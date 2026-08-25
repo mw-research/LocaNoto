@@ -9,6 +9,9 @@ services:
       - APP_TOPIC=${APP_TOPIC:-Allgemein}
       - COMPANY_NAME=${COMPANY_NAME:-LocaNoto}
       - EXPERT_ROLE=${EXPERT_ROLE:-Experte}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - ADMIN_USERS=${ADMIN_USERS:-admin}
     ports:
       - "${APP_PORT:-8501}:8501"
     volumes:
