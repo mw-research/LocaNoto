@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  locanoto_bot:
+    build: .
+    container_name: ${CONTAINER_NAME:-locanoto_app}
+    restart: unless-stopped
+    environment:
+      - APP_TOPIC=${APP_TOPIC:-Allgemein}
+      - COMPANY_NAME=${COMPANY_NAME:-LocaNoto}
+      - EXPERT_ROLE=${EXPERT_ROLE:-Experte}
+    ports:
+      - "${APP_PORT:-8501}:8501"
+    volumes:
+      - ./data/chroma_db:/app/chroma_db
+      - ./data/dokumente:/app/dokumente
+      - ./data/chats:/app/chats
+      - ./users.json:/app/users.json
