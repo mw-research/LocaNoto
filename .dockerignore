@@ -1,0 +1,7 @@
+dokumente/
+chroma_db/
+chats/
+venv/
+__pycache__/
+*.log
+*.tmp

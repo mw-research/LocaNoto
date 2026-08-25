@@ -1,0 +1,16 @@
+# Python & Umgebungen
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Konfiguration & Logs
+.env
+*.log
+*.tmp
+nohup.out
+
+# Datenverzeichnisse & Deployments
+data/
+data_*/
+deploy_*/

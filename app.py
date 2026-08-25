@@ -1,0 +1,691 @@
+import streamlit as st
+import pymupdf
+import chromadb
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from openai import OpenAI
+import os
+import time
+import json
+from datetime import datetime
+import tempfile
+from sentence_transformers import CrossEncoder
+from transformers import AutoModel
+from rank_bm25 import BM25Okapi
+import re
+import bcrypt
+
+import os
+
+# 1. Werte aus der docker-compose.yml holen
+thema = os.getenv("APP_TOPIC", "Allgemein")
+firma = os.getenv("COMPANY_NAME", "LocaNoto")
+
+# 2. Page Config (Browser-Tab-Titel) dynamisch machen
+st.set_page_config(page_title=f"{firma} - {thema}", layout="wide")
+
+# 3. Nur EINMAL die Überschrift auf der Seite setzen!
+st.title(f"{firma} - {thema} Assistent")
+
+#---OPENAI---
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
+    base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
+)
+
+# --- LOGIN SYSTEM ---
+USER_FILE="users.json"
+def load_users():
+    if os.path.exists(USER_FILE):
+        with open(USER_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+if "username" not in st.session_state:
+    st.markdown("<h1 style='text-align: center; margin-top: 10vh;'>🔐 LocaNoto Login</h1>", unsafe_allow_html=True)
+    
+    users = load_users()
+    if not users:
+        st.warning("Keine Benutzer gefunden. Bitte führe zuerst 'create_user.py' auf dem Server aus.")
+        st.stop()
+        
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        with st.form("login_form"):
+            login_user = st.text_input("Benutzername").strip().lower()
+            login_pass = st.text_input("Passwort", type="password")
+            submit_button = st.form_submit_button("Einloggen", use_container_width=True)
+            
+            if submit_button:
+                if login_user in users:
+                    # Das eingegebene Passwort mit dem gespeicherten Hash abgleichen
+                    stored_hash = users[login_user].encode('utf-8')
+                    if bcrypt.checkpw(login_pass.encode('utf-8'), stored_hash):
+                        st.session_state["username"] = login_user
+                        st.rerun()
+                    else:
+                        st.error("Falsches Passwort.")
+                else:
+                    st.error("Benutzer existiert nicht.")
+    
+    st.stop()
+
+USER_FILE = os.path.join(os.getcwd(), "users.json")
+# --- ADMIN SETUP ---
+admin_env = os.getenv("ADMIN_USERS", "admin")
+ADMIN_USERS = [user.strip().lower() for user in admin_env.split(",")]
+
+# --- SIDEBAR (UI) ---
+with st.sidebar:
+    # --- NEU: LOGOUT HIER OBEN ---
+    st.caption(f"👤 Angemeldet als: **{st.session_state['username']}**")
+    if st.button("🚪 Ausloggen", use_container_width=True):
+        del st.session_state["username"]
+        st.rerun()
+    st.markdown("---")
+    
+    
+
+# --- KONFIGURATION CHAT-SPEICHER ---
+CHATS_DIR = os.path.join(os.getcwd(), "data", "chats")
+os.makedirs(CHATS_DIR, exist_ok=True)
+
+# --- KONFIGURATION DOKUMENTE ---
+DOCS_DIR = os.path.join(os.getcwd(), "data", "dokumente")
+os.makedirs(DOCS_DIR, exist_ok=True)
+
+def get_embedding(text, model="qwen3-embedding:4b", keep_alive=None):
+    text = text.replace("\n", " ")
+    extra_body_params = {"drop_params": True}
+    
+    if keep_alive is not None:
+        extra_body_params["keep_alive"] = keep_alive
+        
+    response = client.embeddings.create(
+        input=[text],
+        model=model,
+        encoding_format="float", 
+        extra_body=extra_body_params
+    )
+    return response.data[0].embedding
+
+# --- CHAT-SPEICHERUNG (MULTI-USER) ---
+def get_user_chat_dir():
+    """Gibt den Pfad zum persönlichen Chat-Ordner des eingeloggten Nutzers zurück."""
+    user_dir = os.path.join(os.getcwd(), "chats", st.session_state["username"])
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return user_dir
+
+def get_all_chats():
+    """Gibt eine nach Datum sortierte Liste aller Chat-Dateien des Nutzers zurück."""
+    user_dir = get_user_chat_dir()
+    files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
+    # Sortieren nach Änderungsdatum (neueste zuerst)
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
+    return files
+
+def load_chat(chat_id):
+    """Lädt einen bestimmten Chat anhand seiner ID aus dem Nutzer-Ordner."""
+    user_dir = get_user_chat_dir()
+    path = os.path.join(user_dir, chat_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_chat(chat_id, messages):
+    """Speichert den Verlauf im Nutzer-Ordner."""
+    user_dir = get_user_chat_dir()
+    path = os.path.join(user_dir, chat_id)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=2)
+
+def delete_chat(chat_id):
+    """Löscht eine Chat-Datei aus dem Nutzer-Ordner."""
+    user_dir = get_user_chat_dir()
+    path = os.path.join(user_dir, chat_id)
+    if os.path.exists(path):
+        os.remove(path)
+
+# --- CHAT STATE INITIALISIEREN ---
+# Welcher Chat ist gerade aktiv?
+if "current_chat_id" not in st.session_state:
+    existing_chats = get_all_chats()
+    if existing_chats:
+        st.session_state.current_chat_id = existing_chats[0]
+    else:
+        # Wenn es noch keine Chats gibt, erstelle eine neue ID
+        st.session_state.current_chat_id = f"Chat_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+
+# Lade die Nachrichten für den gerade aktiven Chat
+if "messages" not in st.session_state or st.session_state.get("last_loaded_chat") != st.session_state.current_chat_id:
+    st.session_state.messages = load_chat(st.session_state.current_chat_id)
+    st.session_state.last_loaded_chat = st.session_state.current_chat_id
+
+
+# --- CHROMADB SETUP ---
+@st.cache_resource
+def init_chromadb():
+    db_path = os.path.join(os.getcwd(), "data", "chroma_db")
+    chroma_client = chromadb.PersistentClient(path=db_path)
+    collection = chroma_client.get_or_create_collection(name="pdf_documents")
+    return chroma_client, collection
+
+chroma_client, collection = init_chromadb()
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
+
+# --- BM25 SETUP (In-Memory) ---
+@st.cache_resource
+def init_bm25():
+    # Holt einmalig alle Dokumente aus der ChromaDB
+    all_data = collection.get(include=['documents', 'metadatas'])
+    documents = all_data.get('documents', [])
+    metadatas = all_data.get('metadatas', [])
+    
+    if not documents:
+        return None, [], []
+        
+    # Einfacher Tokenizer: Macht alles klein und filtert nur Buchstaben/Zahlen heraus
+    def tokenize(text):
+        return re.findall(r'\w+', text.lower())
+        
+    tokenized_corpus = [tokenize(doc) for doc in documents]
+    bm25 = BM25Okapi(tokenized_corpus)
+    return bm25, documents, metadatas
+
+bm25_index, bm25_docs, bm25_metas = init_bm25()
+
+# --- RERANKER SETUP ---
+@st.cache_resource
+def init_reranker():
+    return CrossEncoder('BAAI/bge-reranker-v2-m3', max_length=512)
+
+reranker = init_reranker()
+
+# --- DOKUMENTEN-LOGIK ---
+def make_document_public(filename):
+    """Ändert den Status eines privaten Dokuments auf 'shared'."""
+    existing_data = collection.get(
+        where={
+            "$and": [
+                {"file_name": filename},
+                {"owner": st.session_state["username"]}
+            ]
+        }
+    )
+    if existing_data and existing_data["ids"]:
+        new_metadatas = []
+        for meta in existing_data["metadatas"]:
+            meta["access"] = "shared"
+            new_metadatas.append(meta)
+        collection.update(ids=existing_data["ids"], metadatas=new_metadatas)
+        return True
+    return False
+
+def process_uploaded_pdf(uploaded_file, is_shared):
+    """Liest ein PDF ein, speichert es dauerhaft, isoliert Tabellen und vektorisiert beides."""
+    access_type = "shared" if is_shared else "private"
+    
+    # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
+    pdf_path = os.path.join(DOCS_DIR, uploaded_file.name)
+    with open(pdf_path, "wb") as f:
+        f.write(uploaded_file.getvalue())
+        
+    doc = pymupdf.open(pdf_path)
+    chunks = []
+    metadatas = []
+    ids = []
+    
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        
+        # --- 1. TABELLEN EXTRAHIEREN ---
+        tables = page.find_tables()
+        for i, table in enumerate(tables):
+            # Tabelle in Markdown umwandeln
+            md_table = table.to_markdown()
+            
+            # Die Tabelle als EINEN unzerteilten Chunk speichern
+            chunks.append(f"Tabelle von Seite {page_num + 1}:\n\n{md_table}")
+            metadatas.append({
+                "file_name": uploaded_file.name,
+                "page": page_num + 1,
+                "access": access_type,
+                "owner": st.session_state["username"],
+                "type": "table" # Extra-Tag, damit wir wissen, dass es eine Tabelle ist
+            })
+            ids.append(f"{uploaded_file.name}_p{page_num+1}_table_{i}")
+            
+            # Die Fläche der Tabelle für den normalen Text-Extraktor schwärzen
+            page.add_redact_annot(table.bbox)
+        
+        # Schwärzungen anwenden (nur im RAM, die Originaldatei bleibt intakt)
+        page.apply_redactions()
+        
+        # --- 2. RESTLICHEN TEXT EXTRAHIEREN ---
+        text = page.get_text()
+        if text.strip(): # Nur wenn nach dem Schwärzen noch Text übrig ist
+            splits = text_splitter.split_text(text)
+            for i, split in enumerate(splits):
+                chunks.append(split)
+                metadatas.append({
+                    "file_name": uploaded_file.name,
+                    "page": page_num + 1,
+                    "access": access_type,
+                    "owner": st.session_state["username"],
+                    "type": "text"
+                })
+                ids.append(f"{uploaded_file.name}_p{page_num+1}_text_{i}")
+                
+    if chunks:
+        # Vektorisieren
+        embeddings = []
+        for chunk in chunks:
+            embeddings.append(get_embedding(chunk))
+        
+        # In ChromaDB speichern
+        collection.add(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+
+# Listen für die UI abrufen
+shared_data = collection.get(where={"access": "shared"}, include=["metadatas"])
+shared_files = sorted(list(set([m["file_name"] for m in shared_data["metadatas"] if m and "file_name" in m]))) if shared_data and shared_data["metadatas"] else []
+
+private_data = collection.get(where={"$and": [{"access": "private"}, {"owner": st.session_state["username"]}]}, include=["metadatas"])
+private_files = sorted(list(set([m["file_name"] for m in private_data["metadatas"] if m and "file_name" in m]))) if private_data and private_data["metadatas"] else []
+
+# --- SIDEBAR (UI) ---
+with st.sidebar:
+    st.header("💬 Chats")
+    
+    # 1. Neuer Chat Button
+    if st.button("➕ Neuer Chat", use_container_width=True):
+        st.session_state.current_chat_id = f"Chat_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        st.session_state.messages = []
+        st.rerun()
+
+    # 2. Chat-Verlauf Dropdown
+    existing_chats = get_all_chats()
+    if existing_chats:
+        # Wenn der aktuelle Chat noch nicht gespeichert wurde (weil noch keine Nachricht geschrieben wurde), fügen wir ihn temp. zur Liste hinzu
+        if st.session_state.current_chat_id not in existing_chats:
+            existing_chats.insert(0, st.session_state.current_chat_id)
+            
+        selected_chat = st.selectbox(
+            "Vorherige Chats laden:", 
+            existing_chats,
+            index=existing_chats.index(st.session_state.current_chat_id),
+            format_func=lambda x: x.replace(".json", "").replace("_", " ") # Macht den Namen hübscher
+        )
+        
+        # Wechselt den Chat, wenn ein anderer im Dropdown ausgewählt wurde
+        if selected_chat != st.session_state.current_chat_id:
+            st.session_state.current_chat_id = selected_chat
+            st.rerun()
+            
+        # 3. Aktuellen Chat löschen
+        if st.button("🗑️ Aktuellen Chat löschen", use_container_width=True):
+            delete_chat(st.session_state.current_chat_id)
+            del st.session_state.current_chat_id # Zwingt das Skript, beim Rerun einen neuen Chat anzulegen oder den nächstbesten zu laden
+            st.success("Chat gelöscht!")
+            time.sleep(0.5)
+            st.rerun()
+            
+    st.markdown("---")
+    st.header("📚 Datenbank")
+    
+    # Alle verfügbaren Dokumente für den Filter sammeln
+    all_available_files = list(set(shared_files + private_files))
+    
+    st.markdown("---")
+    st.header("🎯 Dokumenten-Filter")
+    selected_docs = st.multiselect(
+        "Suche beschränken auf:", 
+        options=all_available_files,
+        default=[],
+        help="Leer lassen, um in allen Dokumenten zu suchen."
+    )
+
+
+    # 1. NEUER UPLOAD-BEREICH
+    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf"])
+    if uploaded_file:
+        is_shared = st.checkbox("🌍 Für alle Nutzer freigeben", value=False)
+        if st.button("Hochladen & Vektorisieren"):
+            with st.spinner("Verarbeite PDF (das kann kurz dauern)..."):
+                process_uploaded_pdf(uploaded_file, is_shared)
+            st.success(f"'{uploaded_file.name}' erfolgreich hinzugefügt!")
+            time.sleep(1)
+            st.rerun()
+
+    st.subheader("Gemeinsamer Pool")
+    if shared_files:
+        # 1. Alle Dokumente auflisten (für jeden sichtbar)
+        for f in shared_files:
+            st.caption(f"🌍 {f}")
+            
+        # 2. Admin-Kontrollen (nur sichtbar, wenn man in ADMIN_USERS steht)
+        if st.session_state["username"] in ADMIN_USERS:
+            st.markdown("---")
+            st.caption("👑 **Admin-Bereich**")
+            file_to_delete_shared = st.selectbox("Geteiltes Dokument entfernen:", shared_files)
+            if st.button("🗑️ Für alle löschen", use_container_width=True):
+                # Löscht das Dokument global aus der Datenbank
+                collection.delete(
+                    where={
+                        "$and": [
+                            {"file_name": file_to_delete_shared},
+                            {"access": "shared"}
+                        ]
+                    }
+                )
+                file_path = os.path.join(DOCS_DIR, file_to_delete_shared)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    
+                st.success(f"'{file_to_delete_shared}' wurde global gelöscht!")
+                time.sleep(1)
+                st.rerun()
+    else:
+        st.caption("Keine geteilten Dokumente.")
+
+    st.subheader("Deine privaten Dokumente")
+    if private_files:
+        file_to_manage = st.selectbox("Dokument verwalten:", private_files)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🌍 Freigeben", use_container_width=True):
+                make_document_public(file_to_manage)
+                st.success("Freigegeben!")
+                time.sleep(1)
+                st.rerun()
+        with col2:
+            if st.button("🗑️ Löschen", use_container_width=True):
+                collection.delete(where={"file_name": file_to_manage})
+                file_path = os.path.join(DOCS_DIR, file_to_manage)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    
+                st.success("Gelöscht!")
+    else:
+        st.caption("Keine privaten Dokumente.")
+    
+    st.markdown("---")
+    chat_model = st.text_input("Chat Modell", value="qwen3.8:27b") 
+    embed_model = st.text_input("Embedding Modell", value="qwen3-embedding:4b") 
+    top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=20, value=5)
+
+# --- CHAT & RETRIEVAL ---
+if collection.count() > 0:
+    for i, msg in enumerate(st.session_state.messages):
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+            
+            # --- QUELLEN DAUERHAFT ANZEIGEN ---
+            if "sources" in msg and msg["sources"]:
+                st.markdown("---")
+                st.markdown("📚 **Verwendete Quellen:**")
+                
+                for source in msg["sources"]:
+                    file_n = source["file"]
+                    page_n = source["page"]
+                    
+                    with st.expander(f"📄 {file_n} (Seite {page_n})"):
+                        for t in source["texts"]:
+                            st.info(t)
+                        
+                        pdf_path = os.path.join(DOCS_DIR, file_n)
+                        if os.path.exists(pdf_path) and isinstance(page_n, int):
+                            # Einzigartiger Key für diese Nachricht und diese Seite
+                            chk_key = f"chk_{file_n}_{page_n}_{i}"
+                            
+                            if st.checkbox(f"👁️ Original-Seite {page_n} als Bild laden", key=chk_key):
+                                try:
+                                    src_doc = pymupdf.open(pdf_path)
+                                    src_page = src_doc.load_page(page_n - 1)
+                                    pix = src_page.get_pixmap(dpi=150)
+                                    st.image(pix.tobytes(), caption=f"Originalansicht: {file_n} - Seite {page_n}")
+                                    src_doc.close()
+                                except Exception as e:
+                                    st.error(f"Konnte PDF nicht rendern: {e}")
+
+    if user_query := st.chat_input("Stelle eine Frage an die Datenbank..."):
+        
+        st.session_state.messages.append({"role": "user", "content": user_query})
+        
+        # --- NEU: Dynamische Chat-Benennung beim 1. Prompt ---
+        if len(st.session_state.messages) == 1:
+            old_chat_id = st.session_state.current_chat_id
+            date_str = datetime.now().strftime('%y-%m-%d')
+            
+            try:
+                # Die KI nach 2 schlauen Schlagwörtern fragen
+                title_prompt = f"Fasse diese Frage in 1 bis 2 prägnanten Schlagwörtern zusammen. Antworte NUR mit den Schlagwörtern, getrennt durch Unterstriche. Keine Einleitung, keine Satzzeichen.\nFrage: {user_query}"
+                title_resp = client.chat.completions.create(
+                    model=chat_model,
+                    messages=[{"role": "user", "content": title_prompt}],
+                    max_tokens=10,
+                    temperature=0.3
+                )
+                keywords = title_resp.choices[0].message.content.strip()
+                # Säubern: Nur Buchstaben, Zahlen und Unterstriche erlauben
+                keywords = re.sub(r'[^a-zA-Z0-9äöüÄÖÜß_]', '', keywords.replace(' ', '_'))[:30]
+            except:
+                # Fallback: Einfach die ersten 2 Wörter der Frage nehmen
+                words = re.findall(r'\w+', user_query)
+                keywords = "_".join(words[:2])
+                
+            new_chat_id = f"{keywords}_{date_str}.json"
+            
+            # Falls die Datei exakt so schon existiert, Sekunden anhängen
+            if os.path.exists(os.path.join(get_user_chat_dir(), new_chat_id)):
+                new_chat_id = f"{keywords}_{datetime.now().strftime('%y-%m-%d_%H-%M-%S')}.json"
+                
+            st.session_state.current_chat_id = new_chat_id
+            delete_chat(old_chat_id) # Alte Datums-Datei sofort löschen
+        # -------------------------------------------------------
+        
+        save_chat(st.session_state.current_chat_id, st.session_state.messages)
+        
+        with st.chat_message("user"):
+            st.write(user_query)
+
+        with st.chat_message("assistant"):
+            try:
+                search_query = user_query
+                
+                # --- 1. MULTI-QUERY EXPANSION (Universell) ---
+                search_queries = [user_query]
+                
+                with st.spinner("Analysiere Frage und generiere Such-Sonden..."):
+                    history_text = ""
+                    if len(st.session_state.messages) > 1:
+                        history_msgs = st.session_state.messages[:-1][-3:]
+                        history_text = "\nChatverlauf:\n" + "\n".join([f"{msg['role']}: {msg['content'][:300]}" for msg in history_msgs])
+                    
+                    rewrite_prompt = f"""Du bist ein präziser Suchbegriff-Generator für eine universelle Wissens-Datenbank.
+Generiere exakt 3 verschiedene Suchanfragen für die aktuelle Nutzerfrage, um sowohl Fließtexte (wie wissenschaftliche Paper) als auch strukturierte Daten (wie Tabellen/Normen) optimal zu finden:
+1. Die präzise, umformulierte Kernfrage (löse Pronomen durch echte Begriffe aus dem Chatverlauf auf).
+2. Eine konzeptionelle Suche nach zugrundeliegenden Definitionen, Methoden, Parametern oder Theorien.
+3. Eine hochspezifische Stichwort-Suche (Eigennamen, Fachbegriffe, genaue Maße oder Variablen aus der Frage).
+
+{history_text}
+
+Aktuelle Frage: {user_query}
+
+Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche. Keine Zahlen davor, keine Einleitung."""
+
+                    try:
+                        rewrite_response = client.chat.completions.create(
+                            model=chat_model,
+                            messages=[{"role": "user", "content": rewrite_prompt}],
+                            temperature=0.1
+                        )
+                        generated_queries = [q.strip("- 1234567890.") for q in rewrite_response.choices[0].message.content.split("\n") if q.strip()]
+                        if len(generated_queries) >= 3:
+                            search_queries = generated_queries[:3]
+                        st.caption(f"🧠 *Multi-Query Sonden:* \n- `" + "`\n- `".join(search_queries) + "`")
+                    except:
+                        st.caption("🧠 *Nutze Standard-Suche (Multi-Query fehlgeschlagen)*")
+
+                # --- 2. HYBRID-SUCHE (Vektor + BM25) ---
+                with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
+                    query_vectors = [get_embedding(q, model=embed_model, keep_alive=0) for q in search_queries]
+                    broad_k = max(10, top_k * 3) 
+                    
+                    unique_docs = {} 
+
+                    # A. VEKTOR-SUCHE (ChromaDB)
+                    base_filter = {"$or": [{"access": {"$eq": "shared"}}, {"owner": {"$eq": st.session_state["username"]}}]}
+                    where_clause = {"$and": [base_filter, {"file_name": {"$in": selected_docs}}]} if selected_docs else base_filter
+
+                    results = collection.query(
+                        query_embeddings=query_vectors,
+                        n_results=broad_k,
+                        where=where_clause
+                    )
+                    
+                    for query_idx, (batch_docs, batch_metas) in enumerate(zip(results['documents'], results['metadatas'])):
+                        for doc_text, metadata in zip(batch_docs, batch_metas):
+                            if doc_text not in unique_docs:
+                                unique_docs[doc_text] = {"meta": metadata, "found_by_query": search_queries[query_idx]}
+
+                    # B. BM25 KEYWORD-SUCHE (In-Memory)
+                    if bm25_index is not None:
+                        for q in search_queries:
+                            tokenized_query = re.findall(r'\w+', q.lower())
+                            bm25_scores = bm25_index.get_scores(tokenized_query)
+                            
+                            # BM25 darf pro Sonde maximal 5 absolute Keyword-Treffer beisteuern, 
+                            # damit die semantischen Vektor-Treffer (wie DIN 18202) nicht verdrängt werden!
+                            top_n_indices = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:5]
+                            
+                            for idx in top_n_indices:
+                                if bm25_scores[idx] > 0: # Nur wenn es überhaupt einen Match gab
+                                    doc_text = bm25_docs[idx]
+                                    
+                                    # Fallback auf leeres Dictionary, falls Metadaten komplett fehlen
+                                    meta = bm25_metas[idx] or {} 
+                                    
+                                    # Sicheres Auslesen ohne KeyError
+                                    m_access = meta.get('access', 'shared')
+                                    m_owner = meta.get('owner', '')
+                                    m_file = meta.get('file_name', '')
+                                    
+                                    # Manueller Berechtigungs- und Dokumenten-Filter für BM25
+                                    if m_access == 'shared' or m_owner == st.session_state["username"]:
+                                        if not selected_docs or m_file in selected_docs:
+                                            if doc_text not in unique_docs:
+                                                unique_docs[doc_text] = {"meta": meta, "found_by_query": q}
+
+                # --- 2.5 RERANKING (Precision Filtering mit Sonden-Berücksichtigung) ---
+                with st.spinner("Reranker bewertet die Relevanz der gefundenen Dokumente..."):
+                    if unique_docs:
+                        doc_texts = list(unique_docs.keys())
+                        
+                        # DER TRICK: Der Reranker bewertet den Text nicht nur gegen die Originalfrage, 
+                        # sondern gegen die spezifische Sonde, die den Text aus der DB geholt hat!
+                        pairs = [[unique_docs[text]["found_by_query"], text] for text in doc_texts]
+                        
+                        # CrossEncoder nutzt standardmäßig predict()
+                        scores = reranker.predict(pairs)
+
+                        # Wir sortieren die Chunks nach ihrem Score (höchste zuerst)
+                        scored_docs = sorted(zip(scores, doc_texts), key=lambda x: x[0], reverse=True)
+                        
+                        # Wir behalten NUR die vom Nutzer gewünschte Anzahl (top_k, z.B. 5)
+                        top_docs = scored_docs[:top_k]
+                        
+                        # Wir bauen unser neues, extrem präzises Dictionary auf (entpacken die Metadaten wieder)
+                        reranked_unique_docs = {}
+                        for score, text in top_docs:
+                            meta = unique_docs[text]["meta"]
+                            meta["found_by_query"] = unique_docs[text]["found_by_query"]
+                            reranked_unique_docs[text] = meta
+
+                        st.caption(f"🎯 *Reranker hat {len(unique_docs)} Kandidaten auf die besten {len(reranked_unique_docs)} destilliert.*")
+                        unique_docs = reranked_unique_docs
+                    
+                # --- KONTEXT FÜR DAS LLM ZUSAMMENBAUEN ---
+                dynamic_context = ""
+                if unique_docs:
+                    for doc_text, metadata in unique_docs.items():
+                        file_n = metadata['file_name']
+                        page_n = metadata.get('page', '?')
+                        dynamic_context += f'<chunk file="{file_n}" page="{page_n}">\n{doc_text}\n</chunk>\n\n'
+                else:
+                    dynamic_context = "Keine relevanten Dokumenten-Abschnitte gefunden."
+                # --- 2.8 DEBUG-ANSICHT ---
+                with st.expander("🛠️ Debug-Röntgenblick (Was sieht das LLM?)"):
+                    st.write(f"**Generierte Sonden:** {search_queries}")
+                    if unique_docs:
+                        for idx, (doc_text, metadata) in enumerate(unique_docs.items()):
+                            st.markdown(f"**Rang {idx+1}** | 📄 `{metadata.get('file_name', '?')}` | 🎯 Sonde: *{metadata.get('found_by_query', '?')}*")
+                            st.caption(f"{doc_text[:250]}...")
+                    else:
+                        st.write("Keine Chunks gefunden.")
+                # --- 3. ANTWORT GENERIEREN ---
+                # Zieht die Rolle aus der docker-compose (Fallback ist "Assistent")
+                expert_role = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
+
+                # --- 3. ANTWORT GENERIEREN ---
+                
+                # 1. Rolle aus der .env holen (mit Fallback)
+                expert_role = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
+
+                # 2. Prompt-Vorlage aus der Datei laden
+                prompt_path = "system_prompt.txt"
+                
+                try:
+                    with open(prompt_path, "r", encoding="utf-8") as f:
+                        raw_prompt = f.read()
+                except FileNotFoundError:
+                    # Notfall-Fallback, falls die Datei wirklich mal versehentlich gelöscht wird
+                    raw_prompt = "Du bist ein {EXPERT_ROLE}.\n<context>\n{CONTEXT_PLATZHALTER}\n</context>\nBeantworte die Frage nur anhand des Kontexts."
+
+                # 3. Platzhalter durch die echten Werte ersetzen
+                system_prompt = raw_prompt.replace("{EXPERT_ROLE}", expert_role)
+                system_prompt = system_prompt.replace("{CONTEXT_PLATZHALTER}", dynamic_context)
+                
+                api_messages = [{"role": "system", "content": system_prompt}]
+                
+                for msg in st.session_state.messages[-20:]:
+                    api_messages.append({"role": msg["role"], "content": msg["content"]})
+                
+                response = client.chat.completions.create(
+                    model=chat_model, 
+                    messages=api_messages,
+                )
+                
+                answer = response.choices[0].message.content
+                
+                # --- 4. QUELLEN IN DER SESSION SPEICHERN ---
+                unique_sources = {}
+                for doc_text, metadata in unique_docs.items():
+                    key = (metadata['file_name'], metadata.get('page', '?'))
+                    if key not in unique_sources:
+                        unique_sources[key] = []
+                    unique_sources[key].append(doc_text)
+
+                    # Quellen-Datenstruktur an die Nachricht anhängen
+                    message_data = {
+                        "role": "assistant", 
+                        "content": answer,
+                        "sources": [{"file": k[0], "page": k[1], "texts": v} for k, v in unique_sources.items()]
+                    }
+                    
+                    st.session_state.messages.append(message_data)
+                    save_chat(st.session_state.current_chat_id, st.session_state.messages)
+                    
+                    # Rerun, damit die Nachricht oben durch die Chat-Schleife (mit Expandern) gezeichnet wird
+                    st.rerun()
+
+            except Exception as e:
+                st.error(f"Fehler bei der Verarbeitung: {e}")
+
+else:
+    st.info("Die Datenbank ist leer. Bitte nutze dein Hintergrund-Skript, um PDFs einzulesen.")
