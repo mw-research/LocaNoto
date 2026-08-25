@@ -10,6 +10,16 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 
 ---
 
+## DIG:IT-KMU
+ 
+Diese App entstand im Rahmen des Projekts : DIG:IT-KMU 
+
+Das Projekt DIG:IT-KMU am Institut für Digital Engineering (IDEE) der Technischen Hochschule Würzburg-Schweinfurt (THWS) unterstützt Unternehmen bei der digitalen Transformation. Durch gezielten Technologietransfer werden kleine und mittlere Unternehmen befähigt, innovative Technologien sicher und effizient in ihre Geschäftsprozesse zu integrieren. Das Projekt wird im Rahmen des EFRE Bayern 2021–2027 durch das Bayerische Staatsministerium für Wirtschaft, Landesentwicklung und Energie gefördert, kofinanziert von der Europäischen Union.
+
+https://digit.kmu.bayern
+
+---
+
 ## 🛠️ Installation & Schnellstart
 
 ### Voraussetzungen
