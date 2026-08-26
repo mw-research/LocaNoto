@@ -130,7 +130,8 @@ def load_chat(chat_id):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            # Beschaedigte Chat-Datei soll die App nicht blockieren.
             return []
     return []
 
@@ -199,7 +200,10 @@ init_keyword_index()
 # --- RERANKER SETUP ---
 @st.cache_resource
 def init_reranker():
-    return CrossEncoder('BAAI/bge-reranker-v2-m3', max_length=512)
+    # 512 Token reichen fuer die Chunks nicht: 1500 Zeichen Deutsch liegen bei
+    # rund 400-500 Token, dazu kommt die Suchsonde im selben Fenster. Der
+    # Schluss langer Chunks wurde damit abgeschnitten, bevor er bewertet war.
+    return CrossEncoder('BAAI/bge-reranker-v2-m3', max_length=1024)
 
 reranker = init_reranker()
 
@@ -621,7 +625,7 @@ if collection.count() > 0:
                 keywords = title_resp.choices[0].message.content.strip()
                 # Säubern: Nur Buchstaben, Zahlen und Unterstriche erlauben
                 keywords = re.sub(r'[^a-zA-Z0-9äöüÄÖÜß_]', '', keywords.replace(' ', '_'))[:30]
-            except:
+            except Exception:
                 # Fallback: Einfach die ersten 2 Wörter der Frage nehmen
                 words = re.findall(r'\w+', user_query)
                 keywords = "_".join(words[:2])
@@ -643,8 +647,6 @@ if collection.count() > 0:
 
         with st.chat_message("assistant"):
             try:
-                search_query = user_query
-                
                 # --- 1. MULTI-QUERY EXPANSION (Universell) ---
                 search_queries = [user_query]
                 
@@ -676,7 +678,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                         if len(generated_queries) >= 3:
                             search_queries = generated_queries[:3]
                         st.caption(f"🧠 *Multi-Query Sonden:* \n- `" + "`\n- `".join(search_queries) + "`")
-                    except:
+                    except Exception:
                         st.caption("🧠 *Nutze Standard-Suche (Multi-Query fehlgeschlagen)*")
 
                 # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
@@ -778,16 +780,11 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                     else:
                         st.write("Keine Chunks gefunden.")
                 # --- 3. ANTWORT GENERIEREN ---
-                # Zieht die Rolle aus der docker-compose (Fallback ist "Assistent")
-                expert_role = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
-
-                # --- 3. ANTWORT GENERIEREN ---
-                
                 # 1. Rolle aus der .env holen (mit Fallback)
                 expert_role = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
 
                 # 2. Prompt-Vorlage aus der Datei laden
-                prompt_path = "system_prompt.txt"
+                prompt_path = os.path.join(paths.BASE_DIR, "system_prompt.txt")
                 
                 try:
                     with open(prompt_path, "r", encoding="utf-8") as f:
@@ -805,12 +802,25 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 for msg in st.session_state.messages[-20:]:
                     api_messages.append({"role": msg["role"], "content": msg["content"]})
                 
-                response = client.chat.completions.create(
-                    model=chat_model, 
+                # Die Antwort laufend ausgeben statt auf den kompletten Text zu
+                # warten. Auf einem lokalen 27B-Modell dauert eine Antwort
+                # leicht eine halbe Minute -- ohne Streaming ist das eine
+                # halbe Minute leerer Bildschirm.
+                stream = client.chat.completions.create(
+                    model=chat_model,
                     messages=api_messages,
+                    stream=True,
                 )
-                
-                answer = response.choices[0].message.content
+
+                def token_stream():
+                    for part in stream:
+                        if not part.choices:
+                            continue
+                        delta = part.choices[0].delta
+                        if delta and delta.content:
+                            yield delta.content
+
+                answer = st.write_stream(token_stream())
                 
                 # --- 4. QUELLEN IN DER SESSION SPEICHERN ---
                 # Erst ALLE Quellen einsammeln ...
