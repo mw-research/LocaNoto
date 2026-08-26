@@ -3,10 +3,42 @@
 LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RAG) System. Es ermöglicht das intelligente Durchsuchen, Vektorisieren und Abfragen von Fachdokumenten (z.B. Bau-Normen, Handbüchern) mithilfe modernster lokaler Sprachmodelle (LLMs), ohne dass sensible Firmendaten das lokale Netzwerk verlassen.
 
 ## 🚀 Features
-* **100% Offline & Lokal:** Keine Daten fließen an externe Cloud-Anbieter.
+* **Lokal & abgeschottet:** Im Betrieb fließen keine Daten an externe Cloud-Anbieter.
+  (Einmalig beim ersten Start lädt der Reranker sein Modell von HuggingFace; für einen komplett offline betriebenen Server muss das Modell vorab in den Image-Cache gelegt werden.)
 * **Hybride Suche:** Kombination aus semantischer Vektorsuche (ChromaDB) und exakter Keyword-Suche (BM25).
 * **Intelligentes Reranking:** BAAI-Reranker destilliert hunderte Treffer auf die exaktesten Textstellen herunter.
-* **Multi-Tenant-Architektur:** Strikte Trennung von Dokumenten, Chats und Datenbanken über Docker-Volumes.
+* **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
+
+## 📂 Datenverzeichnis
+
+Der gesamte Bestand liegt unter `data/` und wird als eine Einheit
+weitergegeben oder gesichert:
+
+```
+data/
+    dokumente/   Original-PDFs
+    chats/       Chatverläufe je Nutzer
+    chroma_db/   Vektordatenbank
+config/
+    users.json   Benutzer und Passwort-Hashes (NICHT im Repo, NICHT in data/)
+```
+
+Die Struktur wird beim ersten Start automatisch angelegt. Ein vorhandener
+`data/`-Ordner kann stattdessen einfach hineinkopiert werden.
+
+> **Hinweis zur Weitergabe:** `data/chats/` enthält die Chatverläufe aller
+> Nutzer. Vor der Weitergabe an Dritte entfernen.
+
+## 🔐 Rechte
+
+| Bereich | sichtbar für | löschen darf |
+|---|---|---|
+| Gemeinsamer Pool | alle Nutzer | nur Administratoren |
+| Private Dokumente | nur der Eigentümer | Eigentümer und Administratoren |
+
+Administratoren sehen fremde private Dokumente ausschließlich im
+Verwaltungsbereich der Seitenleiste. In Suche und Antworten fließen sie nie
+ein. Wer Administrator ist, legt `ADMIN_USERS` in der `.env` fest.
 
 ---
 
@@ -28,13 +60,13 @@ https://digit.kmu.bayern
 
 ### 1. Repository klonen (oder ZIP entpacken)
 ```bash
-git clone [https://github.com/mw-research/LocaNoto.git](https://github.com/mw-research/LocaNoto)
-cd locanoto
+git clone https://github.com/mw-research/LocaNoto.git
+cd LocaNoto
 ```
 
 ### 2. Konfiguration anlegen - Kopiere die mitgelieferte Vorlage und trage deine API-Keys sowie den initialen Admin-Benutzernamen ein:
 ```bash
-cp env.example .env
+cp .env.example .env
 ```
 
 ### 3. Ersten Benutzer anlegen - Bevor das Web-Interface nutzbar ist, muss lokal ein Nutzer generiert werden (die Zugangsdaten werden sicher als Hash in der users.json gespeichert):

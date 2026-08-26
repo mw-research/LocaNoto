@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   locanoto_bot:
     build: .
@@ -15,7 +13,20 @@ services:
     ports:
       - "${APP_PORT:-8501}:8501"
     volumes:
-      - ./data/chroma_db:/app/chroma_db
-      - ./data/dokumente:/app/dokumente
-      - ./data/chats:/app/chats
-      - ./users.json:/app/users.json
+      # Ein einziger Mount fuer den kompletten Datenbestand. Er entspricht
+      # exakt dem data/-Ordner, der zwischen Installationen weitergegeben
+      # wird -- Hineinkopieren und Selbst-Erzeugen sind damit austauschbar.
+      #
+      #   data/dokumente   Original-PDFs
+      #   data/chats       Chatverlaeufe je Nutzer
+      #   data/chroma_db   Vektordatenbank
+      #
+      # Frueher lagen hier drei Einzel-Mounts nach /app/chroma_db,
+      # /app/dokumente und /app/chats. Die App las aber aus /app/data/... --
+      # also aus einem ungemounteten, leeren Verzeichnis.
+      - ./data:/app/data
+
+      # Als Verzeichnis gemountet, nicht als Einzeldatei: ein Bind-Mount auf
+      # eine einzelne Datei bricht, sobald ein Werkzeug sie ersetzt statt sie
+      # zu ueberschreiben.
+      - ./config:/app/config

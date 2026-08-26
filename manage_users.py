@@ -3,13 +3,22 @@ import os
 import bcrypt
 import getpass
 
-USER_FILE = "users.json"
+import paths
+
+paths.bootstrap()
+USER_FILE = paths.resolve_user_file()
 
 def load_users():
-    if os.path.exists(USER_FILE):
-        with open(USER_FILE, "r", encoding="utf-8") as f:
+    """Laedt die Benutzerdatei. Fehlt sie oder ist sie leer/kaputt, gilt das
+    als 'noch keine Benutzer angelegt' -- nicht als Absturz."""
+    if not os.path.exists(USER_FILE) or os.path.getsize(USER_FILE) == 0:
+        return {}
+    with open(USER_FILE, "r", encoding="utf-8") as f:
+        try:
             return json.load(f)
-    return {}
+        except json.JSONDecodeError:
+            print(f"[!] '{USER_FILE}' ist beschaedigt. Bitte pruefen oder loeschen.")
+            raise SystemExit(1)
 
 def save_users(users):
     with open(USER_FILE, "w", encoding="utf-8") as f:

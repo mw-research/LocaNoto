@@ -23,13 +23,36 @@ DOCS_DIR = os.path.join(DATA_DIR, "dokumente")
 CHATS_DIR = os.path.join(DATA_DIR, "chats")
 CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
 
-USER_FILE = os.path.join(BASE_DIR, "users.json")
+# Benutzerdatei bewusst NICHT unter data/: dieser Ordner wird zwischen
+# Installationen weitergegeben, und Passwort-Hashes haben darin nichts zu
+# suchen. config/ wird als Verzeichnis gemountet -- ein Bind-Mount auf eine
+# einzelne Datei bricht, sobald ein Werkzeug sie ersetzt statt sie zu
+# ueberschreiben.
+CONFIG_DIR = os.path.join(BASE_DIR, "config")
+USER_FILE = os.path.join(CONFIG_DIR, "users.json")
+
+# Aeltere Installationen legten die Datei im Wurzelverzeichnis ab.
+_LEGACY_USER_FILE = os.path.join(BASE_DIR, "users.json")
 
 COLLECTION_NAME = "pdf_documents"
 
 
 def bootstrap():
-    """Legt die data/-Struktur an, falls sie fehlt. Idempotent."""
-    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR):
+    """Legt die data/- und config/-Struktur an, falls sie fehlt. Idempotent."""
+    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR):
         os.makedirs(d, exist_ok=True)
     return DATA_DIR
+
+
+def resolve_user_file():
+    """Effektiver Pfad zur Benutzerdatei.
+
+    Neue Installationen nutzen config/users.json. Bestehende Installationen
+    mit einer gefuellten users.json im Wurzelverzeichnis werden nicht
+    ausgesperrt -- deren Datei wird weiterverwendet.
+    """
+    if os.path.exists(USER_FILE):
+        return USER_FILE
+    if os.path.exists(_LEGACY_USER_FILE) and os.path.getsize(_LEGACY_USER_FILE) > 0:
+        return _LEGACY_USER_FILE
+    return USER_FILE

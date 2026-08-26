@@ -16,3 +16,8 @@ data_*/
 deploy_*/
 # Ingest-Logs
 log_*.txt
+
+# Benutzerdatei (enthaelt Passwort-Hashes) -- gehoert nie ins Repo
+users.json
+config/users.json
+!config/.gitkeep
