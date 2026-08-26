@@ -7,14 +7,15 @@ import os
 import time
 import json
 from datetime import datetime
-import tempfile
 from sentence_transformers import CrossEncoder
-from transformers import AutoModel
 from rank_bm25 import BM25Okapi
 import re
 import bcrypt
 
-import os
+import paths
+from textutils import strip_boilerplate
+
+paths.bootstrap()
 
 # 1. Werte aus der docker-compose.yml holen
 thema = os.getenv("APP_TOPIC", "Allgemein")
@@ -33,12 +34,24 @@ client = OpenAI(
 )
 
 # --- LOGIN SYSTEM ---
-USER_FILE="users.json"
+USER_FILE = paths.resolve_user_file()
+
+
 def load_users():
-    if os.path.exists(USER_FILE):
+    """Laedt die Benutzerdatei. Fehlt sie oder ist sie leer/kaputt, gilt das
+    als 'noch keine Benutzer angelegt' -- nicht als Absturz."""
+    if not os.path.exists(USER_FILE) or os.path.getsize(USER_FILE) == 0:
+        return {}
+    try:
         with open(USER_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {}
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        st.error(
+            f"'{os.path.basename(USER_FILE)}' ist beschaedigt und konnte nicht "
+            "gelesen werden. Bitte pruefen oder loeschen und mit "
+            "create_user.py neu anlegen."
+        )
+        st.stop()
 
 if "username" not in st.session_state:
     st.markdown("<h1 style='text-align: center; margin-top: 10vh;'>🔐 LocaNoto Login</h1>", unsafe_allow_html=True)
@@ -69,10 +82,13 @@ if "username" not in st.session_state:
     
     st.stop()
 
-USER_FILE = os.path.join(os.getcwd(), "users.json")
 # --- ADMIN SETUP ---
 admin_env = os.getenv("ADMIN_USERS", "admin")
 ADMIN_USERS = [user.strip().lower() for user in admin_env.split(",")]
+
+
+def is_admin():
+    return st.session_state.get("username", "").lower() in ADMIN_USERS
 
 # --- SIDEBAR (UI) ---
 with st.sidebar:
@@ -85,13 +101,9 @@ with st.sidebar:
     
     
 
-# --- KONFIGURATION CHAT-SPEICHER ---
-CHATS_DIR = os.path.join(os.getcwd(), "data", "chats")
-os.makedirs(CHATS_DIR, exist_ok=True)
-
-# --- KONFIGURATION DOKUMENTE ---
-DOCS_DIR = os.path.join(os.getcwd(), "data", "dokumente")
-os.makedirs(DOCS_DIR, exist_ok=True)
+# --- KONFIGURATION (Pfade zentral aus paths.py) ---
+CHATS_DIR = paths.CHATS_DIR
+DOCS_DIR = paths.DOCS_DIR
 
 def get_embedding(text, model="qwen3-embedding:4b", keep_alive=None):
     text = text.replace("\n", " ")
@@ -111,7 +123,7 @@ def get_embedding(text, model="qwen3-embedding:4b", keep_alive=None):
 # --- CHAT-SPEICHERUNG (MULTI-USER) ---
 def get_user_chat_dir():
     """Gibt den Pfad zum persönlichen Chat-Ordner des eingeloggten Nutzers zurück."""
-    user_dir = os.path.join(os.getcwd(), "chats", st.session_state["username"])
+    user_dir = os.path.join(CHATS_DIR, st.session_state["username"])
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
     return user_dir
@@ -169,9 +181,8 @@ if "messages" not in st.session_state or st.session_state.get("last_loaded_chat"
 # --- CHROMADB SETUP ---
 @st.cache_resource
 def init_chromadb():
-    db_path = os.path.join(os.getcwd(), "data", "chroma_db")
-    chroma_client = chromadb.PersistentClient(path=db_path)
-    collection = chroma_client.get_or_create_collection(name="pdf_documents")
+    chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
+    collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
     return chroma_client, collection
 
 chroma_client, collection = init_chromadb()
@@ -225,6 +236,57 @@ def make_document_public(filename):
         return True
     return False
 
+def remove_pdf_if_orphaned(filename):
+    """Loescht die PDF von der Platte -- aber nur, wenn kein Chunk mehr auf
+    sie zeigt.
+
+    Alle Nutzer teilen sich DOCS_DIR. Wird die Datei bedingungslos entfernt,
+    reisst das Loeschen einer privaten Kopie die Quellenansicht eines
+    gleichnamigen geteilten Dokuments mit -- und umgekehrt.
+    """
+    if collection.get(where={"file_name": filename}, include=[])["ids"]:
+        return False
+    file_path = os.path.join(DOCS_DIR, filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    return True
+
+
+def delete_private_document(filename, owner):
+    """Loescht ein privates Dokument -- ausschliesslich die Chunks des
+    angegebenen Eigentuemers.
+
+    Ohne den owner-Filter loescht der where-Ausdruck jeden Chunk mit diesem
+    Dateinamen: die privaten Kopien anderer Nutzer und die des gemeinsamen
+    Pools gleich mit.
+    """
+    collection.delete(where={"$and": [
+        {"file_name": filename},
+        {"access": "private"},
+        {"owner": owner},
+    ]})
+
+    remove_pdf_if_orphaned(filename)
+
+
+def list_foreign_private_documents(current_user):
+    """(owner, file_name) aller privaten Dokumente ausser denen des Nutzers.
+
+    Nur fuer den Admin-Verwaltungsbereich. Diese Dokumente werden bewusst
+    nicht ins Retrieval aufgenommen.
+    """
+    data = collection.get(where={"access": "private"}, include=["metadatas"])
+    seen = set()
+    for m in data["metadatas"] or []:
+        if not m:
+            continue
+        owner = m.get("owner", "")
+        fname = m.get("file_name", "")
+        if owner and fname and owner != current_user:
+            seen.add((owner, fname))
+    return sorted(seen)
+
+
 def process_uploaded_pdf(uploaded_file, is_shared):
     """Liest ein PDF ein, speichert es dauerhaft, isoliert Tabellen und vektorisiert beides."""
     access_type = "shared" if is_shared else "private"
@@ -267,7 +329,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
         page.apply_redactions()
         
         # --- 2. RESTLICHEN TEXT EXTRAHIEREN ---
-        text = page.get_text()
+        text = strip_boilerplate(page.get_text())
         if text.strip(): # Nur wenn nach dem Schwärzen noch Text übrig ist
             splits = text_splitter.split_text(text)
             for i, split in enumerate(splits):
@@ -353,7 +415,13 @@ with st.sidebar:
     # 1. NEUER UPLOAD-BEREICH
     uploaded_file = st.file_uploader("PDF hochladen", type=["pdf"])
     if uploaded_file:
-        is_shared = st.checkbox("🌍 Für alle Nutzer freigeben", value=False)
+        # Nur Admins duerfen in den globalen Pool schreiben -- passend dazu,
+        # dass auch nur sie daraus loeschen koennen.
+        if is_admin():
+            is_shared = st.checkbox("🌍 Für alle Nutzer freigeben", value=False)
+        else:
+            is_shared = False
+            st.caption("Der Upload ist privat und nur für dich sichtbar.")
         if st.button("Hochladen & Vektorisieren"):
             with st.spinner("Verarbeite PDF (das kann kurz dauern)..."):
                 process_uploaded_pdf(uploaded_file, is_shared)
@@ -368,7 +436,7 @@ with st.sidebar:
             st.caption(f"🌍 {f}")
             
         # 2. Admin-Kontrollen (nur sichtbar, wenn man in ADMIN_USERS steht)
-        if st.session_state["username"] in ADMIN_USERS:
+        if is_admin():
             st.markdown("---")
             st.caption("👑 **Admin-Bereich**")
             file_to_delete_shared = st.selectbox("Geteiltes Dokument entfernen:", shared_files)
@@ -382,10 +450,8 @@ with st.sidebar:
                         ]
                     }
                 )
-                file_path = os.path.join(DOCS_DIR, file_to_delete_shared)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    
+                remove_pdf_if_orphaned(file_to_delete_shared)
+
                 st.success(f"'{file_to_delete_shared}' wurde global gelöscht!")
                 time.sleep(1)
                 st.rerun()
@@ -395,24 +461,53 @@ with st.sidebar:
     st.subheader("Deine privaten Dokumente")
     if private_files:
         file_to_manage = st.selectbox("Dokument verwalten:", private_files)
-        
+
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🌍 Freigeben", use_container_width=True):
-                make_document_public(file_to_manage)
-                st.success("Freigegeben!")
-                time.sleep(1)
-                st.rerun()
+            # Freigeben schreibt in den globalen Pool -- gleiche Huerde wie
+            # das Loeschen daraus, sonst koennte jeder Nutzer den Pool
+            # befuellen, aber nur Admins ihn wieder aufraeumen.
+            if is_admin():
+                if st.button("🌍 Freigeben", use_container_width=True):
+                    make_document_public(file_to_manage)
+                    st.success("Freigegeben!")
+                    time.sleep(1)
+                    st.rerun()
+            else:
+                st.button("🌍 Freigeben", use_container_width=True, disabled=True,
+                          help="Nur Administratoren können Dokumente global freigeben.")
         with col2:
             if st.button("🗑️ Löschen", use_container_width=True):
-                collection.delete(where={"file_name": file_to_manage})
-                file_path = os.path.join(DOCS_DIR, file_to_manage)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    
+                # Owner-Filter ist zwingend: ohne ihn loescht dieser Aufruf
+                # JEDEN Chunk mit diesem Dateinamen -- auch die anderer
+                # Nutzer und die des gemeinsamen Pools.
+                delete_private_document(file_to_manage, st.session_state["username"])
                 st.success("Gelöscht!")
+                time.sleep(1)
+                st.rerun()
     else:
         st.caption("Keine privaten Dokumente.")
+
+    # --- ADMIN: fremde private Dokumente ---
+    # Bewusst nur hier sichtbar und nie im Retrieval: Admins brauchen das
+    # Loeschrecht (verwaiste Dokumente ausgeschiedener Nutzer), aber private
+    # Dokumente sollen nicht in fremde Antworten einflieszen.
+    if is_admin():
+        foreign = list_foreign_private_documents(st.session_state["username"])
+        if foreign:
+            st.markdown("---")
+            st.caption("👑 **Admin: private Dokumente anderer Nutzer**")
+            st.caption("Nur zur Verwaltung – diese Dokumente werden nicht durchsucht.")
+            label = st.selectbox(
+                "Fremdes Dokument entfernen:",
+                [f"{owner} / {fname}" for owner, fname in foreign],
+            )
+            if st.button("🗑️ Endgültig löschen", use_container_width=True):
+                owner, fname = label.split(" / ", 1)
+                delete_private_document(fname, owner)
+                st.success(f"'{fname}' von '{owner}' gelöscht!")
+                time.sleep(1)
+                st.rerun()
     
     st.markdown("---")
     chat_model = st.text_input("Chat Modell", value="qwen3.8:27b") 
@@ -664,6 +759,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 answer = response.choices[0].message.content
                 
                 # --- 4. QUELLEN IN DER SESSION SPEICHERN ---
+                # Erst ALLE Quellen einsammeln ...
                 unique_sources = {}
                 for doc_text, metadata in unique_docs.items():
                     key = (metadata['file_name'], metadata.get('page', '?'))
@@ -671,18 +767,22 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                         unique_sources[key] = []
                     unique_sources[key].append(doc_text)
 
-                    # Quellen-Datenstruktur an die Nachricht anhängen
-                    message_data = {
-                        "role": "assistant", 
-                        "content": answer,
-                        "sources": [{"file": k[0], "page": k[1], "texts": v} for k, v in unique_sources.items()]
-                    }
-                    
-                    st.session_state.messages.append(message_data)
-                    save_chat(st.session_state.current_chat_id, st.session_state.messages)
-                    
-                    # Rerun, damit die Nachricht oben durch die Chat-Schleife (mit Expandern) gezeichnet wird
-                    st.rerun()
+                # ... und erst danach anhaengen und speichern. Lag dieser Block
+                # innerhalb der Schleife, brach st.rerun() bereits im ersten
+                # Durchlauf ab -- die Nachricht wurde mit genau einer Quelle
+                # gespeichert, alle weiteren gingen verloren.
+                message_data = {
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": [{"file": k[0], "page": k[1], "texts": v}
+                                for k, v in unique_sources.items()]
+                }
+
+                st.session_state.messages.append(message_data)
+                save_chat(st.session_state.current_chat_id, st.session_state.messages)
+
+                # Rerun, damit die Nachricht oben durch die Chat-Schleife (mit Expandern) gezeichnet wird
+                st.rerun()
 
             except Exception as e:
                 st.error(f"Fehler bei der Verarbeitung: {e}")
