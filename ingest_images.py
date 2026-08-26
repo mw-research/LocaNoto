@@ -6,12 +6,20 @@ import glob
 import base64
 from PIL import Image
 import io
+
+import paths
+
 print("Starte nachträgliche Bild-Vektorisierung...")
 
 # --- KONFIGURATION ---
-ORDNER_NAME = "dokumente" 
+paths.bootstrap()
+ORDNER_NAME = paths.DOCS_DIR
 VISION_MODEL = "qwen3-vl:32b"
 EMBEDDING_MODEL = "qwen3-embedding:4b"
+
+# Schwellen für den Müll-Filter (siehe Kommentar an der Prüfstelle).
+MIN_LONG_EDGE = 400
+MIN_AREA = 120_000
 
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
@@ -29,9 +37,8 @@ def get_embedding(text, model=EMBEDDING_MODEL):
     return response.data[0].embedding
 
 # ChromaDB laden (verbindet sich mit deiner bestehenden Datenbank!)
-db_path = os.path.join(os.getcwd(), "chroma_db")
-chroma_client = chromadb.PersistentClient(path=db_path)
-collection = chroma_client.get_collection(name="pdf_documents")
+chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
+collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
 
 pdf_dateien = glob.glob(os.path.join(ORDNER_NAME, "*.pdf"))
 
@@ -87,7 +94,13 @@ for pdf_pfad in pdf_dateien:
                     width, height = image.size
                     
                     # 1. MÜLL-FILTER: Ignoriere winzige Bilder (Logos, Icons, Trennlinien)
-                    if width < 400 or height < 400:
+                    #
+                    # Bewusst NICHT "width < 400 or height < 400": Normen enthalten
+                    # viele breite, flache Detailzeichnungen (z.B. 769x206, 642x189).
+                    # Eine Mindestgröße auf BEIDEN Kanten hat davon 31 % der Bilder
+                    # als "Logo" verworfen -- gemessen überlebten nur 6,7 %.
+                    # Lange Kante + Fläche trifft Logos, behält aber Zeichnungen.
+                    if max(width, height) < MIN_LONG_EDGE or width * height < MIN_AREA:
                         print(f"   ⏩ Überspringe winziges Bild ({width}x{height} px) - vermutlich ein Logo.")
                         continue
                     
@@ -148,7 +161,13 @@ for pdf_pfad in pdf_dateien:
                         ids=[chunk_id],
                         embeddings=[vector],
                         documents=[finaler_text],
-                        metadatas=[{"file_name": dateiname, "page": page_num + 1, "source": "uploaded_pdfs", "type": "image"}]
+                        # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
+                        # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
+                        # diese Keys matchen nie und sind damit unsichtbar -- in der
+                        # produktiven DB betraf das alle 581 Bild-Chunks.
+                        metadatas=[{"file_name": dateiname, "page": page_num + 1,
+                                    "access": "shared", "owner": "system",
+                                    "source": "uploaded_pdfs", "type": "image"}]
                     )
                 except Exception as e:
                     print(f"   [!] Fehler bei der Bildanalyse auf Seite {page_num+1}: {e}")
