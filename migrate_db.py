@@ -1,10 +1,11 @@
 import chromadb
 import os
 
+import paths
+
 print("Starte Datenbank-Migration...")
-db_path = os.path.join(os.getcwd(), "chroma_db")
-chroma_client = chromadb.PersistentClient(path=db_path)
-collection = chroma_client.get_collection(name="pdf_documents")
+chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
+collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
 
 data = collection.get()
 ids_to_update = []

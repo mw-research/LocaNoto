@@ -2,6 +2,8 @@ import pymupdf
 import chromadb
 from openai import OpenAI
 import os
+
+import paths
 import glob
 import base64
 from PIL import Image
@@ -11,7 +13,7 @@ import re
 print("Starte In-Place Formel-Update in ChromaDB...")
 
 # --- KONFIGURATION ---
-ORDNER_NAME = "dokumente" 
+ORDNER_NAME = paths.DOCS_DIR
 VISION_MODEL = "qwen3-vl:32b"
 EMBEDDING_MODEL = "qwen3-embedding:4b"
 
@@ -21,9 +23,8 @@ client = OpenAI(
 )
 
 # ChromaDB laden
-db_path = os.path.join(os.getcwd(), "chroma_db")
-chroma_client = chromadb.PersistentClient(path=db_path)
-collection = chroma_client.get_collection(name="pdf_documents")
+chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
+collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
 
 # Dein strikter Formel-Prompt aus transcribe_formulas.py
 PROMPT = (

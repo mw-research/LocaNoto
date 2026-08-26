@@ -5,10 +5,14 @@ from openai import OpenAI
 import os
 import glob
 
+import paths
+from textutils import strip_boilerplate
+
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
 # --- KONFIGURATION ---
-ORDNER_NAME = "dokumente" # <--- Hier sucht das Skript nach PDFs
+paths.bootstrap()
+ORDNER_NAME = paths.DOCS_DIR # <--- Hier sucht das Skript nach PDFs
 
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
@@ -26,17 +30,13 @@ def get_embedding(text, model="qwen3-embedding:4b"):
     return response.data[0].embedding
 
 # ChromaDB Setup
-db_path = os.path.join(os.getcwd(), "chroma_db")
-chroma_client = chromadb.PersistentClient(path=db_path)
-collection = chroma_client.get_or_create_collection(name="pdf_documents")
+chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
+collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
-# Prüfen, ob der Ordner existiert
-if not os.path.exists(ORDNER_NAME):
-    os.makedirs(ORDNER_NAME)
-    print(f"Ordner '{ORDNER_NAME}' wurde erstellt. Bitte lege PDFs hinein und starte neu.")
-    exit()
+# paths.bootstrap() hat den Ordner bereits angelegt -- hier nur noch melden,
+# wenn er leer ist.
 
 # Alle PDFs im Ordner finden
 pdf_dateien = glob.glob(os.path.join(ORDNER_NAME, "*.pdf"))
@@ -76,7 +76,9 @@ for pdf_pfad in pdf_dateien:
                     
                     # Bounding-Box direkt über der Tabelle abgreifen
                     header_rect = pymupdf.Rect(0, max(0, y0 - 150), page.rect.width, y0)
-                    table_context = page.get_text("text", clip=header_rect).replace("\n", " ").strip()
+                    table_context = strip_boilerplate(
+                        page.get_text("text", clip=header_rect)
+                    ).replace("\n", " ").strip()
                     
                     if not table_context or len(table_context) < 5:
                         table_context = f"Tabelle aus {dateiname}, Seite {page_num + 1}"
@@ -101,7 +103,7 @@ for pdf_pfad in pdf_dateien:
             page.apply_redactions()
 
             # --- RESTLICHEN TEXT AUSLESEN ---
-            page_text = page.get_text()
+            page_text = strip_boilerplate(page.get_text())
             if not page_text.strip():
                 continue
                 
