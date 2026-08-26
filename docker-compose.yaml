@@ -12,6 +12,24 @@ services:
       - ADMIN_USERS=${ADMIN_USERS:-admin}
     ports:
       - "${APP_PORT:-8501}:8501"
+
+    # Der Reranker (BAAI/bge-reranker-v2-m3) ist der einzige Torch-Nutzer im
+    # Container. requirements.txt zieht den vollen CUDA-Stack, ohne die
+    # folgende Sektion laeuft er aber auf der CPU -- bei 1024 Token Fenster
+    # und rund 30 Kandidaten pro Frage kostet das mehrere Sekunden.
+    #
+    # Einkommentieren, wenn auf dem Host das NVIDIA Container Toolkit
+    # eingerichtet ist. Wer bewusst auf der CPU bleibt, sollte stattdessen in
+    # requirements.txt auf die CPU-Variante von torch wechseln -- das spart
+    # mehrere GB Imagegroesse.
+    #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     volumes:
       # Ein einziger Mount fuer den kompletten Datenbestand. Er entspricht
       # exakt dem data/-Ordner, der zwischen Installationen weitergegeben

@@ -205,7 +205,9 @@ try:
         input=["Cleanup"], model=EMBEDDING_MODEL, encoding_format="float",
         extra_body={"drop_params": True, "keep_alive": 0}
     )
-except:
+except Exception:
+    # Das Freigeben des VRAM ist Kür -- ein Fehler hier darf den
+    # abgeschlossenen Ingest nicht als gescheitert erscheinen lassen.
     pass
 
 print("🚀 ALLE BILDER SIND INDEXIERT!")
