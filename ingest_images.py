@@ -39,11 +39,14 @@ if not pdf_dateien:
     print(f"Keine PDFs im Ordner '{ORDNER_NAME}' gefunden.")
     exit()
 
-# Der Prompt ist darauf optimiert, wissenschaftliche Messdaten extrem präzise zu erfassen
+# Prompt
 VISION_PROMPT = """
-Analysiere dieses Bild aus einem wissenschaftlichen Dokument. Beschreibe extrem detailliert, was zu sehen ist. Achte besonders auf Diagramme, Tabellen und Plots. 
-Bei Spektroskopie-Daten (wie separaten WAXS-Diffraktogrammen oder Infrarot-Spektren) nenne präzise die Achsenbeschriftungen, markante Peaks (z. B. 2-Theta-Winkel oder Wellenzahlen in cm^-1), Intensitäten und erkennbare Materialphasen, Sekundärbaustoffe oder Kontaminanten. 
-Erfasse alle relevanten Datenpunkte, Legenden und Zusammenhänge im Bild.
+Analysiere dieses Bild aus einem Dokument. Erstelle eine umfassende, neutrale und hochdetaillierte Textbeschreibung aller sichtbaren Inhalte, damit diese in einer Text-Datenbank optimal durchsuchbar werden.
+- Extrahiere sämtlichen relevanten Text.
+- Beschreibe bei Diagrammen, Graphen oder Schaubildern die Achsen, Werte, Trends und Kernaussagen.
+- Erfasse bei Tabellen die grundlegende Struktur und die wichtigsten Datenpunkte.
+- Beschreibe bei Fotos, Illustrationen oder Skizzen das zentrale Motiv und alle relevanten Details.
+Übersetze den kompletten Informationsgehalt des Bildes so präzise in Textform, dass eine Person, die das Bild nicht sieht, keine einzige fachliche Information verpasst. Erfinde keine Informationen hinzu.
 """
 
 # --- VERARBEITUNG ---
@@ -84,7 +87,7 @@ for pdf_pfad in pdf_dateien:
                     width, height = image.size
                     
                     # 1. MÜLL-FILTER: Ignoriere winzige Bilder (Logos, Icons, Trennlinien)
-                    if width < 150 or height < 150:
+                    if width < 400 or height < 400:
                         print(f"   ⏩ Überspringe winziges Bild ({width}x{height} px) - vermutlich ein Logo.")
                         continue
                     
