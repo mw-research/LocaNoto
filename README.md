@@ -5,9 +5,27 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 ## 🚀 Features
 * **Lokal & abgeschottet:** Im Betrieb fließen keine Daten an externe Cloud-Anbieter.
   (Einmalig beim ersten Start lädt der Reranker sein Modell von HuggingFace; für einen komplett offline betriebenen Server muss das Modell vorab in den Image-Cache gelegt werden.)
-* **Hybride Suche:** Kombination aus semantischer Vektorsuche (ChromaDB) und exakter Keyword-Suche (BM25).
+* **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
 * **Intelligentes Reranking:** BAAI-Reranker destilliert hunderte Treffer auf die exaktesten Textstellen herunter.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
+
+## 🗂️ Sachgebiete
+
+Unterordner in `data/dokumente/` werden als Sachgebiet übernommen und stehen
+in der Seitenleiste als Filter zur Verfügung:
+
+```
+data/dokumente/
+    Tragwerk/        -> Sachgebiet "Tragwerk"
+    Korrosion/       -> Sachgebiet "Korrosion"
+    DIN 18202.pdf    -> Sachgebiet "(Basis)"
+```
+
+Das ist mehr als Bequemlichkeit. In einem flachen gemeinsamen Index
+konkurrieren kleine Dokumente gegen große: DIN 18202 stellt 1,6 % der Chunks
+des Beispielkorpus, DIN EN 1090-2 dagegen 20,6 % — bei einem Top-k über alle
+Dokumente verliert die kleine Norm strukturell. Die Eingrenzung auf ein
+Sachgebiet stellt die Chancengleichheit wieder her.
 
 ## 📂 Datenverzeichnis
 
@@ -28,6 +46,26 @@ Die Struktur wird beim ersten Start automatisch angelegt. Ein vorhandener
 
 > **Hinweis zur Weitergabe:** `data/chats/` enthält die Chatverläufe aller
 > Nutzer. Vor der Weitergabe an Dritte entfernen.
+
+## ⚙️ Ingest
+
+```bash
+python ingest.py          # Text und Tabellen
+python ingest_images.py   # Abbildungen über das Vision-Modell
+```
+
+Beide Läufe sind unterbrechbar und setzen auf Chunk-Ebene wieder auf: die
+Textextraktion läuft erneut (billig), vektorisiert wird nur, was fehlt
+(teuer). Ein abgebrochener Lauf hinterlässt damit kein halb indexiertes
+Dokument, das beim nächsten Start als erledigt gilt.
+
+Stammt die Vektordatenbank aus einer Installation vor dem FTS5-Index, baut
+die App ihn beim ersten Start automatisch auf. Vorab und außerhalb der
+Weboberfläche geht das mit:
+
+```bash
+python rebuild_index.py
+```
 
 ## 🔐 Rechte
 

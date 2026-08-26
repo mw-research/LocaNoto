@@ -8,11 +8,12 @@ import time
 import json
 from datetime import datetime
 from sentence_transformers import CrossEncoder
-from rank_bm25 import BM25Okapi
 import re
 import bcrypt
 
 import paths
+import keyword_index
+from embedding import embed_batch
 from textutils import strip_boilerplate
 
 paths.bootstrap()
@@ -105,21 +106,6 @@ with st.sidebar:
 CHATS_DIR = paths.CHATS_DIR
 DOCS_DIR = paths.DOCS_DIR
 
-def get_embedding(text, model="qwen3-embedding:4b", keep_alive=None):
-    text = text.replace("\n", " ")
-    extra_body_params = {"drop_params": True}
-    
-    if keep_alive is not None:
-        extra_body_params["keep_alive"] = keep_alive
-        
-    response = client.embeddings.create(
-        input=[text],
-        model=model,
-        encoding_format="float", 
-        extra_body=extra_body_params
-    )
-    return response.data[0].embedding
-
 # --- CHAT-SPEICHERUNG (MULTI-USER) ---
 def get_user_chat_dir():
     """Gibt den Pfad zum persönlichen Chat-Ordner des eingeloggten Nutzers zurück."""
@@ -188,26 +174,27 @@ def init_chromadb():
 chroma_client, collection = init_chromadb()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
-# --- BM25 SETUP (In-Memory) ---
+# --- KEYWORD-INDEX (SQLite FTS5, plattenbasiert) ---
+# Loest den fruehren In-Memory-BM25 ab. Der lud bei jedem Start den gesamten
+# Korpus in den Arbeitsspeicher (hochgerechnet 8-15 GB bei 1,6 GB PDF) und war
+# mit @st.cache_resource eingefroren: frisch hochgeladene Dokumente waren bis
+# zum Neustart nicht keyword-suchbar, geloeschte weiterhin auffindbar.
 @st.cache_resource
-def init_bm25():
-    # Holt einmalig alle Dokumente aus der ChromaDB
-    all_data = collection.get(include=['documents', 'metadatas'])
-    documents = all_data.get('documents', [])
-    metadatas = all_data.get('metadatas', [])
-    
-    if not documents:
-        return None, [], []
-        
-    # Einfacher Tokenizer: Macht alles klein und filtert nur Buchstaben/Zahlen heraus
-    def tokenize(text):
-        return re.findall(r'\w+', text.lower())
-        
-    tokenized_corpus = [tokenize(doc) for doc in documents]
-    bm25 = BM25Okapi(tokenized_corpus)
-    return bm25, documents, metadatas
+def init_keyword_index():
+    """Stellt sicher, dass der Index zur Vektordatenbank passt.
 
-bm25_index, bm25_docs, bm25_metas = init_bm25()
+    Faellt er leer aus, obwohl Chunks vorhanden sind, stammt die Datenbank aus
+    einer Installation vor diesem Index -- dann einmalig nachbauen.
+    """
+    have = keyword_index.count()
+    if have == 0 and collection.count() > 0:
+        with st.spinner("Baue Keyword-Index einmalig auf ..."):
+            have = keyword_index.rebuild_from_collection(collection)
+        st.toast(f"Keyword-Index aufgebaut: {have:,} Chunks")
+    return have
+
+
+init_keyword_index()
 
 # --- RERANKER SETUP ---
 @st.cache_resource
@@ -233,6 +220,8 @@ def make_document_public(filename):
             meta["access"] = "shared"
             new_metadatas.append(meta)
         collection.update(ids=existing_data["ids"], metadatas=new_metadatas)
+        keyword_index.set_access(filename, st.session_state["username"], "shared")
+        refresh_document_index()
         return True
     return False
 
@@ -265,8 +254,10 @@ def delete_private_document(filename, owner):
         {"access": "private"},
         {"owner": owner},
     ]})
+    keyword_index.delete_document(filename, access="private", owner=owner)
 
     remove_pdf_if_orphaned(filename)
+    refresh_document_index()
 
 
 def list_foreign_private_documents(current_user):
@@ -316,6 +307,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
             metadatas.append({
                 "file_name": uploaded_file.name,
                 "page": page_num + 1,
+                "folder": "(Basis)",
                 "access": access_type,
                 "owner": st.session_state["username"],
                 "type": "table" # Extra-Tag, damit wir wissen, dass es eine Tabelle ist
@@ -337,6 +329,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
                 metadatas.append({
                     "file_name": uploaded_file.name,
                     "page": page_num + 1,
+                    "folder": "(Basis)",
                     "access": access_type,
                     "owner": st.session_state["username"],
                     "type": "text"
@@ -344,20 +337,65 @@ def process_uploaded_pdf(uploaded_file, is_shared):
                 ids.append(f"{uploaded_file.name}_p{page_num+1}_text_{i}")
                 
     if chunks:
-        # Vektorisieren
-        embeddings = []
-        for chunk in chunks:
-            embeddings.append(get_embedding(chunk))
-        
-        # In ChromaDB speichern
-        collection.add(ids=ids, embeddings=embeddings, documents=chunks, metadatas=metadatas)
+        # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
+        # HTTP-Anfrage an den Modellserver.
+        embeddings = embed_batch(client, chunks, "qwen3-embedding:4b")
 
-# Listen für die UI abrufen
-shared_data = collection.get(where={"access": "shared"}, include=["metadatas"])
-shared_files = sorted(list(set([m["file_name"] for m in shared_data["metadatas"] if m and "file_name" in m]))) if shared_data and shared_data["metadatas"] else []
+        keep = [i for i, v in enumerate(embeddings) if v is not None]
+        if not keep:
+            return
 
-private_data = collection.get(where={"$and": [{"access": "private"}, {"owner": st.session_state["username"]}]}, include=["metadatas"])
-private_files = sorted(list(set([m["file_name"] for m in private_data["metadatas"] if m and "file_name" in m]))) if private_data and private_data["metadatas"] else []
+        collection.add(
+            ids=[ids[i] for i in keep],
+            embeddings=[embeddings[i] for i in keep],
+            documents=[chunks[i] for i in keep],
+            metadatas=[metadatas[i] for i in keep],
+        )
+        # Beide Indizes im selben Schritt fuellen, damit Vektor- und
+        # Keyword-Suche nie auseinanderlaufen.
+        keyword_index.add_chunks(
+            ((ids[i], chunks[i], metadatas[i]) for i in keep))
+        refresh_document_index()
+
+# --- LISTEN FÜR DIE UI ---
+# Gecacht, weil dieser Block auf Modulebene liegt und damit bei JEDEM
+# Streamlit-Rerun laeuft -- also bei jedem Tastendruck und jedem Klick.
+# Ungecacht bedeutet das einen vollstaendigen Metadaten-Scan pro Interaktion;
+# bei 324.000 Chunks (Hochrechnung fuer 1,6 GB) sind das mehrere Sekunden
+# Verzoegerung bei jeder Eingabe.
+#
+# Der Cache wird nach jeder Aenderung ueber refresh_document_index() geleert.
+# Die ttl faengt zusaetzlich Aenderungen ab, die ein ANDERER Nutzer
+# vorgenommen hat -- dessen Cache-Leerung erreicht diese Sitzung nicht.
+@st.cache_data(ttl=60, show_spinner=False)
+def load_document_index(_collection, username):
+    def files_and_folders(data):
+        files, folders = set(), set()
+        for m in (data.get("metadatas") or []):
+            if not m:
+                continue
+            if m.get("file_name"):
+                files.add(m["file_name"])
+            if m.get("folder"):
+                folders.add(m["folder"])
+        return sorted(files), sorted(folders)
+
+    shared_files, shared_folders = files_and_folders(
+        _collection.get(where={"access": "shared"}, include=["metadatas"]))
+    private_files, private_folders = files_and_folders(
+        _collection.get(where={"$and": [{"access": "private"},
+                                        {"owner": username}]},
+                        include=["metadatas"]))
+    return shared_files, private_files, sorted(set(shared_folders) | set(private_folders))
+
+
+def refresh_document_index():
+    """Nach jeder Aenderung an Dokumenten aufrufen."""
+    load_document_index.clear()
+
+
+shared_files, private_files, all_folders = load_document_index(
+    collection, st.session_state["username"])
 
 # --- SIDEBAR (UI) ---
 with st.sidebar:
@@ -404,6 +442,18 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("🎯 Dokumenten-Filter")
+    # Sachgebiet zuerst: bei vielen Dokumenten ist die Ordnerauswahl der
+    # wirksamere Filter. Ein flacher gemeinsamer Index laesst kleine Normen
+    # gegen grosse verlieren -- DIN 18202 stellt 1,6 % der Chunks, DIN EN
+    # 1090-2 dagegen 20,6 %. Die Eingrenzung auf ein Sachgebiet stellt die
+    # Chancengleichheit wieder her.
+    selected_folders = st.multiselect(
+        "Sachgebiet:",
+        options=all_folders,
+        default=[],
+        help="Leer lassen, um alle Sachgebiete zu durchsuchen."
+    ) if all_folders else []
+
     selected_docs = st.multiselect(
         "Suche beschränken auf:", 
         options=all_available_files,
@@ -450,7 +500,9 @@ with st.sidebar:
                         ]
                     }
                 )
+                keyword_index.delete_document(file_to_delete_shared, access="shared")
                 remove_pdf_if_orphaned(file_to_delete_shared)
+                refresh_document_index()
 
                 st.success(f"'{file_to_delete_shared}' wurde global gelöscht!")
                 time.sleep(1)
@@ -627,16 +679,27 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                     except:
                         st.caption("🧠 *Nutze Standard-Suche (Multi-Query fehlgeschlagen)*")
 
-                # --- 2. HYBRID-SUCHE (Vektor + BM25) ---
+                # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
-                    query_vectors = [get_embedding(q, model=embed_model, keep_alive=0) for q in search_queries]
+                    # Die 3 Sonden in EINER Anfrage statt in dreien.
+                    query_vectors = embed_batch(client, search_queries,
+                                                embed_model, keep_alive=0)
+                    query_vectors = [v for v in query_vectors if v is not None]
+                    if not query_vectors:
+                        st.error("Die Suchanfrage konnte nicht vektorisiert werden.")
+                        st.stop()
                     broad_k = max(10, top_k * 3) 
                     
                     unique_docs = {} 
 
                     # A. VEKTOR-SUCHE (ChromaDB)
                     base_filter = {"$or": [{"access": {"$eq": "shared"}}, {"owner": {"$eq": st.session_state["username"]}}]}
-                    where_clause = {"$and": [base_filter, {"file_name": {"$in": selected_docs}}]} if selected_docs else base_filter
+                    conditions = [base_filter]
+                    if selected_docs:
+                        conditions.append({"file_name": {"$in": selected_docs}})
+                    if selected_folders:
+                        conditions.append({"folder": {"$in": selected_folders}})
+                    where_clause = {"$and": conditions} if len(conditions) > 1 else base_filter
 
                     results = collection.query(
                         query_embeddings=query_vectors,
@@ -649,33 +712,24 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                             if doc_text not in unique_docs:
                                 unique_docs[doc_text] = {"meta": metadata, "found_by_query": search_queries[query_idx]}
 
-                    # B. BM25 KEYWORD-SUCHE (In-Memory)
-                    if bm25_index is not None:
-                        for q in search_queries:
-                            tokenized_query = re.findall(r'\w+', q.lower())
-                            bm25_scores = bm25_index.get_scores(tokenized_query)
-                            
-                            # BM25 darf pro Sonde maximal 5 absolute Keyword-Treffer beisteuern, 
-                            # damit die semantischen Vektor-Treffer (wie DIN 18202) nicht verdrängt werden!
-                            top_n_indices = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:5]
-                            
-                            for idx in top_n_indices:
-                                if bm25_scores[idx] > 0: # Nur wenn es überhaupt einen Match gab
-                                    doc_text = bm25_docs[idx]
-                                    
-                                    # Fallback auf leeres Dictionary, falls Metadaten komplett fehlen
-                                    meta = bm25_metas[idx] or {} 
-                                    
-                                    # Sicheres Auslesen ohne KeyError
-                                    m_access = meta.get('access', 'shared')
-                                    m_owner = meta.get('owner', '')
-                                    m_file = meta.get('file_name', '')
-                                    
-                                    # Manueller Berechtigungs- und Dokumenten-Filter für BM25
-                                    if m_access == 'shared' or m_owner == st.session_state["username"]:
-                                        if not selected_docs or m_file in selected_docs:
-                                            if doc_text not in unique_docs:
-                                                unique_docs[doc_text] = {"meta": meta, "found_by_query": q}
+                    # B. KEYWORD-SUCHE (SQLite FTS5, plattenbasiert)
+                    #
+                    # Rechte- und Dokumentenfilter laufen jetzt in SQL statt
+                    # nachtraeglich in Python. Dort hing der Rechtecheck an
+                    # meta.get('access', 'shared') -- Chunks ohne access-Key
+                    # galten damit als oeffentlich.
+                    for q in search_queries:
+                        # Pro Sonde maximal 5 Keyword-Treffer, damit die
+                        # semantischen Vektor-Treffer nicht verdrängt werden.
+                        for hit in keyword_index.search(
+                                q,
+                                st.session_state["username"],
+                                limit=5,
+                                file_names=selected_docs or None,
+                                folders=selected_folders or None):
+                            if hit["text"] not in unique_docs:
+                                unique_docs[hit["text"]] = {
+                                    "meta": hit["meta"], "found_by_query": q}
 
                 # --- 2.5 RERANKING (Precision Filtering mit Sonden-Berücksichtigung) ---
                 with st.spinner("Reranker bewertet die Relevanz der gefundenen Dokumente..."):
