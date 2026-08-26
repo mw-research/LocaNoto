@@ -1,3 +1,15 @@
+"""Batch-Vektorisierung der PDFs aus data/dokumente.
+
+Verarbeitet Tabellen und Fliesstext getrennt: Tabellen werden als ein
+unzerteilter Chunk mit der Bildunterschrift darueber abgelegt und
+anschliessend aus dem Seitentext geschwaerzt, damit sie nicht ein zweites
+Mal als zerlaufener Fliesstext im Index landen.
+
+Der Lauf ist unterbrechbar. Wiederaufsetzen geschieht auf Chunk-Ebene, nicht
+auf Datei-Ebene: die Textextraktion laeuft erneut (billig), aber vektorisiert
+wird nur, was noch fehlt (teuer). Ein abgebrochener Lauf hinterlaesst damit
+kein halb indexiertes Dokument, das beim naechsten Start als erledigt gilt.
+"""
 import pymupdf
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -6,138 +18,187 @@ import os
 import glob
 
 import paths
+import keyword_index
+from embedding import embed_batch
 from textutils import strip_boilerplate
 
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
 # --- KONFIGURATION ---
 paths.bootstrap()
-ORDNER_NAME = paths.DOCS_DIR # <--- Hier sucht das Skript nach PDFs
+ORDNER_NAME = paths.DOCS_DIR
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b")
 
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
+    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"),
     base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
 )
 
-def get_embedding(text, model="qwen3-embedding:4b"):
-    text = text.replace("\n", " ")
-    response = client.embeddings.create(
-        input=[text],
-        model=model,
-        encoding_format="float", 
-        extra_body={"drop_params": True}
-    )
-    return response.data[0].embedding
-
-# ChromaDB Setup
 chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
 collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
+kw = keyword_index.connect()
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
-# paths.bootstrap() hat den Ordner bereits angelegt -- hier nur noch melden,
-# wenn er leer ist.
-
-# Alle PDFs im Ordner finden
-pdf_dateien = glob.glob(os.path.join(ORDNER_NAME, "*.pdf"))
+# Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe folder_of).
+pdf_dateien = sorted(glob.glob(os.path.join(ORDNER_NAME, "**", "*.pdf"),
+                               recursive=True))
 
 if not pdf_dateien:
-    print(f"Keine PDFs im Ordner '{ORDNER_NAME}' gefunden.")
-    exit()
+    print(f"Keine PDFs in '{ORDNER_NAME}' gefunden.")
+    raise SystemExit(0)
 
 print(f"Insgesamt {len(pdf_dateien)} PDFs gefunden. Starte Verarbeitung...\n")
+
+
+def folder_of(pdf_pfad):
+    """Unterordner relativ zu data/dokumente, als Sachgebiet nutzbar.
+
+    PDFs direkt im Wurzelverzeichnis bekommen '(Basis)', damit der Filter in
+    der App auch sie als Gruppe anbieten kann.
+    """
+    rel = os.path.relpath(os.path.dirname(pdf_pfad), ORDNER_NAME)
+    return "(Basis)" if rel in (".", "") else rel.replace(os.sep, "/")
+
+
+def existing_chunk_ids(dateiname):
+    """IDs, die fuer dieses Dokument bereits in der Datenbank stehen."""
+    try:
+        return set(collection.get(where={"file_name": dateiname},
+                                  include=[])["ids"])
+    except Exception:
+        return set()
+
+
+def flush(pending, dateiname):
+    """Vektorisiert und speichert die gesammelten Chunks eines Dokuments."""
+    if not pending:
+        return 0
+
+    ids = [p[0] for p in pending]
+    texts = [p[1] for p in pending]
+    metas = [p[2] for p in pending]
+
+    def show(done, total):
+        print(f"   ... vektorisiere {done}/{total} Chunks", end="\r")
+
+    vectors = embed_batch(client, texts, EMBEDDING_MODEL, progress=show)
+    print(" " * 60, end="\r")
+
+    # Chunks ohne Vektor (dauerhafter Serverfehler) ueberspringen, statt den
+    # ganzen Lauf abzubrechen.
+    keep = [i for i, v in enumerate(vectors) if v is not None]
+    if len(keep) < len(ids):
+        print(f"   [!] {len(ids) - len(keep)} Chunks ohne Vektor uebersprungen.")
+    if not keep:
+        return 0
+
+    collection.add(
+        ids=[ids[i] for i in keep],
+        embeddings=[vectors[i] for i in keep],
+        documents=[texts[i] for i in keep],
+        metadatas=[metas[i] for i in keep],
+    )
+    keyword_index.add_chunks(
+        ((ids[i], texts[i], metas[i]) for i in keep), con=kw)
+    return len(keep)
+
 
 # --- VERARBEITUNG ---
 for pdf_pfad in pdf_dateien:
     dateiname = os.path.basename(pdf_pfad)
-    
-    # 1. Sicherheits-Check: Ist das PDF schon in der Datenbank?
-    existing = collection.get(where={"file_name": dateiname})
-    if existing and len(existing['ids']) > 0:
-        print(f"⏩ ÜBERSPRINGE: '{dateiname}' ist bereits in der Datenbank.")
-        continue # Springt sofort zum nächsten PDF
+    ordner = folder_of(pdf_pfad)
 
-    print(f"⏳ VERARBEITE: '{dateiname}' ...")
+    bekannt = existing_chunk_ids(dateiname)
+
+    print(f"⏳ VERARBEITE: '{dateiname}' [{ordner}]"
+          + (f" -- {len(bekannt)} Chunks bereits vorhanden" if bekannt else ""))
+
     try:
         doc = pymupdf.open(pdf_pfad)
         total_pages = len(doc)
-        
+        pending = []
+        neu = 0
+
         for page_num in range(total_pages):
             page = doc[page_num]
-            
-          # --- NEU: TABELLEN ISOLIEREN UND ANREICHERN ---
+            basis_meta = {"file_name": dateiname, "page": page_num + 1,
+                          "folder": ordner, "access": "shared",
+                          "owner": "system"}
+
+            # --- TABELLEN ISOLIEREN UND ANREICHERN ---
             tables = page.find_tables()
             for i, table in enumerate(tables):
                 try:
                     md_table = table.to_markdown()
-                    
-                    # SICHERER ZUGRIFF: y0 ist immer der 2. Wert im Tuple (Index 1)
+
+                    # SICHERER ZUGRIFF: y0 ist immer der 2. Wert im Tuple
                     y0 = table.bbox[1]
-                    
+
                     # Bounding-Box direkt über der Tabelle abgreifen
-                    header_rect = pymupdf.Rect(0, max(0, y0 - 150), page.rect.width, y0)
+                    header_rect = pymupdf.Rect(0, max(0, y0 - 150),
+                                               page.rect.width, y0)
                     table_context = strip_boilerplate(
                         page.get_text("text", clip=header_rect)
                     ).replace("\n", " ").strip()
-                    
+
                     if not table_context or len(table_context) < 5:
                         table_context = f"Tabelle aus {dateiname}, Seite {page_num + 1}"
-                    
-                    chunk_text = f"KONTEXT ZUR TABELLE: {table_context}\n\nTABELLE (Seite {page_num + 1}):\n{md_table}"
+
+                    chunk_text = (f"KONTEXT ZUR TABELLE: {table_context}\n\n"
+                                  f"TABELLE (Seite {page_num + 1}):\n{md_table}")
                     chunk_id = f"{dateiname}_p{page_num+1}_table_{i}"
-                    
-                    
-                    vector = get_embedding(chunk_text)
-                    collection.add(
-                        ids=[chunk_id],
-                        embeddings=[vector],
-                        documents=[chunk_text],
-                        metadatas=[{"file_name": dateiname, "page": page_num + 1, "access": "shared", "owner": "system", "type": "table"}]
-                    )
-                    
+
+                    if chunk_id not in bekannt:
+                        pending.append((chunk_id, chunk_text,
+                                        dict(basis_meta, type="table")))
+
                     page.add_redact_annot(pymupdf.Rect(table.bbox))
                 except Exception as e:
                     print(f"   [!] Fehler bei Tabelle auf Seite {page_num+1}: {e}")
-            
+
             # Schwärzungen anwenden
             page.apply_redactions()
 
             # --- RESTLICHEN TEXT AUSLESEN ---
             page_text = strip_boilerplate(page.get_text())
-            if not page_text.strip():
-                continue
-                
-            chunks = text_splitter.split_text(page_text)
-            for i, chunk in enumerate(chunks):
-                chunk_id = f"{dateiname}_p{page_num+1}_c{i}"
-                try:
-                    vector = get_embedding(chunk)
-                    collection.add(
-                        ids=[chunk_id],
-                        embeddings=[vector],
-                        documents=[chunk],
-                        metadatas=[{"file_name": dateiname, "page": page_num + 1, "access": "shared", "owner": "system", "type": "text"}]
-                    )
-                except Exception as e:
-                    print(f"   [!] Fehler bei Text auf Seite {page_num+1}: {e}")
-                    
-            # Fortschrittsanzeige für große Dokumente
+            if page_text.strip():
+                for i, chunk in enumerate(text_splitter.split_text(page_text)):
+                    chunk_id = f"{dateiname}_p{page_num+1}_c{i}"
+                    if chunk_id not in bekannt:
+                        pending.append((chunk_id, chunk,
+                                        dict(basis_meta, type="text")))
+
+            # Regelmaessig wegschreiben, damit ein Abbruch nur die letzten
+            # Seiten kostet statt des ganzen Dokuments.
+            if len(pending) >= 256:
+                neu += flush(pending, dateiname)
+                pending = []
+
             if (page_num + 1) % 100 == 0:
                 print(f"   ... Fortschritt: {page_num + 1} / {total_pages} Seiten")
-                
-        print(f"✅ ABGESCHLOSSEN: '{dateiname}' wurde erfolgreich indexiert.\n")
-        
+
+        neu += flush(pending, dateiname)
+        doc.close()
+
+        if neu:
+            print(f"✅ ABGESCHLOSSEN: '{dateiname}' -- {neu} neue Chunks.\n")
+        else:
+            print(f"⏩ ÜBERSPRUNGEN: '{dateiname}' war bereits vollständig.\n")
+
     except Exception as e:
         print(f"❌ FEHLER beim Öffnen von '{dateiname}': {e}\n")
+
+kw.close()
 
 # --- VRAM CLEANUP ---
 print("Gebe VRAM frei...")
 try:
     client.embeddings.create(
-        input=["Cleanup"], model="qwen3-embedding:4b", encoding_format="float",
+        input=["Cleanup"], model=EMBEDDING_MODEL, encoding_format="float",
         extra_body={"drop_params": True, "keep_alive": 0}
     )
-except:
+except Exception:
     pass
 
 print("🚀 FERTIG! Alle Dokumente sind in der Datenbank.")

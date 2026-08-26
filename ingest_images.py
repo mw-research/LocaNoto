@@ -8,6 +8,7 @@ from PIL import Image
 import io
 
 import paths
+import keyword_index
 
 print("Starte nachträgliche Bild-Vektorisierung...")
 
@@ -39,8 +40,16 @@ def get_embedding(text, model=EMBEDDING_MODEL):
 # ChromaDB laden (verbindet sich mit deiner bestehenden Datenbank!)
 chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
 collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
+kw = keyword_index.connect()
 
-pdf_dateien = glob.glob(os.path.join(ORDNER_NAME, "*.pdf"))
+
+def folder_of(pdf_pfad):
+    """Unterordner relativ zu data/dokumente, als Sachgebiet nutzbar."""
+    rel = os.path.relpath(os.path.dirname(pdf_pfad), ORDNER_NAME)
+    return "(Basis)" if rel in (".", "") else rel.replace(os.sep, "/")
+
+pdf_dateien = sorted(glob.glob(os.path.join(ORDNER_NAME, "**", "*.pdf"),
+                               recursive=True))
 
 if not pdf_dateien:
     print(f"Keine PDFs im Ordner '{ORDNER_NAME}' gefunden.")
@@ -59,6 +68,7 @@ Analysiere dieses Bild aus einem Dokument. Erstelle eine umfassende, neutrale un
 # --- VERARBEITUNG ---
 for pdf_pfad in pdf_dateien:
     dateiname = os.path.basename(pdf_pfad)
+    ordner = folder_of(pdf_pfad)
     print(f"\n⏳ Durchsuche '{dateiname}' nach Bildern...")
     
     try:
@@ -157,6 +167,15 @@ for pdf_pfad in pdf_dateien:
                     vector = get_embedding(finaler_text)
                     
                     # 3. Als neuen Chunk in ChromaDB speichern (mit speziellem Typ "image")
+                    #
+                    # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
+                    # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
+                    # diese Keys matchen nie und sind damit unsichtbar -- in der
+                    # produktiven DB betraf das alle 581 Bild-Chunks.
+                    bild_meta = {"file_name": dateiname, "page": page_num + 1,
+                                 "folder": ordner, "access": "shared",
+                                 "owner": "system", "source": "uploaded_pdfs",
+                                 "type": "image"}
                     collection.add(
                         ids=[chunk_id],
                         embeddings=[vector],
@@ -165,10 +184,10 @@ for pdf_pfad in pdf_dateien:
                         # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
                         # diese Keys matchen nie und sind damit unsichtbar -- in der
                         # produktiven DB betraf das alle 581 Bild-Chunks.
-                        metadatas=[{"file_name": dateiname, "page": page_num + 1,
-                                    "access": "shared", "owner": "system",
-                                    "source": "uploaded_pdfs", "type": "image"}]
+                        metadatas=[bild_meta]
                     )
+                    keyword_index.add_chunks(
+                        [(chunk_id, finaler_text, bild_meta)], con=kw)
                 except Exception as e:
                     print(f"   [!] Fehler bei der Bildanalyse auf Seite {page_num+1}: {e}")
                     
@@ -176,6 +195,8 @@ for pdf_pfad in pdf_dateien:
         
     except Exception as e:
         print(f"❌ FEHLER beim Öffnen von '{dateiname}': {e}")
+
+kw.close()
 
 # --- VRAM CLEANUP ---
 print("\nGebe VRAM frei...")
