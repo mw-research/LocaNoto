@@ -14,3 +14,5 @@ nohup.out
 data/
 data_*/
 deploy_*/
+# Ingest-Logs
+log_*.txt
