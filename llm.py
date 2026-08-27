@@ -45,7 +45,7 @@ STANDARD_API_KEY = os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key")
 STANDARD_MODELLE = {
     "CHAT": "qwen3.8:27b",
     "TITLE": "",           # leer = Chat-Modell verwenden
-    "EMBEDDING": "qwen3-embedding:4b",
+    "EMBEDDING": "qwen3-embedding:8b",
     "VISION": "qwen3-vl:32b",
     "SQL": "",             # leer = Chat-Modell verwenden
 }

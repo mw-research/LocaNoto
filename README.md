@@ -126,6 +126,15 @@ CHAT_API_VERSION=2024-10-21
 Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
 — ohne Schlüssel, nur Modellname und Adresse.
 
+> **Wechsel des Embedding-Modells:** Vektoren verschiedener Modelle sind
+> nicht vergleichbar und haben in der Regel schon unterschiedlich viele
+> Dimensionen. Wird `EMBEDDING_MODEL` geändert, muss der gesamte Bestand neu
+> eingelesen werden — `data/chroma_db/` und `data/keyword_index.sqlite3`
+> vorher löschen. Ohne das schlägt das Hinzufügen neuer Chunks mit einem
+> Dimensionsfehler fehl, und bereits vorhandene Treffer werden gegen die
+> falsche Vektorbasis bewertet.
+
+
 ## ⚠️ Nach einem Rebuild
 
 ```bash
