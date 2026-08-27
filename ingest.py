@@ -14,12 +14,12 @@ indexiertes Dokument, das beim naechsten Start als erledigt gilt.
 import pymupdf
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from openai import OpenAI
 import os
 import glob
 
 import paths
 import keyword_index
+import llm
 from embedding import embed_batch
 from textutils import strip_boilerplate
 from tables import build_table_chunks
@@ -29,12 +29,8 @@ print("Starte Batch-Hintergrund-Vektorisierung...")
 # --- KONFIGURATION ---
 paths.bootstrap()
 ORDNER_NAME = paths.DOCS_DIR
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b")
-
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"),
-    base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
-)
+EMBEDDING_MODEL = llm.modell("EMBEDDING")
+client = llm.client("EMBEDDING")
 
 chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
 collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)

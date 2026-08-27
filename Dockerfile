@@ -25,6 +25,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV HF_HOME=/app/models \
     SENTENCE_TRANSFORMERS_HOME=/app/models
 ARG RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+
+# Der Xet-Uebertragungsweg von HuggingFace bleibt gelegentlich haengen -- der
+# Download bricht dann nicht ab, sondern steht still. Das trifft hier den
+# Build und nicht mehr den Programmstart, ist aber weiterhin eine Wartezeit
+# ohne Rueckmeldung. Auf 1 gesetzt laeuft der Download ueber HTTPS.
+#
+# Als ENV und nicht nur als ARG: der Wert muss die Umgebung des folgenden
+# RUN erreichen, und ein spaeterer Build-Schritt oder ein manueller Aufruf im
+# Container soll ihn ebenfalls sehen.
+ARG HF_HUB_DISABLE_XET=1
+ENV HF_HUB_DISABLE_XET=${HF_HUB_DISABLE_XET}
+
 RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANKER_MODEL}'); print('Reranker im Image: ${RERANKER_MODEL}')"
 
 # Ab hier kein Netzzugriff mehr auf HuggingFace -- weder beim Start noch
