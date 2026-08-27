@@ -6,7 +6,7 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 * **Lokal & abgeschottet:** Im Betrieb fließen keine Daten an externe Cloud-Anbieter.
   (Einmalig beim ersten Start lädt der Reranker sein Modell von HuggingFace; für einen komplett offline betriebenen Server muss das Modell vorab in den Image-Cache gelegt werden.)
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
-* **Intelligentes Reranking:** BAAI-Reranker destilliert hunderte Treffer auf die exaktesten Textstellen herunter.
+* **Rangfolge ohne Modell:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie. Kein Modell-Download beim Start, keine Ladezeit, keine Netzabhängigkeit. Ein CrossEncoder lässt sich über `RERANKER_MODEL` zusätzlich zuschalten.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete

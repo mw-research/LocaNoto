@@ -1,3 +1,8 @@
+# HINWEIS: sentence-transformers, torch/torchvision und der komplette
+# nvidia-*/CUDA-Block werden nur gebraucht, wenn RERANKER_MODEL gesetzt
+# ist. Im Standardbetrieb rankt die App ueber Rangfolge-Fusion ohne
+# Modell -- wer dabei bleibt, kann diese Pakete streichen und spart
+# mehrere GB Imagegroesse.
 accelerate==1.14.0
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.3

@@ -12,17 +12,19 @@ services:
       - ADMIN_USERS=${ADMIN_USERS:-admin}
       - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:4b}
-      - TOP_K=${TOP_K:-12}
+      - TITLE_MODEL=${TITLE_MODEL:-}
+      - RERANKER_MODEL=${RERANKER_MODEL:-}
+      - TOP_K=${TOP_K:-5}
       - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-6000}
       - HELPER_TIMEOUT=${HELPER_TIMEOUT:-60}
       - ANSWER_TIMEOUT=${ANSWER_TIMEOUT:-300}
     ports:
       - "${APP_PORT:-8501}:8501"
 
-    # Der Reranker (BAAI/bge-reranker-v2-m3) ist der einzige Torch-Nutzer im
-    # Container. requirements.txt zieht den vollen CUDA-Stack, ohne die
-    # folgende Sektion laeuft er aber auf der CPU -- bei 1024 Token Fenster
-    # und rund 30 Kandidaten pro Frage kostet das mehrere Sekunden.
+    # Nur relevant, wenn RERANKER_MODEL gesetzt ist: dann ist der CrossEncoder
+    # der einzige Torch-Nutzer im Container und laeuft ohne die folgende
+    # Sektion auf der CPU. Im Standardbetrieb (Rangfolge-Fusion, kein Modell)
+    # wird weder Torch noch eine GPU gebraucht.
     #
     # Einkommentieren, wenn auf dem Host das NVIDIA Container Toolkit
     # eingerichtet ist. Wer bewusst auf der CPU bleibt, sollte stattdessen in
