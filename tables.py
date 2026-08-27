@@ -16,6 +16,7 @@ Zwei Gruende fuer dieses Modul:
    der groesste Chunk im Bereich von MAX_TABLE_CHARS.
 """
 import os
+import re
 
 import pymupdf
 
@@ -83,17 +84,46 @@ def _is_watermark_fragment(text):
     return any(t in w for w in _WATERMARKS)
 
 
+# Der Streifen ueber einer Tabelle enthaelt ausser der Ueberschrift auch die
+# laufende Kopfzeile der Seite. Zwei Bestandteile davon muessen raus:
+#
+# 1. Die gedruckte Seitenzahl als eigener Block. Sie landete sonst am Ende der
+#    Ueberschrift ("... Stuetzen einstoeckiger Gebaeude 160") und wurde vom
+#    Modell als Fundstelle gelesen: es meldete daraufhin, die Tabelle stehe auf
+#    Seite 160 und sei "im Textauszug nicht enthalten" -- obwohl ihre Werte
+#    unmittelbar darunter standen.
+#
+# 2. Abgeschnittene Normbezeichnungen wie "DIN EN 1", die der Ausschnitt aus
+#    der Kopfzeile herausschneidet.
+#
+# Eine VOLLSTAENDIGE Bezeichnung mit Ausgabestand bleibt dagegen
+# stehen: sie benennt das Dokument und macht die Ueberschrift als Suchanker
+# wertvoller.
+_SEITENZAHL = re.compile(r"^\d{1,4}$")
+_ABGESCHNITTENE_NORM = re.compile(r"^(DIN\s+)?EN\s+\d{1,5}$", re.I)
+
+
+def _ist_kopfzeilen_rest(text):
+    t = " ".join(text.split())
+    return bool(_SEITENZAHL.match(t) or _ABGESCHNITTENE_NORM.match(t))
+
+
 def table_caption(page, table, dateiname, seite):
     """Liest den Text direkt oberhalb der Tabelle als Ueberschrift."""
     y0 = table.bbox[1]
     rect = pymupdf.Rect(0, max(0, y0 - CAPTION_HEIGHT), page.rect.width, y0)
 
-    stuecke = []
+    # Nach Position sortieren, damit die Ueberschrift in Lesereihenfolge
+    # zusammengesetzt wird und nicht in der Reihenfolge, in der pymupdf die
+    # Bloecke liefert.
+    bloecke = []
     for block in page.get_text("blocks", clip=rect):
         text = block[4] if len(block) > 4 else ""
-        if not text or _is_watermark_fragment(text):
+        if not text or _is_watermark_fragment(text) or _ist_kopfzeilen_rest(text):
             continue
-        stuecke.append(text)
+        bloecke.append((block[1], block[0], text))
+
+    stuecke = [t for _, _, t in sorted(bloecke)]
 
     caption = strip_boilerplate(" ".join(stuecke)).replace("\n", " ").strip()
     caption = " ".join(caption.split())
