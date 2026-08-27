@@ -21,6 +21,7 @@ import paths
 import keyword_index
 from embedding import embed_batch
 from textutils import strip_boilerplate
+from tables import build_table_chunks
 
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
@@ -130,28 +131,15 @@ for pdf_pfad in pdf_dateien:
             tables = page.find_tables()
             for i, table in enumerate(tables):
                 try:
-                    md_table = table.to_markdown()
-
-                    # SICHERER ZUGRIFF: y0 ist immer der 2. Wert im Tuple
-                    y0 = table.bbox[1]
-
-                    # Bounding-Box direkt über der Tabelle abgreifen
-                    header_rect = pymupdf.Rect(0, max(0, y0 - 150),
-                                               page.rect.width, y0)
-                    table_context = strip_boilerplate(
-                        page.get_text("text", clip=header_rect)
-                    ).replace("\n", " ").strip()
-
-                    if not table_context or len(table_context) < 5:
-                        table_context = f"Tabelle aus {dateiname}, Seite {page_num + 1}"
-
-                    chunk_text = (f"KONTEXT ZUR TABELLE: {table_context}\n\n"
-                                  f"TABELLE (Seite {page_num + 1}):\n{md_table}")
-                    chunk_id = f"{dateiname}_p{page_num+1}_table_{i}"
-
-                    if chunk_id not in bekannt:
-                        pending.append((chunk_id, chunk_text,
-                                        dict(basis_meta, type="table")))
+                    # Ueberschrift voranstellen und uebergrosse Tabellen
+                    # aufteilen -- siehe tables.py. Bleibt eine Tabelle unter
+                    # dem Limit, ist die Chunk-ID unveraendert.
+                    for suffix, chunk_text in build_table_chunks(
+                            page, table, dateiname, page_num + 1, i):
+                        chunk_id = f"{dateiname}_{suffix}"
+                        if chunk_id not in bekannt:
+                            pending.append((chunk_id, chunk_text,
+                                            dict(basis_meta, type="table")))
 
                     page.add_redact_annot(pymupdf.Rect(table.bbox))
                 except Exception as e:
