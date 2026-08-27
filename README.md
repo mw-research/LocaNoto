@@ -6,7 +6,7 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 * **Lokal & abgeschottet:** Im Betrieb fließen keine Daten an externe Cloud-Anbieter.
   (Einmalig beim ersten Start lädt der Reranker sein Modell von HuggingFace; für einen komplett offline betriebenen Server muss das Modell vorab in den Image-Cache gelegt werden.)
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
-* **Rangfolge ohne Modell:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie. Kein Modell-Download beim Start, keine Ladezeit, keine Netzabhängigkeit. Ein CrossEncoder lässt sich über `RERANKER_MODEL` zusätzlich zuschalten.
+* **Zweistufige Rangfolge:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie, danach bewertet ein CrossEncoder die engere Auswahl. Das Modell liegt **im Image** und wird nicht zur Laufzeit heruntergeladen — die App startet ohne Internetzugang.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete
@@ -66,6 +66,27 @@ Weboberfläche geht das mit:
 ```bash
 python rebuild_index.py
 ```
+
+## 🧠 Reranker-Modell
+
+Das Modell (Standard `BAAI/bge-reranker-v2-m3`) wird **beim Bauen** in das
+Image geladen:
+
+```bash
+docker compose build
+```
+
+Zur Laufzeit wird es von dort gelesen; `HF_HUB_OFFLINE=1` verhindert jeden
+Netzzugriff. Der Container läuft damit ohne Internetverbindung, und ein
+Ausfall von HuggingFace kann den Start nicht mehr verhindern.
+
+Der Download passiert genau einmal pro Build und liegt im Dockerfile vor
+`COPY . .` — eine Code-Änderung löst ihn also nicht erneut aus.
+
+Anderes Modell: `RERANKER_MODEL` in der `.env` setzen und **neu bauen**.
+Leer (`RERANKER_MODEL=`) schaltet den Reranker ab; dann rankt allein die
+Rangfolge-Fusion. Lässt sich das Modell nicht laden, fällt die App auf
+Fusion zurück statt abzubrechen.
 
 ## ⚠️ Nach einem Rebuild
 
