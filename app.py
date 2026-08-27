@@ -660,7 +660,7 @@ with st.sidebar:
                                 value=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"))
     # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
     # Toleranz-Auskunft braucht mehrere Tabellen aus mehreren Normen
-    # gleichzeitig. Am RST-Deployment lag die DIN 18202 sauber in der
+    # gleichzeitig. In einem Test lag die passende Norm sauber in der
     # Wissensbasis und wurde trotzdem nicht abgerufen, weil die fuenf Plaetze
     # nach zwei anderen Fundstellen aufgebraucht waren. Der Standard bleibt
     # dennoch 5; wer mehr braucht, zieht den Regler oder setzt TOP_K.
