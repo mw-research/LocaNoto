@@ -16,6 +16,15 @@ weitergegeben wird):
 """
 import os
 
+# --- TELEMETRIE ABSCHALTEN ---
+# ChromaDB sendet standardmaessig anonymisierte Nutzungsdaten nach aussen.
+# Fuer eine Anwendung, die ohne Netzzugang laufen soll, ist das ein offener
+# Kanal. Hier gesetzt statt in jedem Skript einzeln: alle Einstiegspunkte
+# importieren paths, und setdefault laesst eine bewusste Vorgabe von aussen
+# unangetastet.
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("CHROMA_ANONYMIZED_TELEMETRY", "False")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATA_DIR = os.path.join(BASE_DIR, "data")

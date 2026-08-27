@@ -1,0 +1,10 @@
+# Streamlit meldet standardmaessig Nutzungsstatistiken an streamlit.io.
+# Fuer eine Anwendung, die ausdruecklich ohne Netzzugang laufen soll, ist das
+# ein offener Kanal nach draussen -- hier abgeschaltet.
+[browser]
+gatherUsageStats = false
+
+[server]
+# Kein Datei-Watcher: im Container aendert sich der Code zur Laufzeit nicht,
+# und der Watcher kostet nur CPU.
+fileWatcherType = "none"

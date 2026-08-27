@@ -3,7 +3,7 @@
 LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RAG) System. Es ermöglicht das intelligente Durchsuchen, Vektorisieren und Abfragen von Fachdokumenten (z.B. Bau-Normen, Handbüchern) mithilfe modernster lokaler Sprachmodelle (LLMs), ohne dass sensible Firmendaten das lokale Netzwerk verlassen.
 
 ## 🚀 Features
-* **100% Offline & Lokal:** Keine Daten fließen an externe Cloud-Anbieter. Alle Modelle, die das Image mitbringt, werden **beim Bauen** geladen — zur Laufzeit greift der Container auf kein externes Netz zu.
+* **100% Offline & Lokal:** Zur Laufzeit greift der Container auf kein externes Netz zu. Modelle werden **beim Bauen** in das Image geladen, und die Telemetrie von ChromaDB wie Streamlit ist abgeschaltet. Die einzigen ausgehenden Verbindungen gehen an euren eigenen LLM-Server.
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
 * **Zweistufige Rangfolge:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie, danach bewertet ein CrossEncoder die engere Auswahl. Das Modell liegt **im Image** und wird nicht zur Laufzeit heruntergeladen — die App startet ohne Internetzugang.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.

@@ -34,6 +34,14 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     RERANKER_MODEL=${RERANKER_MODEL}
 
+# Telemetrie abschalten. ChromaDB und Streamlit senden von sich aus
+# Nutzungsdaten nach draussen -- fuer einen Container, der ohne Netzzugang
+# laufen soll, ein offener Kanal. Streamlit liest zusaetzlich
+# .streamlit/config.toml, das mit dem Code hereinkopiert wird.
+ENV ANONYMIZED_TELEMETRY=False \
+    CHROMA_ANONYMIZED_TELEMETRY=False \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
 COPY . .
 
 EXPOSE 8501
