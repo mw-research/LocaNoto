@@ -10,8 +10,8 @@ Zwei Stufen:
    weggeworfen wurde -- der Reranker sah nur noch die entdoppelte Menge ohne
    jede Rangfolge.
 
-2. Der CrossEncoder bewertet die engere Auswahl inhaltlich. Dadurch haengen
-   die Modellkosten an top_k statt an der Kandidatenzahl.
+2. Der CrossEncoder bewertet die engere Auswahl inhaltlich. Dadurch haengt
+   die Rechenzeit des Modells an top_k statt an der Kandidatenzahl.
 
 Das Modell liegt im Image (siehe Dockerfile) und wird zur Laufzeit von dort
 gelesen -- HF_HUB_OFFLINE=1 verhindert jeden Netzzugriff. Frueher holte der
@@ -25,7 +25,7 @@ ohne torch auskommt.
 import os
 
 # Daempfungskonstante aus der urspruenglichen RRF-Veroeffentlichung. Sie
-# verhindert, dass Platz 1 einer einzelnen Liste alles andere erschlaegt.
+# begrenzt den Vorsprung, den Platz 1 einer einzelnen Liste erhaelt.
 RRF_K = int(os.getenv("RRF_K", "60"))
 
 # Im Image vorhanden (Dockerfile). Leer setzen = reines RRF ohne Modell.
@@ -68,8 +68,8 @@ def rank(ranked_lists, top_k, cross_encoder=None):
     """Liefert die besten top_k Kandidaten.
 
     Ohne cross_encoder entscheidet allein RRF. Mit cross_encoder wird RRF als
-    Vorfilter benutzt und nur die engere Auswahl vom Modell bewertet -- das
-    haelt die Modellkosten unabhaengig von der Kandidatenzahl.
+    Vorfilter benutzt und nur die engere Auswahl vom Modell bewertet. Die
+    Rechenzeit des Modells bleibt damit unabhaengig von der Kandidatenzahl.
     """
     fusioniert = reciprocal_rank_fusion(ranked_lists)
     if not fusioniert:

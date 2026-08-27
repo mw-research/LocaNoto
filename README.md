@@ -55,8 +55,9 @@ python ingest_images.py   # Abbildungen über das Vision-Modell
 ```
 
 Beide Läufe sind unterbrechbar und setzen auf Chunk-Ebene wieder auf: die
-Textextraktion läuft erneut (billig), vektorisiert wird nur, was fehlt
-(teuer). Ein abgebrochener Lauf hinterlässt damit kein halb indexiertes
+Textextraktion läuft erneut — sie dauert nur Millisekunden pro Seite.
+Vektorisiert wird nur, was fehlt; das ist der zeitintensive Teil. Ein
+abgebrochener Lauf hinterlässt damit kein halb indexiertes
 Dokument, das beim nächsten Start als erledigt gilt.
 
 Stammt die Vektordatenbank aus einer Installation vor dem FTS5-Index, baut

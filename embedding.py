@@ -24,8 +24,8 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
     """Vektorisiert eine Liste von Texten und behaelt die Reihenfolge bei.
 
     Faellt ein Batch aus (zu lang, Serverfehler), wird er einzeln
-    nachgearbeitet, damit ein einzelner problematischer Chunk nicht 63
-    unschuldige mitreisst.
+    nachgearbeitet. Andernfalls wuerde ein einzelner fehlerhafter Chunk den
+    gesamten Batch verwerfen.
     """
     texts = list(texts)
     if not texts:

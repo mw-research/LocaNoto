@@ -6,9 +6,10 @@ anschliessend aus dem Seitentext geschwaerzt, damit sie nicht ein zweites
 Mal als zerlaufener Fliesstext im Index landen.
 
 Der Lauf ist unterbrechbar. Wiederaufsetzen geschieht auf Chunk-Ebene, nicht
-auf Datei-Ebene: die Textextraktion laeuft erneut (billig), aber vektorisiert
-wird nur, was noch fehlt (teuer). Ein abgebrochener Lauf hinterlaesst damit
-kein halb indexiertes Dokument, das beim naechsten Start als erledigt gilt.
+auf Datei-Ebene: die Textextraktion laeuft erneut, sie dauert nur
+Millisekunden pro Seite. Vektorisiert wird nur, was noch fehlt -- das ist der
+zeitintensive Teil. Ein abgebrochener Lauf hinterlaesst damit kein halb
+indexiertes Dokument, das beim naechsten Start als erledigt gilt.
 """
 import pymupdf
 import chromadb
@@ -157,8 +158,8 @@ for pdf_pfad in pdf_dateien:
                         pending.append((chunk_id, chunk,
                                         dict(basis_meta, type="text")))
 
-            # Regelmaessig wegschreiben, damit ein Abbruch nur die letzten
-            # Seiten kostet statt des ganzen Dokuments.
+            # Regelmaessig wegschreiben, damit nach einem Abbruch nur die
+            # letzten Seiten erneut verarbeitet werden muessen.
             if len(pending) >= 256:
                 neu += flush(pending, dateiname)
                 pending = []

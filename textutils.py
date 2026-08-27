@@ -2,9 +2,10 @@
 
 Viele Herausgeber versehen heruntergeladene Dokumente mit einer
 Druck-Kopfzeile pro Seite (Ausdruckdatum, Lizenznehmer, Benutzerkennung).
-Ohne Filter landet dieser Block in einem grossen Teil aller Chunks und
-verwaessert deren Embedding -- bei kurzen Dokumenten besonders stark, weil
-dort der Anteil pro Chunk am hoechsten ist.
+Ohne Filter landet dieser Block in einem grossen Teil aller Chunks. Er
+geht damit in deren Embedding ein und verringert den Anteil des eigentlichen
+Inhalts -- bei kurzen Dokumenten am staerksten, weil dort sein Anteil pro
+Chunk am hoechsten ist.
 
 Zusaetzlich entfernt der Filter die Lizenzkennung des Abonnenten, die sonst
 mit jeder weitergegebenen Vektordatenbank mitwandert.
