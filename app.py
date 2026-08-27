@@ -15,6 +15,7 @@ import paths
 import keyword_index
 from embedding import embed_batch
 from textutils import strip_boilerplate
+from tables import build_table_chunks
 
 paths.bootstrap()
 
@@ -27,6 +28,13 @@ st.set_page_config(page_title=f"{firma} - {thema}", layout="wide")
 
 # 3. Nur EINMAL die Überschrift auf der Seite setzen!
 st.title(f"{firma} - {thema} Assistent")
+
+# --- ZEITLIMITS ---
+# Der OpenAI-Client wartet ohne timeout= bis zu 600 s. Haengt ein Aufruf,
+# steht die Oberflaeche zehn Minuten ohne Rueckmeldung -- fuer den Nutzer
+# nicht von "kaputt" unterscheidbar.
+HELPER_TIMEOUT = float(os.getenv("HELPER_TIMEOUT", "60"))    # Titel, Rewrite
+ANSWER_TIMEOUT = float(os.getenv("ANSWER_TIMEOUT", "300"))   # Antwort-Stream
 
 #---OPENAI---
 client = OpenAI(
@@ -106,6 +114,59 @@ with st.sidebar:
 CHATS_DIR = paths.CHATS_DIR
 DOCS_DIR = paths.DOCS_DIR
 
+def _sanitize_title(text):
+    """Macht aus freiem Text einen brauchbaren Dateinamen-Bestandteil."""
+    text = " ".join(text.split())
+    text = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]", "", text)
+    text = re.sub(r"[ -]+", "_", text).strip("_")
+    return text[:30].strip("_")
+
+
+def make_chat_title(user_query, model):
+    """Erzeugt die Schlagwörter für den Chat-Dateinamen.
+
+    Der Aufruf lief bisher mit max_tokens=10. Bei einem Reasoning-Modell
+    verbraucht schon der Denk-Vorspann dieses Budget, sodass content leer
+    zurueckkommt -- die Datei hiess dann nur "_26-08-26.json". Ein
+    Fehlerfall war das nicht, deshalb griff der bisherige except-Zweig nie.
+
+    Jetzt: groesseres Budget, Denk-Bloecke werden entfernt, und das Ergebnis
+    wird geprueft statt vorausgesetzt. Bleibt nichts uebrig, greift derselbe
+    Rueckfall wie bei einem echten Fehler.
+    """
+    try:
+        title_prompt = (
+            "Fasse diese Frage in 1 bis 2 prägnanten Schlagwörtern zusammen. "
+            "Antworte NUR mit den Schlagwörtern, getrennt durch Unterstriche. "
+            f"Keine Einleitung, keine Satzzeichen.\nFrage: {user_query}"
+        )
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": title_prompt}],
+            max_tokens=64,
+            temperature=0.3,
+            timeout=HELPER_TIMEOUT,
+        )
+        raw = (resp.choices[0].message.content or "")
+
+        # Denk-Bloecke entfernen -- auch einen unabgeschlossenen, falls das
+        # Token-Budget mitten im Denken endet.
+        raw = re.sub(r"<think>.*?</think>", " ", raw, flags=re.S | re.I)
+        raw = re.sub(r"<think>.*", " ", raw, flags=re.S | re.I)
+
+        # Reasoning-Modelle stellen die eigentliche Antwort ans Ende.
+        lines = [ln for ln in raw.splitlines() if ln.strip()]
+        keywords = _sanitize_title(lines[-1]) if lines else ""
+    except Exception:
+        keywords = ""
+
+    if not keywords:
+        # Rueckfall: die ersten beiden Wörter der Frage.
+        keywords = _sanitize_title("_".join(re.findall(r"\w+", user_query)[:2]))
+
+    return keywords or "Chat"
+
+
 # --- CHAT-SPEICHERUNG (MULTI-USER) ---
 def get_user_chat_dir():
     """Gibt den Pfad zum persönlichen Chat-Ordner des eingeloggten Nutzers zurück."""
@@ -180,7 +241,15 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=20
 # Korpus in den Arbeitsspeicher (hochgerechnet 8-15 GB bei 1,6 GB PDF) und war
 # mit @st.cache_resource eingefroren: frisch hochgeladene Dokumente waren bis
 # zum Neustart nicht keyword-suchbar, geloeschte weiterhin auffindbar.
-@st.cache_resource
+#
+# Der Hinweistext laeuft ueber den Dekorator-Parameter und NICHT ueber
+# st.spinner/st.toast im Funktionsrumpf. Streamlit zeichnet Elemente aus
+# gecachten Funktionen auf und spielt sie bei jedem Cache-Treffer erneut ab --
+# ein Layout-Block wie st.spinner laesst sich aber nicht wiedergeben, der
+# zweite Durchlauf stirbt mit CacheReplayClosureError. Das traf nur
+# BESTEHENDE Installationen: eine frische Datenbank ist leer, betritt den
+# Rebuild-Zweig nie und erzeugt daher nie ein Element.
+@st.cache_resource(show_spinner="Baue Keyword-Index einmalig auf ...")
 def init_keyword_index():
     """Stellt sicher, dass der Index zur Vektordatenbank passt.
 
@@ -189,9 +258,7 @@ def init_keyword_index():
     """
     have = keyword_index.count()
     if have == 0 and collection.count() > 0:
-        with st.spinner("Baue Keyword-Index einmalig auf ..."):
-            have = keyword_index.rebuild_from_collection(collection)
-        st.toast(f"Keyword-Index aufgebaut: {have:,} Chunks")
+        have = keyword_index.rebuild_from_collection(collection)
     return have
 
 
@@ -301,23 +368,26 @@ def process_uploaded_pdf(uploaded_file, is_shared):
         page = doc[page_num]
         
         # --- 1. TABELLEN EXTRAHIEREN ---
+        # Gleiche Aufbereitung wie im Batch-Ingest (tables.py): die Zeile
+        # ueber der Tabelle wird vorangestellt, uebergrosse Tabellen werden
+        # geteilt. Vorher stand hier nur "Tabelle von Seite N" ohne Kontext,
+        # wodurch hochgeladene Dokumente schlechter auffindbar waren als die
+        # per Skript eingelesenen Normen.
         tables = page.find_tables()
         for i, table in enumerate(tables):
-            # Tabelle in Markdown umwandeln
-            md_table = table.to_markdown()
-            
-            # Die Tabelle als EINEN unzerteilten Chunk speichern
-            chunks.append(f"Tabelle von Seite {page_num + 1}:\n\n{md_table}")
-            metadatas.append({
-                "file_name": uploaded_file.name,
-                "page": page_num + 1,
-                "folder": "(Basis)",
-                "access": access_type,
-                "owner": st.session_state["username"],
-                "type": "table" # Extra-Tag, damit wir wissen, dass es eine Tabelle ist
-            })
-            ids.append(f"{uploaded_file.name}_p{page_num+1}_table_{i}")
-            
+            for suffix, chunk_text in build_table_chunks(
+                    page, table, uploaded_file.name, page_num + 1, i):
+                chunks.append(chunk_text)
+                metadatas.append({
+                    "file_name": uploaded_file.name,
+                    "page": page_num + 1,
+                    "folder": "(Basis)",
+                    "access": access_type,
+                    "owner": st.session_state["username"],
+                    "type": "table"
+                })
+                ids.append(f"{uploaded_file.name}_{suffix}")
+
             # Die Fläche der Tabelle für den normalen Text-Extraktor schwärzen
             page.add_redact_annot(table.bbox)
         
@@ -566,9 +636,18 @@ with st.sidebar:
                 st.rerun()
     
     st.markdown("---")
-    chat_model = st.text_input("Chat Modell", value="qwen3.8:27b") 
-    embed_model = st.text_input("Embedding Modell", value="qwen3-embedding:4b") 
-    top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=20, value=5)
+    chat_model = st.text_input("Chat Modell",
+                               value=os.getenv("CHAT_MODEL", "qwen3.8:27b"))
+    embed_model = st.text_input("Embedding Modell",
+                                value=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"))
+    # Standard war 5. Bei Fachfragen nach "allen relevanten Toleranzen" muessen
+    # mehrere Tabellen aus mehreren Normen gleichzeitig im Kontext liegen; mit
+    # 5 Chunks kann die Antwort strukturell nicht vollstaendig werden. Gemessen
+    # am RST-Deployment: die DIN 18202 lag sauber in der Wissensbasis und
+    # wurde trotzdem nicht abgerufen -- die fuenf Plaetze waren nach zwei
+    # anderen Fundstellen aufgebraucht.
+    top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
+                      value=int(os.getenv("TOP_K", "12")))
 
 # --- CHAT & RETRIEVAL ---
 if collection.count() > 0:
@@ -613,23 +692,8 @@ if collection.count() > 0:
             old_chat_id = st.session_state.current_chat_id
             date_str = datetime.now().strftime('%y-%m-%d')
             
-            try:
-                # Die KI nach 2 schlauen Schlagwörtern fragen
-                title_prompt = f"Fasse diese Frage in 1 bis 2 prägnanten Schlagwörtern zusammen. Antworte NUR mit den Schlagwörtern, getrennt durch Unterstriche. Keine Einleitung, keine Satzzeichen.\nFrage: {user_query}"
-                title_resp = client.chat.completions.create(
-                    model=chat_model,
-                    messages=[{"role": "user", "content": title_prompt}],
-                    max_tokens=10,
-                    temperature=0.3
-                )
-                keywords = title_resp.choices[0].message.content.strip()
-                # Säubern: Nur Buchstaben, Zahlen und Unterstriche erlauben
-                keywords = re.sub(r'[^a-zA-Z0-9äöüÄÖÜß_]', '', keywords.replace(' ', '_'))[:30]
-            except Exception:
-                # Fallback: Einfach die ersten 2 Wörter der Frage nehmen
-                words = re.findall(r'\w+', user_query)
-                keywords = "_".join(words[:2])
-                
+            keywords = make_chat_title(user_query, chat_model)
+
             new_chat_id = f"{keywords}_{date_str}.json"
             
             # Falls die Datei exakt so schon existiert, Sekunden anhängen
@@ -670,6 +734,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
 
                     try:
                         rewrite_response = client.chat.completions.create(
+                            timeout=HELPER_TIMEOUT,
                             model=chat_model,
                             messages=[{"role": "user", "content": rewrite_prompt}],
                             temperature=0.1
@@ -810,6 +875,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                     model=chat_model,
                     messages=api_messages,
                     stream=True,
+                    timeout=ANSWER_TIMEOUT,
                 )
 
                 def token_stream():

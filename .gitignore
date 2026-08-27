@@ -21,3 +21,7 @@ log_*.txt
 users.json
 config/users.json
 !config/.gitkeep
+
+# Standortspezifische Compose-Erweiterung (Netze, GPU, Ports)
+docker-compose.override.yaml
+docker-compose.override.yml

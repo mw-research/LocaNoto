@@ -67,6 +67,17 @@ Weboberfläche geht das mit:
 python rebuild_index.py
 ```
 
+## ⚠️ Nach einem Rebuild
+
+```bash
+docker compose up -d --build
+```
+
+erzeugt den Container **neu**. Alle offenen Streamlit-Sitzungen sterben mit
+ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung dahinter ist
+tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das sieht aus wie ein
+Absturz der App und ist keiner: **Seite neu laden**, dann erneut anmelden.
+
 ## 🔐 Rechte
 
 | Bereich | sichtbar für | löschen darf |

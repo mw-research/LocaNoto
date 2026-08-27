@@ -13,6 +13,11 @@ import os
 
 DEFAULT_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "64"))
 
+# Ohne timeout= wartet der Client bis zu 600 s. Ein haengender Batch soll den
+# Ingest nicht stundenlang blockieren -- der Einzel-Rueckfall arbeitet ihn
+# danach ohnehin nach.
+DEFAULT_TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "120"))
+
 
 def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
                 progress=None):
@@ -37,7 +42,7 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
         cleaned = [t.replace("\n", " ") for t in chunk]
         try:
             resp = client.embeddings.create(
-                input=cleaned, model=model,
+                input=cleaned, model=model, timeout=DEFAULT_TIMEOUT,
                 encoding_format="float", extra_body=extra)
             # Die API darf die Reihenfolge aendern -- ueber .index zuordnen.
             for item in resp.data:
@@ -46,7 +51,7 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
             for i, single in enumerate(cleaned):
                 try:
                     resp = client.embeddings.create(
-                        input=[single], model=model,
+                        input=[single], model=model, timeout=DEFAULT_TIMEOUT,
                         encoding_format="float", extra_body=extra)
                     out[start + i] = resp.data[0].embedding
                 except Exception as e:
