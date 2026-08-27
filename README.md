@@ -20,16 +20,12 @@ data/dokumente/
     dokument.pdf       -> Sachgebiet "(Basis)"
 ```
 
-Der Filter ist nicht nur Bequemlichkeit. In einem gemeinsamen Index
-konkurrieren umfangreiche und knappe Dokumente um dieselben Plätze der
-Trefferliste, und ein umfangreiches Dokument stellt allein durch seine Größe
-mehr Chunks. Eine inhaltlich passende, aber kurze Quelle kann dadurch aus den
-Top-k verdrängt werden. Die Eingrenzung auf ein Sachgebiet begrenzt den
-Suchraum und gleicht diesen Größenvorteil aus.
+Sachgebiete dienen dazu, die Suche auf einen Teil des Bestands einzugrenzen.
+Ist eines ausgewählt, berücksichtigen Vektor- und Keyword-Suche nur die
+Dokumente daraus.
 
-Die Sachgebiete sind optional: liegen alle Dateien direkt in
-`data/dokumente/`, gibt es nur `(Basis)` und der Filter wird nicht
-eingeblendet.
+Sie sind optional: liegen alle Dateien direkt in `data/dokumente/`, gibt es
+nur `(Basis)` und der Filter wird nicht eingeblendet.
 
 ## 📂 Datenverzeichnis
 
