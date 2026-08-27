@@ -390,7 +390,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
         # ueber der Tabelle wird vorangestellt, uebergrosse Tabellen werden
         # geteilt. Vorher stand hier nur "Tabelle von Seite N" ohne Kontext,
         # wodurch hochgeladene Dokumente schlechter auffindbar waren als die
-        # per Skript eingelesenen Normen.
+        # per Skript eingelesenen.
         tables = page.find_tables()
         for i, table in enumerate(tables):
             for suffix, chunk_text in build_table_chunks(
@@ -535,10 +535,10 @@ with st.sidebar:
     st.markdown("---")
     st.header("🎯 Dokumenten-Filter")
     # Sachgebiet zuerst: bei vielen Dokumenten ist die Ordnerauswahl der
-    # wirksamere Filter. Ein flacher gemeinsamer Index laesst kleine Normen
-    # gegen grosse verlieren -- DIN 18202 stellt 1,6 % der Chunks, DIN EN
-    # 1090-2 dagegen 20,6 %. Die Eingrenzung auf ein Sachgebiet stellt die
-    # Chancengleichheit wieder her.
+    # wirksamere Filter. In einem gemeinsamen Index stellt ein umfangreiches
+    # Dokument allein durch seine Groesse mehr Chunks und verdraengt damit
+    # kuerzere, inhaltlich passende Quellen aus den Top-k. Die Eingrenzung
+    # auf ein Sachgebiet gleicht das aus.
     selected_folders = st.multiselect(
         "Sachgebiet:",
         options=all_folders,
@@ -659,11 +659,10 @@ with st.sidebar:
     embed_model = st.text_input("Embedding Modell",
                                 value=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"))
     # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
-    # Toleranz-Auskunft braucht mehrere Tabellen aus mehreren Normen
-    # gleichzeitig. In einem Test lag die passende Norm sauber in der
-    # Wissensbasis und wurde trotzdem nicht abgerufen, weil die fuenf Plaetze
-    # nach zwei anderen Fundstellen aufgebraucht waren. Der Standard bleibt
-    # dennoch 5; wer mehr braucht, zieht den Regler oder setzt TOP_K.
+    # Auskunft braucht dann mehrere Tabellen aus mehreren Dokumenten
+    # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
+    # aufgebraucht. Der Standard bleibt dennoch 5; wer mehr braucht, zieht
+    # den Regler oder setzt TOP_K.
     top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
                       value=int(os.getenv("TOP_K", "5")))
 

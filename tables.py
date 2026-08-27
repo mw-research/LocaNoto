@@ -3,18 +3,17 @@
 Zwei Gruende fuer dieses Modul:
 
 1. Die Ueberschriftenzeile ueber einer Tabelle ist der wirksamste
-   Retrieval-Anker im Korpus -- sie enthaelt in aller Regel
-   "<Norm> Tabelle N - <Titel>". ingest.py stellte sie voran, der
-   Upload-Pfad in app.py nicht. Ueber die Oberflaeche hochgeladene
-   Dokumente bekamen dadurch schlechtere Chunks als die per Skript
-   eingelesenen Normen. Beide Pfade rufen jetzt dieselbe Funktion.
+   Retrieval-Anker im Korpus -- sie enthaelt in aller Regel Nummer und
+   Titel der Tabelle. ingest.py stellte sie voran, der Upload-Pfad in
+   app.py nicht. Ueber die Oberflaeche hochgeladene Dokumente bekamen
+   dadurch schlechtere Chunks als die per Skript eingelesenen. Beide Pfade
+   rufen jetzt dieselbe Funktion.
 
-2. to_markdown() kann sehr grosse Chunks erzeugen. In der ausgelieferten
-   Wissensbasis lag die groesste Tabelle bei 60 267 Zeichen (~15 000 Token,
-   DIN EN 1090-4 S. 86). Ein einzelner Vektor darueber ist semantisch
-   unbrauchbar, und ein Treffer dieser Groesse verdraengt den restlichen
-   Kontext des LLM. Nach der Aufteilung liegt der groesste Chunk bei rund
-   6 900 Zeichen.
+2. to_markdown() kann sehr grosse Chunks erzeugen -- in Tests einzelne
+   Tabellen von ueber 60 000 Zeichen, also rund 15 000 Token. Ein einzelner
+   Vektor darueber ist semantisch unbrauchbar, und ein Treffer dieser
+   Groesse verdraengt den restlichen Kontext des LLM. Mit dem Limit bleibt
+   der groesste Chunk im Bereich von MAX_TABLE_CHARS.
 """
 import os
 
@@ -42,8 +41,8 @@ def split_markdown_table(md_table, max_chars=None):
     budget = max(max_chars - len(header_text) - 1, 500)
 
     # Einzelne Zeilen koennen das Budget selbst sprengen: verbundene Zellen
-    # werden mit <br> in EINE Zeile aufgeklappt, auf S. 86 der DIN EN 1090-4
-    # auf ueber 30 000 Zeichen. Zeilenweises Teilen allein reicht daher nicht.
+    # werden mit <br> in EINE Zeile aufgeklappt, im Extremfall auf ueber
+    # 30 000 Zeichen. Zeilenweises Teilen allein reicht daher nicht.
     body = []
     for line in lines[2:]:
         if len(line) <= budget:
@@ -63,7 +62,8 @@ def split_markdown_table(md_table, max_chars=None):
     return parts
 
 
-# Wasserzeichen, die DIN quer ueber die Seite legt. strip_boilerplate faengt
+# Wasserzeichen, die manche Herausgeber quer ueber die Seite legen.
+# strip_boilerplate faengt
 # sie zeilenweise ab; der Ausschnitt oberhalb der Tabelle schneidet sie aber
 # mitten im Wort durch, sodass Bruchstuecke wie "olled" oder "ted c"
 # uebrigbleiben. Gegen ein Fragment hilft kein zeilenverankertes Muster --

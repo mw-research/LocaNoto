@@ -15,16 +15,21 @@ in der Seitenleiste als Filter zur Verfügung:
 
 ```
 data/dokumente/
-    Tragwerk/        -> Sachgebiet "Tragwerk"
-    Korrosion/       -> Sachgebiet "Korrosion"
-    DIN 18202.pdf    -> Sachgebiet "(Basis)"
+    Sachgebiet-A/      -> Sachgebiet "Sachgebiet-A"
+    Sachgebiet-B/      -> Sachgebiet "Sachgebiet-B"
+    dokument.pdf       -> Sachgebiet "(Basis)"
 ```
 
-Das ist mehr als Bequemlichkeit. In einem flachen gemeinsamen Index
-konkurrieren kleine Dokumente gegen große: DIN 18202 stellt 1,6 % der Chunks
-des Beispielkorpus, DIN EN 1090-2 dagegen 20,6 % — bei einem Top-k über alle
-Dokumente verliert die kleine Norm strukturell. Die Eingrenzung auf ein
-Sachgebiet stellt die Chancengleichheit wieder her.
+Der Filter ist nicht nur Bequemlichkeit. In einem gemeinsamen Index
+konkurrieren umfangreiche und knappe Dokumente um dieselben Plätze der
+Trefferliste, und ein umfangreiches Dokument stellt allein durch seine Größe
+mehr Chunks. Eine inhaltlich passende, aber kurze Quelle kann dadurch aus den
+Top-k verdrängt werden. Die Eingrenzung auf ein Sachgebiet begrenzt den
+Suchraum und gleicht diesen Größenvorteil aus.
+
+Die Sachgebiete sind optional: liegen alle Dateien direkt in
+`data/dokumente/`, gibt es nur `(Basis)` und der Filter wird nicht
+eingeblendet.
 
 ## 📂 Datenverzeichnis
 
