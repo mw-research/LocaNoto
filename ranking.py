@@ -1,21 +1,26 @@
 """Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen.
 
-Standardverfahren ist Reciprocal Rank Fusion (RRF). Es braucht kein Modell:
-kein Download beim ersten Start, keine Ladezeit, keine GPU, keine
-Netzabhaengigkeit. Der bisherige CrossEncoder holte sein Modell beim ersten
-Start von HuggingFace -- war der Dienst nicht erreichbar, startete die App
-nicht.
+Zwei Stufen:
 
-RRF bewertet nicht den Inhalt, sondern die Uebereinstimmung der Ranglisten:
-ein Chunk, den mehrere Sonden und beide Suchwege weit oben finden, gewinnt
-gegen einen, der nur in einer Liste ganz vorne steht. Das ist genau die
-Information, die eine Multi-Query-Suche mit zwei Suchpfaden ohnehin erzeugt
-und die vorher weggeworfen wurde -- der CrossEncoder sah nur noch die
-entdoppelte Menge ohne jede Rangfolge.
+1. Reciprocal Rank Fusion (RRF) ueber alle Ranglisten. Sie bewertet nicht den
+   Inhalt, sondern die Uebereinstimmung der Listen: ein Chunk, den mehrere
+   Sonden und beide Suchwege weit oben finden, gewinnt gegen einen, der nur
+   in einer Liste vorne steht. Das ist genau die Information, die eine
+   Multi-Query-Suche mit zwei Suchpfaden ohnehin erzeugt und die vorher
+   weggeworfen wurde -- der Reranker sah nur noch die entdoppelte Menge ohne
+   jede Rangfolge.
 
-Der CrossEncoder bleibt als Option erhalten (RERANKER_MODEL setzen). Der
-Import passiert bewusst erst bei Bedarf, damit ohne ihn weder
-sentence_transformers noch torch geladen werden.
+2. Der CrossEncoder bewertet die engere Auswahl inhaltlich. Dadurch haengen
+   die Modellkosten an top_k statt an der Kandidatenzahl.
+
+Das Modell liegt im Image (siehe Dockerfile) und wird zur Laufzeit von dort
+gelesen -- HF_HUB_OFFLINE=1 verhindert jeden Netzzugriff. Frueher holte der
+CrossEncoder es beim ersten Programmstart von HuggingFace, womit der Start
+von einem externen Dienst abhing.
+
+Laesst es sich nicht laden, faellt die App auf reines RRF zurueck statt den
+Start abzubrechen. Der Import passiert erst bei Bedarf, damit dieser Fall
+ohne torch auskommt.
 """
 import os
 
@@ -23,8 +28,8 @@ import os
 # verhindert, dass Platz 1 einer einzelnen Liste alles andere erschlaegt.
 RRF_K = int(os.getenv("RRF_K", "60"))
 
-# Leer = kein Modell, reines RRF. Gesetzt = zusaetzlich CrossEncoder.
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "").strip()
+# Im Image vorhanden (Dockerfile). Leer setzen = reines RRF ohne Modell.
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip()
 RERANKER_MAX_LENGTH = int(os.getenv("RERANKER_MAX_LENGTH", "1024"))
 
 
@@ -54,7 +59,7 @@ def reciprocal_rank_fusion(ranked_lists, k=None):
 
 
 def _load_cross_encoder():
-    """Laedt den CrossEncoder -- nur wenn RERANKER_MODEL gesetzt ist."""
+    """Laedt den CrossEncoder aus dem Modellverzeichnis des Images."""
     from sentence_transformers import CrossEncoder  # bewusst lokal
     return CrossEncoder(RERANKER_MODEL, max_length=RERANKER_MAX_LENGTH)
 

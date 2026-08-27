@@ -1,6 +1,12 @@
 services:
   locanoto_bot:
-    build: .
+    build:
+      context: .
+      args:
+        # Wird beim Bauen in das Image geladen und zur Laufzeit von dort
+        # gelesen. Leer lassen ist nicht vorgesehen -- wer ohne Modell
+        # arbeiten will, setzt RERANKER_MODEL im environment auf "".
+        RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
     container_name: ${CONTAINER_NAME:-locanoto_app}
     restart: unless-stopped
     environment:
@@ -13,7 +19,7 @@ services:
       - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:4b}
       - TITLE_MODEL=${TITLE_MODEL:-}
-      - RERANKER_MODEL=${RERANKER_MODEL:-}
+      - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
       - TOP_K=${TOP_K:-5}
       - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-6000}
       - HELPER_TIMEOUT=${HELPER_TIMEOUT:-60}
@@ -21,10 +27,10 @@ services:
     ports:
       - "${APP_PORT:-8501}:8501"
 
-    # Nur relevant, wenn RERANKER_MODEL gesetzt ist: dann ist der CrossEncoder
-    # der einzige Torch-Nutzer im Container und laeuft ohne die folgende
-    # Sektion auf der CPU. Im Standardbetrieb (Rangfolge-Fusion, kein Modell)
-    # wird weder Torch noch eine GPU gebraucht.
+    # Der CrossEncoder ist der einzige Torch-Nutzer im Container und laeuft
+    # ohne die folgende Sektion auf der CPU. Bei 1024 Token Fenster und rund
+    # 15-20 Kandidaten pro Frage kostet das einige Sekunden; mit GPU ist es
+    # kaum messbar.
     #
     # Einkommentieren, wenn auf dem Host das NVIDIA Container Toolkit
     # eingerichtet ist. Wer bewusst auf der CPU bleibt, sollte stattdessen in

@@ -270,12 +270,15 @@ init_keyword_index()
 # --- RERANKER SETUP ---
 @st.cache_resource(show_spinner="Lade Reranker-Modell ...")
 def init_reranker():
-    """Laedt den CrossEncoder -- nur wenn RERANKER_MODEL gesetzt ist.
+    """Laedt den CrossEncoder einmal pro Prozess.
 
-    Ohne die Variable arbeitet die App mit reiner Rangfolge-Fusion (ranking.py):
-    kein Modell, kein Download, keine Ladezeit. Der frueher fest verdrahtete
-    CrossEncoder holte sein Modell beim ersten Start von HuggingFace -- war der
-    Dienst nicht erreichbar, startete die App nicht.
+    Das Modell liegt im Image (siehe Dockerfile) und wird von dort gelesen,
+    nicht von HuggingFace geholt. Frueher passierte der Download beim ersten
+    Programmstart -- war der Dienst nicht erreichbar, lief die App nicht an.
+
+    @st.cache_resource sorgt dafuer, dass das Laden einmal pro Containerstart
+    geschieht und nicht bei jeder Frage. Scheitert es trotzdem, arbeitet die
+    App mit reiner Rangfolge-Fusion weiter, statt den Start abzubrechen.
     """
     if not ranking.RERANKER_MODEL:
         return None
