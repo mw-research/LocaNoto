@@ -1,6 +1,5 @@
 import pymupdf
 import chromadb
-from openai import OpenAI
 import os
 import glob
 import base64
@@ -9,23 +8,24 @@ import io
 
 import paths
 import keyword_index
+import llm
 
 print("Starte nachträgliche Bild-Vektorisierung...")
 
 # --- KONFIGURATION ---
 paths.bootstrap()
 ORDNER_NAME = paths.DOCS_DIR
-VISION_MODEL = "qwen3-vl:32b"
-EMBEDDING_MODEL = "qwen3-embedding:4b"
+# Bildbeschreibung und Vektorisierung koennen auf getrennten Servern
+# liegen -- VISION_BASE_URL und EMBEDDING_BASE_URL steuern das.
+VISION_MODEL = llm.modell("VISION")
+EMBEDDING_MODEL = llm.modell("EMBEDDING")
+vision_client = llm.client("VISION")
 
 # Schwellen für den Müll-Filter (siehe Kommentar an der Prüfstelle).
 MIN_LONG_EDGE = 400
 MIN_AREA = 120_000
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
-    base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
-)
+client = llm.client("EMBEDDING")
 
 def get_embedding(text, model=EMBEDDING_MODEL):
     text = text.replace("\n", " ")
@@ -146,7 +146,7 @@ for pdf_pfad in pdf_dateien:
                 # ----------------------------------------
                 try:
                     # 1. Bild an Qwen3-VL senden
-                    vision_response = client.chat.completions.create(
+                    vision_response = vision_client.chat.completions.create(
                         model=VISION_MODEL,
                         messages=[
                             {

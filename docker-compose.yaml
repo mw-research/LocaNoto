@@ -7,6 +7,8 @@ services:
         # gelesen. Leer lassen ist nicht vorgesehen -- wer ohne Modell
         # arbeiten will, setzt RERANKER_MODEL im environment auf "".
         RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+        # Auf 0 setzen, wenn der Xet-Weg in eurem Netz schneller ist.
+        HF_HUB_DISABLE_XET: ${HF_HUB_DISABLE_XET:-1}
     container_name: ${CONTAINER_NAME:-locanoto_app}
     restart: unless-stopped
     environment:
@@ -16,9 +18,24 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
       - ADMIN_USERS=${ADMIN_USERS:-admin}
+      # Modelle und ihre Endpunkte. Leere Werte fallen auf OPENAI_BASE_URL
+      # und OPENAI_API_KEY zurueck (siehe llm.py).
       - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
+      - CHAT_BASE_URL=${CHAT_BASE_URL:-}
+      - CHAT_API_KEY=${CHAT_API_KEY:-}
+      - CHAT_API_VERSION=${CHAT_API_VERSION:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:4b}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_API_VERSION=${EMBEDDING_API_VERSION:-}
+      - VISION_MODEL=${VISION_MODEL:-qwen3-vl:32b}
+      - VISION_BASE_URL=${VISION_BASE_URL:-}
+      - VISION_API_KEY=${VISION_API_KEY:-}
+      - VISION_API_VERSION=${VISION_API_VERSION:-}
       - TITLE_MODEL=${TITLE_MODEL:-}
+      - TITLE_BASE_URL=${TITLE_BASE_URL:-}
+      - TITLE_API_KEY=${TITLE_API_KEY:-}
+      - TITLE_API_VERSION=${TITLE_API_VERSION:-}
       - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
       - TOP_K=${TOP_K:-5}
       - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-6000}

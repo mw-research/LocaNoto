@@ -2,7 +2,6 @@ import streamlit as st
 import pymupdf
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from openai import OpenAI
 import os
 import time
 import json
@@ -12,6 +11,7 @@ import bcrypt
 
 import paths
 import keyword_index
+import llm
 from embedding import embed_batch
 import ranking
 from textutils import strip_boilerplate
@@ -36,11 +36,13 @@ st.title(f"{firma} - {thema} Assistent")
 HELPER_TIMEOUT = float(os.getenv("HELPER_TIMEOUT", "60"))    # Titel, Rewrite
 ANSWER_TIMEOUT = float(os.getenv("ANSWER_TIMEOUT", "300"))   # Antwort-Stream
 
-#---OPENAI---
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
-    base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
-)
+# --- MODELL-ENDPUNKTE ---
+# Je Aufgabe eigene Adresse, eigener Schluessel, eigenes Modell (siehe
+# llm.py). Ohne aufgabenspezifische Angaben laeuft alles wie bisher ueber
+# OPENAI_BASE_URL.
+chat_client = llm.client("CHAT")
+title_client = llm.client("TITLE")
+embed_client = llm.client("EMBEDDING")
 
 # --- LOGIN SYSTEM ---
 USER_FILE = paths.resolve_user_file()
@@ -140,11 +142,11 @@ def make_chat_title(user_query, model):
             "Antworte NUR mit den Schlagwörtern, getrennt durch Unterstriche. "
             f"Keine Einleitung, keine Satzzeichen.\nFrage: {user_query}"
         )
-        resp = client.chat.completions.create(
+        resp = title_client.chat.completions.create(
             # Der Titel ist eine Nebensache -- ein kleines Modell reicht und
             # spart bei drei LLM-Aufrufen pro Frage spuerbar Zeit. Ohne
             # TITLE_MODEL bleibt es beim Chat-Modell.
-            model=os.getenv("TITLE_MODEL") or model,
+            model=llm.modell("TITLE", model),
             messages=[{"role": "user", "content": title_prompt}],
             max_tokens=64,
             temperature=0.3,
@@ -431,7 +433,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
     if chunks:
         # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
         # HTTP-Anfrage an den Modellserver.
-        embeddings = embed_batch(client, chunks, "qwen3-embedding:4b")
+        embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
 
         keep = [i for i, v in enumerate(embeddings) if v is not None]
         if not keep:
@@ -652,10 +654,10 @@ with st.sidebar:
                 st.rerun()
     
     st.markdown("---")
-    chat_model = st.text_input("Chat Modell",
-                               value=os.getenv("CHAT_MODEL", "qwen3.8:27b"))
-    embed_model = st.text_input("Embedding Modell",
-                                value=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"))
+    chat_model = st.text_input("Chat Modell", value=llm.modell("CHAT"))
+    embed_model = st.text_input("Embedding Modell", value=llm.modell("EMBEDDING"))
+    with st.expander("🔌 Modell-Endpunkte"):
+        st.code(llm.uebersicht(), language="text")
     # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
     # Auskunft braucht dann mehrere Tabellen aus mehreren Dokumenten
     # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
@@ -748,7 +750,7 @@ Aktuelle Frage: {user_query}
 Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche. Keine Zahlen davor, keine Einleitung."""
 
                     try:
-                        rewrite_response = client.chat.completions.create(
+                        rewrite_response = chat_client.chat.completions.create(
                             timeout=HELPER_TIMEOUT,
                             model=chat_model,
                             messages=[{"role": "user", "content": rewrite_prompt}],
@@ -764,7 +766,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
                     # Die 3 Sonden in EINER Anfrage statt in dreien.
-                    vektoren = embed_batch(client, search_queries,
+                    vektoren = embed_batch(embed_client, search_queries,
                                            embed_model, keep_alive=0)
                     # Sonde und Vektor gemeinsam filtern. Wuerde man nur die
                     # Vektoren zusammenschieben, verschoeben sich die Indizes
@@ -888,7 +890,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 # warten. Auf einem lokalen 27B-Modell dauert eine Antwort
                 # leicht eine halbe Minute -- ohne Streaming ist das eine
                 # halbe Minute leerer Bildschirm.
-                stream = client.chat.completions.create(
+                stream = chat_client.chat.completions.create(
                     model=chat_model,
                     messages=api_messages,
                     stream=True,

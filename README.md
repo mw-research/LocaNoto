@@ -84,10 +84,47 @@ Ausfall von HuggingFace kann den Start nicht mehr verhindern.
 Der Download passiert genau einmal pro Build und liegt im Dockerfile vor
 `COPY . .` — eine Code-Änderung löst ihn also nicht erneut aus.
 
+Der Xet-Übertragungsweg von HuggingFace bleibt gelegentlich hängen: der
+Download bricht dann nicht ab, sondern steht still. `HF_HUB_DISABLE_XET=1`
+ist deshalb voreingestellt und leitet ihn über HTTPS. Auf `0` setzen, wenn
+Xet in eurem Netz schneller ist.
+
 Anderes Modell: `RERANKER_MODEL` in der `.env` setzen und **neu bauen**.
 Leer (`RERANKER_MODEL=`) schaltet den Reranker ab; dann rankt allein die
 Rangfolge-Fusion. Lässt sich das Modell nicht laden, fällt die App auf
 Fusion zurück statt abzubrechen.
+
+## 🔌 Modelle und Endpunkte
+
+Jede Aufgabe kann ihren eigenen Server bekommen:
+
+| Aufgabe | Präfix | wofür |
+|---|---|---|
+| Antwort, Umformulierung | `CHAT_` | die eigentliche Antwort |
+| Vektorisierung | `EMBEDDING_` | Chunks und Suchanfragen |
+| Bildbeschreibung | `VISION_` | Abbildungen im Ingest |
+| Chat-Benennung | `TITLE_` | Dateiname des Chats |
+
+Je Präfix stehen `_MODEL`, `_BASE_URL`, `_API_KEY` und `_API_VERSION` zur
+Verfügung. Nicht gesetzte Werte fallen auf `OPENAI_BASE_URL` und
+`OPENAI_API_KEY` zurück — wer alles über einen Endpunkt fährt, ändert nichts.
+
+Ist `_API_VERSION` gesetzt, wird ein Azure-OpenAI-Client verwendet.
+
+Beispiel — Chat über Azure, alles andere lokal:
+
+```
+OPENAI_BASE_URL=http://ollama:11434/v1
+OPENAI_API_KEY=ollama
+
+CHAT_MODEL=gpt-4o
+CHAT_BASE_URL=https://meine-instanz.openai.azure.com
+CHAT_API_KEY=...
+CHAT_API_VERSION=2024-10-21
+```
+
+Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
+— ohne Schlüssel, nur Modellname und Adresse.
 
 ## ⚠️ Nach einem Rebuild
 

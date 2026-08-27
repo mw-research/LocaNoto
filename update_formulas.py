@@ -1,9 +1,9 @@
 import pymupdf
 import chromadb
-from openai import OpenAI
 import os
 
 import paths
+import llm
 import glob
 import base64
 from PIL import Image
@@ -14,13 +14,11 @@ print("Starte In-Place Formel-Update in ChromaDB...")
 
 # --- KONFIGURATION ---
 ORDNER_NAME = paths.DOCS_DIR
-VISION_MODEL = "qwen3-vl:32b"
-EMBEDDING_MODEL = "qwen3-embedding:4b"
+VISION_MODEL = llm.modell("VISION")
+EMBEDDING_MODEL = llm.modell("EMBEDDING")
+vision_client = llm.client("VISION")
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key"), 
-    base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
-)
+client = llm.client("EMBEDDING")
 
 # ChromaDB laden
 chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
@@ -110,7 +108,7 @@ for pdf_pfad in pdf_dateien:
                 
                 try:
                     # Vision API anfragen
-                    vision_response = client.chat.completions.create(
+                    vision_response = vision_client.chat.completions.create(
                         model=VISION_MODEL,
                         messages=[
                             {
