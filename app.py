@@ -7,13 +7,13 @@ import os
 import time
 import json
 from datetime import datetime
-from sentence_transformers import CrossEncoder
 import re
 import bcrypt
 
 import paths
 import keyword_index
 from embedding import embed_batch
+import ranking
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -141,7 +141,10 @@ def make_chat_title(user_query, model):
             f"Keine Einleitung, keine Satzzeichen.\nFrage: {user_query}"
         )
         resp = client.chat.completions.create(
-            model=model,
+            # Der Titel ist eine Nebensache -- ein kleines Modell reicht und
+            # spart bei drei LLM-Aufrufen pro Frage spuerbar Zeit. Ohne
+            # TITLE_MODEL bleibt es beim Chat-Modell.
+            model=os.getenv("TITLE_MODEL") or model,
             messages=[{"role": "user", "content": title_prompt}],
             max_tokens=64,
             temperature=0.3,
@@ -265,12 +268,24 @@ def init_keyword_index():
 init_keyword_index()
 
 # --- RERANKER SETUP ---
-@st.cache_resource
+@st.cache_resource(show_spinner="Lade Reranker-Modell ...")
 def init_reranker():
-    # 512 Token reichen fuer die Chunks nicht: 1500 Zeichen Deutsch liegen bei
-    # rund 400-500 Token, dazu kommt die Suchsonde im selben Fenster. Der
-    # Schluss langer Chunks wurde damit abgeschnitten, bevor er bewertet war.
-    return CrossEncoder('BAAI/bge-reranker-v2-m3', max_length=1024)
+    """Laedt den CrossEncoder -- nur wenn RERANKER_MODEL gesetzt ist.
+
+    Ohne die Variable arbeitet die App mit reiner Rangfolge-Fusion (ranking.py):
+    kein Modell, kein Download, keine Ladezeit. Der frueher fest verdrahtete
+    CrossEncoder holte sein Modell beim ersten Start von HuggingFace -- war der
+    Dienst nicht erreichbar, startete die App nicht.
+    """
+    if not ranking.RERANKER_MODEL:
+        return None
+    try:
+        return ranking._load_cross_encoder()
+    except Exception as e:
+        # Ein nicht erreichbares Modell darf die App nicht blockieren.
+        st.warning(f"Reranker-Modell nicht ladbar ({e}) -- es wird ohne "
+                   "gearbeitet.")
+        return None
 
 reranker = init_reranker()
 
@@ -640,14 +655,14 @@ with st.sidebar:
                                value=os.getenv("CHAT_MODEL", "qwen3.8:27b"))
     embed_model = st.text_input("Embedding Modell",
                                 value=os.getenv("EMBEDDING_MODEL", "qwen3-embedding:4b"))
-    # Standard war 5. Bei Fachfragen nach "allen relevanten Toleranzen" muessen
-    # mehrere Tabellen aus mehreren Normen gleichzeitig im Kontext liegen; mit
-    # 5 Chunks kann die Antwort strukturell nicht vollstaendig werden. Gemessen
-    # am RST-Deployment: die DIN 18202 lag sauber in der Wissensbasis und
-    # wurde trotzdem nicht abgerufen -- die fuenf Plaetze waren nach zwei
-    # anderen Fundstellen aufgebraucht.
+    # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
+    # Toleranz-Auskunft braucht mehrere Tabellen aus mehreren Normen
+    # gleichzeitig. Am RST-Deployment lag die DIN 18202 sauber in der
+    # Wissensbasis und wurde trotzdem nicht abgerufen, weil die fuenf Plaetze
+    # nach zwei anderen Fundstellen aufgebraucht waren. Der Standard bleibt
+    # dennoch 5; wer mehr braucht, zieht den Regler oder setzt TOP_K.
     top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
-                      value=int(os.getenv("TOP_K", "12")))
+                      value=int(os.getenv("TOP_K", "5")))
 
 # --- CHAT & RETRIEVAL ---
 if collection.count() > 0:
@@ -749,15 +764,23 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
                     # Die 3 Sonden in EINER Anfrage statt in dreien.
-                    query_vectors = embed_batch(client, search_queries,
-                                                embed_model, keep_alive=0)
-                    query_vectors = [v for v in query_vectors if v is not None]
-                    if not query_vectors:
+                    vektoren = embed_batch(client, search_queries,
+                                           embed_model, keep_alive=0)
+                    # Sonde und Vektor gemeinsam filtern. Wuerde man nur die
+                    # Vektoren zusammenschieben, verschoeben sich die Indizes
+                    # und die Treffer bekaemen die falsche Sonde zugeordnet.
+                    sonden = [(q, v) for q, v in zip(search_queries, vektoren)
+                              if v is not None]
+                    if not sonden:
                         st.error("Die Suchanfrage konnte nicht vektorisiert werden.")
                         st.stop()
-                    broad_k = max(10, top_k * 3) 
-                    
-                    unique_docs = {} 
+                    broad_k = max(10, top_k * 3)
+
+                    # Jede Sonde und jeder Suchweg liefert eine EIGENE
+                    # Rangliste. Die Reihenfolge innerhalb der Listen ist die
+                    # eigentliche Information fuer die Fusion (ranking.py) --
+                    # frueher wurde sie beim Entdoppeln weggeworfen.
+                    ranglisten = []
 
                     # A. VEKTOR-SUCHE (ChromaDB)
                     base_filter = {"$or": [{"access": {"$eq": "shared"}}, {"owner": {"$eq": st.session_state["username"]}}]}
@@ -769,62 +792,56 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                     where_clause = {"$and": conditions} if len(conditions) > 1 else base_filter
 
                     results = collection.query(
-                        query_embeddings=query_vectors,
+                        query_embeddings=[v for _, v in sonden],
                         n_results=broad_k,
                         where=where_clause
                     )
-                    
-                    for query_idx, (batch_docs, batch_metas) in enumerate(zip(results['documents'], results['metadatas'])):
-                        for doc_text, metadata in zip(batch_docs, batch_metas):
-                            if doc_text not in unique_docs:
-                                unique_docs[doc_text] = {"meta": metadata, "found_by_query": search_queries[query_idx]}
+
+                    for idx, (batch_docs, batch_metas) in enumerate(
+                            zip(results['documents'], results['metadatas'])):
+                        probe = sonden[idx][0]
+                        liste = [{"text": d, "meta": m, "probe": probe}
+                                 for d, m in zip(batch_docs, batch_metas)]
+                        if liste:
+                            ranglisten.append(liste)
 
                     # B. KEYWORD-SUCHE (SQLite FTS5, plattenbasiert)
                     #
-                    # Rechte- und Dokumentenfilter laufen jetzt in SQL statt
+                    # Rechte- und Dokumentenfilter laufen in SQL statt
                     # nachtraeglich in Python. Dort hing der Rechtecheck an
                     # meta.get('access', 'shared') -- Chunks ohne access-Key
                     # galten damit als oeffentlich.
-                    for q in search_queries:
-                        # Pro Sonde maximal 5 Keyword-Treffer, damit die
-                        # semantischen Vektor-Treffer nicht verdrängt werden.
-                        for hit in keyword_index.search(
-                                q,
-                                st.session_state["username"],
-                                limit=5,
-                                file_names=selected_docs or None,
-                                folders=selected_folders or None):
-                            if hit["text"] not in unique_docs:
-                                unique_docs[hit["text"]] = {
-                                    "meta": hit["meta"], "found_by_query": q}
+                    for q, _ in sonden:
+                        treffer = keyword_index.search(
+                            q,
+                            st.session_state["username"],
+                            limit=broad_k,
+                            file_names=selected_docs or None,
+                            folders=selected_folders or None)
+                        liste = [{"text": h["text"], "meta": h["meta"], "probe": q}
+                                 for h in treffer]
+                        if liste:
+                            ranglisten.append(liste)
 
-                # --- 2.5 RERANKING (Precision Filtering mit Sonden-Berücksichtigung) ---
-                with st.spinner("Reranker bewertet die Relevanz der gefundenen Dokumente..."):
-                    if unique_docs:
-                        doc_texts = list(unique_docs.keys())
-                        
-                        # DER TRICK: Der Reranker bewertet den Text nicht nur gegen die Originalfrage, 
-                        # sondern gegen die spezifische Sonde, die den Text aus der DB geholt hat!
-                        pairs = [[unique_docs[text]["found_by_query"], text] for text in doc_texts]
-                        
-                        # CrossEncoder nutzt standardmäßig predict()
-                        scores = reranker.predict(pairs)
+                # --- 2.5 RANGFOLGE (Fusion der Ranglisten) ---
+                unique_docs = {}
+                if ranglisten:
+                    kandidaten = sum(len(l) for l in ranglisten)
+                    gewaehlt = ranking.rank(ranglisten, top_k,
+                                            cross_encoder=reranker)
 
-                        # Wir sortieren die Chunks nach ihrem Score (höchste zuerst)
-                        scored_docs = sorted(zip(scores, doc_texts), key=lambda x: x[0], reverse=True)
-                        
-                        # Wir behalten NUR die vom Nutzer gewünschte Anzahl (top_k, z.B. 5)
-                        top_docs = scored_docs[:top_k]
-                        
-                        # Wir bauen unser neues, extrem präzises Dictionary auf (entpacken die Metadaten wieder)
-                        reranked_unique_docs = {}
-                        for score, text in top_docs:
-                            meta = unique_docs[text]["meta"]
-                            meta["found_by_query"] = unique_docs[text]["found_by_query"]
-                            reranked_unique_docs[text] = meta
+                    for text, score, item in gewaehlt:
+                        # Kopie: die Metadaten kommen direkt aus ChromaDB und
+                        # sollen nicht im Cache veraendert werden.
+                        meta = dict(item["meta"] or {})
+                        meta["found_by_query"] = item["probe"]
+                        unique_docs[text] = meta
 
-                        st.caption(f"🎯 *Reranker hat {len(unique_docs)} Kandidaten auf die besten {len(reranked_unique_docs)} destilliert.*")
-                        unique_docs = reranked_unique_docs
+                    verfahren = ("Reranker" if reranker is not None
+                                 else "Rangfolge-Fusion")
+                    st.caption(f"🎯 *{verfahren}: {kandidaten} Treffer aus "
+                               f"{len(ranglisten)} Ranglisten auf die besten "
+                               f"{len(unique_docs)} destilliert.*")
                     
                 # --- KONTEXT FÜR DAS LLM ZUSAMMENBAUEN ---
                 dynamic_context = ""
