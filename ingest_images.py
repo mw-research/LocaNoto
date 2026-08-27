@@ -103,7 +103,8 @@ for pdf_pfad in pdf_dateien:
                     image = Image.open(io.BytesIO(image_bytes))
                     width, height = image.size
                     
-                    # 1. MÜLL-FILTER: Ignoriere winzige Bilder (Logos, Icons, Trennlinien)
+                    # 1. GRÖSSENFILTER: Kleine Grafiken überspringen
+                    #    (Logos, Icons, Trennlinien)
                     #
                     # Bewusst NICHT "width < 400 or height < 400": technische
                     # Dokumente enthalten viele breite, flache Detailzeichnungen.
@@ -205,8 +206,8 @@ try:
         extra_body={"drop_params": True, "keep_alive": 0}
     )
 except Exception:
-    # Das Freigeben des VRAM ist Kür -- ein Fehler hier darf den
-    # abgeschlossenen Ingest nicht als gescheitert erscheinen lassen.
+    # Das Freigeben des VRAM ist optional. Ein Fehler an dieser Stelle
+    # darf einen abgeschlossenen Ingest nicht als gescheitert ausweisen.
     pass
 
 print("🚀 ALLE BILDER SIND INDEXIERT!")

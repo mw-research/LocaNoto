@@ -249,7 +249,7 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=20
 # st.spinner/st.toast im Funktionsrumpf. Streamlit zeichnet Elemente aus
 # gecachten Funktionen auf und spielt sie bei jedem Cache-Treffer erneut ab --
 # ein Layout-Block wie st.spinner laesst sich aber nicht wiedergeben, der
-# zweite Durchlauf stirbt mit CacheReplayClosureError. Das traf nur
+# zweite Durchlauf endet mit CacheReplayClosureError. Das traf nur
 # BESTEHENDE Installationen: eine frische Datenbank ist leer, betritt den
 # Rebuild-Zweig nie und erzeugt daher nie ein Element.
 @st.cache_resource(show_spinner="Baue Keyword-Index einmalig auf ...")
@@ -319,8 +319,8 @@ def remove_pdf_if_orphaned(filename):
     sie zeigt.
 
     Alle Nutzer teilen sich DOCS_DIR. Wird die Datei bedingungslos entfernt,
-    reisst das Loeschen einer privaten Kopie die Quellenansicht eines
-    gleichnamigen geteilten Dokuments mit -- und umgekehrt.
+    verliert ein gleichnamiges geteiltes Dokument seine Quellenansicht,
+    sobald jemand seine private Kopie loescht -- und umgekehrt.
     """
     if collection.get(where={"file_name": filename}, include=[])["ids"]:
         return False
