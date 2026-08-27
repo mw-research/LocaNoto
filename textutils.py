@@ -1,9 +1,10 @@
 """Textbereinigung fuer den Ingest.
 
-DIN liefert heruntergeladene Normen mit einer Druck-Kopfzeile pro Seite aus
-(Ausdruckdatum, Lizenznehmer, Benutzerkennung). Ohne Filter landet dieser
-Block in ~40 % aller Chunks und verwaessert deren Embedding -- bei kurzen
-Normen besonders stark, weil dort der Anteil pro Chunk am hoechsten ist.
+Viele Herausgeber versehen heruntergeladene Dokumente mit einer
+Druck-Kopfzeile pro Seite (Ausdruckdatum, Lizenznehmer, Benutzerkennung).
+Ohne Filter landet dieser Block in einem grossen Teil aller Chunks und
+verwaessert deren Embedding -- bei kurzen Dokumenten besonders stark, weil
+dort der Anteil pro Chunk am hoechsten ist.
 
 Zusaetzlich entfernt der Filter die Lizenzkennung des Abonnenten, die sonst
 mit jeder weitergegebenen Vektordatenbank mitwandert.

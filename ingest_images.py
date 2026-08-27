@@ -105,10 +105,10 @@ for pdf_pfad in pdf_dateien:
                     
                     # 1. MÜLL-FILTER: Ignoriere winzige Bilder (Logos, Icons, Trennlinien)
                     #
-                    # Bewusst NICHT "width < 400 or height < 400": Normen enthalten
-                    # viele breite, flache Detailzeichnungen (z.B. 769x206, 642x189).
-                    # Eine Mindestgröße auf BEIDEN Kanten hat davon 31 % der Bilder
-                    # als "Logo" verworfen -- gemessen überlebten nur 6,7 %.
+                    # Bewusst NICHT "width < 400 or height < 400": technische
+                    # Dokumente enthalten viele breite, flache Detailzeichnungen.
+                    # Eine Mindestgröße auf BEIDEN Kanten verwirft davon einen
+                    # erheblichen Teil als "Logo".
                     # Lange Kante + Fläche trifft Logos, behält aber Zeichnungen.
                     if max(width, height) < MIN_LONG_EDGE or width * height < MIN_AREA:
                         print(f"   ⏩ Überspringe winziges Bild ({width}x{height} px) - vermutlich ein Logo.")
@@ -170,8 +170,7 @@ for pdf_pfad in pdf_dateien:
                     #
                     # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
                     # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
-                    # diese Keys matchen nie und sind damit unsichtbar -- in der
-                    # produktiven DB betraf das alle 581 Bild-Chunks.
+                    # diese Keys matchen nie und sind damit unsichtbar.
                     bild_meta = {"file_name": dateiname, "page": page_num + 1,
                                  "folder": ordner, "access": "shared",
                                  "owner": "system", "source": "uploaded_pdfs",
@@ -183,7 +182,7 @@ for pdf_pfad in pdf_dateien:
                         # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
                         # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
                         # diese Keys matchen nie und sind damit unsichtbar -- in der
-                        # produktiven DB betraf das alle 581 Bild-Chunks.
+                        # diese Keys matchen nie und sind damit unsichtbar.
                         metadatas=[bild_meta]
                     )
                     keyword_index.add_chunks(
