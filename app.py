@@ -534,11 +534,9 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("🎯 Dokumenten-Filter")
-    # Sachgebiet zuerst: bei vielen Dokumenten ist die Ordnerauswahl der
-    # wirksamere Filter. In einem gemeinsamen Index stellt ein umfangreiches
-    # Dokument allein durch seine Groesse mehr Chunks und verdraengt damit
-    # kuerzere, inhaltlich passende Quellen aus den Top-k. Die Eingrenzung
-    # auf ein Sachgebiet gleicht das aus.
+    # Grenzt die Suche auf die Dokumente eines Unterordners ein. Steht vor
+    # dem Dokumentenfilter, weil die Auswahl bei vielen Dateien schneller
+    # geht als das Zusammensuchen einzelner Dokumente.
     selected_folders = st.multiselect(
         "Sachgebiet:",
         options=all_folders,
