@@ -22,9 +22,16 @@ import pymupdf
 
 from textutils import strip_boilerplate
 
-# Zeichen, nicht Token. ~6000 Zeichen deutscher Tabellentext sind grob
-# 1800 Token und bleiben damit deutlich unter jedem Embedding-Limit.
-MAX_TABLE_CHARS = int(os.getenv("MAX_TABLE_CHARS", "6000"))
+# Zeichen, nicht Token -- und das Verhaeltnis ist bei Tabellen schlecht.
+# Zahlen, Einheiten und Trennzeichen ergeben viel mehr Token je Zeichen als
+# Fliesstext: 6000 Zeichen Tabelle koennen 2100 Token sein, waehrend 6000
+# Zeichen Prosa bei etwa 1600 liegen.
+#
+# Ein Embedding-Server mit 2048 Token Fenster lehnt solche Chunks ab. Der
+# Ingest ueberspringt sie dann -- ausgerechnet die Tabellen, also den
+# wertvollsten Teil. 3000 Zeichen bleiben auch bei dichten Tabellen sicher
+# darunter. Wer ein groesseres Fenster hat, kann hochsetzen.
+MAX_TABLE_CHARS = int(os.getenv("MAX_TABLE_CHARS", "3000"))
 
 # Hoehe des Streifens ueber der Tabelle, aus dem die Ueberschrift stammt.
 CAPTION_HEIGHT = int(os.getenv("CAPTION_HEIGHT", "150"))
