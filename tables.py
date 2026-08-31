@@ -108,6 +108,60 @@ def _ist_kopfzeilen_rest(text):
     return bool(_SEITENZAHL.match(t) or _ABGESCHNITTENE_NORM.match(t))
 
 
+def umgebender_text(page, bbox, oben=None, unten=0):
+    """Liest den Text ober- und/oder unterhalb einer Flaeche.
+
+    oben/unten sind Hoehen in Punkt. Die Bloecke werden nach Position
+    sortiert, damit der Text in Lesereihenfolge zusammengesetzt wird und nicht
+    in der Reihenfolge, in der pymupdf sie liefert. Kopfzeilenreste und
+    Wasserzeichen fallen dabei heraus.
+    """
+    oben = CAPTION_HEIGHT if oben is None else oben
+    x0, y0, x1, y1 = bbox[0], bbox[1], bbox[2], bbox[3]
+
+    bereiche = []
+    if oben:
+        bereiche.append(pymupdf.Rect(0, max(0, y0 - oben), page.rect.width, y0))
+    if unten:
+        bereiche.append(pymupdf.Rect(0, y1, page.rect.width,
+                                     min(page.rect.height, y1 + unten)))
+
+    bloecke = []
+    for rect in bereiche:
+        for block in page.get_text("blocks", clip=rect):
+            text = block[4] if len(block) > 4 else ""
+            if not text or _is_watermark_fragment(text) or _ist_kopfzeilen_rest(text):
+                continue
+            bloecke.append((block[1], block[0], text))
+
+    stuecke = [t for _, _, t in sorted(bloecke)]
+    aus = strip_boilerplate(" ".join(stuecke)).replace("\n", " ").strip()
+    return " ".join(aus.split())
+
+
+def bild_kontext(page, bbox, dateiname, seite):
+    """Bildunterschrift und umgebender Text zu einer Abbildung.
+
+    Anders als bei Tabellen steht die Unterschrift bei Abbildungen in aller
+    Regel DARUNTER ("Bild 2 - Unterbrochene Kehlnaehte"), deshalb wird
+    zuerst dort gesucht.
+
+    Ohne diesen Kontext beschreibt das Sehmodell nur die Geometrie: es sieht
+    den freigeschnittenen Ausschnitt und weiss weder, welche Groesse auf einer
+    Achse steht, noch zu welcher Norm die Abbildung gehoert. Eine so
+    entstandene Beschreibung ("die vertikale Achse ist mit F beschriftet")
+    trifft keine Fachfrage. Gemessen an 309 Bild-Chunks erreichte kein
+    einziger je den Kontext einer Antwort.
+    """
+    unten = umgebender_text(page, bbox, oben=0, unten=CAPTION_HEIGHT)
+    oben = umgebender_text(page, bbox, oben=CAPTION_HEIGHT, unten=0)
+
+    teile = [t for t in (unten, oben) if t and len(t) >= 5]
+    if not teile:
+        return f"Abbildung aus {dateiname}, Seite {seite}"
+    return " | ".join(teile)[:800]
+
+
 def table_caption(page, table, dateiname, seite):
     """Liest den Text direkt oberhalb der Tabelle als Ueberschrift."""
     y0 = table.bbox[1]
