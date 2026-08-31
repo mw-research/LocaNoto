@@ -68,7 +68,38 @@ Weboberfläche geht das mit:
 python rebuild_index.py
 ```
 
-## 🧠 Reranker-Modell
+## 🧠 Rangfolge der Treffer
+
+Nach der Suche werden die Ranglisten aller Sonden und beider Suchwege
+verschmolzen (Reciprocal Rank Fusion). Die engere Auswahl bewertet danach ein
+Reranker — dafür gibt es drei Stufen, die in dieser Reihenfolge versucht
+werden:
+
+| Stufe | wann | Konfiguration |
+|---|---|---|
+| **1. Rerank-Endpunkt** | `RERANKER_BASE_URL` gesetzt und erreichbar | Modell austauschbar ohne Rebuild |
+| **2. Modell im Image** | sonst, wenn `RERANKER_MODEL` gesetzt | kein Netzzugriff, aber Rebuild bei Wechsel |
+| **3. keiner** | sonst | allein die Fusion entscheidet |
+
+Keine dieser Stufen kann den Start verhindern: schlägt eine fehl, wird die
+nächste genommen. Welche gerade greift, steht in der Seitenleiste unter
+**Modell-Endpunkte**.
+
+Der Endpunkt erwartet das Cohere-artige Schema, das LiteLLM, Jina, TEI und
+vLLM gleichermaßen sprechen — `POST /rerank` mit `query` und `documents`,
+zurück kommen `results` mit `index` und `relevance_score`. Der Pfad `/rerank`
+wird angehängt, sofern die Adresse ihn nicht schon enthält.
+
+```
+RERANKER_BASE_URL=http://litellm:4000/v1
+RERANKER_API_KEY=...
+RERANKER_API_MODEL=bge-reranker-v2-m3
+```
+
+Fällt der Endpunkt während des Betriebs aus, bleibt die Reihenfolge aus der
+Fusion stehen — die Frage wird beantwortet, nur ohne die zweite Bewertung.
+
+## 🧠 Reranker-Modell im Image
 
 Das Modell (Standard `BAAI/bge-reranker-v2-m3`) wird **beim Bauen** in das
 Image geladen:

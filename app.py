@@ -270,29 +270,21 @@ def init_keyword_index():
 init_keyword_index()
 
 # --- RERANKER SETUP ---
-@st.cache_resource(show_spinner="Lade Reranker-Modell ...")
+@st.cache_resource(show_spinner="Richte Rangfolge ein ...")
 def init_reranker():
-    """Laedt den CrossEncoder einmal pro Prozess.
+    """Waehlt den Bewerter einmal pro Prozess.
 
-    Das Modell liegt im Image (siehe Dockerfile) und wird von dort gelesen,
-    nicht von HuggingFace geholt. Frueher passierte der Download beim ersten
-    Programmstart -- war der Dienst nicht erreichbar, lief die App nicht an.
+    Reihenfolge in ranking.lade_bewerter(): Rerank-Endpunkt, dann das Modell
+    aus dem Image, dann keiner. Keine dieser Stufen kann den Start verhindern
+    -- schlaegt eine fehl, wird die naechste genommen.
 
-    @st.cache_resource sorgt dafuer, dass das Laden einmal pro Containerstart
-    geschieht und nicht bei jeder Frage. Scheitert es trotzdem, arbeitet die
-    App mit reiner Rangfolge-Fusion weiter, statt den Start abzubrechen.
+    @st.cache_resource sorgt dafuer, dass die Auswahl einmal pro
+    Containerstart geschieht und nicht bei jeder Frage.
     """
-    if not ranking.RERANKER_MODEL:
-        return None
-    try:
-        return ranking._load_cross_encoder()
-    except Exception as e:
-        # Ein nicht erreichbares Modell darf die App nicht blockieren.
-        st.warning(f"Reranker-Modell nicht ladbar ({e}) -- es wird ohne "
-                   "gearbeitet.")
-        return None
+    return ranking.lade_bewerter()
 
-reranker = init_reranker()
+
+reranker, rerank_info = init_reranker()
 
 # --- DOKUMENTEN-LOGIK ---
 def make_document_public(filename):
@@ -657,7 +649,8 @@ with st.sidebar:
     chat_model = st.text_input("Chat Modell", value=llm.modell("CHAT"))
     embed_model = st.text_input("Embedding Modell", value=llm.modell("EMBEDDING"))
     with st.expander("🔌 Modell-Endpunkte"):
-        st.code(llm.uebersicht(), language="text")
+        st.code(llm.uebersicht() + f"\nRANGFOLGE   {rerank_info}",
+                language="text")
     # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
     # Auskunft braucht dann mehrere Tabellen aus mehreren Dokumenten
     # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
@@ -830,7 +823,7 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                 if ranglisten:
                     kandidaten = sum(len(l) for l in ranglisten)
                     gewaehlt = ranking.rank(ranglisten, top_k,
-                                            cross_encoder=reranker)
+                                            bewerter=reranker)
 
                     for text, score, item in gewaehlt:
                         # Kopie: die Metadaten kommen direkt aus ChromaDB und
