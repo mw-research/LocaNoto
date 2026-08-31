@@ -9,6 +9,7 @@ import io
 import paths
 import keyword_index
 import llm
+from tables import bild_kontext
 
 print("Starte nachträgliche Bild-Vektorisierung...")
 
@@ -65,6 +66,17 @@ Analysiere dieses Bild aus einem Dokument. Erstelle eine umfassende, neutrale un
 Übersetze den kompletten Informationsgehalt des Bildes so präzise in Textform, dass eine Person, die das Bild nicht sieht, keine einzige fachliche Information verpasst. Erfinde keine Informationen hinzu.
 """
 
+# Wird an den Prompt angehaengt, sobald Text um die Abbildung herum gefunden
+# wurde. Ohne ihn beschreibt das Modell nur Geometrie: es sieht den
+# freigeschnittenen Ausschnitt und weiss weder, welche Groesse auf einer Achse
+# steht, noch zu welchem Regelwerk die Abbildung gehoert.
+KONTEXT_ZUSATZ = """
+Diese Abbildung steht in folgendem Zusammenhang. Nutze ihn, um zu benennen, WAS
+dargestellt ist -- nicht nur, wie es aussieht:
+
+{kontext}
+"""
+
 # --- VERARBEITUNG ---
 for pdf_pfad in pdf_dateien:
     dateiname = os.path.basename(pdf_pfad)
@@ -91,6 +103,16 @@ for pdf_pfad in pdf_dateien:
                     continue # Bild wurde schon verarbeitet
                 
                 print(f"   🖼️ Analysiere Bild {img_index+1} auf Seite {page_num+1}...")
+
+                # Bildunterschrift und umgebender Text. Ohne sie sieht das
+                # Sehmodell nur den freigeschnittenen Ausschnitt und beschreibt
+                # Geometrie statt Bedeutung -- welche Norm, welche Groesse,
+                # welcher Zusammenhang steht ausserhalb des Bildes.
+                try:
+                    kontext = bild_kontext(page, page.get_image_bbox(img_info),
+                                           dateiname, page_num + 1)
+                except Exception:
+                    kontext = f"Abbildung aus {dateiname}, Seite {page_num + 1}"
                 
                 # Bild extrahieren
                 xref = img_info[0]
@@ -152,7 +174,7 @@ for pdf_pfad in pdf_dateien:
                             {
                                 "role": "user",
                                 "content": [
-                                    {"type": "text", "text": VISION_PROMPT},
+                                    {"type": "text", "text": VISION_PROMPT + KONTEXT_ZUSATZ.format(kontext=kontext)},
                                     {"type": "image_url", "image_url": {"url": image_url}}
                                 ]
                             }
@@ -162,7 +184,13 @@ for pdf_pfad in pdf_dateien:
                     bild_beschreibung = vision_response.choices[0].message.content
                     
                     # Den Text für den Chat-Kontext aufbereiten
-                    finaler_text = f"[BILD-BESCHREIBUNG]: {bild_beschreibung}"
+                    # Der Kontext steht mit im Chunk, nicht nur im Prompt: er
+                    # ist der Suchanker. Eine reine Geometriebeschreibung
+                    # trifft keine Fachfrage -- dieselbe Erfahrung wie bei den
+                    # Tabellen, wo die Zeile ueber der Tabelle der wirksamste
+                    # Anker im Korpus ist.
+                    finaler_text = ("KONTEXT ZUM BILD: " + kontext + "\n\n"
+                                    "[BILD-BESCHREIBUNG]: " + str(bild_beschreibung))
                     
                     # 2. Beschreibung vektorisieren
                     vector = get_embedding(finaler_text)

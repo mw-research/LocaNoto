@@ -54,6 +54,12 @@ python ingest.py          # Text und Tabellen
 python ingest_images.py   # Abbildungen über das Vision-Modell
 ```
 
+Der Bildlauf gibt dem Sehmodell die Bildunterschrift und den umgebenden Text
+mit. Ohne sie sieht das Modell nur den freigeschnittenen Ausschnitt und
+beschreibt Geometrie statt Bedeutung — welche Größe auf einer Achse steht und
+zu welchem Regelwerk die Abbildung gehört, ist außerhalb des Bildes notiert.
+Der Kontext steht auch im gespeicherten Chunk, denn er ist der Suchanker.
+
 Beide Läufe sind unterbrechbar und setzen auf Chunk-Ebene wieder auf: die
 Textextraktion läuft erneut — sie dauert nur Millisekunden pro Seite.
 Vektorisiert wird nur, was fehlt; das ist der zeitintensive Teil. Ein
