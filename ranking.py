@@ -41,8 +41,17 @@ RRF_K = int(os.getenv("RRF_K", "60"))
 # --- Stufe 1: Rerank-Endpunkt ---
 # Gesetzt = wird zuerst versucht. Der Pfad /rerank wird angehaengt, sofern die
 # Adresse ihn nicht schon enthaelt.
+# Die Adresse ist bewusst OHNE Rueckfall auf OPENAI_BASE_URL: sie ist der
+# Schalter, mit dem diese Stufe eingeschaltet wird. Faellt sie zurueck, wuerde
+# bei jedem Start ein Rerank-Aufruf gegen den allgemeinen Modellserver
+# versucht, der dort nichts zu suchen hat.
 RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "").strip()
-RERANKER_API_KEY = os.getenv("RERANKER_API_KEY", "").strip()
+
+# Der Schluessel dagegen faellt auf OPENAI_API_KEY zurueck, wie bei allen
+# anderen Aufgaben auch (siehe llm.py). Wer alles ueber denselben Zugang
+# faehrt, soll ihn nicht zweimal eintragen muessen.
+RERANKER_API_KEY = (os.getenv("RERANKER_API_KEY", "").strip()
+                    or os.getenv("OPENAI_API_KEY", "").strip())
 # Modellname am Endpunkt. Ohne Angabe wird RERANKER_MODEL verwendet.
 RERANKER_API_MODEL = os.getenv("RERANKER_API_MODEL", "").strip()
 RERANKER_TIMEOUT = float(os.getenv("RERANKER_TIMEOUT", "30"))
