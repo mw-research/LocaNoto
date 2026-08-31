@@ -53,6 +53,24 @@ def bootstrap():
     return DATA_DIR
 
 
+def pdf_dateien(ordner=None):
+    """Alle PDFs unterhalb von data/dokumente, rekursiv und sortiert.
+
+    Bewusst ueber os.walk statt glob: glob ist auf Linux von der
+    Gross-/Kleinschreibung abhaengig, sodass eine Datei mit der Endung .PDF
+    stillschweigend uebergangen wurde -- ohne Meldung, sie fehlte einfach in
+    der Wissensbasis. Ein zweites glob-Muster fuer .PDF waere keine Loesung,
+    weil dieselbe Datei auf Windows dann doppelt gefunden wird.
+    """
+    ordner = ordner or DOCS_DIR
+    gefunden = []
+    for wurzel, _, dateien in os.walk(ordner):
+        for name in dateien:
+            if name.lower().endswith(".pdf"):
+                gefunden.append(os.path.join(wurzel, name))
+    return sorted(gefunden)
+
+
 def resolve_user_file():
     """Effektiver Pfad zur Benutzerdatei.
 

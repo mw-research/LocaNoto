@@ -1,7 +1,6 @@
 import pymupdf
 import chromadb
 import os
-import glob
 import base64
 from PIL import Image
 import io
@@ -49,8 +48,9 @@ def folder_of(pdf_pfad):
     rel = os.path.relpath(os.path.dirname(pdf_pfad), ORDNER_NAME)
     return "(Basis)" if rel in (".", "") else rel.replace(os.sep, "/")
 
-pdf_dateien = sorted(glob.glob(os.path.join(ORDNER_NAME, "**", "*.pdf"),
-                               recursive=True))
+# Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe
+# folder_of), und unabhaengig von der Gross-/Kleinschreibung der Endung.
+pdf_dateien = paths.pdf_dateien(ORDNER_NAME)
 
 if not pdf_dateien:
     print(f"Keine PDFs im Ordner '{ORDNER_NAME}' gefunden.")
