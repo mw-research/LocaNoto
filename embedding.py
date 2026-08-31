@@ -18,6 +18,51 @@ DEFAULT_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "64"))
 # danach ohnehin nach.
 DEFAULT_TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "120"))
 
+# Untergrenze, ab der nicht weiter gekuerzt wird. Bleibt ein Chunk auch so zu
+# gross, liegt der Fehler woanders und soll sichtbar werden.
+MIN_KUERZUNG_CHARS = int(os.getenv("EMBED_MIN_CHARS", "400"))
+
+
+def _ist_kontextfehler(e):
+    """Erkennt die Rueckmeldung eines Servers, dem der Text zu lang ist.
+
+    Die Formulierung unterscheidet sich je nach Server und Proxy, deshalb
+    ueber Stichworte statt ueber einen Fehlertyp.
+    """
+    t = str(e).lower()
+    return any(w in t for w in (
+        "context window", "contextwindow", "exceed_context",
+        "exceeds the available context", "maximum context",
+        "too long", "context length"))
+
+
+def _embed_einzeln(client, text, model, extra, timeout):
+    """Vektorisiert einen Text und kuerzt ihn, falls der Server ihn ablehnt.
+
+    Nicht der gespeicherte Chunk wird gekuerzt, sondern nur die Fassung, die
+    zur Vektorberechnung geht. In ChromaDB und im Keyword-Index steht
+    weiterhin der vollstaendige Text -- das Sprachmodell bekommt also die
+    ganze Tabelle zu sehen, nur der Vektor stammt aus ihrem Anfang.
+
+    Das ist deutlich besser als die Alternative: bisher wurde ein zu langer
+    Chunk komplett verworfen und fehlte in der Wissensbasis.
+    """
+    versuch = text
+    gekuerzt = False
+    while True:
+        try:
+            resp = client.embeddings.create(
+                input=[versuch], model=model, timeout=timeout,
+                encoding_format="float", extra_body=extra)
+            return resp.data[0].embedding, gekuerzt
+        except Exception as e:
+            if not _ist_kontextfehler(e) or len(versuch) <= MIN_KUERZUNG_CHARS:
+                raise
+            # Zwei Drittel statt Haelfte: naeher an der Grenze, damit moeglichst
+            # viel vom Text in den Vektor eingeht.
+            versuch = versuch[:max(MIN_KUERZUNG_CHARS, len(versuch) * 2 // 3)]
+            gekuerzt = True
+
 
 def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
                 progress=None):
@@ -50,10 +95,14 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
         except Exception:
             for i, single in enumerate(cleaned):
                 try:
-                    resp = client.embeddings.create(
-                        input=[single], model=model, timeout=DEFAULT_TIMEOUT,
-                        encoding_format="float", extra_body=extra)
-                    out[start + i] = resp.data[0].embedding
+                    vektor, gekuerzt = _embed_einzeln(
+                        client, single, model, extra, DEFAULT_TIMEOUT)
+                    out[start + i] = vektor
+                    if gekuerzt:
+                        print(f"   [i] Chunk {start + i} war fuer das "
+                              f"Kontextfenster zu lang -- Vektor aus dem "
+                              f"Anfang des Textes, gespeichert wird der "
+                              f"vollstaendige Text.")
                 except Exception as e:
                     print(f"   [!] Embedding fehlgeschlagen (Chunk "
                           f"{start + i}): {e}")
