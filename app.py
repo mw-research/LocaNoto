@@ -732,17 +732,32 @@ if collection.count() > 0:
                         history_msgs = st.session_state.messages[:-1][-3:]
                         history_text = "\nChatverlauf:\n" + "\n".join([f"{msg['role']}: {msg['content'][:300]}" for msg in history_msgs])
                     
-                    rewrite_prompt = f"""Du bist ein präziser Suchbegriff-Generator für eine universelle Wissens-Datenbank.
+                    # Wie system_prompt.txt aus einer Datei, damit sich die
+                    # Sonden je Bestand anpassen lassen: was ein Regelwerk
+                    # braucht (Fundstelle, Tabelle, Anhang), ist bei einer
+                    # Papersammlung die falsche Frage.
+                    vorlage_pfad = os.path.join(paths.BASE_DIR, "search_prompt.txt")
+                    try:
+                        with open(vorlage_pfad, "r", encoding="utf-8") as vf:
+                            rewrite_vorlage = vf.read()
+                    except FileNotFoundError:
+                        rewrite_vorlage = None
+
+                    rewrite_prompt = (
+                        rewrite_vorlage.replace("{HISTORY}", history_text)
+                                       .replace("{FRAGE}", user_query)
+                        if rewrite_vorlage else
+                        f"""Du bist ein präziser Suchbegriff-Generator für eine universelle Wissens-Datenbank.
 Generiere exakt 3 verschiedene Suchanfragen für die aktuelle Nutzerfrage, um sowohl Fließtexte (wie wissenschaftliche Paper) als auch strukturierte Daten (wie Tabellen/Normen) optimal zu finden:
 1. Die präzise, umformulierte Kernfrage (löse Pronomen durch echte Begriffe aus dem Chatverlauf auf).
-2. Eine konzeptionelle Suche nach zugrundeliegenden Definitionen, Methoden, Parametern oder Theorien.
+2. Eine Suche nach der Fundstelle: Abschnitt, Anhang oder Tabelle, in der die gesuchte Angabe steht -- und, wo es passt, nach der zugrundeliegenden Definition oder Methode.
 3. Eine hochspezifische Stichwort-Suche (Eigennamen, Fachbegriffe, genaue Maße oder Variablen aus der Frage).
 
 {history_text}
 
 Aktuelle Frage: {user_query}
 
-Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche. Keine Zahlen davor, keine Einleitung."""
+Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche. Keine Zahlen davor, keine Einleitung.""")
 
                     try:
                         rewrite_response = chat_client.chat.completions.create(

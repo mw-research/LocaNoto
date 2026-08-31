@@ -15,13 +15,14 @@ import pymupdf
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
+import re
 
 import paths
 import keyword_index
 import llm
 from embedding import embed_batch
 from textutils import strip_boilerplate
-from tables import build_table_chunks
+from tables import build_table_chunks, table_caption
 
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
@@ -67,6 +68,35 @@ def existing_chunk_ids(dateiname):
         return set()
 
 
+# Ein Text-Chunk gilt als reine Kopfzeile, wenn er kurz ist UND sein Inhalt
+# bereits in einer Tabellen-Ueberschrift derselben Seite steht. Beide
+# Bedingungen zusammen: die Laenge allein wuerde auch echte kurze Absaetze
+# treffen, die Enthaltensein-Pruefung allein auch laengeren Fliesstext, der
+# eine Ueberschrift zufaellig zitiert.
+MAX_KOPFZEILE_CHARS = int(os.getenv("MAX_KOPFZEILE_CHARS", "200"))
+
+
+def _vergleichsform(text):
+    """Kleinschreibung, ohne Ziffern und Sonderzeichen -- damit die gedruckte
+    Seitenzahl den Vergleich nicht verhindert."""
+    return " ".join(re.sub(r"[^a-zA-ZäöüÄÖÜß ]", " ", text).lower().split())
+
+
+def ist_nur_ueberschrift(chunk, ueberschriften):
+    if not ueberschriften or len(chunk) > MAX_KOPFZEILE_CHARS:
+        return False
+    kern = _vergleichsform(chunk)
+    if len(kern) < 10:
+        return True
+    return any(kern in _vergleichsform(u) for u in ueberschriften)
+
+
+# Ueber den ganzen Lauf mitgezaehlt: bei tausenden Seiten geht eine einzelne
+# Fehlermeldung in der Ausgabe unter, und das Ergebnis waere eine
+# Wissensbasis mit Luecken, von denen niemand weiss.
+uebersprungen = []
+
+
 def flush(pending, dateiname):
     """Vektorisiert und speichert die gesammelten Chunks eines Dokuments."""
     if not pending:
@@ -86,6 +116,8 @@ def flush(pending, dateiname):
     # ganzen Lauf abzubrechen.
     keep = [i for i, v in enumerate(vectors) if v is not None]
     if len(keep) < len(ids):
+        fehlend = [ids[i] for i in range(len(ids)) if vectors[i] is None]
+        uebersprungen.extend(fehlend)
         print(f"   [!] {len(ids) - len(keep)} Chunks ohne Vektor uebersprungen.")
     if not keep:
         return 0
@@ -124,12 +156,15 @@ for pdf_pfad in pdf_dateien:
                           "owner": "system"}
 
             # --- TABELLEN ISOLIEREN UND ANREICHERN ---
+            ueberschriften = []
             tables = page.find_tables()
             for i, table in enumerate(tables):
                 try:
                     # Ueberschrift voranstellen und uebergrosse Tabellen
                     # aufteilen -- siehe tables.py. Bleibt eine Tabelle unter
                     # dem Limit, ist die Chunk-ID unveraendert.
+                    ueberschriften.append(
+                        table_caption(page, table, dateiname, page_num + 1))
                     for suffix, chunk_text in build_table_chunks(
                             page, table, dateiname, page_num + 1, i):
                         chunk_id = f"{dateiname}_{suffix}"
@@ -148,6 +183,17 @@ for pdf_pfad in pdf_dateien:
             page_text = strip_boilerplate(page.get_text())
             if page_text.strip():
                 for i, chunk in enumerate(text_splitter.split_text(page_text)):
+                    # Auf Anhangseiten bleibt nach dem Schwaerzen der Tabelle
+                    # oft nur die laufende Kopfzeile uebrig -- Normbezeichnung
+                    # und Tabellentitel, ohne einen einzigen Wert. Weil BM25
+                    # auf Laenge normalisiert, rankt so ein Chunk ueber der
+                    # Tabelle, die er benennt, und belegt deren Platz.
+                    #
+                    # Seit die Tabelle ihre Ueberschrift selbst traegt, steht
+                    # sein gesamter Inhalt bereits in dem Chunk, mit dem er
+                    # konkurriert. Er transportiert nichts Eigenes mehr.
+                    if ist_nur_ueberschrift(chunk, ueberschriften):
+                        continue
                     chunk_id = f"{dateiname}_p{page_num+1}_c{i}"
                     if chunk_id not in bekannt:
                         pending.append((chunk_id, chunk,
@@ -185,4 +231,17 @@ try:
 except Exception:
     pass
 
-print("🚀 FERTIG! Alle Dokumente sind in der Datenbank.")
+if uebersprungen:
+    print()
+    print(f"⚠️  {len(uebersprungen)} Chunks konnten NICHT vektorisiert werden "
+          f"und fehlen in der Wissensbasis.")
+    print("   Haeufigste Ursache: der Chunk ueberschreitet das Kontextfenster "
+          "des Embedding-Servers.")
+    print("   Dann MAX_TABLE_CHARS verkleinern und ingest.py erneut starten --"
+          " vorhandene Chunks werden uebersprungen.")
+    for cid in uebersprungen[:10]:
+        print(f"     {cid}")
+    if len(uebersprungen) > 10:
+        print(f"     ... und {len(uebersprungen) - 10} weitere")
+else:
+    print("🚀 FERTIG! Alle Dokumente sind in der Datenbank.")
