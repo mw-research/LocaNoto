@@ -15,7 +15,6 @@ import pymupdf
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
-import glob
 
 import paths
 import keyword_index
@@ -38,9 +37,9 @@ kw = keyword_index.connect()
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
-# Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe folder_of).
-pdf_dateien = sorted(glob.glob(os.path.join(ORDNER_NAME, "**", "*.pdf"),
-                               recursive=True))
+# Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe
+# folder_of), und unabhaengig von der Gross-/Kleinschreibung der Endung.
+pdf_dateien = paths.pdf_dateien(ORDNER_NAME)
 
 if not pdf_dateien:
     print(f"Keine PDFs in '{ORDNER_NAME}' gefunden.")

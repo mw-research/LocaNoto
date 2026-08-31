@@ -547,7 +547,9 @@ with st.sidebar:
 
 
     # 1. NEUER UPLOAD-BEREICH
-    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf"])
+    # Beide Schreibweisen: Streamlit vergleicht die Endung mit dieser Liste,
+    # und eine Datei mit der Endung .PDF wuerde sonst abgelehnt.
+    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf", "PDF"])
     if uploaded_file:
         # Nur Admins duerfen in den globalen Pool schreiben -- passend dazu,
         # dass auch nur sie daraus loeschen koennen.
