@@ -37,7 +37,14 @@ ARG RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 ARG HF_HUB_DISABLE_XET=1
 ENV HF_HUB_DISABLE_XET=${HF_HUB_DISABLE_XET}
 
-RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANKER_MODEL}'); print('Reranker im Image: ${RERANKER_MODEL}')"
+# Leerer Modellname heisst: kein Modell ins Image. Ohne diese Weiche wuerde
+# CrossEncoder('') aufgerufen und der Build abbrechen -- gerade dann, wenn
+# jemand bewusst auf einen Rerank-Endpunkt oder auf die reine Fusion setzt.
+RUN if [ -n "${RERANKER_MODEL}" ]; then \
+      python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANKER_MODEL}'); print('Reranker im Image: ${RERANKER_MODEL}')"; \
+    else \
+      echo "RERANKER_MODEL leer -- kein Modell ins Image gelegt"; \
+    fi
 
 # Ab hier kein Netzzugriff mehr auf HuggingFace -- weder beim Start noch
 # spaeter. Ein versehentlich falsch gesetzter Modellname faellt damit sofort
