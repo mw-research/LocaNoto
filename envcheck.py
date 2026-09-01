@@ -58,17 +58,27 @@ def _lies(pfad, auch_auskommentiert=False):
 
 
 def vergleiche():
-    """(fehlend, abweichend) -- jeweils nur Namen, nie Werte.
+    """(fehlend, abweichend, unbekannt) -- jeweils nur Namen, nie Werte.
 
     fehlend    in der Vorlage gesetzt, in der eigenen .env nicht vorhanden.
                Unkritisch: dann greift der Standard aus dem Code.
     abweichend in beiden gesetzt, aber mit unterschiedlichem Wert. Das ist
                der Fall, der still zu falschem Verhalten fuehrt.
+    unbekannt  in der eigenen .env gesetzt, in der Vorlage gar nicht
+               vorgesehen -- weder gesetzt noch auskommentiert. Entweder ist
+               die Einstellung veraltet, oder die Vorlage hat sie verloren.
+               Der zweite Fall ist genau so vorgekommen: beim Angleichen der
+               Repositories wurde ein ganzer Abschnitt ueberschrieben, und
+               ohne diese Meldung faellt so etwas erst auf, wenn jemand die
+               Funktion neu einrichten will.
     """
     eigene = _lies(os.path.join(paths.BASE_DIR, ".env"))
     vorlage = _lies(os.path.join(paths.BASE_DIR, ".env.example"))
+    # Auskommentierte Zeilen der Vorlage zaehlen als "vorgesehen".
+    vorgesehen = set(_lies(os.path.join(paths.BASE_DIR, ".env.example"),
+                           auch_auskommentiert=True))
 
-    fehlend, abweichend = [], []
+    fehlend, abweichend, unbekannt = [], [], []
     for name, wert in vorlage.items():
         if _GEHEIM.search(name):
             continue
@@ -76,4 +86,9 @@ def vergleiche():
             fehlend.append(name)
         elif eigene[name] != wert and name not in _ERWARTET_ABWEICHEND:
             abweichend.append(name)
-    return sorted(fehlend), sorted(abweichend)
+
+    for name in eigene:
+        if not _GEHEIM.search(name) and name not in vorgesehen:
+            unbekannt.append(name)
+
+    return sorted(fehlend), sorted(abweichend), sorted(unbekannt)
