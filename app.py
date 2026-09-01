@@ -12,6 +12,7 @@ import bcrypt
 import paths
 import keyword_index
 import llm
+import envcheck
 from embedding import embed_batch
 import ranking
 from textutils import strip_boilerplate
