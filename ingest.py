@@ -5,11 +5,18 @@ unzerteilter Chunk mit der Bildunterschrift darueber abgelegt und
 anschliessend aus dem Seitentext geschwaerzt, damit sie nicht ein zweites
 Mal als zerlaufener Fliesstext im Index landen.
 
-Der Lauf ist unterbrechbar. Wiederaufsetzen geschieht auf Chunk-Ebene, nicht
-auf Datei-Ebene: die Textextraktion laeuft erneut, sie dauert nur
-Millisekunden pro Seite. Vektorisiert wird nur, was noch fehlt -- das ist der
-zeitintensive Teil. Ein abgebrochener Lauf hinterlaesst damit kein halb
-indexiertes Dokument, das beim naechsten Start als erledigt gilt.
+Der Lauf ist unterbrechbar und setzt auf Seiten-Ebene wieder auf: er beginnt
+bei der zuletzt geschriebenen Seite, nicht bei der ersten. Alles davor ist
+abgeschlossen.
+
+Das Wiederaufsetzen auf Datei-Ebene waere gefaehrlich -- ein mitten in einem
+Dokument abgebrochener Lauf haette es beim naechsten Start als erledigt
+betrachtet und die fehlenden Seiten nie nachgetragen. Auf Seiten-Ebene
+entfaellt das, und zugleich muss nicht jedes Mal das gesamte Dokument erneut
+durch die Tabellenerkennung.
+
+Innerhalb der begonnenen Seite entscheidet weiterhin die Chunk-ID: was schon
+in der Datenbank steht, wird nicht erneut vektorisiert.
 """
 import pymupdf
 import chromadb
@@ -66,6 +73,32 @@ def existing_chunk_ids(dateiname):
                                   include=[])["ids"])
     except Exception:
         return set()
+
+
+def letzte_seite(dateiname, bekannt):
+    """Hoechste Seitenzahl, zu der bereits Chunks vorliegen.
+
+    Alles davor ist abgeschlossen und muss nicht erneut gelesen werden. Die
+    Textextraktion selbst ist zwar schnell, die Tabellenerkennung aber nicht:
+    ohne diese Abkuerzung laeuft find_tables ueber jede Seite des Dokuments,
+    auch wenn nur eine Handvoll Chunks nachzutragen ist. Bei einem Bestand von
+    13.598 Seiten dauert das eine halbe Stunde, in der nichts entsteht.
+
+    Bewusst die hoechste Seite und nicht die Menge der bekannten Seiten:
+    Zwischenspeicherung erfolgt alle 256 Chunks, sodass die zuletzt
+    geschriebene Seite mitten in der Verarbeitung stehen kann. Alles davor ist
+    sicher vollstaendig -- diese eine Seite wird erneut gelesen.
+    """
+    hoechste = 0
+    vorspann = dateiname + "_p"
+    for cid in bekannt:
+        if not cid.startswith(vorspann):
+            continue
+        rest = cid[len(vorspann):]
+        ziffern = rest.split("_", 1)[0]
+        if ziffern.isdigit():
+            hoechste = max(hoechste, int(ziffern))
+    return hoechste
 
 
 # Ein Text-Chunk gilt als reine Kopfzeile, wenn er kurz ist UND sein Inhalt
@@ -139,9 +172,11 @@ for pdf_pfad in pdf_dateien:
     ordner = folder_of(pdf_pfad)
 
     bekannt = existing_chunk_ids(dateiname)
+    ab_seite = letzte_seite(dateiname, bekannt)
 
     print(f"⏳ VERARBEITE: '{dateiname}' [{ordner}]"
-          + (f" -- {len(bekannt)} Chunks bereits vorhanden" if bekannt else ""))
+          + (f" -- {len(bekannt)} Chunks vorhanden, weiter ab Seite {ab_seite}"
+             if bekannt else ""))
 
     try:
         doc = pymupdf.open(pdf_pfad)
@@ -150,6 +185,11 @@ for pdf_pfad in pdf_dateien:
         neu = 0
 
         for page_num in range(total_pages):
+            # Seiten vor der zuletzt geschriebenen sind abgeschlossen. Der
+            # Sprung spart die Tabellenerkennung, nicht nur das Einlesen.
+            if page_num + 1 < ab_seite:
+                continue
+
             page = doc[page_num]
             basis_meta = {"file_name": dateiname, "page": page_num + 1,
                           "folder": ordner, "access": "shared",
