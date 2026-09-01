@@ -21,9 +21,13 @@ VISION_MODEL = llm.modell("VISION")
 EMBEDDING_MODEL = llm.modell("EMBEDDING")
 vision_client = llm.client("VISION")
 
-# Schwellen für den Müll-Filter (siehe Kommentar an der Prüfstelle).
-MIN_LONG_EDGE = 400
-MIN_AREA = 120_000
+# Schwellen für den Größenfilter (siehe Kommentar an der Prüfstelle).
+#
+# Die Vorgaben sind an technischen Zeichnungen kalibriert. Bei einem
+# Software-Handbuch liegen Bildschirmausschnitte deutlich darunter -- ein
+# Dialogfenster misst schnell nur 250x260 Pixel. Deshalb einstellbar.
+MIN_LONG_EDGE = paths.env_int("MIN_LONG_EDGE", 400)
+MIN_AREA = paths.env_int("MIN_AREA", 120_000)
 
 client = llm.client("EMBEDDING")
 
@@ -77,6 +81,16 @@ dargestellt ist -- nicht nur, wie es aussieht:
 {kontext}
 """
 
+# Bereits verarbeitete Bild-Referenzen ueber das gesamte Dokument.
+#
+# Manche PDFs teilen sich ein gemeinsames Ressourcen-Verzeichnis: dann meldet
+# JEDE Seite saemtliche Bilder des Dokuments. Beobachtet an einem Handbuch mit
+# 7833 Seiten, das auf jeder Seite dieselben 2040 Bilder auswies -- ohne
+# Entdopplung waeren das 16 Millionen Durchlaeufe und jeder Screenshot 7833-mal
+# in der Datenbank.
+gesehene_bilder = set()
+
+
 # --- VERARBEITUNG ---
 for pdf_pfad in pdf_dateien:
     dateiname = os.path.basename(pdf_pfad)
@@ -93,29 +107,51 @@ for pdf_pfad in pdf_dateien:
             image_list = page.get_images(full=True)
             
             for img_index, img_info in enumerate(image_list):
+                xref = img_info[0]
+
+                # 1. Steht das Bild ueberhaupt auf DIESER Seite?
+                #
+                # get_images() listet den Inhalt des Ressourcen-Verzeichnisses,
+                # nicht das, was gezeichnet wird. Teilen sich alle Seiten ein
+                # Verzeichnis, meldet jede Seite alles. get_image_bbox liefert
+                # dann ein unendliches Rechteck -- daran ist zu erkennen, dass
+                # das Bild hier nicht vorkommt.
+                #
+                # Die Pruefung steht bewusst vor allem anderen: sie braucht
+                # weder eine Datenbankabfrage noch das Entpacken des Bildes.
+                try:
+                    bbox = page.get_image_bbox(img_info)
+                except Exception:
+                    continue
+                if bbox.is_empty or bbox.is_infinite:
+                    continue
+
+                # 2. Dasselbe Bild nur einmal, auch wenn es mehrfach vorkommt.
+                if xref in gesehene_bilder:
+                    continue
+                gesehene_bilder.add(xref)
+
                 images_found += 1
                 # Wir bauen eine spezielle ID für Bilder, um Doppelungen zu vermeiden
                 chunk_id = f"{dateiname}_p{page_num+1}_img{img_index}"
-                
+
                 # Check: Ist das Bild schon in der Datenbank?
                 existing = collection.get(ids=[chunk_id])
                 if existing and len(existing['ids']) > 0:
                     continue # Bild wurde schon verarbeitet
-                
+
                 print(f"   🖼️ Analysiere Bild {img_index+1} auf Seite {page_num+1}...")
 
                 # Bildunterschrift und umgebender Text. Ohne sie sieht das
                 # Sehmodell nur den freigeschnittenen Ausschnitt und beschreibt
-                # Geometrie statt Bedeutung -- welche Norm, welche Groesse,
-                # welcher Zusammenhang steht ausserhalb des Bildes.
+                # Geometrie statt Bedeutung -- welche Groesse, welches
+                # Regelwerk, welcher Zusammenhang steht ausserhalb des Bildes.
                 try:
-                    kontext = bild_kontext(page, page.get_image_bbox(img_info),
-                                           dateiname, page_num + 1)
+                    kontext = bild_kontext(page, bbox, dateiname, page_num + 1)
                 except Exception:
                     kontext = f"Abbildung aus {dateiname}, Seite {page_num + 1}"
-                
+
                 # Bild extrahieren
-                xref = img_info[0]
                 base_image = doc.extract_image(xref)
                 image_bytes = base_image["image"]
                 
