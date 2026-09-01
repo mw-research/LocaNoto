@@ -4,6 +4,7 @@ import os
 import base64
 from PIL import Image
 import io
+from concurrent.futures import ThreadPoolExecutor
 
 import paths
 import keyword_index
@@ -28,6 +29,18 @@ vision_client = llm.client("VISION")
 # Dialogfenster misst schnell nur 250x260 Pixel. Deshalb einstellbar.
 MIN_LONG_EDGE = paths.env_int("MIN_LONG_EDGE", 400)
 MIN_AREA = paths.env_int("MIN_AREA", 120_000)
+
+# Gleichzeitig laufende Bildanalysen.
+#
+# Eine Beschreibung dauert bei einem lokalen Sehmodell rund eine Minute, und
+# der Prozess wartet dabei ausschliesslich auf Antwort. Mehrere offene
+# Anfragen lassen den Modellserver sie zusammen abarbeiten und seine
+# Grafikkarten auslasten -- die Beschleunigung entsteht dort, nicht hier.
+#
+# Die sinnvolle Obergrenze richtet sich nach dem Server: zu viele gleichzeitige
+# Anfragen erzeugen dort nur eine Warteschlange oder Zeitueberschreitungen.
+# 1 stellt das fruehere Verhalten her.
+VISION_PARALLEL = max(1, paths.env_int("VISION_PARALLEL", 4))
 
 client = llm.client("EMBEDDING")
 
@@ -81,6 +94,72 @@ dargestellt ist -- nicht nur, wie es aussieht:
 {kontext}
 """
 
+def beschreibe(aufgabe):
+    """Bildbeschreibung und Vektor zu einer Aufgabe.
+
+    Laeuft in einem eigenen Strang und fasst nichts an, was sich mehrere
+    teilen -- weder die Datenbank noch den Keyword-Index. Zurueck kommt nur
+    das Ergebnis; geschrieben wird spaeter im Hauptstrang.
+    """
+    chunk_id, image_url, kontext, meta = aufgabe
+    try:
+        antwort = vision_client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text",
+                     "text": VISION_PROMPT + KONTEXT_ZUSATZ.format(kontext=kontext)},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            }],
+        )
+        beschreibung = antwort.choices[0].message.content
+
+        # Der Kontext steht mit im Chunk, nicht nur im Prompt: er ist der
+        # Suchanker. Eine reine Geometriebeschreibung trifft keine Fachfrage --
+        # dieselbe Erfahrung wie bei den Tabellen, wo die Zeile ueber der
+        # Tabelle der wirksamste Anker im Korpus ist.
+        text = ("KONTEXT ZUM BILD: " + kontext + chr(10) + chr(10) +
+                "[BILD-BESCHREIBUNG]: " + str(beschreibung))
+        return chunk_id, text, get_embedding(text), meta
+    except Exception as e:
+        print(f"   [!] Fehler bei der Bildanalyse ({chunk_id}): {e}")
+        return None
+
+
+def verarbeite(aufgaben):
+    """Beschreibt eine Reihe von Bildern gleichzeitig und speichert sie."""
+    if not aufgaben:
+        return 0
+    if VISION_PARALLEL <= 1:
+        ergebnisse = [beschreibe(a) for a in aufgaben]
+    else:
+        with ThreadPoolExecutor(max_workers=VISION_PARALLEL) as pool:
+            ergebnisse = list(pool.map(beschreibe, aufgaben))
+    return schreibe(ergebnisse)
+
+
+def schreibe(ergebnisse):
+    """Speichert die fertigen Beschreibungen -- nur aus dem Hauptstrang.
+
+    ChromaDB und der Keyword-Index vertragen keine gleichzeitigen Schreiber,
+    deshalb sammelt der Lauf die Ergebnisse und legt sie gebuendelt ab. Das
+    spart nebenbei eine Datenbankabfrage je Bild.
+    """
+    fertig = [e for e in ergebnisse if e]
+    if not fertig:
+        return 0
+    collection.add(
+        ids=[e[0] for e in fertig],
+        embeddings=[e[2] for e in fertig],
+        documents=[e[1] for e in fertig],
+        metadatas=[e[3] for e in fertig],
+    )
+    keyword_index.add_chunks([(e[0], e[1], e[3]) for e in fertig], con=kw)
+    return len(fertig)
+
+
 # Bereits verarbeitete Bild-Referenzen ueber das gesamte Dokument.
 #
 # Manche PDFs teilen sich ein gemeinsames Ressourcen-Verzeichnis: dann meldet
@@ -101,6 +180,8 @@ for pdf_pfad in pdf_dateien:
         doc = pymupdf.open(pdf_pfad)
         total_pages = len(doc)
         images_found = 0
+        gespeichert = 0
+        aufgaben = []
         
         for page_num in range(total_pages):
             page = doc[page_num]
@@ -202,60 +283,24 @@ for pdf_pfad in pdf_dateien:
                     print(f"   [!] Fehler bei der Bildoptimierung: {e}")
                     continue
                 # ----------------------------------------
-                try:
-                    # 1. Bild an Qwen3-VL senden
-                    vision_response = vision_client.chat.completions.create(
-                        model=VISION_MODEL,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": VISION_PROMPT + KONTEXT_ZUSATZ.format(kontext=kontext)},
-                                    {"type": "image_url", "image_url": {"url": image_url}}
-                                ]
-                            }
-                        ]
-                    )
-                    
-                    bild_beschreibung = vision_response.choices[0].message.content
-                    
-                    # Den Text für den Chat-Kontext aufbereiten
-                    # Der Kontext steht mit im Chunk, nicht nur im Prompt: er
-                    # ist der Suchanker. Eine reine Geometriebeschreibung
-                    # trifft keine Fachfrage -- dieselbe Erfahrung wie bei den
-                    # Tabellen, wo die Zeile ueber der Tabelle der wirksamste
-                    # Anker im Korpus ist.
-                    finaler_text = ("KONTEXT ZUM BILD: " + kontext + "\n\n"
-                                    "[BILD-BESCHREIBUNG]: " + str(bild_beschreibung))
-                    
-                    # 2. Beschreibung vektorisieren
-                    vector = get_embedding(finaler_text)
-                    
-                    # 3. Als neuen Chunk in ChromaDB speichern (mit speziellem Typ "image")
-                    #
-                    # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
-                    # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
-                    # diese Keys matchen nie und sind damit unsichtbar.
-                    bild_meta = {"file_name": dateiname, "page": page_num + 1,
-                                 "folder": ordner, "access": "shared",
-                                 "owner": "system", "source": "uploaded_pdfs",
-                                 "type": "image"}
-                    collection.add(
-                        ids=[chunk_id],
-                        embeddings=[vector],
-                        documents=[finaler_text],
-                        # access/owner MÜSSEN gesetzt sein: die Vektorsuche filtert
-                        # mit {"$or": [{"access": ...}, {"owner": ...}]}. Chunks ohne
-                        # diese Keys matchen nie und sind damit unsichtbar -- in der
-                        # diese Keys matchen nie und sind damit unsichtbar.
-                        metadatas=[bild_meta]
-                    )
-                    keyword_index.add_chunks(
-                        [(chunk_id, finaler_text, bild_meta)], con=kw)
-                except Exception as e:
-                    print(f"   [!] Fehler bei der Bildanalyse auf Seite {page_num+1}: {e}")
-                    
-        print(f"✅ FERTIG mit '{dateiname}'. Insgesamt {images_found} Bilder gefunden.")
+                # access/owner MUESSEN gesetzt sein: die Vektorsuche filtert
+                # ueber diese Keys -- fehlen sie, matcht ein Chunk nie.
+                bild_meta = {"file_name": dateiname, "page": page_num + 1,
+                             "folder": ordner, "access": "shared",
+                             "owner": "system", "source": "uploaded_pdfs",
+                             "type": "image"}
+                aufgaben.append((chunk_id, image_url, kontext, bild_meta))
+
+                # Ein Vielfaches der Strangzahl, damit beim Schreiben keine
+                # Luecke entsteht, in der niemand mehr auf den Server wartet.
+                if len(aufgaben) >= VISION_PARALLEL * 3:
+                    gespeichert += verarbeite(aufgaben)
+                    aufgaben = []
+
+        gespeichert += verarbeite(aufgaben)
+        aufgaben = []
+        print(f"FERTIG mit '{dateiname}': {images_found} Bilder gefunden, "
+              f"{gespeichert} beschrieben.")
         
     except Exception as e:
         print(f"❌ FEHLER beim Öffnen von '{dateiname}': {e}")
