@@ -16,6 +16,7 @@ import envcheck
 from embedding import embed_batch
 import ranking
 import vision
+import pipeline
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -35,8 +36,7 @@ st.title(f"{firma} - {thema} Assistent")
 # Der OpenAI-Client wartet ohne timeout= bis zu 600 s. Haengt ein Aufruf,
 # steht die Oberflaeche zehn Minuten ohne Rueckmeldung -- fuer den Nutzer
 # nicht von "kaputt" unterscheidbar.
-HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)    # Titel, Rewrite
-ANSWER_TIMEOUT = paths.env_float("ANSWER_TIMEOUT", 300)   # Antwort-Stream
+HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)    # Titel
 
 # --- MODELL-ENDPUNKTE ---
 # Je Aufgabe eigene Adresse, eigener Schluessel, eigenes Modell (siehe
@@ -799,241 +799,73 @@ if collection.count() > 0:
 
         with st.chat_message("assistant"):
             try:
-                # --- 1. MULTI-QUERY EXPANSION (Universell) ---
-                search_queries = [user_query]
-                
+                # --- 1. SUCHSONDEN ---
+                verlauf = pipeline.verlaufstext(st.session_state.messages)
                 with st.spinner("Analysiere Frage und generiere Such-Sonden..."):
-                    history_text = ""
-                    if len(st.session_state.messages) > 1:
-                        history_msgs = st.session_state.messages[:-1][-3:]
-                        history_text = "\nChatverlauf:\n" + "\n".join([f"{msg['role']}: {msg['content'][:300]}" for msg in history_msgs])
-                    
-                    # Wie system_prompt.txt aus einer Datei, damit sich die
-                    # Sonden je Bestand anpassen lassen: was ein Regelwerk
-                    # braucht (Fundstelle, Tabelle, Anhang), ist bei einer
-                    # Papersammlung die falsche Frage.
-                    vorlage_pfad = os.path.join(paths.BASE_DIR, "search_prompt.txt")
-                    try:
-                        with open(vorlage_pfad, "r", encoding="utf-8") as vf:
-                            rewrite_vorlage = vf.read()
-                    except FileNotFoundError:
-                        rewrite_vorlage = None
+                    search_queries, sonden_hinweis = pipeline.sonden(
+                        chat_client, chat_model, user_query,
+                        verlauf=verlauf, bild_texte=bild_texte)
 
-                    rewrite_prompt = (
-                        rewrite_vorlage.replace("{HISTORY}", history_text)
-                                       .replace("{FRAGE}", user_query)
-                        if rewrite_vorlage else
-                        f"""Du bist ein präziser Suchbegriff-Generator für eine universelle Wissens-Datenbank.
-Generiere exakt 3 verschiedene Suchanfragen für die aktuelle Nutzerfrage, um sowohl Fließtexte (wie wissenschaftliche Paper) als auch strukturierte Daten (wie Tabellen/Normen) optimal zu finden:
-1. Die präzise, umformulierte Kernfrage (löse Pronomen durch echte Begriffe aus dem Chatverlauf auf).
-2. Eine Suche nach der Fundstelle: Abschnitt, Anhang oder Tabelle, in der die gesuchte Angabe steht -- und, wo es passt, nach der zugrundeliegenden Definition oder Methode.
-3. Eine hochspezifische Stichwort-Suche (Eigennamen, Fachbegriffe, genaue Maße oder Variablen aus der Frage).
+                if sonden_hinweis:
+                    st.caption("\U0001f9e0 *Nutze Standard-Suche -- Sonden "
+                               f"fehlgeschlagen: {sonden_hinweis}*")
+                else:
+                    st.caption("\U0001f9e0 *Multi-Query Sonden:* \n- `"
+                               + "`\n- `".join(search_queries) + "`")
 
-{history_text}
-
-Aktuelle Frage: {user_query}
-
-Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche. Keine Zahlen davor, keine Einleitung.""")
-
-                    try:
-                        rewrite_response = chat_client.chat.completions.create(
-                            timeout=HELPER_TIMEOUT,
-                            model=chat_model,
-                            messages=[{"role": "user", "content": rewrite_prompt}],
-                            temperature=0.1
-                        )
-                        generated_queries = [q.strip("- 1234567890.") for q in rewrite_response.choices[0].message.content.split("\n") if q.strip()]
-                        if len(generated_queries) >= 3:
-                            search_queries = generated_queries[:3]
-                        st.caption(f"🧠 *Multi-Query Sonden:* \n- `" + "`\n- `".join(search_queries) + "`")
-                    except Exception:
-                        st.caption("🧠 *Nutze Standard-Suche (Multi-Query fehlgeschlagen)*")
-
-                    # Aus einer Bildbeschreibung wird eine eigene Sonde.
-                    # Ohne sie koennte die Suche nur nach dem gehen, was
-                    # der Nutzer tippt -- und "was ist das hier?" trifft
-                    # nichts. Sie kommt nach dem except-Zweig, damit sie
-                    # auch dann greift, wenn das Umschreiben scheitert.
-                    for bt in bild_texte:
-                        search_queries.append(bt[:400])
-
-                # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
+                # --- 2. HYBRIDE SUCHE UND RANGFOLGE ---
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
-                    # Die 3 Sonden in EINER Anfrage statt in dreien.
-                    vektoren = embed_batch(embed_client, search_queries,
-                                           embed_model, keep_alive=0)
-                    # Sonde und Vektor gemeinsam filtern. Wuerde man nur die
-                    # Vektoren zusammenschieben, verschoeben sich die Indizes
-                    # und die Treffer bekaemen die falsche Sonde zugeordnet.
-                    sonden = [(q, v) for q, v in zip(search_queries, vektoren)
-                              if v is not None]
-                    if not sonden:
-                        st.error("Die Suchanfrage konnte nicht vektorisiert werden.")
+                    try:
+                        treffer, zahlen = pipeline.suche(
+                            collection, embed_client, embed_model,
+                            search_queries, st.session_state["username"], top_k,
+                            dateien=selected_docs or None,
+                            ordner=selected_folders or None,
+                            bewerter=reranker)
+                    except ValueError as e:
+                        st.error(str(e))
                         st.stop()
-                    broad_k = max(10, top_k * 3)
 
-                    # Jede Sonde und jeder Suchweg liefert eine EIGENE
-                    # Rangliste. Die Reihenfolge innerhalb der Listen ist die
-                    # eigentliche Information fuer die Fusion (ranking.py) --
-                    # frueher wurde sie beim Entdoppeln weggeworfen.
-                    ranglisten = []
-
-                    # A. VEKTOR-SUCHE (ChromaDB)
-                    base_filter = {"$or": [{"access": {"$eq": "shared"}}, {"owner": {"$eq": st.session_state["username"]}}]}
-                    conditions = [base_filter]
-                    if selected_docs:
-                        conditions.append({"file_name": {"$in": selected_docs}})
-                    if selected_folders:
-                        conditions.append({"folder": {"$in": selected_folders}})
-                    where_clause = {"$and": conditions} if len(conditions) > 1 else base_filter
-
-                    results = collection.query(
-                        query_embeddings=[v for _, v in sonden],
-                        n_results=broad_k,
-                        where=where_clause
-                    )
-
-                    for idx, (batch_docs, batch_metas) in enumerate(
-                            zip(results['documents'], results['metadatas'])):
-                        probe = sonden[idx][0]
-                        liste = [{"text": d, "meta": m, "probe": probe}
-                                 for d, m in zip(batch_docs, batch_metas)]
-                        if liste:
-                            ranglisten.append(liste)
-
-                    # B. KEYWORD-SUCHE (SQLite FTS5, plattenbasiert)
-                    #
-                    # Rechte- und Dokumentenfilter laufen in SQL statt
-                    # nachtraeglich in Python. Dort hing der Rechtecheck an
-                    # meta.get('access', 'shared') -- Chunks ohne access-Key
-                    # galten damit als oeffentlich.
-                    for q, _ in sonden:
-                        treffer = keyword_index.search(
-                            q,
-                            st.session_state["username"],
-                            limit=broad_k,
-                            file_names=selected_docs or None,
-                            folders=selected_folders or None)
-                        liste = [{"text": h["text"], "meta": h["meta"], "probe": q}
-                                 for h in treffer]
-                        if liste:
-                            ranglisten.append(liste)
-
-                # --- 2.5 RANGFOLGE (Fusion der Ranglisten) ---
-                unique_docs = {}
-                if ranglisten:
-                    kandidaten = sum(len(l) for l in ranglisten)
-                    gewaehlt = ranking.rank(ranglisten, top_k,
-                                            bewerter=reranker)
-
-                    for text, score, item in gewaehlt:
-                        # Kopie: die Metadaten kommen direkt aus ChromaDB und
-                        # sollen nicht im Cache veraendert werden.
-                        meta = dict(item["meta"] or {})
-                        meta["found_by_query"] = item["probe"]
-                        unique_docs[text] = meta
-
+                if treffer:
                     verfahren = ("Reranker" if reranker is not None
                                  else "Rangfolge-Fusion")
-                    st.caption(f"🎯 *{verfahren}: {kandidaten} Treffer aus "
-                               f"{len(ranglisten)} Ranglisten auf die besten "
-                               f"{len(unique_docs)} destilliert.*")
-                    
-                # --- KONTEXT FÜR DAS LLM ZUSAMMENBAUEN ---
-                dynamic_context = ""
-                if unique_docs:
-                    for doc_text, metadata in unique_docs.items():
-                        file_n = metadata['file_name']
-                        page_n = metadata.get('page', '?')
-                        dynamic_context += f'<chunk file="{file_n}" page="{page_n}">\n{doc_text}\n</chunk>\n\n'
-                else:
-                    dynamic_context = "Keine relevanten Dokumenten-Abschnitte gefunden."
-                # Die Bildbeschreibung als eigener Block, klar getrennt
-                # von den Dokumenten-Abschnitten. Sonst gaebe das Modell aus,
-                # das Handbuch habe etwas gezeigt, was in Wahrheit auf dem
-                # hochgeladenen Bild stand.
-                for n, bt in enumerate(bild_texte, 1):
-                    dynamic_context += ("<hochgeladenes_bild nr=" + str(n) +
-                                        ">" + chr(10) + bt + chr(10) +
-                                        "</hochgeladenes_bild>" + chr(10) + chr(10))
+                    st.caption(f"\U0001f3af *{verfahren}: {zahlen['kandidaten']} "
+                               f"Treffer aus {zahlen['ranglisten']} Ranglisten "
+                               f"auf die besten {len(treffer)} destilliert.*")
 
-                # --- 2.8 DEBUG-ANSICHT ---
-                with st.expander("🛠️ Debug-Röntgenblick (Was sieht das LLM?)"):
+                # --- 3. KONTEXT FÜR DAS LLM ---
+                dynamic_context = pipeline.kontext(treffer, bild_texte)
+
+                with st.expander("\U0001f6e0\ufe0f Debug-Röntgenblick (Was sieht das LLM?)"):
                     st.write(f"**Generierte Sonden:** {search_queries}")
-                    if unique_docs:
-                        for idx, (doc_text, metadata) in enumerate(unique_docs.items()):
-                            st.markdown(f"**Rang {idx+1}** | 📄 `{metadata.get('file_name', '?')}` | 🎯 Sonde: *{metadata.get('found_by_query', '?')}*")
-                            st.caption(f"{doc_text[:250]}...")
+                    if treffer:
+                        for rang, eintrag in enumerate(treffer, 1):
+                            meta = eintrag["meta"]
+                            st.markdown(
+                                f"**Rang {rang}** | \U0001f4c4 "
+                                f"`{meta.get('file_name', '?')}` | "
+                                f"\U0001f3af Sonde: *{meta.get('found_by_query', '?')}*")
+                            st.caption(f"{eintrag['text'][:250]}...")
                     else:
                         st.write("Keine Chunks gefunden.")
-                # --- 3. ANTWORT GENERIEREN ---
-                # 1. Rolle aus der .env holen (mit Fallback)
-                expert_role = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
 
-                # 2. Prompt-Vorlage aus der Datei laden
-                prompt_path = os.path.join(paths.BASE_DIR, "system_prompt.txt")
-                
-                try:
-                    with open(prompt_path, "r", encoding="utf-8") as f:
-                        raw_prompt = f.read()
-                except FileNotFoundError:
-                    # Notfall-Fallback, falls die Datei wirklich mal versehentlich gelöscht wird
-                    raw_prompt = "Du bist ein {EXPERT_ROLE}.\n<context>\n{CONTEXT_PLATZHALTER}\n</context>\nBeantworte die Frage nur anhand des Kontexts."
+                # --- 4. ANTWORT ---
+                answer = st.write_stream(pipeline.antwort(
+                    chat_client, chat_model,
+                    pipeline.systemprompt(dynamic_context),
+                    st.session_state.messages))
 
-                # 3. Platzhalter durch die echten Werte ersetzen
-                system_prompt = raw_prompt.replace("{EXPERT_ROLE}", expert_role)
-                system_prompt = system_prompt.replace("{CONTEXT_PLATZHALTER}", dynamic_context)
-                
-                api_messages = [{"role": "system", "content": system_prompt}]
-                
-                for msg in st.session_state.messages[-20:]:
-                    api_messages.append({"role": msg["role"], "content": msg["content"]})
-                
-                # Die Antwort laufend ausgeben statt auf den kompletten Text zu
-                # warten. Auf einem lokalen 27B-Modell dauert eine Antwort
-                # leicht eine halbe Minute -- ohne Streaming ist das eine
-                # halbe Minute leerer Bildschirm.
-                stream = chat_client.chat.completions.create(
-                    model=chat_model,
-                    messages=api_messages,
-                    stream=True,
-                    timeout=ANSWER_TIMEOUT,
-                )
-
-                def token_stream():
-                    for part in stream:
-                        if not part.choices:
-                            continue
-                        delta = part.choices[0].delta
-                        if delta and delta.content:
-                            yield delta.content
-
-                answer = st.write_stream(token_stream())
-                
-                # --- 4. QUELLEN IN DER SESSION SPEICHERN ---
-                # Erst ALLE Quellen einsammeln ...
-                unique_sources = {}
-                for doc_text, metadata in unique_docs.items():
-                    key = (metadata['file_name'], metadata.get('page', '?'))
-                    if key not in unique_sources:
-                        unique_sources[key] = []
-                    unique_sources[key].append(doc_text)
-
-                # ... und erst danach anhaengen und speichern. Lag dieser Block
-                # innerhalb der Schleife, brach st.rerun() bereits im ersten
-                # Durchlauf ab -- die Nachricht wurde mit genau einer Quelle
-                # gespeichert, alle weiteren gingen verloren.
-                message_data = {
+                # --- 5. QUELLEN SPEICHERN ---
+                st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
-                    "sources": [{"file": k[0], "page": k[1], "texts": v}
-                                for k, v in unique_sources.items()]
-                }
+                    "sources": pipeline.quellen(treffer),
+                })
+                save_chat(st.session_state.current_chat_id,
+                          st.session_state.messages)
 
-                st.session_state.messages.append(message_data)
-                save_chat(st.session_state.current_chat_id, st.session_state.messages)
-
-                # Rerun, damit die Nachricht oben durch die Chat-Schleife (mit Expandern) gezeichnet wird
+                # Neu zeichnen, damit die Nachricht durch die Chat-Schleife
+                # oben laeuft und ihre Quellen-Aufklapper bekommt.
                 st.rerun()
 
             except Exception as e:
