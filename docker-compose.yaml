@@ -20,6 +20,12 @@ services:
       - ADMIN_USERS=${ADMIN_USERS:-admin}
       # Modelle und ihre Endpunkte. Leere Werte fallen auf OPENAI_BASE_URL
       # und OPENAI_API_KEY zurueck (siehe llm.py).
+      #
+      # Die Zahlenwerte werden bewusst OHNE Vorgabe durchgereicht: ein hier
+      # eingetragener Standard wuerde den im Code ueberschreiben, auch wenn in
+      # der .env nichts steht -- derselbe Wert stuende dann an drei Stellen.
+      # paths.env_int/env_float behandeln einen leeren Wert als "nicht
+      # gesetzt".
       - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
       - CHAT_BASE_URL=${CHAT_BASE_URL:-}
       - CHAT_API_KEY=${CHAT_API_KEY:-}
@@ -40,11 +46,11 @@ services:
       - RERANKER_BASE_URL=${RERANKER_BASE_URL:-}
       - RERANKER_API_KEY=${RERANKER_API_KEY:-}
       - RERANKER_API_MODEL=${RERANKER_API_MODEL:-}
-      - RERANKER_TIMEOUT=${RERANKER_TIMEOUT:-30}
-      - TOP_K=${TOP_K:-5}
-      - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-6000}
-      - HELPER_TIMEOUT=${HELPER_TIMEOUT:-60}
-      - ANSWER_TIMEOUT=${ANSWER_TIMEOUT:-300}
+      - RERANKER_TIMEOUT=${RERANKER_TIMEOUT:-}
+      - TOP_K=${TOP_K:-}
+      - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-}
+      - HELPER_TIMEOUT=${HELPER_TIMEOUT:-}
+      - ANSWER_TIMEOUT=${ANSWER_TIMEOUT:-}
     ports:
       - "${APP_PORT:-8501}:8501"
 

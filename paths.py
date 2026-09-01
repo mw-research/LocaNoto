@@ -53,6 +53,36 @@ def bootstrap():
     return DATA_DIR
 
 
+def env_int(name, standard):
+    """Ganzzahl aus der Umgebung, wobei ein leerer Wert als "nicht gesetzt"
+    gilt.
+
+    os.getenv liefert bei einer gesetzten, aber leeren Variablen "" statt des
+    Standards -- und docker-compose setzt jede aufgefuehrte Variable, auch
+    wenn sie in der .env fehlt. int("") wuerde abbrechen.
+
+    Damit kann die compose-Datei die Werte durchreichen, ohne sie zu
+    verdoppeln: der Standard steht dann nur noch im Code.
+    """
+    wert = os.getenv(name, "").strip()
+    if not wert:
+        return standard
+    try:
+        return int(wert)
+    except ValueError:
+        return standard
+
+
+def env_float(name, standard):
+    wert = os.getenv(name, "").strip()
+    if not wert:
+        return standard
+    try:
+        return float(wert)
+    except ValueError:
+        return standard
+
+
 def pdf_dateien(ordner=None):
     """Alle PDFs unterhalb von data/dokumente, rekursiv und sortiert.
 

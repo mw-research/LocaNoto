@@ -16,6 +16,8 @@ Zwei Gruende fuer dieses Modul:
    der groesste Chunk im Bereich von MAX_TABLE_CHARS.
 """
 import os
+
+import paths
 import re
 
 import pymupdf
@@ -31,10 +33,10 @@ from textutils import strip_boilerplate
 # Ingest ueberspringt sie dann -- ausgerechnet die Tabellen, also den
 # wertvollsten Teil. 3000 Zeichen bleiben auch bei dichten Tabellen sicher
 # darunter. Wer ein groesseres Fenster hat, kann hochsetzen.
-MAX_TABLE_CHARS = int(os.getenv("MAX_TABLE_CHARS", "3000"))
+MAX_TABLE_CHARS = paths.env_int("MAX_TABLE_CHARS", 3000)
 
 # Hoehe des Streifens ueber der Tabelle, aus dem die Ueberschrift stammt.
-CAPTION_HEIGHT = int(os.getenv("CAPTION_HEIGHT", "150"))
+CAPTION_HEIGHT = paths.env_int("CAPTION_HEIGHT", 150)
 
 
 def split_markdown_table(md_table, max_chars=None):

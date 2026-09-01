@@ -73,7 +73,7 @@ def existing_chunk_ids(dateiname):
 # Bedingungen zusammen: die Laenge allein wuerde auch echte kurze Absaetze
 # treffen, die Enthaltensein-Pruefung allein auch laengeren Fliesstext, der
 # eine Ueberschrift zufaellig zitiert.
-MAX_KOPFZEILE_CHARS = int(os.getenv("MAX_KOPFZEILE_CHARS", "200"))
+MAX_KOPFZEILE_CHARS = paths.env_int("MAX_KOPFZEILE_CHARS", 200)
 
 
 def _vergleichsform(text):

@@ -34,9 +34,11 @@ naechste genommen.
 """
 import os
 
+import paths
+
 # Daempfungskonstante aus der urspruenglichen RRF-Veroeffentlichung. Sie
 # begrenzt den Vorsprung, den Platz 1 einer einzelnen Liste erhaelt.
-RRF_K = int(os.getenv("RRF_K", "60"))
+RRF_K = paths.env_int("RRF_K", 60)
 
 # --- Stufe 1: Rerank-Endpunkt ---
 # Gesetzt = wird zuerst versucht. Der Pfad /rerank wird angehaengt, sofern die
@@ -54,12 +56,12 @@ RERANKER_API_KEY = (os.getenv("RERANKER_API_KEY", "").strip()
                     or os.getenv("OPENAI_API_KEY", "").strip())
 # Modellname am Endpunkt. Ohne Angabe wird RERANKER_MODEL verwendet.
 RERANKER_API_MODEL = os.getenv("RERANKER_API_MODEL", "").strip()
-RERANKER_TIMEOUT = float(os.getenv("RERANKER_TIMEOUT", "30"))
+RERANKER_TIMEOUT = paths.env_float("RERANKER_TIMEOUT", 30)
 
 # --- Stufe 2: Modell im Image (Dockerfile) ---
 # Leer setzen = kein lokales Modell; dann bleibt nur die Fusion.
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip()
-RERANKER_MAX_LENGTH = int(os.getenv("RERANKER_MAX_LENGTH", "1024"))
+RERANKER_MAX_LENGTH = paths.env_int("RERANKER_MAX_LENGTH", 1024)
 
 
 def reciprocal_rank_fusion(ranked_lists, k=None):
