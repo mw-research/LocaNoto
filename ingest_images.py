@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import paths
 import keyword_index
 import llm
+from embedding import embed_batch
 from tables import bild_kontext
 
 print("Starte nachträgliche Bild-Vektorisierung...")
@@ -52,17 +53,26 @@ VISION_PARALLEL = max(1, paths.env_int("VISION_PARALLEL", 4))
 VISION_VERSUCHE = max(1, paths.env_int("VISION_VERSUCHE", 3))
 VISION_WARTEN = paths.env_float("VISION_WARTEN", 5)
 
+# Zeitlimit je Bildanfrage.
+#
+# Ohne Angabe wartet der Client den Standard von 600 Sekunden ab. Ist der
+# Sehmodell-Server nicht erreichbar, steht der Lauf damit zehn Minuten je
+# Buendel still, ohne eine Zeile auszugeben -- von aussen nicht von einem
+# Absturz zu unterscheiden. Eine Minute reicht fuer eine Bildbeschreibung
+# reichlich; laenger heisst, dass etwas nicht stimmt.
+VISION_TIMEOUT = paths.env_float("VISION_TIMEOUT", 120)
+
 client = llm.client("EMBEDDING")
 
 def get_embedding(text, model=EMBEDDING_MODEL):
-    text = text.replace("\n", " ")
-    response = client.embeddings.create(
-        input=[text],
-        model=model,
-        encoding_format="float", 
-        extra_body={"drop_params": True}
-    )
-    return response.data[0].embedding
+    """Vektorisiert die Bildbeschreibung.
+
+    Ueber embed_batch, damit hier dieselbe Behandlung greift wie im Textlauf:
+    Zeitlimit, Kuerzung bei zu langem Text und Einzel-Rueckfall. Der eigene
+    Aufruf hatte keines davon -- eine haengende Anfrage blockierte den Strang
+    bis zum Standard von 600 Sekunden.
+    """
+    return embed_batch(client, [text], model)[0]
 
 # ChromaDB laden (verbindet sich mit deiner bestehenden Datenbank!)
 chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
@@ -145,6 +155,7 @@ def _einmal_beschreiben(chunk_id, image_url, kontext, meta):
     """Ein einzelner Versuch. Fehler gehen an beschreibe() zurueck."""
     antwort = vision_client.chat.completions.create(
         model=VISION_MODEL,
+        timeout=VISION_TIMEOUT,
         messages=[{
             "role": "user",
             "content": [
