@@ -33,8 +33,8 @@ st.title(f"{firma} - {thema} Assistent")
 # Der OpenAI-Client wartet ohne timeout= bis zu 600 s. Haengt ein Aufruf,
 # steht die Oberflaeche zehn Minuten ohne Rueckmeldung -- fuer den Nutzer
 # nicht von "kaputt" unterscheidbar.
-HELPER_TIMEOUT = float(os.getenv("HELPER_TIMEOUT", "60"))    # Titel, Rewrite
-ANSWER_TIMEOUT = float(os.getenv("ANSWER_TIMEOUT", "300"))   # Antwort-Stream
+HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)    # Titel, Rewrite
+ANSWER_TIMEOUT = paths.env_float("ANSWER_TIMEOUT", 300)   # Antwort-Stream
 
 # --- MODELL-ENDPUNKTE ---
 # Je Aufgabe eigene Adresse, eigener Schluessel, eigenes Modell (siehe
@@ -659,7 +659,7 @@ with st.sidebar:
     # aufgebraucht. Der Standard bleibt dennoch 5; wer mehr braucht, zieht
     # den Regler oder setzt TOP_K.
     top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
-                      value=int(os.getenv("TOP_K", "5")))
+                      value=paths.env_int("TOP_K", 5))
 
 # --- CHAT & RETRIEVAL ---
 if collection.count() > 0:

@@ -11,16 +11,18 @@ Timeouts laufen.
 """
 import os
 
-DEFAULT_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "64"))
+import paths
+
+DEFAULT_BATCH_SIZE = paths.env_int("EMBED_BATCH_SIZE", 64)
 
 # Ohne timeout= wartet der Client bis zu 600 s. Ein haengender Batch soll den
 # Ingest nicht stundenlang blockieren -- der Einzel-Rueckfall arbeitet ihn
 # danach ohnehin nach.
-DEFAULT_TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "120"))
+DEFAULT_TIMEOUT = paths.env_float("EMBED_TIMEOUT", 120)
 
 # Untergrenze, ab der nicht weiter gekuerzt wird. Bleibt ein Chunk auch so zu
 # gross, liegt der Fehler woanders und soll sichtbar werden.
-MIN_KUERZUNG_CHARS = int(os.getenv("EMBED_MIN_CHARS", "400"))
+MIN_KUERZUNG_CHARS = paths.env_int("EMBED_MIN_CHARS", 400)
 
 
 def _ist_kontextfehler(e):
