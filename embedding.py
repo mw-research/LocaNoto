@@ -10,6 +10,7 @@ konservativ: zu grosse Batches lassen den Server bei langen Chunks in
 Timeouts laufen.
 """
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import paths
 
@@ -23,6 +24,15 @@ DEFAULT_TIMEOUT = paths.env_float("EMBED_TIMEOUT", 120)
 # Untergrenze, ab der nicht weiter gekuerzt wird. Bleibt ein Chunk auch so zu
 # gross, liegt der Fehler woanders und soll sichtbar werden.
 MIN_KUERZUNG_CHARS = paths.env_int("EMBED_MIN_CHARS", 400)
+
+# Gleichzeitig offene Anfragen an den Modellserver.
+#
+# Der Prozess wartet die meiste Zeit auf Antwort, nicht auf eigene Rechenzeit.
+# Mehrere offene Anfragen lassen den Server sie zusammen abarbeiten und seine
+# Grafikkarten besser auslasten. Die sinnvolle Obergrenze liegt beim Server,
+# nicht hier -- zu hohe Werte erzeugen dort nur eine Warteschlange oder
+# Zeitueberschreitungen. 1 stellt das frühere Verhalten her.
+PARALLEL = max(1, paths.env_int("EMBED_PARALLEL", 2))
 
 
 def _ist_kontextfehler(e):
@@ -84,7 +94,14 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
         extra["keep_alive"] = keep_alive
 
     out = [None] * len(texts)
-    for start in range(0, len(texts), batch_size):
+
+    def ein_batch(start):
+        """Vektorisiert einen Abschnitt und schreibt ihn an seine feste Stelle.
+
+        Jeder Abschnitt kennt seinen Startindex. Deshalb koennen mehrere
+        gleichzeitig laufen, ohne dass die Reihenfolge durcheinandergeraet --
+        geschrieben wird immer an dieselbe Position in out.
+        """
         chunk = texts[start:start + batch_size]
         cleaned = [t.replace("\n", " ") for t in chunk]
         try:
@@ -108,8 +125,21 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
                 except Exception as e:
                     print(f"   [!] Embedding fehlgeschlagen (Chunk "
                           f"{start + i}): {e}")
-        if progress:
-            progress(min(start + batch_size, len(texts)), len(texts))
+
+    starts = list(range(0, len(texts), batch_size))
+
+    if PARALLEL <= 1 or len(starts) <= 1:
+        for n, start in enumerate(starts, 1):
+            ein_batch(start)
+            if progress:
+                progress(min(n * batch_size, len(texts)), len(texts))
+    else:
+        fertig = 0
+        with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+            for _ in pool.map(ein_batch, starts):
+                fertig += 1
+                if progress:
+                    progress(min(fertig * batch_size, len(texts)), len(texts))
 
     return out
 
