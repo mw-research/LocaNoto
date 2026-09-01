@@ -4,6 +4,7 @@ import os
 import base64
 from PIL import Image
 import io
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import paths
@@ -41,6 +42,15 @@ MIN_AREA = paths.env_int("MIN_AREA", 120_000)
 # Anfragen erzeugen dort nur eine Warteschlange oder Zeitueberschreitungen.
 # 1 stellt das fruehere Verhalten her.
 VISION_PARALLEL = max(1, paths.env_int("VISION_PARALLEL", 4))
+
+# Wiederholungen bei voruebergehenden Fehlern des Modellservers.
+#
+# Beobachtet im Betrieb: "Cannot connect to host", 504 vom vorgeschalteten
+# nginx, Zeitueberschreitungen. Solche Ausfaelle treffen einzelne Anfragen,
+# nicht den Lauf -- ohne Wiederholung waeren die betroffenen Bilder in diesem
+# Durchgang verloren und muessten ueber einen erneuten Start nachgeholt werden.
+VISION_VERSUCHE = max(1, paths.env_int("VISION_VERSUCHE", 3))
+VISION_WARTEN = paths.env_float("VISION_WARTEN", 5)
 
 client = llm.client("EMBEDDING")
 
@@ -102,30 +112,57 @@ def beschreibe(aufgabe):
     das Ergebnis; geschrieben wird spaeter im Hauptstrang.
     """
     chunk_id, image_url, kontext, meta = aufgabe
-    try:
-        antwort = vision_client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text",
-                     "text": VISION_PROMPT + KONTEXT_ZUSATZ.format(kontext=kontext)},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
-            }],
-        )
-        beschreibung = antwort.choices[0].message.content
+    for versuch in range(1, VISION_VERSUCHE + 1):
+        try:
+            return _einmal_beschreiben(chunk_id, image_url, kontext, meta)
+        except Exception as e:
+            if versuch >= VISION_VERSUCHE or not _voruebergehend(e):
+                print(f"   [!] Bildanalyse fehlgeschlagen ({chunk_id}): "
+                      f"{str(e)[:160]}")
+                fehlgeschlagen.append(chunk_id)
+                return None
+            # Ansteigend warten: ist der Dienst gerade am Neustarten, hilft
+            # ein sofortiger zweiter Versuch nicht.
+            time.sleep(VISION_WARTEN * versuch)
+    return None
 
-        # Der Kontext steht mit im Chunk, nicht nur im Prompt: er ist der
-        # Suchanker. Eine reine Geometriebeschreibung trifft keine Fachfrage --
-        # dieselbe Erfahrung wie bei den Tabellen, wo die Zeile ueber der
-        # Tabelle der wirksamste Anker im Korpus ist.
-        text = ("KONTEXT ZUM BILD: " + kontext + chr(10) + chr(10) +
-                "[BILD-BESCHREIBUNG]: " + str(beschreibung))
-        return chunk_id, text, get_embedding(text), meta
-    except Exception as e:
-        print(f"   [!] Fehler bei der Bildanalyse ({chunk_id}): {e}")
-        return None
+
+def _voruebergehend(e):
+    """Unterscheidet einen Ausfall des Dienstes von einer schlechten Anfrage.
+
+    Bei 500, 502, 504, einem abgelehnten Verbindungsaufbau oder einer
+    Zeitueberschreitung lohnt ein zweiter Versuch. Bei einer abgelehnten
+    Anfrage -- etwa einem zu grossen Bild -- nicht.
+    """
+    t = str(e).lower()
+    return any(w in t for w in (
+        "cannot connect", "connection", "timed out", "timeout",
+        "500", "502", "503", "504", "gateway", "unavailable",
+        "internalservererror"))
+
+
+def _einmal_beschreiben(chunk_id, image_url, kontext, meta):
+    """Ein einzelner Versuch. Fehler gehen an beschreibe() zurueck."""
+    antwort = vision_client.chat.completions.create(
+        model=VISION_MODEL,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text",
+                 "text": VISION_PROMPT + KONTEXT_ZUSATZ.format(kontext=kontext)},
+                {"type": "image_url", "image_url": {"url": image_url}},
+            ],
+        }],
+    )
+    beschreibung = antwort.choices[0].message.content
+
+    # Der Kontext steht mit im Chunk, nicht nur im Prompt: er ist der
+    # Suchanker. Eine reine Geometriebeschreibung trifft keine Fachfrage --
+    # dieselbe Erfahrung wie bei den Tabellen, wo die Zeile ueber der
+    # Tabelle der wirksamste Anker im Korpus ist.
+    text = ("KONTEXT ZUM BILD: " + kontext + chr(10) + chr(10) +
+            "[BILD-BESCHREIBUNG]: " + str(beschreibung))
+    return chunk_id, text, get_embedding(text), meta
 
 
 def verarbeite(aufgaben):
@@ -168,6 +205,11 @@ def schreibe(ergebnisse):
 # Entdopplung waeren das 16 Millionen Durchlaeufe und jeder Screenshot 7833-mal
 # in der Datenbank.
 gesehene_bilder = set()
+
+# Bilder, die auch nach allen Versuchen keine Beschreibung bekommen haben.
+# Ein erneuter Start holt sie nach -- ihre Chunk-IDs stehen ja nicht in der
+# Datenbank -- aber das muss jemand wissen.
+fehlgeschlagen = []
 
 
 # --- VERARBEITUNG ---
@@ -306,6 +348,18 @@ for pdf_pfad in pdf_dateien:
         print(f"❌ FEHLER beim Öffnen von '{dateiname}': {e}")
 
 kw.close()
+
+if fehlgeschlagen:
+    print()
+    print(f"[!] {len(fehlgeschlagen)} Bilder ohne Beschreibung. Haeufigste "
+          f"Ursache: der Sehmodell-Server war zeitweise nicht erreichbar.")
+    print("    Ein erneuter Start von ingest_images.py holt sie nach; "
+          "bereits beschriebene Bilder werden uebersprungen.")
+    print("    Haeufen sich die Ausfaelle, VISION_PARALLEL verkleinern.")
+    for cid in fehlgeschlagen[:10]:
+        print(f"      {cid}")
+    if len(fehlgeschlagen) > 10:
+        print(f"      ... und {len(fehlgeschlagen) - 10} weitere")
 
 # --- VRAM CLEANUP ---
 print("\nGebe VRAM frei...")
