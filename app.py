@@ -655,6 +655,37 @@ with st.sidebar:
     with st.expander("🔌 Modell-Endpunkte"):
         st.code(llm.uebersicht() + f"\nRANGFOLGE   {rerank_info}",
                 language="text")
+
+    # --- KONFIGURATION GEGEN DIE VORLAGE ---
+    #
+    # .env steht in der .gitignore, ein git pull fasst sie also nie an.
+    # Kommt mit einem Update eine Einstellung dazu oder aendert sich ein
+    # empfohlener Wert, bleibt die eigene .env, wie sie war -- und ein dort
+    # eingetragener Wert schlaegt immer den Standard im Code. Genau so ist
+    # eine Obergrenze ueber mehrere Updates hinweg auf einem Wert
+    # stehengeblieben, der zu Ausfaellen beim Vektorisieren gefuehrt hat.
+    #
+    # Angezeigt werden nur Namen, nie Werte; Namen, die auf ein Geheimnis
+    # hindeuten, werden gar nicht erst verglichen.
+    if is_admin():
+        try:
+            fehlend, abweichend, unbekannt = envcheck.vergleiche()
+        except Exception:
+            fehlend, abweichend, unbekannt = [], [], []
+        if fehlend or abweichend or unbekannt:
+            with st.expander(f"⚙️ Konfiguration ({len(fehlend) + len(abweichend) + len(unbekannt)})"):
+                if abweichend:
+                    st.caption("**Abweichend von der Vorlage** -- gewollt oder "
+                               "beim letzten Update uebersehen:")
+                    st.code(chr(10).join(abweichend), language="text")
+                if fehlend:
+                    st.caption("**Nicht in der eigenen .env** -- es greift der "
+                               "Standard aus dem Code:")
+                    st.code(chr(10).join(fehlend), language="text")
+                if unbekannt:
+                    st.caption("**Nur in der eigenen .env** -- veraltet, oder "
+                               "die Vorlage hat den Eintrag verloren:")
+                    st.code(chr(10).join(unbekannt), language="text")
     # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
     # Auskunft braucht dann mehrere Tabellen aus mehreren Dokumenten
     # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
