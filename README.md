@@ -6,6 +6,7 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 * **100% Offline & Lokal:** Zur Laufzeit greift der Container auf kein externes Netz zu. Modelle werden **beim Bauen** in das Image geladen, und die Telemetrie von ChromaDB wie Streamlit ist abgeschaltet. Die einzigen ausgehenden Verbindungen gehen an euren eigenen LLM-Server.
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
 * **Zweistufige Rangfolge:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie, danach bewertet ein CrossEncoder die engere Auswahl. Das Modell liegt **im Image** und wird nicht zur Laufzeit heruntergeladen — die App startet ohne Internetzugang.
+* **Bilder im Chat:** An eine Frage lassen sich Bilder anhaengen -- ein Bildschirmausschnitt, ein Foto einer Anlage, eine abfotografierte Seite. Das Sehmodell wandelt sie in Text um; dieser Text dient als zusaetzliche Suchsonde und geht klar gekennzeichnet in den Kontext der Antwort ein. Das Chat-Modell selbst bekommt das Bild nicht und kann damit ein reines Textmodell bleiben.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete

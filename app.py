@@ -15,6 +15,7 @@ import llm
 import envcheck
 from embedding import embed_batch
 import ranking
+import vision
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -666,6 +667,12 @@ with st.sidebar:
 if collection.count() > 0:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
+            # Angehaengte Bilder vor dem Text, so wie der Nutzer sie
+            # geschickt hat. Fehlt die Datei -- etwa weil der Chat-Ordner
+            # aufgeraeumt wurde -- wird sie stillschweigend uebergangen.
+            for bild in msg.get("bilder", []):
+                if os.path.exists(bild):
+                    st.image(bild, width=360)
             st.write(msg["content"])
             
             # --- QUELLEN DAUERHAFT ANZEIGEN ---
@@ -696,9 +703,46 @@ if collection.count() > 0:
                                 except Exception as e:
                                     st.error(f"Konnte PDF nicht rendern: {e}")
 
-    if user_query := st.chat_input("Stelle eine Frage an die Datenbank..."):
-        
-        st.session_state.messages.append({"role": "user", "content": user_query})
+    eingabe = st.chat_input(
+        "Frage an die Datenbank -- Bilder koennen angehaengt werden ...",
+        accept_file="multiple", file_type=vision.ERLAUBTE_TYPEN)
+
+    if eingabe:
+        # Mit accept_file liefert chat_input ein Objekt mit .text und .files
+        # statt einer Zeichenkette.
+        user_query = (eingabe.text or "").strip()
+        angehaengt = list(eingabe.files or [])
+
+        # --- ANGEHAENGTE BILDER BESCHREIBEN ---
+        #
+        # Das Sehmodell wandelt sie in Text um. Der wird an zwei Stellen
+        # gebraucht: als zusaetzliche Suchsonde, damit die Dokumentensuche
+        # ueberhaupt etwas zum Bild findet, und im Kontext der Antwort. Das
+        # Chat-Modell selbst bekommt das Bild nicht -- es kann in dieser
+        # Aufteilung ein reines Textmodell sein.
+        bild_pfade, bild_texte = [], []
+        for n, datei in enumerate(angehaengt):
+            with st.spinner(f"Lese Bild {n + 1} von {len(angehaengt)} ..."):
+                rohdaten = datei.getvalue()
+                try:
+                    endung = os.path.splitext(datei.name)[1].lower() or ".jpg"
+                    name = (f"{st.session_state.current_chat_id[:-5]}"
+                            f"_{len(st.session_state.messages)}_{n}{endung}")
+                    bild_pfade.append(vision.speichern(
+                        rohdaten, st.session_state["username"], name))
+                    bild_texte.append(vision.beschreibe(rohdaten, user_query))
+                except Exception as e:
+                    st.warning(f"Bild '{datei.name}' konnte nicht gelesen "
+                               f"werden: {e}")
+
+        if not user_query and not bild_texte:
+            st.stop()
+        if not user_query:
+            user_query = ("Was ist auf dem Bild zu sehen, und was sagt die "
+                          "Dokumentation dazu?")
+
+        st.session_state.messages.append({"role": "user", "content": user_query,
+                                          "bilder": bild_pfade})
         
         # --- NEU: Dynamische Chat-Benennung beim 1. Prompt ---
         if len(st.session_state.messages) == 1:
@@ -773,6 +817,14 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                         st.caption(f"🧠 *Multi-Query Sonden:* \n- `" + "`\n- `".join(search_queries) + "`")
                     except Exception:
                         st.caption("🧠 *Nutze Standard-Suche (Multi-Query fehlgeschlagen)*")
+
+                    # Aus einer Bildbeschreibung wird eine eigene Sonde.
+                    # Ohne sie koennte die Suche nur nach dem gehen, was
+                    # der Nutzer tippt -- und "was ist das hier?" trifft
+                    # nichts. Sie kommt nach dem except-Zweig, damit sie
+                    # auch dann greift, wenn das Umschreiben scheitert.
+                    for bt in bild_texte:
+                        search_queries.append(bt[:400])
 
                 # --- 2. HYBRID-SUCHE (Vektor + Keyword/FTS5) ---
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
@@ -865,6 +917,15 @@ Antworte AUSSCHLIESSLICH mit den 3 Suchanfragen, getrennt durch Zeilenumbrüche.
                         dynamic_context += f'<chunk file="{file_n}" page="{page_n}">\n{doc_text}\n</chunk>\n\n'
                 else:
                     dynamic_context = "Keine relevanten Dokumenten-Abschnitte gefunden."
+                # Die Bildbeschreibung als eigener Block, klar getrennt
+                # von den Dokumenten-Abschnitten. Sonst gaebe das Modell aus,
+                # das Handbuch habe etwas gezeigt, was in Wahrheit auf dem
+                # hochgeladenen Bild stand.
+                for n, bt in enumerate(bild_texte, 1):
+                    dynamic_context += ("<hochgeladenes_bild nr=" + str(n) +
+                                        ">" + chr(10) + bt + chr(10) +
+                                        "</hochgeladenes_bild>" + chr(10) + chr(10))
+
                 # --- 2.8 DEBUG-ANSICHT ---
                 with st.expander("🛠️ Debug-Röntgenblick (Was sieht das LLM?)"):
                     st.write(f"**Generierte Sonden:** {search_queries}")
