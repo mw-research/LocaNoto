@@ -38,10 +38,22 @@ import os
 
 from openai import OpenAI
 
+import paths
+
 STANDARD_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://localhost:4000")
 STANDARD_API_KEY = os.getenv("OPENAI_API_KEY", "Dein_Platzhalter_Key")
 
 # Modellnamen, falls die Umgebung nichts vorgibt.
+# Wiederholungen des Clients selbst. Der OpenAI-Client versucht eine
+# fehlgeschlagene Anfrage ohne Zutun zweimal erneut -- damit ist ein
+# gesetztes Zeitlimit nicht die Wartezeit, sondern ein Drittel davon. Die
+# Skripte bringen ihre eigenen Wiederholungen mit (VISION_VERSUCHE), und
+# beide Ebenen multiplizieren sich: aus drei Versuchen werden neun.
+#
+# Deshalb hier ein Versuch. Wer die Wiederholung des Clients moechte, setzt
+# LLM_VERSUCHE hoeher.
+LLM_VERSUCHE = max(1, paths.env_int("LLM_VERSUCHE", 1))
+
 STANDARD_MODELLE = {
     "CHAT": "qwen3.8:27b",
     "TITLE": "",           # leer = Chat-Modell verwenden
@@ -98,9 +110,11 @@ def client(aufgabe):
 
     if version:
         from openai import AzureOpenAI  # nur bei Azure-Nutzung geladen
-        c = AzureOpenAI(azure_endpoint=base, api_key=key, api_version=version)
+        c = AzureOpenAI(azure_endpoint=base, api_key=key,
+                        api_version=version,
+                        max_retries=LLM_VERSUCHE - 1)
     else:
-        c = OpenAI(base_url=base, api_key=key)
+        c = OpenAI(base_url=base, api_key=key, max_retries=LLM_VERSUCHE - 1)
 
     _clients[schluessel] = c
     return c
