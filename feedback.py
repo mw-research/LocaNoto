@@ -106,6 +106,45 @@ def lese(grenze=None, art=None):
     return list(reversed(eintraege))[:grenze]
 
 
+def archiviere():
+    """Legt das Protokoll beiseite und beginnt ein neues.
+
+    Bewusst kein Loeschen. Die Liste haelt fest, was Nutzer nicht gefunden
+    haben -- fragt in einem halben Jahr jemand, ob der Bestand besser
+    geworden ist, ist sie die einzige Quelle, die das beantwortet. Die
+    Arbeitsliste soll leer werden, nicht die Ueberlieferung.
+
+    Rueckgabe: Pfad der Ablage, oder None wenn nichts abzulegen war.
+    """
+    if not os.path.exists(DATEI) or os.path.getsize(DATEI) == 0:
+        return None
+    stamm, endung = os.path.splitext(DATEI)
+    tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    ziel = f"{stamm}-{tag}{endung}"
+    # Zweimal am selben Tag ist kein Fehler, aber auch kein Grund, die erste
+    # Ablage zu ueberschreiben.
+    n = 2
+    while os.path.exists(ziel):
+        ziel = f"{stamm}-{tag}-{n}{endung}"
+        n += 1
+    try:
+        os.replace(DATEI, ziel)
+    except OSError:
+        return None
+    return ziel
+
+
+def ablagen():
+    """Die bereits beiseitegelegten Protokolle, neueste zuerst."""
+    ordner = os.path.dirname(DATEI)
+    stamm = os.path.basename(os.path.splitext(DATEI)[0]) + "-"
+    if not os.path.isdir(ordner):
+        return []
+    return sorted((d for d in os.listdir(ordner)
+                   if d.startswith(stamm) and d.endswith(".jsonl")),
+                  reverse=True)
+
+
 def zaehle():
     """Anzahl je Art -- fuer die Uebersicht."""
     zahlen = {a: 0 for a in ARTEN}
