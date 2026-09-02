@@ -287,3 +287,32 @@ def quellen(treffer):
         gesammelt.setdefault(schluessel, []).append(eintrag["text"])
     return [{"file": datei, "page": seite, "texts": texte}
             for (datei, seite), texte in gesammelt.items()]
+
+
+def dokumente(collection, benutzer):
+    """Welche Dokumente dieser Nutzer sehen darf.
+
+    Dieselbe Trennung wie in der Suche: geteilte Dokumente sehen alle,
+    private nur ihr Eigentuemer. Steht hier statt in der Oberflaeche, damit
+    Oberflaeche und Schnittstelle nicht zwei Auffassungen davon entwickeln,
+    was sichtbar ist.
+
+    Rueckgabe: (geteilt, privat, sachgebiete) -- jeweils sortierte Listen.
+    """
+    def sammle(daten):
+        dateien, ordner = set(), set()
+        for m in (daten.get("metadatas") or []):
+            if not m:
+                continue
+            if m.get("file_name"):
+                dateien.add(m["file_name"])
+            if m.get("folder"):
+                ordner.add(m["folder"])
+        return sorted(dateien), sorted(ordner)
+
+    geteilt, ordner_g = sammle(collection.get(where={"access": "shared"},
+                                              include=["metadatas"]))
+    privat, ordner_p = sammle(collection.get(
+        where={"$and": [{"access": "private"}, {"owner": benutzer}]},
+        include=["metadatas"]))
+    return geteilt, privat, sorted(set(ordner_g) | set(ordner_p))

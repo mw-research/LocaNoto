@@ -1,6 +1,5 @@
 import streamlit as st
 import pymupdf
-import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import time
@@ -10,6 +9,7 @@ import re
 import bcrypt
 
 import paths
+import store
 import keyword_index
 import llm
 import envcheck
@@ -236,9 +236,10 @@ if "messages" not in st.session_state or st.session_state.get("last_loaded_chat"
 # --- CHROMADB SETUP ---
 @st.cache_resource
 def init_chromadb():
-    chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
-    collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
-    return chroma_client, collection
+    # Der Zugang liegt in store.py -- dieselbe Stelle, die auch die
+    # Skripte und die Schnittstelle benutzen. Mit CHROMA_HOST wird daraus
+    # ein Server statt einer Dateiablage, ohne dass es hier auffaellt.
+    return store.client(), store.collection()
 
 chroma_client, collection = init_chromadb()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
@@ -457,24 +458,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
 # vorgenommen hat -- dessen Cache-Leerung erreicht diese Sitzung nicht.
 @st.cache_data(ttl=60, show_spinner=False)
 def load_document_index(_collection, username):
-    def files_and_folders(data):
-        files, folders = set(), set()
-        for m in (data.get("metadatas") or []):
-            if not m:
-                continue
-            if m.get("file_name"):
-                files.add(m["file_name"])
-            if m.get("folder"):
-                folders.add(m["folder"])
-        return sorted(files), sorted(folders)
-
-    shared_files, shared_folders = files_and_folders(
-        _collection.get(where={"access": "shared"}, include=["metadatas"]))
-    private_files, private_folders = files_and_folders(
-        _collection.get(where={"$and": [{"access": "private"},
-                                        {"owner": username}]},
-                        include=["metadatas"]))
-    return shared_files, private_files, sorted(set(shared_folders) | set(private_folders))
+    return pipeline.dokumente(_collection, username)
 
 
 def refresh_document_index():

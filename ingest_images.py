@@ -1,5 +1,4 @@
 import pymupdf
-import chromadb
 import os
 import base64
 from PIL import Image
@@ -8,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import paths
+import store
 import keyword_index
 import llm
 from embedding import embed_batch
@@ -74,9 +74,9 @@ def get_embedding(text, model=EMBEDDING_MODEL):
     """
     return embed_batch(client, [text], model)[0]
 
-# ChromaDB laden (verbindet sich mit deiner bestehenden Datenbank!)
-chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
-collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
+# Bewusst ohne Anlegen: eine frisch erzeugte, leere Sammlung waere
+# hier kein Ausgangspunkt, sondern ein Hinweis auf den falschen Pfad.
+collection = store.collection(anlegen=False)
 kw = keyword_index.connect()
 
 

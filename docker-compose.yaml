@@ -1,64 +1,75 @@
+# Bau und Umgebung stehen einmal hier und werden von allen Diensten
+# benutzt. Zweimal gepflegt waeren sie irgendwann verschieden -- und die
+# Schnittstelle wuerde mit anderen Modellen antworten als die Oberflaeche,
+# ohne dass es jemandem auffaellt.
+x-bau: &bau
+  context: .
+  args:
+    # Wird beim Bauen in das Image geladen und zur Laufzeit von dort
+    # gelesen. Leer lassen ist nicht vorgesehen -- wer ohne Modell
+    # arbeiten will, setzt RERANKER_MODEL im environment auf "".
+    RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+    # Auf 0 setzen, wenn der Xet-Weg in eurem Netz schneller ist.
+    HF_HUB_DISABLE_XET: ${HF_HUB_DISABLE_XET:-1}
+
+x-umgebung: &umgebung
+  - APP_TOPIC=${APP_TOPIC:-Allgemein}
+  - COMPANY_NAME=${COMPANY_NAME:-LocaNoto}
+  - EXPERT_ROLE=${EXPERT_ROLE:-Experte}
+  - OPENAI_API_KEY=${OPENAI_API_KEY}
+  - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+  - ADMIN_USERS=${ADMIN_USERS:-admin}
+  # Modelle und ihre Endpunkte. Leere Werte fallen auf OPENAI_BASE_URL
+  # und OPENAI_API_KEY zurueck (siehe llm.py).
+  #
+  # Die Zahlenwerte werden bewusst OHNE Vorgabe durchgereicht: ein hier
+  # eingetragener Standard wuerde den im Code ueberschreiben, auch wenn in
+  # der .env nichts steht -- derselbe Wert stuende dann an drei Stellen.
+  # paths.env_int/env_float behandeln einen leeren Wert als "nicht
+  # gesetzt".
+  - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
+  - CHAT_BASE_URL=${CHAT_BASE_URL:-}
+  - CHAT_API_KEY=${CHAT_API_KEY:-}
+  - CHAT_API_VERSION=${CHAT_API_VERSION:-}
+  - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:8b}
+  - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+  - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+  - EMBEDDING_API_VERSION=${EMBEDDING_API_VERSION:-}
+  - VISION_MODEL=${VISION_MODEL:-qwen3-vl:32b}
+  - VISION_BASE_URL=${VISION_BASE_URL:-}
+  - VISION_API_KEY=${VISION_API_KEY:-}
+  - VISION_API_VERSION=${VISION_API_VERSION:-}
+  - MIN_LONG_EDGE=${MIN_LONG_EDGE:-}
+  - MIN_AREA=${MIN_AREA:-}
+  - VISION_PARALLEL=${VISION_PARALLEL:-}
+  - EMBED_PARALLEL=${EMBED_PARALLEL:-}
+  - VISION_VERSUCHE=${VISION_VERSUCHE:-}
+  - VISION_WARTEN=${VISION_WARTEN:-}
+  - VISION_TIMEOUT=${VISION_TIMEOUT:-}
+  - CHAT_BILD_MAX_KANTE=${CHAT_BILD_MAX_KANTE:-}
+  - TITLE_MODEL=${TITLE_MODEL:-}
+  - TITLE_BASE_URL=${TITLE_BASE_URL:-}
+  - TITLE_API_KEY=${TITLE_API_KEY:-}
+  - TITLE_API_VERSION=${TITLE_API_VERSION:-}
+  - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+  - RERANKER_BASE_URL=${RERANKER_BASE_URL:-}
+  - RERANKER_API_KEY=${RERANKER_API_KEY:-}
+  - RERANKER_API_MODEL=${RERANKER_API_MODEL:-}
+  - RERANKER_TIMEOUT=${RERANKER_TIMEOUT:-}
+  - TOP_K=${TOP_K:-}
+  - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-}
+  - HELPER_TIMEOUT=${HELPER_TIMEOUT:-}
+  - ANSWER_TIMEOUT=${ANSWER_TIMEOUT:-}
+  - CHROMA_HOST=${CHROMA_HOST:-}
+  - CHROMA_PORT=${CHROMA_PORT:-}
+
 services:
   locanoto_bot:
-    build:
-      context: .
-      args:
-        # Wird beim Bauen in das Image geladen und zur Laufzeit von dort
-        # gelesen. Leer lassen ist nicht vorgesehen -- wer ohne Modell
-        # arbeiten will, setzt RERANKER_MODEL im environment auf "".
-        RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
-        # Auf 0 setzen, wenn der Xet-Weg in eurem Netz schneller ist.
-        HF_HUB_DISABLE_XET: ${HF_HUB_DISABLE_XET:-1}
+    build: *bau
+    image: locanoto:lokal
     container_name: ${CONTAINER_NAME:-locanoto_app}
     restart: unless-stopped
-    environment:
-      - APP_TOPIC=${APP_TOPIC:-Allgemein}
-      - COMPANY_NAME=${COMPANY_NAME:-LocaNoto}
-      - EXPERT_ROLE=${EXPERT_ROLE:-Experte}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - ADMIN_USERS=${ADMIN_USERS:-admin}
-      # Modelle und ihre Endpunkte. Leere Werte fallen auf OPENAI_BASE_URL
-      # und OPENAI_API_KEY zurueck (siehe llm.py).
-      #
-      # Die Zahlenwerte werden bewusst OHNE Vorgabe durchgereicht: ein hier
-      # eingetragener Standard wuerde den im Code ueberschreiben, auch wenn in
-      # der .env nichts steht -- derselbe Wert stuende dann an drei Stellen.
-      # paths.env_int/env_float behandeln einen leeren Wert als "nicht
-      # gesetzt".
-      - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
-      - CHAT_BASE_URL=${CHAT_BASE_URL:-}
-      - CHAT_API_KEY=${CHAT_API_KEY:-}
-      - CHAT_API_VERSION=${CHAT_API_VERSION:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-qwen3-embedding:8b}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
-      - EMBEDDING_API_VERSION=${EMBEDDING_API_VERSION:-}
-      - VISION_MODEL=${VISION_MODEL:-qwen3-vl:32b}
-      - VISION_BASE_URL=${VISION_BASE_URL:-}
-      - VISION_API_KEY=${VISION_API_KEY:-}
-      - VISION_API_VERSION=${VISION_API_VERSION:-}
-      - MIN_LONG_EDGE=${MIN_LONG_EDGE:-}
-      - MIN_AREA=${MIN_AREA:-}
-      - VISION_PARALLEL=${VISION_PARALLEL:-}
-      - EMBED_PARALLEL=${EMBED_PARALLEL:-}
-      - VISION_VERSUCHE=${VISION_VERSUCHE:-}
-      - VISION_WARTEN=${VISION_WARTEN:-}
-      - VISION_TIMEOUT=${VISION_TIMEOUT:-}
-      - CHAT_BILD_MAX_KANTE=${CHAT_BILD_MAX_KANTE:-}
-      - TITLE_MODEL=${TITLE_MODEL:-}
-      - TITLE_BASE_URL=${TITLE_BASE_URL:-}
-      - TITLE_API_KEY=${TITLE_API_KEY:-}
-      - TITLE_API_VERSION=${TITLE_API_VERSION:-}
-      - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
-      - RERANKER_BASE_URL=${RERANKER_BASE_URL:-}
-      - RERANKER_API_KEY=${RERANKER_API_KEY:-}
-      - RERANKER_API_MODEL=${RERANKER_API_MODEL:-}
-      - RERANKER_TIMEOUT=${RERANKER_TIMEOUT:-}
-      - TOP_K=${TOP_K:-}
-      - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-}
-      - HELPER_TIMEOUT=${HELPER_TIMEOUT:-}
-      - ANSWER_TIMEOUT=${ANSWER_TIMEOUT:-}
+    environment: *umgebung
     ports:
       - "${APP_PORT:-8501}:8501"
 
@@ -97,6 +108,62 @@ services:
       # eine einzelne Datei bricht, sobald ein Werkzeug sie ersetzt statt sie
       # zu ueberschreiben.
       - ./config:/app/config
+
+  # --- VEKTORDATENBANK ALS DIENST ---
+  #
+  # Nur aktiv, wenn CHROMA_HOST gesetzt ist -- ohne das greifen Oberflaeche
+  # und Skripte weiter auf die Dateiablage zu, und dieser Container laeuft
+  # daneben ins Leere.
+  #
+  # Gebraucht wird er, sobald mehr als ein Prozess auf denselben Bestand
+  # zugreift. Genau das tut die Schnittstelle: zwei Prozesse auf derselben
+  # Dateiablage beschaedigen den Index, und zwar ohne Fehlermeldung.
+  #
+  # Dasselbe Image wie die Anwendung, damit Server und Clients dieselbe
+  # Chroma-Fassung benutzen. Eine abweichende Fassung liest den Bestand
+  # unter Umstaenden nicht.
+  chroma:
+    build: *bau
+    image: locanoto:lokal
+    container_name: ${CONTAINER_NAME:-locanoto_app}_chroma
+    restart: unless-stopped
+    command: >
+      chroma run --path /app/data/chroma_db --host 0.0.0.0 --port 8000
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+      - CHROMA_ANONYMIZED_TELEMETRY=False
+    volumes:
+      - ./data:/app/data
+    # Bewusst ohne ports: erreichbar nur innerhalb des Compose-Netzes. Der
+    # Chroma-Server kennt keine Rechte -- wer ihn erreicht, liest alles.
+
+  # --- HTTP-SCHNITTSTELLE ---
+  #
+  # Dieselbe Suche wie in der Oberflaeche, ohne Browser. Zugang ueber ein
+  # Token je Nutzer (create_token.py).
+  api:
+    build: *bau
+    image: locanoto:lokal
+    container_name: ${CONTAINER_NAME:-locanoto_app}_api
+    restart: unless-stopped
+    command: >
+      uvicorn api:app --host 0.0.0.0 --port 8600
+    environment: *umgebung
+    ports:
+      # An 127.0.0.1 gebunden: erreichbar vom Server selbst und ueber einen
+      # SSH-Tunnel, nicht aus dem Netz. Der Verkehr ist unverschluesselt,
+      # das Token waere sonst auf dem Draht mitlesbar. Fuer einen Zugriff
+      # von aussen gehoert ein Reverse Proxy mit TLS davor.
+      - "127.0.0.1:${API_PORT:-8600}:8600"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8600/gesundheit')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 # Standortspezifisches gehoert NICHT hierher, sondern in eine
 # docker-compose.override.yaml daneben. Docker Compose liest sie automatisch

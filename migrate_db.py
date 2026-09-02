@@ -1,11 +1,10 @@
-import chromadb
 import os
 
 import paths
+import store
 
 print("Starte Datenbank-Migration...")
-chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
-collection = chroma_client.get_collection(name=paths.COLLECTION_NAME)
+collection = store.collection(anlegen=False)
 
 data = collection.get()
 ids_to_update = []
