@@ -45,7 +45,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
 def connect():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     con = sqlite3.connect(DB_PATH)
+    # WAL: Leser blockieren einander und den Schreiber nicht.
     con.execute("PRAGMA journal_mode=WAL")
+    # Ohne Wartezeit bricht ein gleichzeitiger Schreibzugriff sofort mit
+    # "database is locked" ab, statt kurz zu warten. Sobald neben der
+    # Oberflaeche ein zweiter Prozess arbeitet -- die Schnittstelle, ein
+    # laufender Ingest --, trifft das sonst irgendwann zu.
+    con.execute("PRAGMA busy_timeout=5000")
     con.executescript(_SCHEMA)
     return con
 
