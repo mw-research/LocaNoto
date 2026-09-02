@@ -33,3 +33,8 @@ docker-compose.override.yml
 *.tar.gz
 *.tgz
 *.bak
+
+# Sprachgebrauch des Betriebs. Die Vorlage ist glossar.example.txt; die
+# gefuellte Datei bleibt lokal, damit ein Update die Eintraege nicht
+# ueberschreibt -- dieselbe Aufteilung wie bei der .env.
+glossar.txt

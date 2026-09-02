@@ -277,7 +277,16 @@ eine Nummer genannt. Weder die Vektorsuche noch die Stichwortsuche
 überbrückt das: die Frage findet nichts, obwohl die Antwort im Bestand
 steht.
 
-`glossar.txt` liegt neben den Prompt-Vorlagen und ist beim Ausliefern leer.
+Die Vorlage ist `glossar.example.txt`. Einmal kopieren, dann pflegen:
+
+```bash
+cp glossar.example.txt glossar.txt
+```
+
+`glossar.txt` selbst ist gitignoriert — dieselbe Aufteilung wie bei der
+`.env`, damit ein Update die eigenen Einträge nicht überschreibt. Fehlt die
+Datei, verhält sich alles wie ohne Glossar.
+
 Je Zeile eine Zuordnung:
 
 ```
@@ -378,6 +387,12 @@ cd LocaNoto
 ### 2. Konfiguration anlegen - Kopiere die mitgelieferte Vorlage und trage deine API-Keys sowie den initialen Admin-Benutzernamen ein:
 ```bash
 cp .env.example .env
+```
+
+Dazu die Glossar-Vorlage, falls eigene Abkürzungen gepflegt werden sollen:
+
+```bash
+cp glossar.example.txt glossar.txt
 ```
 
 ### 3. Ersten Benutzer anlegen - Bevor das Web-Interface nutzbar ist, muss lokal ein Nutzer generiert werden (die Zugangsdaten werden sicher als Hash in der users.json gespeichert):
