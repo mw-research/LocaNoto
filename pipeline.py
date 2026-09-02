@@ -76,7 +76,7 @@ def _vorlage(dateiname, rueckfall):
 
 
 def glossar():
-    """Der Sprachgebrauch des Hauses, aus glossar.txt.
+    """Der Sprachgebrauch des Hauses, aus config/glossar.txt.
 
     Mitarbeiter fragen in ihren eigenen Abkuerzungen -- "BANF", "FA", "WE" --,
     und die stehen im Handbuch nicht: dort heisst es "Bestellanforderung"
@@ -90,7 +90,12 @@ def glossar():
     """
     # Zeilen mit # sind Erklaerungen fuer den, der die Datei pflegt. Sie
     # gehoeren nicht in den Prompt: das Modell wuerde sie als Inhalt lesen.
-    zeilen = [z.rstrip() for z in _vorlage("glossar.txt", "").splitlines()]
+    try:
+        with open(paths.resolve_glossar(), "r", encoding="utf-8") as f:
+            roh = f.read()
+    except OSError:
+        roh = ""
+    zeilen = [z.rstrip() for z in roh.splitlines()]
     return chr(10).join(z for z in zeilen
                         if z.strip() and not z.lstrip().startswith("#"))
 
