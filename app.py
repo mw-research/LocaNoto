@@ -670,7 +670,28 @@ with st.sidebar:
                     st.code(chr(10).join(
                         f"{e['zeitpunkt'][:10]}  {e['frage'][:70]}"
                         for e in schlecht), language="text")
-                st.caption(f"Vollstaendig in `data/feedback.jsonl`.")
+                st.caption("Vollstaendig in `data/feedback.jsonl`.")
+
+                # Beiseitelegen statt loeschen: die Arbeitsliste soll leer
+                # werden, nicht die Ueberlieferung. Was Nutzer nicht
+                # gefunden haben, ist die einzige Quelle fuer die Frage, ob
+                # der Bestand mit der Zeit besser wird.
+                if st.button("Liste abschliessen", use_container_width=True,
+                             help="Legt das Protokoll unter einem Datum ab "
+                                  "und beginnt ein neues. Es wird nichts "
+                                  "geloescht."):
+                    ziel = feedback.archiviere()
+                    if ziel:
+                        st.success(f"Abgelegt als `{os.path.basename(ziel)}`.")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.info("Nichts abzulegen.")
+
+                alte = feedback.ablagen()
+                if alte:
+                    st.caption(f"Frueher abgelegt: {', '.join(alte[:5])}"
+                               + (" ..." if len(alte) > 5 else ""))
 
     # --- KONFIGURATION GEGEN DIE VORLAGE ---
     #

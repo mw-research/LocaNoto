@@ -311,6 +311,18 @@ der verwendeten Quellen — nicht die Abschnitte selbst. Die stehen im Bestand
 und würden das Protokoll unbrauchbar groß machen. Fragen über die
 HTTP-Schnittstelle zählen mit.
 
+Ist eine Liste abgearbeitet, legt der Knopf **Liste abschliessen** das
+Protokoll unter dem Tagesdatum ab (`feedback-2026-09-02.jsonl`) und beginnt
+ein neues. Gelöscht wird nichts: was Nutzer nicht gefunden haben, ist die
+einzige Quelle für die Frage, ob der Bestand mit der Zeit besser wird. Die
+abgelegten Dateien stehen unter der Liste und liegen im selben Ordner.
+
+Von Hand geht dasselbe:
+
+```bash
+mv data/feedback.jsonl data/feedback-$(date +%F).jsonl
+```
+
 ### Glossar
 
 `glossar.example.txt` ist die Vorlage. Einmal kopieren, dann pflegen:
