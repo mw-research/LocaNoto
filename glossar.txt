@@ -1,0 +1,30 @@
+# Der Sprachgebrauch des Betriebs. Diese Datei ist leer und soll gefuellt
+# werden -- von dem, der die Anlage betreibt.
+#
+# Wozu: Nutzer fragen in ihren eigenen Woertern und Abkuerzungen. Die stehen
+# in den Dokumenten oft nicht, weil dort ausgeschrieben wird, anders benannt
+# oder nur eine Nummer genannt. Weder die Vektorsuche noch die
+# Stichwortsuche ueberbrueckt das: die Frage findet nichts, obwohl die
+# Antwort im Bestand steht.
+#
+# Je Zeile eine Zuordnung:
+#
+#     HAUSWORT = Begriff in den Dokumenten; weitere Schreibweisen
+#
+# Wo es eine Fundstelle gibt, gehoert sie dazu -- Kapitel, Modulnummer,
+# Tabellennummer. Solche Anker stehen in Ueberschriften und Querverweisen
+# und sind deshalb besonders wirksam:
+#
+#     FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
+#
+# Woher die Eintraege kommen: nicht aus dem Kopf, sondern aus dem Betrieb.
+# In der Seitenleiste steht unter "Rueckmeldungen" die Liste der Fragen, die
+# nichts gefunden haben. Genau die gehoeren hierher, zusammen mit dem Wort,
+# unter dem der Bestand die Sache fuehrt.
+#
+# Nur gepruefte Zuordnungen eintragen. Ein falscher Eintrag lenkt die Suche
+# zuverlaessig auf die falsche Stelle -- die Antwort klingt dann plausibel
+# und ist falsch, und das faellt schwerer auf als ein fehlender Eintrag.
+#
+# Zeilen mit # kommen nicht in den Prompt. Eine Datei ohne Eintraege
+# veraendert nichts.
