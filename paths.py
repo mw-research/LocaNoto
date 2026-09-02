@@ -43,6 +43,12 @@ USER_FILE = os.path.join(CONFIG_DIR, "users.json")
 # Aeltere Installationen legten die Datei im Wurzelverzeichnis ab.
 _LEGACY_USER_FILE = os.path.join(BASE_DIR, "users.json")
 
+# Sprachgebrauch des Betriebs. Unter config/, weil das Verzeichnis eingehaengt
+# ist: die Datei wird laufend gepflegt und soll dafuer weder Serverzugang noch
+# einen Rebuild brauchen. Die Vorlage glossar.example.txt bleibt beim Code.
+GLOSSAR_FILE = os.path.join(CONFIG_DIR, "glossar.txt")
+_LEGACY_GLOSSAR = os.path.join(BASE_DIR, "glossar.txt")
+
 COLLECTION_NAME = "pdf_documents"
 
 
@@ -51,6 +57,20 @@ def bootstrap():
     for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR):
         os.makedirs(d, exist_ok=True)
     return DATA_DIR
+
+
+def resolve_glossar():
+    """Effektiver Pfad zum Glossar.
+
+    config/glossar.txt ist der Ort, an dem es gepflegt wird. Eine Datei
+    neben dem Code wird weiterverwendet, wenn dort keine liegt -- so bleibt
+    eine bestehende Installation lesbar, die sie noch beim Code hat.
+    """
+    if os.path.exists(GLOSSAR_FILE):
+        return GLOSSAR_FILE
+    if os.path.exists(_LEGACY_GLOSSAR):
+        return _LEGACY_GLOSSAR
+    return GLOSSAR_FILE
 
 
 def env_int(name, standard):

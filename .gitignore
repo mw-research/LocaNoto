@@ -38,3 +38,5 @@ docker-compose.override.yml
 # gefuellte Datei bleibt lokal, damit ein Update die Eintraege nicht
 # ueberschreibt -- dieselbe Aufteilung wie bei der .env.
 glossar.txt
+config/glossar.txt
+config/glossar.txt.neu

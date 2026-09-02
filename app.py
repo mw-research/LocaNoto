@@ -688,10 +688,77 @@ with st.sidebar:
                     else:
                         st.info("Nichts abzulegen.")
 
+                # Herunterladen statt auf den Server steigen: die Liste
+                # wird ausgewertet, nicht nur angesehen, und dafuer braucht
+                # man sie vollstaendig.
+                if os.path.exists(feedback.DATEI):
+                    with open(feedback.DATEI, "rb") as f:
+                        st.download_button(
+                            "Protokoll herunterladen", f.read(),
+                            file_name="feedback.jsonl",
+                            mime="application/x-ndjson",
+                            use_container_width=True)
+
                 alte = feedback.ablagen()
                 if alte:
-                    st.caption(f"Frueher abgelegt: {', '.join(alte[:5])}"
-                               + (" ..." if len(alte) > 5 else ""))
+                    st.caption("Frueher abgelegt:")
+                    wahl = st.selectbox("Ablage", alte, label_visibility="collapsed")
+                    pfad = os.path.join(os.path.dirname(feedback.DATEI), wahl)
+                    if os.path.exists(pfad):
+                        with open(pfad, "rb") as f:
+                            st.download_button(
+                                f"{wahl} herunterladen", f.read(),
+                                file_name=wahl, mime="application/x-ndjson",
+                                use_container_width=True)
+
+    # --- GLOSSAR ---
+    #
+    # Bearbeitbar im Browser, weil es laufend gepflegt wird: die Eintraege
+    # entstehen aus den Fragen, die nichts gefunden haben, und wer sie
+    # nachtraegt sitzt nicht am Server. Die Datei liegt unter config/ und
+    # ist damit eingehaengt -- die Aenderung wirkt bei der naechsten Frage,
+    # ohne Rebuild und ohne Neustart.
+    if is_admin():
+        with st.expander("\U0001f5e3\ufe0f Glossar bearbeiten"):
+            pfad = paths.resolve_glossar()
+            try:
+                with open(pfad, "r", encoding="utf-8") as f:
+                    inhalt = f.read()
+            except OSError:
+                # Noch nicht angelegt: mit der Vorlage beginnen, damit die
+                # Hinweise zur Pflege gleich dabeistehen.
+                vorlage = os.path.join(paths.BASE_DIR, "glossar.example.txt")
+                try:
+                    with open(vorlage, "r", encoding="utf-8") as f:
+                        inhalt = f.read()
+                except OSError:
+                    inhalt = ""
+
+            neu = st.text_area(
+                "Je Zeile eine Zuordnung. Zeilen mit # sind Erlaeuterungen "
+                "und kommen nicht in den Prompt.",
+                value=inhalt, height=320, key="glossar_text")
+
+            wirksam = pipeline.glossar()
+            st.caption(f"Wirksam: {len(wirksam.splitlines()) if wirksam else 0} "
+                       f"Zuordnungen \u00b7 `{os.path.relpath(pfad, paths.BASE_DIR)}`")
+
+            if st.button("Glossar speichern", use_container_width=True):
+                try:
+                    os.makedirs(os.path.dirname(paths.GLOSSAR_FILE),
+                                exist_ok=True)
+                    # Erst daneben schreiben, dann umbenennen: bricht der
+                    # Vorgang ab, steht die alte Datei noch vollstaendig da.
+                    vorlaeufig = paths.GLOSSAR_FILE + ".neu"
+                    with open(vorlaeufig, "w", encoding="utf-8",
+                              newline="\n") as f:
+                        f.write(neu)
+                    os.replace(vorlaeufig, paths.GLOSSAR_FILE)
+                    st.success("Gespeichert. Wirkt ab der naechsten Frage.")
+                    time.sleep(1)
+                    st.rerun()
+                except OSError as e:
+                    st.error(f"Konnte nicht gespeichert werden: {e}")
 
     # --- KONFIGURATION GEGEN DIE VORLAGE ---
     #

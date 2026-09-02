@@ -311,6 +311,10 @@ der verwendeten Quellen — nicht die Abschnitte selbst. Die stehen im Bestand
 und würden das Protokoll unbrauchbar groß machen. Fragen über die
 HTTP-Schnittstelle zählen mit.
 
+Die vollständige Liste lässt sich mit **Protokoll herunterladen** aus der
+Seitenleiste holen — auswerten heißt in der Regel sortieren und zählen, und
+dafür braucht man sie ganz. Frühere Ablagen stehen darunter zur Auswahl.
+
 Ist eine Liste abgearbeitet, legt der Knopf **Liste abschliessen** das
 Protokoll unter dem Tagesdatum ab (`feedback-2026-09-02.jsonl`) und beginnt
 ein neues. Gelöscht wird nichts: was Nutzer nicht gefunden haben, ist die
@@ -325,15 +329,21 @@ mv data/feedback.jsonl data/feedback-$(date +%F).jsonl
 
 ### Glossar
 
-`glossar.example.txt` ist die Vorlage. Einmal kopieren, dann pflegen:
+Gepflegt wird es **im Browser**: Verwalter finden in der Seitenleiste
+**🗣️ Glossar bearbeiten**. Die Datei liegt unter `config/glossar.txt` und
+damit im eingehängten Verzeichnis — die Änderung wirkt bei der nächsten
+Frage, ohne Rebuild und ohne Neustart. Wer sie noch nie angelegt hat,
+bekommt im Bearbeitungsfeld den Inhalt von `glossar.example.txt` vorgelegt.
+
+Auf dem Server geht es genauso:
 
 ```bash
-cp glossar.example.txt glossar.txt
+cp glossar.example.txt config/glossar.txt
 ```
 
-`glossar.txt` ist gitignoriert — dieselbe Aufteilung wie bei der `.env`,
-damit ein Update die eigenen Einträge nicht überschreibt. Fehlt die Datei,
-verhält sich alles wie ohne Glossar.
+`config/glossar.txt` ist gitignoriert — dieselbe Aufteilung wie bei der
+`.env`, damit ein Update die eigenen Einträge nicht überschreibt. Fehlt die
+Datei, verhält sich alles wie ohne Glossar.
 
 Je Zeile eine Zuordnung. Wo es eine Fundstelle gibt, gehört sie dazu; solche
 Anker stehen in Überschriften und Querverweisen und wirken deshalb besonders
@@ -359,9 +369,6 @@ für das, was wirklich haussprachlich ist.
 **Nur geprüfte Zuordnungen eintragen.** Ein falscher Eintrag lenkt die Suche
 zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
 ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
-
-Änderungen an `glossar.txt` brauchen einen Rebuild, wie die Prompt-Vorlagen
-auch.
 
 ## 🔐 Rechte
 
@@ -407,10 +414,10 @@ Die mitgelieferte Vorlage kopieren und darin die Adressen der Modellserver, die 
 cp .env.example .env
 ```
 
-Dazu die Glossar-Vorlage, falls eigene Abkürzungen gepflegt werden sollen:
+Das Glossar für Hauswörter kann leer bleiben — es lässt sich später im Browser pflegen. Wer gleich beginnen will:
 
 ```bash
-cp glossar.example.txt glossar.txt
+cp glossar.example.txt config/glossar.txt
 ```
 
 ### 3. Ersten Benutzer anlegen
