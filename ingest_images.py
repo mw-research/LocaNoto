@@ -148,7 +148,10 @@ def _voruebergehend(e):
     return any(w in t for w in (
         "cannot connect", "connection", "timed out", "timeout",
         "500", "502", "503", "504", "gateway", "unavailable",
-        "internalservererror"))
+        "internalservererror",
+        # Eine leere Antwort kommt meist von einem Dienst, der gerade nicht
+        # bei sich ist -- ein zweiter Versuch lohnt.
+        "keine beschreibung"))
 
 
 def _einmal_beschreiben(chunk_id, image_url, kontext, meta):
@@ -165,14 +168,22 @@ def _einmal_beschreiben(chunk_id, image_url, kontext, meta):
             ],
         }],
     )
-    beschreibung = antwort.choices[0].message.content
+    beschreibung = (antwort.choices[0].message.content or "").strip()
+
+    # Eine leere Antwort ist kein Ergebnis. Ohne diese Pruefung landete
+    # "[BILD-BESCHREIBUNG]: None" als Chunk im Index -- vektorisiert,
+    # durchsuchbar und wertlos. Beobachtet an einem Endpunkt, der eine
+    # Anfrage nach vier Sekunden als erfolgreich zurueckgab, waehrend ein
+    # echter Durchlauf desselben Bildes Minuten braucht.
+    if not beschreibung:
+        raise ValueError("Sehmodell: keine Beschreibung erhalten.")
 
     # Der Kontext steht mit im Chunk, nicht nur im Prompt: er ist der
     # Suchanker. Eine reine Geometriebeschreibung trifft keine Fachfrage --
     # dieselbe Erfahrung wie bei den Tabellen, wo die Zeile ueber der
     # Tabelle der wirksamste Anker im Korpus ist.
     text = ("KONTEXT ZUM BILD: " + kontext + chr(10) + chr(10) +
-            "[BILD-BESCHREIBUNG]: " + str(beschreibung))
+            "[BILD-BESCHREIBUNG]: " + beschreibung)
     return chunk_id, text, get_embedding(text), meta
 
 
