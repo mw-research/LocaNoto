@@ -205,6 +205,12 @@ def schreibe(ergebnisse):
         metadatas=[e[3] for e in fertig],
     )
     keyword_index.add_chunks([(e[0], e[1], e[3]) for e in fertig], con=kw)
+
+    # Erfolge gehoerten bisher nicht ins Protokoll -- nur Fehlschlaege. Damit
+    # liess sich aus dem Log nicht ablesen, ob ueberhaupt etwas ankommt; die
+    # einzige Auskunft war die Zahl der Abschnitte in der Datenbank.
+    print(f"   [+] {len(fertig)} von {len(ergebnisse)} Bildern gespeichert: "
+          + ", ".join(e[0] for e in fertig), flush=True)
     return len(fertig)
 
 
