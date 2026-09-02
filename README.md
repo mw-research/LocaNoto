@@ -269,6 +269,43 @@ Das ist Absicht. Der Verkehr ist unverschlüsselt, das Token wäre sonst auf
 dem Draht mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
 mit TLS davor.
 
+## 🗣️ Sprachgebrauch des Betriebs
+
+Nutzer fragen in ihren eigenen Wörtern und Abkürzungen. Die stehen in den
+Dokumenten oft nicht — dort wird ausgeschrieben, anders benannt oder nur
+eine Nummer genannt. Weder die Vektorsuche noch die Stichwortsuche
+überbrückt das: die Frage findet nichts, obwohl die Antwort im Bestand
+steht.
+
+`glossar.txt` liegt neben den Prompt-Vorlagen und ist beim Ausliefern leer.
+Je Zeile eine Zuordnung:
+
+```
+BANF = Bestellanforderung; auch Anforderung oder Bestellvorschlag
+FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
+```
+
+Der Inhalt geht an zwei Stellen ein: in die Sondenbildung, damit die Suche
+den Begriff der Dokumente verwendet, und in den Antwortprompt, damit die
+Antwort ihn mitnennt — der Nutzer findet ihn beim nächsten Mal selbst. Als
+Zuordnung *der Nutzer* gekennzeichnet, nicht als Dokumentinhalt: zitiert
+wird sie nicht.
+
+Zeilen mit `#` sind Erläuterungen für den, der die Datei pflegt, und kommen
+nicht in den Prompt. Eine Datei ohne Einträge verändert nichts.
+
+**Woher die Einträge kommen:** nicht aus dem Kopf, sondern aus dem Betrieb.
+In der Seitenleiste steht unter **📝 Rückmeldungen** die Liste der Fragen,
+die nichts gefunden haben. Genau die gehören hierher, zusammen mit dem Wort,
+unter dem der Bestand die Sache führt.
+
+Fachübliche Abkürzungen löst das Modell selbst auf; `glossar.txt` ist für
+das, was wirklich haussprachlich ist. Nur geprüfte Zuordnungen eintragen —
+ein falscher Eintrag lenkt die Suche zuverlässig auf die falsche Stelle, und
+das fällt schwerer auf als ein fehlender.
+
+Änderungen brauchen einen Rebuild, wie die Prompt-Vorlagen auch.
+
 ## 📝 Rückmeldungen
 
 Welche Begriffe im Betrieb gebraucht werden und im Bestand fehlen, lässt

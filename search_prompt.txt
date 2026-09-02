@@ -4,6 +4,9 @@ Generiere exakt 3 verschiedene Suchanfragen für die aktuelle Nutzerfrage, um so
 2. Eine Suche nach der Fundstelle: Abschnitt, Anhang oder Tabelle, in der die gesuchte Angabe steht -- und, wo es passt, nach der zugrundeliegenden Definition oder Methode.
 3. Eine hochspezifische Stichwort-Suche (Eigennamen, Fachbegriffe, genaue Maße oder Variablen aus der Frage).
 
+{GLOSSAR}
+Loese Abkuerzungen auf. Dokumente schreiben aus, was im Betrieb abgekuerzt wird -- nach der Kurzform allein findet die Suche nichts. Steht die Abkuerzung oben im Sprachgebrauch, nimm die dortige Zuordnung; steht sie nicht dort, loese sie selbst auf, wenn sie im Fach ueblich ist, und nimm beide Formen in die Sonden auf -- die ausgeschriebene zuerst.
+
 {HISTORY}
 
 Aktuelle Frage: {FRAGE}
