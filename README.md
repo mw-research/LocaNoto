@@ -7,6 +7,7 @@ LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RA
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
 * **Zweistufige Rangfolge:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie, danach bewertet ein Reranker die engere Auswahl. Bevorzugt über einen Endpunkt (`RERANKER_BASE_URL`), damit sich das Modell ohne Rebuild austauschen lässt; ist keiner erreichbar, greift das Modell **im Image**, und andernfalls rankt allein die Fusion. Keine dieser Stufen kann den Start verhindern.
 * **Bilder im Chat:** An eine Frage lassen sich Bilder anhaengen -- ein Bildschirmausschnitt, ein Foto einer Anlage, eine abfotografierte Seite. Das Sehmodell wandelt sie in Text um; dieser Text dient als zusaetzliche Suchsonde und geht klar gekennzeichnet in den Kontext der Antwort ein. Das Chat-Modell selbst bekommt das Bild nicht und kann damit ein reines Textmodell bleiben.
+* **HTTP-Schnittstelle:** Dieselbe Suche ohne Browser — eine Frage aus dem Terminal, ein Skript. Zugang über ein Token je Nutzer; die Trennung zwischen privaten und geteilten Dokumenten gilt dort genauso.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete
@@ -183,6 +184,86 @@ erzeugt den Container **neu**. Alle offenen Streamlit-Sitzungen sterben mit
 ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung dahinter ist
 tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das sieht aus wie ein
 Absturz der App und ist keiner: **Seite neu laden**, dann erneut anmelden.
+
+## 🔌 HTTP-Schnittstelle
+
+Dieselbe Suche wie in der Oberfläche, ohne Browser — für eine Frage aus dem
+Terminal oder ein Skript, das einen Bestand prüft. Die Antworten kommen aus
+`pipeline.py`, denselben Funktionen, die auch die Oberfläche benutzt.
+
+### Voraussetzung: Chroma als Dienst
+
+Solange die Oberfläche läuft, greift ein zweiter Prozess auf denselben
+Bestand zu — und dafür ist die Dateiablage nicht gebaut. Die Folge wäre kein
+sauberer Fehler, sondern ein beschädigter Index. In der `.env`:
+
+```
+CHROMA_HOST=chroma
+```
+
+Damit sprechen Oberfläche, Ingest-Skripte und Schnittstelle den
+`chroma`-Dienst aus der `docker-compose.yaml` an. Er liest denselben Ordner
+`data/chroma_db` weiter — **die Daten müssen nicht umgezogen werden.** Ohne
+diesen Eintrag verweigert die Schnittstelle den Start, statt den Index still
+zu gefährden.
+
+### Token anlegen
+
+```bash
+docker compose exec api python create_token.py markus --bezeichnung "Terminal Laptop"
+```
+
+Das Token wird genau einmal ausgegeben; gespeichert ist nur sein Hashwert.
+Es bildet auf eine angelegte Kennung ab, und diese Kennung geht als
+`benutzer` in die Suche — **die Trennung zwischen privaten und geteilten
+Dokumenten gilt hier genauso wie in der Oberfläche.** Es gibt keinen
+Schalter, der sie umgeht.
+
+```bash
+docker compose exec api python create_token.py --liste
+docker compose exec api python create_token.py --widerrufe 3f9a1c
+```
+
+### Aufrufen
+
+```bash
+curl -s -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" http://127.0.0.1:8600/status
+```
+
+```bash
+curl -s -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/json" -d '{"frage":"Welche Prüffristen gelten?"}' http://127.0.0.1:8600/frage
+```
+
+Laufend statt am Stück — `?strom=1` liefert `text/event-stream` mit den
+Ereignissen `sonden`, `text` und `quellen`:
+
+```bash
+curl -N -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/json" -d '{"frage":"Welche Prüffristen gelten?"}' "http://127.0.0.1:8600/frage?strom=1"
+```
+
+| Aufruf | Zweck |
+|---|---|
+| `GET /gesundheit` | Lebenszeichen, ohne Token |
+| `GET /status` | Modelle, Ablage, Anzahl Abschnitte, sichtbare Dokumente |
+| `GET /dokumente` | was diese Kennung sehen darf |
+| `POST /frage` | Antwort mit Quellen; `?strom=1` für laufende Ausgabe |
+| `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
+
+Im Rumpf von `/frage` sind `top_k`, `dateien`, `sachgebiete` und `verlauf`
+optional — dieselben Einschränkungen wie die Filter in der Seitenleiste.
+
+### Erreichbarkeit
+
+Der Port ist an `127.0.0.1` gebunden: erreichbar vom Server selbst und über
+einen SSH-Tunnel, nicht aus dem Netz.
+
+```bash
+ssh -L 8600:127.0.0.1:8600 benutzer@server
+```
+
+Das ist Absicht. Der Verkehr ist unverschlüsselt, das Token wäre sonst auf
+dem Draht mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
+mit TLS davor.
 
 ## 🔐 Rechte
 

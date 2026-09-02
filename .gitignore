@@ -20,6 +20,8 @@ log_*.txt
 # Benutzerdatei (enthaelt Passwort-Hashes) -- gehoert nie ins Repo
 users.json
 config/users.json
+config/tokens.json
+config/tokens.json.neu
 !config/.gitkeep
 
 # Standortspezifische Compose-Erweiterung (Netze, GPU, Ports)

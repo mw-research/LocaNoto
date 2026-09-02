@@ -19,12 +19,12 @@ Innerhalb der begonnenen Seite entscheidet weiterhin die Chunk-ID: was schon
 in der Datenbank steht, wird nicht erneut vektorisiert.
 """
 import pymupdf
-import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import re
 
 import paths
+import store
 import keyword_index
 import llm
 from embedding import embed_batch
@@ -39,8 +39,7 @@ ORDNER_NAME = paths.DOCS_DIR
 EMBEDDING_MODEL = llm.modell("EMBEDDING")
 client = llm.client("EMBEDDING")
 
-chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
-collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
+collection = store.collection()
 kw = keyword_index.connect()
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)

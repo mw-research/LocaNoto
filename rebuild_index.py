@@ -8,15 +8,14 @@ Fall, dass man den Aufbau lieber vorab und ausserhalb der Weboberflaeche
 laufen laesst, oder wenn der Index nach einem Eingriff von Hand nicht mehr
 zur Datenbank passt.
 """
-import chromadb
 
 import paths
+import store
 import keyword_index
 
 paths.bootstrap()
 
-chroma_client = chromadb.PersistentClient(path=paths.CHROMA_DIR)
-collection = chroma_client.get_or_create_collection(name=paths.COLLECTION_NAME)
+collection = store.collection()
 
 total = collection.count()
 print(f"Vektordatenbank enthaelt {total:,} Chunks.")
