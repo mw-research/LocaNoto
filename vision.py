@@ -37,16 +37,24 @@ MAX_TOKENS = paths.env_int("VISION_MAX_TOKENS", 0)
 
 ERLAUBTE_TYPEN = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
 
-PROMPT = """Beschreibe dieses Bild vollstaendig und sachlich, damit jemand, der es
-nicht sieht, damit arbeiten kann.
+# Der Prompt ist knapp gehalten, und das aus einem gemessenen Grund: fuer
+# ein fast leeres Bild schrieb das Sehmodell 792 Token in 33 Sekunden. Bei
+# 23 Token/s geht die Zeit ins Formulieren, nicht ins Sehen. Was die Suche
+# spaeter braucht, ist der lesbare Inhalt -- nicht die Feststellung, dass
+# der Hintergrund weiss ist und keine Fehlermeldung zu sehen war.
+PROMPT = """Gib den Inhalt dieses Bildes wieder, damit jemand, der es nicht sieht,
+damit arbeiten kann.
 
-- Gib saemtlichen lesbaren Text woertlich wieder: Beschriftungen, Feldnamen,
+- Beginne mit dem lesbaren Text, woertlich: Beschriftungen, Feldnamen,
   Schaltflaechen, Menuepunkte, Fehlermeldungen, Zahlenwerte, Einheiten.
-- Beschreibe bei Bildschirmausschnitten, welche Maske oder welcher Dialog zu
-  sehen ist und wie die Elemente angeordnet sind.
-- Beschreibe bei Zeichnungen und Diagrammen Achsen, Bemassungen, Bauteile und
-  ihre Beziehung zueinander.
+- Bildschirmausschnitt: welche Maske oder welcher Dialog, wie die Elemente
+  angeordnet sind.
+- Zeichnung oder Diagramm: Achsen, Bemassungen, Bauteile und ihre Beziehung
+  zueinander.
 - Erfinde nichts. Was unleserlich ist, benennst du als unleserlich.
+
+Keine Einleitung, keine Zusammenfassung, keine Wiederholung der Frage.
+Nenne nicht, was NICHT zu sehen ist. Nur der Inhalt selbst.
 """
 
 
