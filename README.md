@@ -1,13 +1,16 @@
 # LocaNoto - Lokales RAG System für technische Dokumentationen
 
-LocaNoto ist ein vollständig lokal laufendes Retrieval-Augmented Generation (RAG) System. Es ermöglicht das intelligente Durchsuchen, Vektorisieren und Abfragen von Fachdokumenten (z.B. Bau-Normen, Handbüchern) mithilfe modernster lokaler Sprachmodelle (LLMs), ohne dass sensible Firmendaten das lokale Netzwerk verlassen.
+LocaNoto durchsucht Fachdokumente und beantwortet Fragen dazu — mit Angabe der Fundstelle, Datei und Seite. Die Dokumente werden in Abschnitte zerlegt, vektorisiert und über zwei Suchwege gefunden; ein Sprachmodell formuliert daraus die Antwort.
+
+Der Container spricht zur Laufzeit nur mit den Modellservern, die in der `.env` eingetragen sind. Die Dokumente selbst verlassen das eigene Netz nicht.
 
 ## 🚀 Features
-* **100% Offline & Lokal:** Zur Laufzeit greift der Container auf kein externes Netz zu. Modelle werden **beim Bauen** in das Image geladen, und die Telemetrie von ChromaDB wie Streamlit ist abgeschaltet. Die einzigen ausgehenden Verbindungen gehen an euren eigenen LLM-Server.
+* **Kein Netzzugang zur Laufzeit:** Ausgehende Verbindungen gehen ausschließlich an die Adressen, die in der `.env` stehen. Das Reranker-Modell wird beim Bauen in das Image geladen, die Telemetrie von ChromaDB und Streamlit ist abgeschaltet. Wo die Modelle laufen, entscheidet die Konfiguration — im eigenen Netz oder bei einem Anbieter.
 * **Hybride Suche:** Semantische Vektorsuche (ChromaDB) kombiniert mit BM25-gerankter Keyword-Suche (SQLite FTS5, plattenbasiert).
 * **Zweistufige Rangfolge:** Jede Suchsonde und jeder Suchweg liefert eine eigene Rangliste; Reciprocal Rank Fusion verschmilzt sie, danach bewertet ein Reranker die engere Auswahl. Bevorzugt über einen Endpunkt (`RERANKER_BASE_URL`), damit sich das Modell ohne Rebuild austauschen lässt; ist keiner erreichbar, greift das Modell **im Image**, und andernfalls rankt allein die Fusion. Keine dieser Stufen kann den Start verhindern.
-* **Bilder im Chat:** An eine Frage lassen sich Bilder anhaengen -- ein Bildschirmausschnitt, ein Foto einer Anlage, eine abfotografierte Seite. Das Sehmodell wandelt sie in Text um; dieser Text dient als zusaetzliche Suchsonde und geht klar gekennzeichnet in den Kontext der Antwort ein. Das Chat-Modell selbst bekommt das Bild nicht und kann damit ein reines Textmodell bleiben.
+* **Bilder im Chat:** An eine Frage lassen sich Bilder anhängen — ein Bildschirmausschnitt, ein Foto einer Anlage, eine abfotografierte Seite. Das Sehmodell wandelt sie in Text um; dieser Text dient als zusätzliche Suchsonde und geht gekennzeichnet in den Kontext der Antwort ein. Das Chat-Modell bekommt das Bild nicht und kann ein reines Textmodell bleiben.
 * **HTTP-Schnittstelle:** Dieselbe Suche ohne Browser — eine Frage aus dem Terminal, ein Skript. Zugang über ein Token je Nutzer; die Trennung zwischen privaten und geteilten Dokumenten gilt dort genauso.
+* **Sprachgebrauch und Rückmeldungen:** Fragen, die nichts finden, werden festgehalten; Nutzer können jede Antwort bewerten. Aus dieser Liste wächst ein Glossar der Hauswörter, die in den Dokumenten anders heißen.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete
@@ -107,7 +110,7 @@ RERANKER_API_MODEL=bge-reranker-v2-m3
 Fällt der Endpunkt während des Betriebs aus, bleibt die Reihenfolge aus der
 Fusion stehen — die Frage wird beantwortet, nur ohne die zweite Bewertung.
 
-## 🧠 Reranker-Modell im Image
+## 🧩 Reranker-Modell im Image
 
 Das Modell (Standard `BAAI/bge-reranker-v2-m3`) wird **beim Bauen** in das
 Image geladen:
@@ -185,7 +188,7 @@ ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung dahinter ist
 tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das sieht aus wie ein
 Absturz der App und ist keiner: **Seite neu laden**, dann erneut anmelden.
 
-## 🔌 HTTP-Schnittstelle
+## 🔗 HTTP-Schnittstelle
 
 Dieselbe Suche wie in der Oberfläche, ohne Browser — für eine Frage aus dem
 Terminal oder ein Skript, das einen Bestand prüft. Die Antworten kommen aus
@@ -269,61 +272,21 @@ Das ist Absicht. Der Verkehr ist unverschlüsselt, das Token wäre sonst auf
 dem Draht mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
 mit TLS davor.
 
-## 🗣️ Sprachgebrauch des Betriebs
+## 🔁 Aus dem Betrieb lernen
 
-Nutzer fragen in ihren eigenen Wörtern und Abkürzungen. Die stehen in den
-Dokumenten oft nicht — dort wird ausgeschrieben, anders benannt oder nur
-eine Nummer genannt. Weder die Vektorsuche noch die Stichwortsuche
-überbrückt das: die Frage findet nichts, obwohl die Antwort im Bestand
-steht.
+Nutzer fragen in ihren eigenen Wörtern. Die stehen in den Dokumenten oft
+nicht — dort wird ausgeschrieben, anders benannt oder nur eine Nummer
+genannt. Eine Frage nach *„BANF"* findet nichts, wenn die Dokumente
+*Bestellanforderung* schreiben — obwohl die Antwort im Bestand steht.
+Weder die Vektorsuche noch die Stichwortsuche überbrückt das.
 
-Die Vorlage ist `glossar.example.txt`. Einmal kopieren, dann pflegen:
+Welche Wörter das betrifft, lässt sich nicht ausdenken. Deshalb schreibt die
+Anwendung mit, was gefragt wurde und keine Antwort fand — und daraus wächst
+das Glossar.
 
-```bash
-cp glossar.example.txt glossar.txt
-```
+### Rückmeldungen
 
-`glossar.txt` selbst ist gitignoriert — dieselbe Aufteilung wie bei der
-`.env`, damit ein Update die eigenen Einträge nicht überschreibt. Fehlt die
-Datei, verhält sich alles wie ohne Glossar.
-
-Je Zeile eine Zuordnung:
-
-```
-BANF = Bestellanforderung; auch Anforderung oder Bestellvorschlag
-FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
-```
-
-Der Inhalt geht an zwei Stellen ein: in die Sondenbildung, damit die Suche
-den Begriff der Dokumente verwendet, und in den Antwortprompt, damit die
-Antwort ihn mitnennt — der Nutzer findet ihn beim nächsten Mal selbst. Als
-Zuordnung *der Nutzer* gekennzeichnet, nicht als Dokumentinhalt: zitiert
-wird sie nicht.
-
-Zeilen mit `#` sind Erläuterungen für den, der die Datei pflegt, und kommen
-nicht in den Prompt. Eine Datei ohne Einträge verändert nichts.
-
-**Woher die Einträge kommen:** nicht aus dem Kopf, sondern aus dem Betrieb.
-In der Seitenleiste steht unter **📝 Rückmeldungen** die Liste der Fragen,
-die nichts gefunden haben. Genau die gehören hierher, zusammen mit dem Wort,
-unter dem der Bestand die Sache führt.
-
-Fachübliche Abkürzungen löst das Modell selbst auf; `glossar.txt` ist für
-das, was wirklich haussprachlich ist. Nur geprüfte Zuordnungen eintragen —
-ein falscher Eintrag lenkt die Suche zuverlässig auf die falsche Stelle, und
-das fällt schwerer auf als ein fehlender.
-
-Änderungen brauchen einen Rebuild, wie die Prompt-Vorlagen auch.
-
-## 📝 Rückmeldungen
-
-Welche Begriffe im Betrieb gebraucht werden und im Bestand fehlen, lässt
-sich nicht ausdenken. Die Frage *„was passiert bei einer BANF"* lief ins
-Leere, weil das Handbuch *Bestellanforderung* schreibt — darauf kommt
-niemand, der sich am Schreibtisch ein Glossar überlegt.
-
-Deshalb umgekehrt: aufschreiben, was tatsächlich gefragt wurde. Drei
-Anlässe landen in `data/feedback.jsonl`:
+Drei Anlässe landen in `data/feedback.jsonl`:
 
 | Anlass | wann |
 |---|---|
@@ -331,23 +294,62 @@ Anlässe landen in `data/feedback.jsonl`:
 | `daumen_runter` | der Nutzer meldet, die Antwort taugte nicht |
 | `daumen_hoch` | der Nutzer meldet, sie war gut |
 
-Die **Zustimmung** ist dabei nicht Beifall, sondern die andere Hälfte der
+Die Zustimmung ist dabei nicht Beifall, sondern die zweite Hälfte der
 Auskunft: sie zeigt, welche Fragen der Bestand gut trägt. Kennt man nur die
-Fehlschläge, weiß man nach einer Änderung nicht, ob sie etwas verbessert
-oder nur verschoben hat.
+Fehlschläge, lässt sich nach einer Änderung nicht sagen, ob sie etwas
+verbessert oder nur verschoben hat.
 
-Verwalter sehen die Sammlung in der Seitenleiste unter **📝 Rückmeldungen** —
-die Fragen ohne Treffer sind die Arbeitsliste für `glossar.txt`. Findet sich
-zu einer Frage auch mit dem richtigen Begriff nichts, ist es keine Lücke im
-Wortschatz, sondern im Dokumentenbestand; auch das ist eine brauchbare
-Auskunft.
+Verwalter sehen die Sammlung in der Seitenleiste unter **📝 Rückmeldungen**.
+Die beiden Listen bedeuten Verschiedenes:
 
-Festgehalten werden Frage, Sonden, Trefferzahlen sowie Datei und Seite der
-verwendeten Quellen — **nicht die Abschnitte selbst.** Die stehen im Bestand
-und würden das Protokoll unbrauchbar groß machen.
+* **Fragen ohne Treffer** — meist ein Wort, das im Glossar fehlt.
+* **Als nicht hilfreich gemeldet** — hier kamen Treffer, aber die falschen.
+  Das ist kein Wortschatzproblem, sondern eines der Rangfolge.
 
-Fragen über die Schnittstelle zählen mit: eine Lücke im Bestand ist keine
-Frage der Bedienung.
+Festgehalten werden Frage, Suchsonden, Trefferzahlen sowie Datei und Seite
+der verwendeten Quellen — nicht die Abschnitte selbst. Die stehen im Bestand
+und würden das Protokoll unbrauchbar groß machen. Fragen über die
+HTTP-Schnittstelle zählen mit.
+
+### Glossar
+
+`glossar.example.txt` ist die Vorlage. Einmal kopieren, dann pflegen:
+
+```bash
+cp glossar.example.txt glossar.txt
+```
+
+`glossar.txt` ist gitignoriert — dieselbe Aufteilung wie bei der `.env`,
+damit ein Update die eigenen Einträge nicht überschreibt. Fehlt die Datei,
+verhält sich alles wie ohne Glossar.
+
+Je Zeile eine Zuordnung. Wo es eine Fundstelle gibt, gehört sie dazu; solche
+Anker stehen in Überschriften und Querverweisen und wirken deshalb besonders
+gut:
+
+```
+BANF = Bestellanforderung; auch Anforderung oder Bestellvorschlag
+FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
+```
+
+Der Inhalt geht an zwei Stellen ein: in die Bildung der Suchsonden, damit
+die Suche den Begriff der Dokumente verwendet, und in den Antwortprompt,
+damit die Antwort ihn mitnennt — der Nutzer findet ihn beim nächsten Mal
+selbst. Gekennzeichnet als Zuordnung der Nutzer, nicht als Dokumentinhalt:
+zitiert wird sie nicht.
+
+Zeilen mit `#` sind Erläuterungen für den, der die Datei pflegt, und kommen
+nicht in den Prompt.
+
+Fachübliche Abkürzungen löst das Sprachmodell selbst auf. Das Glossar ist
+für das, was wirklich haussprachlich ist.
+
+**Nur geprüfte Zuordnungen eintragen.** Ein falscher Eintrag lenkt die Suche
+zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
+ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
+
+Änderungen an `glossar.txt` brauchen einen Rebuild, wie die Prompt-Vorlagen
+auch.
 
 ## 🔐 Rechte
 
@@ -375,8 +377,9 @@ https://digit.kmu.bayern
 ## 🛠️ Installation & Schnellstart
 
 ### Voraussetzungen
-* Docker & Docker Compose installiert
-* (Optional, aber empfohlen) Lokaler KI-Server (z.B. Ollama oder vLLM) für die LLM-Schnittstelle
+
+* Docker und Docker Compose
+* Ein erreichbarer Modellserver für Chat und Embedding — etwa Ollama, vLLM oder ein Gateway davor. Ohne ihn startet die Anwendung, findet aber nichts und antwortet nicht.
 
 ### 1. Repository klonen (oder ZIP entpacken)
 ```bash
@@ -384,7 +387,10 @@ git clone https://github.com/mw-research/LocaNoto.git
 cd LocaNoto
 ```
 
-### 2. Konfiguration anlegen - Kopiere die mitgelieferte Vorlage und trage deine API-Keys sowie den initialen Admin-Benutzernamen ein:
+### 2. Konfiguration anlegen
+
+Die mitgelieferte Vorlage kopieren und darin die Adressen der Modellserver, die Schlüssel und den ersten Verwalter eintragen:
+
 ```bash
 cp .env.example .env
 ```
@@ -395,14 +401,17 @@ Dazu die Glossar-Vorlage, falls eigene Abkürzungen gepflegt werden sollen:
 cp glossar.example.txt glossar.txt
 ```
 
-### 3. Ersten Benutzer anlegen - Bevor das Web-Interface nutzbar ist, muss lokal ein Nutzer generiert werden (die Zugangsdaten werden sicher als Hash in der users.json gespeichert):
+### 3. Ersten Benutzer anlegen
+
+Ohne Benutzer ist die Oberfläche nicht nutzbar. Das Passwort wird als bcrypt-Hash in `config/users.json` abgelegt, nicht im Klartext:
+
 ```bash
 python3 create_user.py
 ```
 
-### 4. Container starten - Starte den Container im Hintergrund.
+### 4. Container starten
 ```bash
 docker compose up -d
 ```
 
-### Das Interface ist nun unter http://localhost:8501 erreichbar.
+Die Oberfläche ist danach unter `http://localhost:8501` erreichbar — oder unter dem Port, der in `APP_PORT` steht.
