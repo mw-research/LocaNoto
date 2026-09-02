@@ -27,6 +27,14 @@ VISION_TIMEOUT = paths.env_float("VISION_TIMEOUT", 120)
 # selten mehr Erkennung, kostet aber Speicher im Sehmodell.
 MAX_KANTE = paths.env_int("CHAT_BILD_MAX_KANTE", 1280)
 
+# Obergrenze fuer die Laenge der Beschreibung. 0 = keine.
+#
+# Gebraucht wird der lesbare Inhalt eines Bildes, nicht die Feststellung,
+# dass der Hintergrund einheitlich weiss ist. Bei einem grossen Sehmodell
+# macht die Erzeugung den Hauptteil der Zeit aus -- ein Deckel wirkt dort
+# unmittelbar, waehrend an der Bildgroesse kaum etwas zu holen ist.
+MAX_TOKENS = paths.env_int("VISION_MAX_TOKENS", 0)
+
 ERLAUBTE_TYPEN = ["png", "jpg", "jpeg", "webp", "gif", "bmp"]
 
 PROMPT = """Beschreibe dieses Bild vollstaendig und sachlich, damit jemand, der es
@@ -80,9 +88,11 @@ def beschreibe(daten, frage=""):
               f"besonders auf das ein, was fuer diese Frage zaehlt."
               if frage.strip() else "")
 
+    zusatz_args = {"max_tokens": MAX_TOKENS} if MAX_TOKENS else {}
     antwort = llm.client("VISION").chat.completions.create(
         model=llm.modell("VISION"),
         timeout=VISION_TIMEOUT,
+        **zusatz_args,
         messages=[{
             "role": "user",
             "content": [
