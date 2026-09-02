@@ -28,6 +28,7 @@ import paths
 import auth
 import llm
 import pipeline
+import feedback
 import ranking
 import store
 
@@ -152,6 +153,13 @@ def _suchen(anfrage, kennung):
         # Der Embedding-Endpunkt antwortet nicht. 503, weil es an einem
         # nachgelagerten Dienst liegt und ein spaeterer Versuch klappen kann.
         raise HTTPException(status_code=503, detail=str(e))
+
+    if not treffer:
+        # Auch ueber die Schnittstelle gestellte Fragen gehoeren in die
+        # Arbeitsliste -- eine Luecke im Bestand ist keine Frage der
+        # Bedienung.
+        feedback.notiere("leer", kennung, anfrage.frage, sonden=sonden,
+                         zahlen=zahlen, herkunft="schnittstelle")
 
     nachrichten = list(anfrage.verlauf or []) + [
         {"role": "user", "content": anfrage.frage}]

@@ -17,6 +17,7 @@ from embedding import embed_batch
 import ranking
 import vision
 import pipeline
+import feedback
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -640,6 +641,37 @@ with st.sidebar:
         st.code(llm.uebersicht() + f"\nRANGFOLGE   {rerank_info}",
                 language="text")
 
+    # --- RUECKMELDUNGEN ---
+    #
+    # Die Arbeitsliste fuer glossar.txt und fuer Luecken im Bestand: hier
+    # steht, was gefragt wurde und nichts fand.
+    if is_admin():
+        zahlen = feedback.zaehle()
+        gesamt = sum(zahlen.values())
+        if gesamt:
+            with st.expander(f"\U0001f4dd Rueckmeldungen ({gesamt})"):
+                st.caption(
+                    f"ohne Treffer: {zahlen['leer']} \u00b7 "
+                    f"hat geholfen: {zahlen['daumen_hoch']} \u00b7 "
+                    f"hat nicht geholfen: {zahlen['daumen_runter']}")
+                st.caption("**Fragen ohne Treffer** -- Kandidaten fuer "
+                           "glossar.txt:")
+                leer = feedback.lese(grenze=15, art="leer")
+                if leer:
+                    st.code(chr(10).join(
+                        f"{e['zeitpunkt'][:10]}  {e['frage'][:70]}"
+                        for e in leer), language="text")
+                else:
+                    st.caption("keine")
+                schlecht = feedback.lese(grenze=15, art="daumen_runter")
+                if schlecht:
+                    st.caption("**Als nicht hilfreich gemeldet** -- Treffer "
+                               "kamen, aber die falschen:")
+                    st.code(chr(10).join(
+                        f"{e['zeitpunkt'][:10]}  {e['frage'][:70]}"
+                        for e in schlecht), language="text")
+                st.caption(f"Vollstaendig in `data/feedback.jsonl`.")
+
     # --- KONFIGURATION GEGEN DIE VORLAGE ---
     #
     # .env steht in der .gitignore, ein git pull fasst sie also nie an.
@@ -690,6 +722,40 @@ if collection.count() > 0:
                     st.image(bild, width=360)
             st.write(msg["content"])
             
+            # --- RUECKMELDUNG ---
+            #
+            # Unter jeder Antwort, nicht nur unter schlechten: die
+            # Zustimmung zeigt, welche Fragen der Bestand gut traegt.
+            # Kennt man nur die Fehlschlaege, weiss man nach einer
+            # Aenderung nicht, ob sie etwas verbessert oder nur verschoben
+            # hat.
+            if msg["role"] == "assistant":
+                frage_davor = next(
+                    (m["content"] for m in
+                     reversed(st.session_state.messages[:i])
+                     if m["role"] == "user"), "")
+                gegeben = st.session_state.setdefault("rueckmeldungen", set())
+                schluessel = f"{st.session_state.current_chat_id}:{i}"
+                if schluessel in gegeben:
+                    st.caption("Danke -- vermerkt.")
+                else:
+                    hoch, runter, _ = st.columns([1, 1, 8])
+                    for spalte, zeichen, art, text in (
+                            (hoch, "\U0001f44d", "daumen_hoch", "Hat geholfen"),
+                            (runter, "\U0001f44e", "daumen_runter",
+                             "Hat nicht geholfen")):
+                        with spalte:
+                            if st.button(zeichen, key=f"fb_{art}_{schluessel}",
+                                         help=text):
+                                feedback.notiere(
+                                    art, st.session_state["username"],
+                                    frage_davor,
+                                    sonden=msg.get("sonden", []),
+                                    zahlen=msg.get("zahlen", {}),
+                                    quellen=msg.get("sources", []))
+                                gegeben.add(schluessel)
+                                st.rerun()
+
             # --- QUELLEN DAUERHAFT ANZEIGEN ---
             if "sources" in msg and msg["sources"]:
                 st.markdown("---")
@@ -810,6 +876,13 @@ if collection.count() > 0:
                         st.error(str(e))
                         st.stop()
 
+                if not treffer:
+                    # Die aussagekraeftigste Rueckmeldung ist die, fuer die
+                    # niemand einen Knopf druecken muss.
+                    feedback.notiere("leer", st.session_state["username"],
+                                     user_query, sonden=search_queries,
+                                     zahlen=zahlen)
+
                 if treffer:
                     verfahren = ("Reranker" if reranker is not None
                                  else "Rangfolge-Fusion")
@@ -844,6 +917,11 @@ if collection.count() > 0:
                     "role": "assistant",
                     "content": answer,
                     "sources": pipeline.quellen(treffer),
+                    # Fuer die Rueckmeldung: ohne Sonden und Zahlen ist ein
+                    # spaeteres "hat nicht geholfen" nicht auswertbar -- man
+                    # sieht nicht, wonach gesucht wurde.
+                    "sonden": search_queries,
+                    "zahlen": zahlen,
                 })
                 save_chat(st.session_state.current_chat_id,
                           st.session_state.messages)

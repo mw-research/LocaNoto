@@ -269,6 +269,40 @@ Das ist Absicht. Der Verkehr ist unverschlüsselt, das Token wäre sonst auf
 dem Draht mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
 mit TLS davor.
 
+## 📝 Rückmeldungen
+
+Welche Begriffe im Betrieb gebraucht werden und im Bestand fehlen, lässt
+sich nicht ausdenken. Die Frage *„was passiert bei einer BANF"* lief ins
+Leere, weil das Handbuch *Bestellanforderung* schreibt — darauf kommt
+niemand, der sich am Schreibtisch ein Glossar überlegt.
+
+Deshalb umgekehrt: aufschreiben, was tatsächlich gefragt wurde. Drei
+Anlässe landen in `data/feedback.jsonl`:
+
+| Anlass | wann |
+|---|---|
+| `leer` | die Suche fand nichts — ohne Zutun des Nutzers vermerkt |
+| `daumen_runter` | der Nutzer meldet, die Antwort taugte nicht |
+| `daumen_hoch` | der Nutzer meldet, sie war gut |
+
+Die **Zustimmung** ist dabei nicht Beifall, sondern die andere Hälfte der
+Auskunft: sie zeigt, welche Fragen der Bestand gut trägt. Kennt man nur die
+Fehlschläge, weiß man nach einer Änderung nicht, ob sie etwas verbessert
+oder nur verschoben hat.
+
+Verwalter sehen die Sammlung in der Seitenleiste unter **📝 Rückmeldungen** —
+die Fragen ohne Treffer sind die Arbeitsliste für `glossar.txt`. Findet sich
+zu einer Frage auch mit dem richtigen Begriff nichts, ist es keine Lücke im
+Wortschatz, sondern im Dokumentenbestand; auch das ist eine brauchbare
+Auskunft.
+
+Festgehalten werden Frage, Sonden, Trefferzahlen sowie Datei und Seite der
+verwendeten Quellen — **nicht die Abschnitte selbst.** Die stehen im Bestand
+und würden das Protokoll unbrauchbar groß machen.
+
+Fragen über die Schnittstelle zählen mit: eine Lücke im Bestand ist keine
+Frage der Bedienung.
+
 ## 🔐 Rechte
 
 | Bereich | sichtbar für | löschen darf |
