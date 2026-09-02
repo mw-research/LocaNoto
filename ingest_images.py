@@ -236,7 +236,16 @@ for pdf_pfad in pdf_dateien:
         gespeichert = 0
         aufgaben = []
         
+        # Lebenszeichen. Ohne das meldet sich der Lauf nur, wenn zufaellig
+        # ein Bild gefunden wird -- in einem Handbuch mit tausenden Seiten
+        # koennen dazwischen viertelstundenlang bildfreie Seiten liegen, und
+        # ein arbeitender Lauf sieht dann aus wie ein haengender.
+        MELDE_ALLE = paths.env_int("SEITEN_MELDUNG", 100)
+
         for page_num in range(total_pages):
+            if MELDE_ALLE and page_num and page_num % MELDE_ALLE == 0:
+                print(f"   ... Seite {page_num} von {total_pages}, "
+                      f"{images_found} Bilder bisher", flush=True)
             page = doc[page_num]
             image_list = page.get_images(full=True)
             
