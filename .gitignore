@@ -27,3 +27,9 @@ config/tokens.json.neu
 # Standortspezifische Compose-Erweiterung (Netze, GPU, Ports)
 docker-compose.override.yaml
 docker-compose.override.yml
+
+# Sicherungen des Bestands
+*.tar
+*.tar.gz
+*.tgz
+*.bak
