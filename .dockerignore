@@ -32,3 +32,12 @@ __pycache__/
 *.pyc
 *.log
 *.tmp
+
+# Sicherungen. Sie landen erfahrungsgemaess im Repo-Ordner, weil man sie
+# dort anlegt -- und wandern dann bei jedem Build durch den Kontext.
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.bak
+*.sqlite3
