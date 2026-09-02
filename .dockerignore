@@ -1,7 +1,34 @@
-dokumente/
-chroma_db/
-chats/
+# Was NICHT ins Image gehoert.
+#
+# Zur Laufzeit werden data/ und config/ als Verzeichnisse eingehaengt -- im
+# Image haben sie nichts verloren. Frueher standen hier dokumente/,
+# chroma_db/ und chats/; seit dem Umzug nach data/ traf keine dieser Zeilen
+# mehr zu, und jeder Build kopierte den kompletten Bestand samt
+# Zugangsdaten in das Image.
+
+# Bestand: waechst auf Gigabyte und wird zur Laufzeit eingehaengt.
+data/
+
+# Zugangsdaten: Passwort-Hashes und Token. Gehoeren nicht in ein Image, das
+# weitergegeben werden koennte.
+config/
+.env
+.env.*
+!.env.example
+
+# VPN-Zugang: Zertifikate, privater Schluessel, Anmeldedaten.
+vpn/
+*.ovpn
+*.key
+*.pem
+auth.txt
+
+# Entwicklung
+.git/
+.gitignore
 venv/
+.venv/
 __pycache__/
+*.pyc
 *.log
 *.tmp
