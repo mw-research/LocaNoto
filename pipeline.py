@@ -75,6 +75,36 @@ def _vorlage(dateiname, rueckfall):
         return rueckfall
 
 
+def glossar():
+    """Der Sprachgebrauch des Hauses, aus glossar.txt.
+
+    Mitarbeiter fragen in ihren eigenen Abkuerzungen -- "BANF", "FA", "WE" --,
+    und die stehen im Handbuch nicht: dort heisst es "Bestellanforderung"
+    oder es steht nur eine Modulnummer. Weder eine Vektorsuche noch FTS5
+    ueberbrueckt das; die Frage findet nichts, obwohl die Antwort im Bestand
+    steht.
+
+    Die Datei ist bewusst getrennt vom Prompt: sie waechst mit jeder Frage,
+    die ins Leere lief, und gehoert damit dem Betrieb, nicht dem Code.
+    Fehlt sie, bleibt alles wie zuvor.
+    """
+    # Zeilen mit # sind Erklaerungen fuer den, der die Datei pflegt. Sie
+    # gehoeren nicht in den Prompt: das Modell wuerde sie als Inhalt lesen.
+    zeilen = [z.rstrip() for z in _vorlage("glossar.txt", "").splitlines()]
+    return chr(10).join(z for z in zeilen
+                        if z.strip() and not z.lstrip().startswith("#"))
+
+
+def _glossarblock():
+    """Der Glossartext, eingefasst -- oder nichts."""
+    text = glossar()
+    if not text:
+        return ""
+    return ("Sprachgebrauch im Betrieb. Diese Zuordnungen stammen nicht aus "
+            "den Dokumenten, sondern von den Nutzern:" + chr(10) + text
+            + chr(10))
+
+
 def verlaufstext(nachrichten, ohne_letzte=True):
     """Die letzten Nachrichten als Text fuer die Sondenbildung."""
     vorher = nachrichten[:-1] if ohne_letzte else list(nachrichten)
@@ -97,6 +127,7 @@ def sonden(client, modell, frage, verlauf="", bild_texte=()):
     hinweis = None
 
     prompt = (_vorlage("search_prompt.txt", RUECKFALL_SUCHPROMPT)
+              .replace("{GLOSSAR}", _glossarblock())
               .replace("{HISTORY}", verlauf)
               .replace("{FRAGE}", frage))
     try:
@@ -246,6 +277,7 @@ def systemprompt(kontexttext):
     rolle = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
     return (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT)
             .replace("{EXPERT_ROLE}", rolle)
+            .replace("{GLOSSAR}", _glossarblock())
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
 
 
