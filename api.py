@@ -99,6 +99,12 @@ class Frage(BaseModel):
         default=None,
         description="frueherer Austausch als [{'role','content'}], "
                     "damit Rueckbezuege aufgeloest werden koennen")
+    quellen_texte: bool = Field(
+        default=False,
+        description="die vollstaendigen Abschnitte mitliefern. Ohne das nur "
+                    "Datei und Seite -- ein Tabellenabschnitt ist mehrere "
+                    "Kilobyte gross, und im Terminal ueberdeckt er die "
+                    "Antwort, um die es ging")
 
 
 @app.get("/gesundheit")
@@ -167,7 +173,7 @@ def frage(anfrage: Frage,
         text = "".join(pipeline.antwort(chat_client, CHAT_MODELL, system,
                                         nachrichten))
         return {"antwort": text,
-                "quellen": pipeline.quellen(treffer),
+                "quellen": _quellen(treffer, anfrage.quellen_texte),
                 "sonden": sonden,
                 "sonden_hinweis": hinweis,
                 "zahlen": zahlen}
@@ -181,11 +187,21 @@ def frage(anfrage: Frage,
         for stueck in pipeline.antwort(chat_client, CHAT_MODELL, system,
                                        nachrichten):
             yield _sse("text", {"text": stueck})
-        yield _sse("quellen", {"quellen": pipeline.quellen(treffer)})
+        yield _sse("quellen",
+                   {"quellen": _quellen(treffer, anfrage.quellen_texte)})
 
     return StreamingResponse(ereignisse(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",
                                       "X-Accel-Buffering": "no"})
+
+
+def _quellen(treffer, mit_texten):
+    """Fundstellen, auf Wunsch mit den Abschnitten selbst."""
+    quellen = pipeline.quellen(treffer)
+    if mit_texten:
+        return quellen
+    return [{"file": q["file"], "page": q["page"],
+             "abschnitte": len(q["texts"])} for q in quellen]
 
 
 def _sse(art, nutzlast):

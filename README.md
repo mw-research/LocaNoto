@@ -252,6 +252,10 @@ curl -N -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/jso
 Im Rumpf von `/frage` sind `top_k`, `dateien`, `sachgebiete` und `verlauf`
 optional — dieselben Einschränkungen wie die Filter in der Seitenleiste.
 
+`quellen` nennt standardmäßig nur Datei, Seite und die Zahl der Abschnitte.
+Ein Tabellenabschnitt ist mehrere Kilobyte groß; im Terminal überdeckt er
+die Antwort, um die es ging. Mit `"quellen_texte": true` kommen sie mit.
+
 ### Erreichbarkeit
 
 Der Port ist an `127.0.0.1` gebunden: erreichbar vom Server selbst und über
