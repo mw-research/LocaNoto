@@ -47,3 +47,6 @@ config/tabellen_pfad.txt.neu
 config/*_prompt.txt
 config/*_prompt.txt.neu
 config/glossar.txt.neu
+
+# Kennungen laufender Hintergrundvorgaenge
+lauf_*.pid
