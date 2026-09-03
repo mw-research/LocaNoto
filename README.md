@@ -30,6 +30,11 @@ Sachgebiete dienen dazu, die Suche auf einen Teil des Bestands einzugrenzen.
 Ist eines ausgewählt, berücksichtigen Vektor- und Keyword-Suche nur die
 Dokumente daraus.
 
+**Beim Hochladen** wird das Sachgebiet mit ausgewählt; über **+ neues
+anlegen** entsteht dabei ein neues. Die Datei landet im zugehörigen
+Unterordner, damit ein späterer vollständiger Ingest dieselbe Zuordnung
+findet — bliebe sie im Wurzelverzeichnis, wäre sie danach wieder `(Basis)`.
+
 Sie sind optional: liegen alle Dateien direkt in `data/dokumente/`, gibt es
 nur `(Basis)` und der Filter wird nicht eingeblendet.
 
@@ -374,7 +379,8 @@ ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
 ## 📊 Listen aus Tabellendateien
 
 Bestandslisten, Preislisten, Zuordnungen: `xlsx`, `xlsm`, `csv` und `tsv`
-unter `data/tabellen/`. **Sie werden nicht vektorisiert.** Eine Liste mit
+unter `data/tabellen/` — oder in einem beliebigen anderen Verzeichnis, siehe
+unten. **Sie werden nicht vektorisiert.** Eine Liste mit
 zehntausenden Zeilen zeilenweise einzubetten kostet Stunden Modellzeit, ist
 beim nächsten Export veraltet, und semantische Ähnlichkeit ist bei
 Teilenummern und Mengen ohnehin das falsche Werkzeug.
@@ -403,6 +409,31 @@ ihn nennen kann.
 
 Zwischengespeichert wird nur, solange Änderungsdatum und Größe gleich
 bleiben. Ein neuer Export wirkt damit ab der nächsten Frage.
+
+### Ordner außerhalb des Containers
+
+Liegen die Listen im Netzlaufwerk der Firma und werden dort von den
+Fachabteilungen gepflegt, muss sie niemand zweimal ablegen. In der
+`docker-compose.override.yaml`:
+
+```yaml
+services:
+  locanoto_bot:
+    volumes:
+      - /mnt/firma/listen:/listen:ro
+```
+
+und in der `.env`:
+
+```
+TABELLEN_PFAD=/listen
+```
+
+Eine **Nur-Lese-Einhängung genügt** — die Anwendung schreibt dort nicht
+hinein. Der Katalog liegt weiterhin im Datenverzeichnis, nicht beim Ordner.
+
+Ist das Verzeichnis nicht erreichbar, erscheint das als Fehler im Katalog;
+die Anwendung läuft ohne Listen weiter.
 
 ### Große Listen
 

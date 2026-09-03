@@ -34,7 +34,14 @@ CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
 
 # Tabellendateien -- Bestands- und Preislisten. Sie werden nicht
 # vektorisiert, sondern bei der Frage gelesen; siehe tabellen.py.
-TABELLEN_DIR = os.path.join(DATA_DIR, "tabellen")
+#
+# TABELLEN_PFAD zeigt den Ordner woanders hin. Gedacht fuer den Fall, dass
+# die Listen in einem Netzlaufwerk der Firma liegen und dort von den
+# Fachabteilungen gepflegt werden: dann wird dieses Verzeichnis in den
+# Container eingehaengt, und niemand muss Dateien zweimal ablegen. Ein
+# Nur-Lese-Mount genuegt -- die Anwendung schreibt dort nicht hinein.
+TABELLEN_DIR = os.getenv("TABELLEN_PFAD", "").strip() or os.path.join(
+    DATA_DIR, "tabellen")
 
 # Benutzerdatei bewusst NICHT unter data/: dieser Ordner wird zwischen
 # Installationen weitergegeben, und Passwort-Hashes haben darin nichts zu
@@ -58,9 +65,14 @@ COLLECTION_NAME = "pdf_documents"
 
 def bootstrap():
     """Legt die data/- und config/-Struktur an, falls sie fehlt. Idempotent."""
-    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR,
-              TABELLEN_DIR):
+    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR):
         os.makedirs(d, exist_ok=True)
+    try:
+        # Der Listenordner kann ausserhalb liegen und nur lesbar eingehaengt
+        # sein. Dass er sich nicht anlegen laesst, ist dann kein Fehler.
+        os.makedirs(TABELLEN_DIR, exist_ok=True)
+    except OSError:
+        pass
     return DATA_DIR
 
 

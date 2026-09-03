@@ -369,12 +369,24 @@ def list_foreign_private_documents(current_user):
     return sorted(seen)
 
 
-def process_uploaded_pdf(uploaded_file, is_shared):
-    """Liest ein PDF ein, speichert es dauerhaft, isoliert Tabellen und vektorisiert beides."""
+def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
+    """Liest ein PDF ein, speichert es dauerhaft, isoliert Tabellen und vektorisiert beides.
+
+    sachgebiet bestimmt den Unterordner und die Metadaten der Abschnitte --
+    dieselbe Zuordnung, die der Ingest aus der Ordnerstruktur ableitet. Ohne
+    Angabe landet die Datei wie zuvor direkt in data/dokumente/.
+    """
     access_type = "shared" if is_shared else "private"
+    sachgebiet = (sachgebiet or "(Basis)").strip() or "(Basis)"
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
-    pdf_path = os.path.join(DOCS_DIR, uploaded_file.name)
+    # In den Unterordner des Sachgebiets, damit ein spaeterer
+    # vollstaendiger Ingest dieselbe Zuordnung findet. Blieb die Datei im
+    # Wurzelverzeichnis, waere sie danach wieder "(Basis)".
+    ziel_ordner = (DOCS_DIR if sachgebiet == "(Basis)"
+                   else os.path.join(DOCS_DIR, sachgebiet))
+    os.makedirs(ziel_ordner, exist_ok=True)
+    pdf_path = os.path.join(ziel_ordner, uploaded_file.name)
     with open(pdf_path, "wb") as f:
         f.write(uploaded_file.getvalue())
         
@@ -401,7 +413,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
                 metadatas.append({
                     "file_name": uploaded_file.name,
                     "page": page_num + 1,
-                    "folder": "(Basis)",
+                    "folder": sachgebiet,
                     "access": access_type,
                     "owner": st.session_state["username"],
                     "type": "table"
@@ -423,7 +435,7 @@ def process_uploaded_pdf(uploaded_file, is_shared):
                 metadatas.append({
                     "file_name": uploaded_file.name,
                     "page": page_num + 1,
-                    "folder": "(Basis)",
+                    "folder": sachgebiet,
                     "access": access_type,
                     "owner": st.session_state["username"],
                     "type": "text"
@@ -629,6 +641,27 @@ with st.sidebar:
     # und eine Datei mit der Endung .PDF wuerde sonst abgelehnt.
     uploaded_file = st.file_uploader("PDF hochladen", type=["pdf", "PDF"])
     if uploaded_file:
+        # --- SACHGEBIET ---
+        #
+        # Die Zuordnung entsteht sonst allein aus der Ordnerstruktur, die
+        # beim Ingest gilt. Ein Upload landete deshalb immer in "(Basis)"
+        # und war ueber den Sachgebietsfilter nicht zu erreichen.
+        _wahl = st.selectbox(
+            "Sachgebiet",
+            ["(Basis)"] + [g for g in all_folders if g != "(Basis)"]
+            + ["+ neues anlegen"],
+            help="Bestimmt, in welchem Unterordner die Datei liegt und unter "
+                 "welchem Sachgebiet sie gefunden wird.")
+        if _wahl == "+ neues anlegen":
+            _neu = st.text_input("Name des neuen Sachgebiets").strip()
+            # Ein Ordnername, nicht ein beliebiger Pfad: alles andere waere
+            # eine Einladung, mit ../ aus dem Datenverzeichnis zu geraten.
+            sachgebiet = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]", "", _neu).strip()
+            if _neu and not sachgebiet:
+                st.warning("Der Name enthaelt nur unzulaessige Zeichen.")
+        else:
+            sachgebiet = _wahl
+
         # Nur Admins duerfen in den globalen Pool schreiben -- passend dazu,
         # dass auch nur sie daraus loeschen koennen.
         if is_admin():
@@ -636,10 +669,11 @@ with st.sidebar:
         else:
             is_shared = False
             st.caption("Der Upload ist privat und nur für dich sichtbar.")
-        if st.button("Hochladen & Vektorisieren"):
+        if st.button("Hochladen & Vektorisieren", disabled=not sachgebiet):
             with st.spinner("Verarbeite PDF (das kann kurz dauern)..."):
-                process_uploaded_pdf(uploaded_file, is_shared)
-            st.success(f"'{uploaded_file.name}' erfolgreich hinzugefügt!")
+                process_uploaded_pdf(uploaded_file, is_shared, sachgebiet)
+            st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' hinzugefügt!")
+            refresh_document_index()
             time.sleep(1)
             st.rerun()
 
