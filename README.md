@@ -466,8 +466,8 @@ dann zwar richtig, das Modell kann seine Auskunft aber nicht benennen.
 Die Kopfzeile wird deshalb gesucht: gewertet nach gefüllten Zellen und
 Textanteil, denn eine Kopfzeile ist breit und besteht aus Wörtern, eine
 Datenzeile ist schmaler und enthält Zahlen. Leerzeilen unter der Tabelle
-fallen weg — eine Inventurliste mit 60 Positionen meldete sich vorher als
-1234 Zeilen.
+fallen weg; ohne das meldet sich eine Liste leicht mit dem Vielfachen
+ihrer tatsächlichen Positionen.
 
 Unter **Erkannte Blätter** steht je Blatt, welche Zeile genommen wurde und
 wie die Spalten heißen. Verwalter können die Zeile dort korrigieren; die
@@ -552,9 +552,21 @@ Kommentare, kein `INTO`, keine Prozeduraufrufe. **Es wird kein erzeugter
 Code ausgeführt.**
 
 Beispielwerte aus den Spalten gehen in den Prompt — das ist der einzige Teil
-des Katalogs, der echte Daten an das Modell trägt. `TABELLEN_BEISPIELE_BIS`
-und `TABELLEN_BEISPIELE` begrenzen ihn; auf `0` gesetzt bleiben nur die
-Spaltennamen.
+des Katalogs, der echte Daten an das Modell trägt. Sie sind zugleich der
+nützlichste Teil: eine Spalte `Status` sagt wenig, `Status: frei, gesperrt`
+sagt alles.
+
+Wo das nicht in Ordnung ist — eine Lieferantenliste trägt Firmennamen —
+begrenzt `TABELLEN_BEISPIELE_BIS` die Vielfalt, ab der eine Spalte
+aufgezählt wird, und `TABELLEN_BEISPIELE` die Zahl der Werte:
+
+```
+TABELLEN_BEISPIELE_BIS=0
+```
+
+**schaltet sie vollständig ab.** Dann stehen nur Spaltennamen im Katalog;
+das Modell findet die richtige Liste weiterhin, muss aber ohne Kenntnis der
+Werte auskommen.
 
 ## 🎛️ Voreinstellungen
 
