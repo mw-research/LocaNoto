@@ -370,6 +370,30 @@ für das, was wirklich haussprachlich ist.
 zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
 ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
 
+## 📜 Prompts anpassen
+
+Zwei Vorlagen bestimmen, wonach gesucht und wie geantwortet wird:
+
+| Datei | wofür |
+|---|---|
+| `search_prompt.txt` | aus der Frage werden drei Suchanfragen |
+| `system_prompt.txt` | Rolle, Regeln, Umgang mit Quellen |
+
+Verwalter bearbeiten sie in der Seitenleiste unter **📜 Prompts bearbeiten**.
+Gespeichert wird nach `config/`, also ins eingehängte Verzeichnis — die
+Änderung wirkt bei der nächsten Frage, ohne Rebuild. **Auf Vorlage
+zurücksetzen** entfernt die eigene Fassung wieder; die mitgelieferte gilt
+dann erneut.
+
+**Pflicht-Platzhalter werden geprüft.** Verschwindet `{CONTEXT_PLATZHALTER}`
+aus dem Antwort-Prompt, bekommt das Sprachmodell die gefundenen Abschnitte
+nicht mehr — es antwortet dann aus dem, was es ohnehin zu wissen glaubt, mit
+erfundenen Fundstellen und ohne jede Fehlermeldung. Ein Speichern ohne die
+nötigen Platzhalter wird deshalb abgelehnt.
+
+Die Vorlagen sind für Verwalter da, nicht für jeden Nutzer: eine unglückliche
+Formulierung wirkt auf jede Antwort, die danach gegeben wird.
+
 ## 🔐 Rechte
 
 | Bereich | sichtbar für | löschen darf |

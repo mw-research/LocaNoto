@@ -59,6 +59,19 @@ def bootstrap():
     return DATA_DIR
 
 
+def resolve_prompt(name):
+    """Effektiver Pfad zu einer Prompt-Vorlage.
+
+    config/ zuerst: dort liegt die im Betrieb bearbeitete Fassung, und das
+    Verzeichnis ist eingehaengt. Fehlt sie, gilt die mitgelieferte neben dem
+    Code.
+    """
+    eigen = os.path.join(CONFIG_DIR, name)
+    if os.path.exists(eigen):
+        return eigen
+    return os.path.join(BASE_DIR, name)
+
+
 def resolve_glossar():
     """Effektiver Pfad zum Glossar.
 

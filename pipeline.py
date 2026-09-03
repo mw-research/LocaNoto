@@ -64,12 +64,13 @@ def _vorlage(dateiname, rueckfall):
 
     Als Datei, damit sich die Formulierung je Bestand anpassen laesst: was
     ein Regelwerk braucht (Fundstelle, Tabelle, Anhang), ist bei einer
-    Papersammlung die falsche Frage. Fehlt die Datei, greift der Rueckfall
-    -- eine geloeschte Vorlage legt die Anwendung nicht lahm.
+    Papersammlung die falsche Frage. Bearbeitet wird sie unter config/ --
+    paths.resolve_prompt() nimmt die dortige Fassung, sonst die
+    mitgelieferte. Fehlt beides, greift der Rueckfall: eine geloeschte
+    Vorlage legt die Anwendung nicht lahm.
     """
     try:
-        with open(os.path.join(paths.BASE_DIR, dateiname),
-                  "r", encoding="utf-8") as f:
+        with open(paths.resolve_prompt(dateiname), "r", encoding="utf-8") as f:
             return f.read()
     except OSError:
         return rueckfall
