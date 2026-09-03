@@ -665,6 +665,49 @@ with st.sidebar:
                         time.sleep(1)
                         st.rerun()
 
+            # --- HOCHLADEN ---
+            #
+            # Ohne das ginge es nur ueber das Terminal. Wer eine Liste hat,
+            # soll sie ablegen koennen, ohne Serverzugang zu brauchen.
+            if tabellen.beschreibbar():
+                _hoch = st.file_uploader(
+                    "Liste hochladen", accept_multiple_files=True,
+                    type=[e.lstrip(".") for e in tabellen.ENDUNGEN],
+                    key="listen_upload")
+                if _hoch:
+                    _bekannt = [b for b in tabellen.bereiche(_eintraege)
+                                if b != "(Basis)"]
+                    _bwahl = st.selectbox(
+                        "Bereich fuer den Upload",
+                        ["(Basis)"] + _bekannt + ["+ neues anlegen"],
+                        key="listen_upload_bereich")
+                    if _bwahl == "+ neues anlegen":
+                        _bneu = st.text_input("Name des neuen Bereichs",
+                                              key="listen_upload_neu")
+                        _ziel_bereich = _bneu.strip()
+                    else:
+                        _ziel_bereich = "" if _bwahl == "(Basis)" else _bwahl
+
+                    if st.button(f"{len(_hoch)} Datei(en) ablegen und einlesen",
+                                 use_container_width=True):
+                        _abgelegt, _misslungen = [], []
+                        for _f in _hoch:
+                            ok, meldung = tabellen.lege_ab(
+                                _f.getvalue(), _f.name, _ziel_bereich)
+                            (_abgelegt if ok else _misslungen).append(meldung)
+                        with st.spinner("Lese Listen ein ..."):
+                            neu, fehler = tabellen.baue_katalog()
+                        if _abgelegt:
+                            st.success("Abgelegt: " + ", ".join(_abgelegt))
+                        for m in _misslungen:
+                            st.error(m)
+                        if _abgelegt:
+                            time.sleep(1)
+                            st.rerun()
+            else:
+                st.caption("Der Ordner ist nicht beschreibbar -- die Dateien "
+                           "werden dort gepflegt, wo sie liegen.")
+
             if st.button("Listen neu einlesen", use_container_width=True,
                          help="Liest den Ordner vollstaendig neu ein. "
                               "Fuer geaenderte Zeilen nicht noetig."):
