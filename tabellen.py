@@ -39,7 +39,10 @@ import sqlite3
 import paths
 import sqlpruefung
 
-VERZEICHNIS = os.path.join(paths.DATA_DIR, "tabellen")
+VERZEICHNIS = paths.TABELLEN_DIR
+
+# Der Katalog liegt bewusst NICHT beim Ordner: der kann ausserhalb und nur
+# lesbar eingehaengt sein, etwa ein Netzlaufwerk der Firma.
 KATALOG = os.path.join(paths.DATA_DIR, "tabellen_katalog.json")
 
 ENDUNGEN = (".xlsx", ".xlsm", ".csv", ".tsv")
@@ -136,8 +139,13 @@ def baue_katalog():
     eine unlesbare Datei soll den Katalog nicht verhindern, aber auch nicht
     stillschweigend fehlen.
     """
-    os.makedirs(VERZEICHNIS, exist_ok=True)
+    try:
+        os.makedirs(VERZEICHNIS, exist_ok=True)
+    except OSError:
+        pass
     eintraege, fehler = [], []
+    if not os.path.isdir(VERZEICHNIS):
+        fehler.append((VERZEICHNIS, "Ordner nicht erreichbar"))
 
     for wurzel, _, dateien in os.walk(VERZEICHNIS):
         for name in sorted(dateien):
