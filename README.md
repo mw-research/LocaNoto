@@ -464,8 +464,8 @@ abfragbaren Liste. Eine Voreinstellung wählt einen Bereich, keinen Pfad.
 ### Ordner außerhalb des Containers
 
 Liegen die Listen im Netzlaufwerk der Firma und werden dort von den
-Fachabteilungen gepflegt, muss sie niemand zweimal ablegen. In der
-`docker-compose.override.yaml`:
+Fachabteilungen gepflegt, muss sie niemand zweimal ablegen. Das Verzeichnis
+einhängen — `docker-compose.override.yaml`:
 
 ```yaml
 services:
@@ -474,17 +474,23 @@ services:
       - /mnt/firma/listen:/listen:ro
 ```
 
-und in der `.env`:
+Dann in der Seitenleiste unter **📊 Listen** das Feld **Ordner** auf
+`/listen` setzen und **Ordner verknüpfen und einlesen** drücken. Der Pfad
+liegt in `config/tabellen_pfad.txt` und überlebt Updates.
 
-```
-TABELLEN_PFAD=/listen
-```
+Ohne Oberfläche geht dasselbe über `TABELLEN_PFAD` in der `.env`. Die
+Reihenfolge: eingetragener Pfad, dann `TABELLEN_PFAD`, dann
+`data/tabellen/`.
 
 Eine **Nur-Lese-Einhängung genügt** — die Anwendung schreibt dort nicht
-hinein. Der Katalog liegt weiterhin im Datenverzeichnis, nicht beim Ordner.
+hinein. Der Katalog liegt im Datenverzeichnis, nicht beim Ordner; genau
+dieser Fall hätte ihn sonst unmöglich gemacht.
 
-Ist das Verzeichnis nicht erreichbar, erscheint das als Fehler im Katalog;
-die Anwendung läuft ohne Listen weiter.
+Der Pfad muss der Pfad **im Container** sein, nicht der des Hosts. Gibt es
+ihn dort nicht, sagt die Oberfläche das beim Verknüpfen — dann fehlt die
+Einhängung. Gelesen werden ausschließlich `xlsx`, `xlsm`, `csv` und `tsv`;
+höchstens `TABELLEN_MAX_DATEIEN` Dateien, damit ein versehentliches `/`
+nicht den ganzen Container durchläuft.
 
 ### Große Listen
 

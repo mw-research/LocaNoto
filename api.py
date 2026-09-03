@@ -162,7 +162,7 @@ def _listenstand():
         "gross": sum(1 for e in eintraege if e.get("gross")),
         "bereiche": tabellen.bereiche(eintraege),
         "nicht_lesbar": len(katalog.get("fehler", [])),
-        "ordner": tabellen.VERZEICHNIS,
+        "ordner": tabellen.pfad(),
     }
 
 
