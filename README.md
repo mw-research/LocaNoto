@@ -12,6 +12,7 @@ Der Container spricht zur Laufzeit nur mit den Modellservern, die in der `.env` 
 * **HTTP-Schnittstelle:** Dieselbe Suche ohne Browser — eine Frage aus dem Terminal, ein Skript. Zugang über ein Token je Nutzer; die Trennung zwischen privaten und geteilten Dokumenten gilt dort genauso.
 * **Sprachgebrauch und Rückmeldungen:** Fragen, die nichts finden, werden festgehalten; Nutzer können jede Antwort bewerten. Aus dieser Liste wächst ein Glossar der Hauswörter, die in den Dokumenten anders heißen.
 * **Listen aus Tabellendateien:** `xlsx` und `csv` unter `data/tabellen/` werden nicht vektorisiert. Ein Katalog hält ihre Struktur, die Zeilen liest die Anwendung bei jeder Frage frisch — geänderte Listen wirken sofort.
+* **Formate:** PDF, Word, Markdown und Text werden vektorisiert; bei den Formaten ohne Seiten tritt ein Abschnitt an die Stelle der Seitenzahl.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete
@@ -57,6 +58,30 @@ Die Struktur wird beim ersten Start automatisch angelegt. Ein vorhandener
 
 > **Hinweis zur Weitergabe:** `data/chats/` enthält die Chatverläufe aller
 > Nutzer. Vor der Weitergabe an Dritte entfernen.
+
+## 📄 Formate
+
+Vektorisiert werden PDF, Word (`docx`), Markdown (`md`, `markdown`) und
+einfacher Text (`txt`) — über den Upload wie über den Ingest.
+
+PDFs gehen den bisherigen Weg: Seiten, Tabellenerkennung über die Fläche,
+Entfernen laufender Kopfzeilen, Wiederaufsetzen ab der zuletzt
+geschriebenen Seite.
+
+Die anderen Formate haben keine Seiten. Dort tritt ein **Abschnitt** an
+ihre Stelle: bei Markdown eine Überschrift mit ihrem Text, bei Word ein
+Abschnitt je Überschrift und je Tabelle. Die Abschnittsnummer steht in den
+Metadaten und in der Quellenangabe, wo sonst die Seitenzahl steht.
+
+Die Überschrift bleibt dabei im Text des Abschnitts stehen — dieselbe
+Erfahrung wie bei den Tabellen: die Zeile darüber ist der wirksamste Anker
+im Bestand.
+
+Tabellen aus Word werden zu eigenen Abschnitten mit der vorangehenden
+Überschrift als Kontext. `xlsx` und `csv` gehören **nicht** hierher; für
+Listen siehe *Listen aus Tabellendateien*.
+
+Die Vorschau der Originalseite unter einer Quelle gibt es nur bei PDFs.
 
 ## ⚙️ Ingest
 
