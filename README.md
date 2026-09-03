@@ -11,6 +11,7 @@ Der Container spricht zur Laufzeit nur mit den Modellservern, die in der `.env` 
 * **Bilder im Chat:** An eine Frage lassen sich Bilder anhängen — ein Bildschirmausschnitt, ein Foto einer Anlage, eine abfotografierte Seite. Das Sehmodell wandelt sie in Text um; dieser Text dient als zusätzliche Suchsonde und geht gekennzeichnet in den Kontext der Antwort ein. Das Chat-Modell bekommt das Bild nicht und kann ein reines Textmodell bleiben.
 * **HTTP-Schnittstelle:** Dieselbe Suche ohne Browser — eine Frage aus dem Terminal, ein Skript. Zugang über ein Token je Nutzer; die Trennung zwischen privaten und geteilten Dokumenten gilt dort genauso.
 * **Sprachgebrauch und Rückmeldungen:** Fragen, die nichts finden, werden festgehalten; Nutzer können jede Antwort bewerten. Aus dieser Liste wächst ein Glossar der Hauswörter, die in den Dokumenten anders heißen.
+* **Listen aus Tabellendateien:** `xlsx` und `csv` unter `data/tabellen/` werden nicht vektorisiert. Ein Katalog hält ihre Struktur, die Zeilen liest die Anwendung bei jeder Frage frisch — geänderte Listen wirken sofort.
 * **Multi-Tenant-Architektur:** Getrennte Sichtbarkeit von Dokumenten und Chats je Nutzer.
 
 ## 🗂️ Sachgebiete
@@ -369,6 +370,63 @@ für das, was wirklich haussprachlich ist.
 **Nur geprüfte Zuordnungen eintragen.** Ein falscher Eintrag lenkt die Suche
 zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
 ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
+
+## 📊 Listen aus Tabellendateien
+
+Bestandslisten, Preislisten, Zuordnungen: `xlsx`, `xlsm`, `csv` und `tsv`
+unter `data/tabellen/`. **Sie werden nicht vektorisiert.** Eine Liste mit
+zehntausenden Zeilen zeilenweise einzubetten kostet Stunden Modellzeit, ist
+beim nächsten Export veraltet, und semantische Ähnlichkeit ist bei
+Teilenummern und Mengen ohnehin das falsche Werkzeug.
+
+Stattdessen dasselbe Vorgehen wie bei einer Datenbank: erst entscheiden, wo
+die Antwort stehen könnte, dann dort gezielt nachsehen.
+
+### Der Katalog
+
+Beim Einlesen wird je Datei und Blatt mechanisch erfasst, was darin steht:
+Spaltennamen, Zeilenzahl, und bei Spalten mit wenigen verschiedenen Werten
+deren Liste. Der letzte Teil ist der nützlichste — eine Spalte `Status` sagt
+wenig, `Status: frei, gesperrt, ausgebucht` sagt alles. Kein Modell nötig,
+in Sekunden erledigt.
+
+Spaltennamen werden dabei auf eine abfragbare Form gebracht (`Teile-Nr.` →
+`teile_nr`); der Originalname steht im Katalog daneben, damit die Antwort
+ihn nennen kann.
+
+### Was wann aktualisiert werden muss
+
+| Änderung | nötig |
+|---|---|
+| Zeilen geändert, ergänzt, gelöscht | **nichts** — die Datei wird bei jeder Frage frisch gelesen |
+| neue Datei, neues Blatt, neue Spalte | **Listen neu einlesen** in der Seitenleiste |
+
+Zwischengespeichert wird nur, solange Änderungsdatum und Größe gleich
+bleiben. Ein neuer Export wirkt damit ab der nächsten Frage.
+
+### Große Listen
+
+Blätter ab `TABELLEN_GROSS_AB` Zeilen (Vorgabe 50.000) stehen im Katalog,
+werden aber **nicht abgefragt**, solange sie nicht ausdrücklich per Häkchen
+einbezogen werden — sie müssen bei jeder Frage vollständig geladen werden,
+und das dauert spürbar. Die Oberfläche weist beim Einschalten darauf hin.
+
+Ist eine Liste dauerhaft zu groß, gehört sie in eine Datenbank und nicht in
+einen Ordner.
+
+### Sicherheit
+
+Das Modell formuliert eine `SELECT`-Anweisung; ausgeführt wird sie gegen das
+eine gewählte Blatt in einer SQLite-Datenbank im Arbeitsspeicher. Geprüft
+wird sie mit derselben Kette wie eine Abfrage an einen SQL-Server
+(`sqlpruefung.py`): genau eine Anweisung, nur `SELECT` oder `WITH`, keine
+Kommentare, kein `INTO`, keine Prozeduraufrufe. **Es wird kein erzeugter
+Code ausgeführt.**
+
+Beispielwerte aus den Spalten gehen in den Prompt — das ist der einzige Teil
+des Katalogs, der echte Daten an das Modell trägt. `TABELLEN_BEISPIELE_BIS`
+und `TABELLEN_BEISPIELE` begrenzen ihn; auf `0` gesetzt bleiben nur die
+Spaltennamen.
 
 ## 🎛️ Voreinstellungen
 

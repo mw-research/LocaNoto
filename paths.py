@@ -32,6 +32,10 @@ DOCS_DIR = os.path.join(DATA_DIR, "dokumente")
 CHATS_DIR = os.path.join(DATA_DIR, "chats")
 CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
 
+# Tabellendateien -- Bestands- und Preislisten. Sie werden nicht
+# vektorisiert, sondern bei der Frage gelesen; siehe tabellen.py.
+TABELLEN_DIR = os.path.join(DATA_DIR, "tabellen")
+
 # Benutzerdatei bewusst NICHT unter data/: dieser Ordner wird zwischen
 # Installationen weitergegeben, und Passwort-Hashes haben darin nichts zu
 # suchen. config/ wird als Verzeichnis gemountet -- ein Bind-Mount auf eine
@@ -54,7 +58,8 @@ COLLECTION_NAME = "pdf_documents"
 
 def bootstrap():
     """Legt die data/- und config/-Struktur an, falls sie fehlt. Idempotent."""
-    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR):
+    for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, CHROMA_DIR, CONFIG_DIR,
+              TABELLEN_DIR):
         os.makedirs(d, exist_ok=True)
     return DATA_DIR
 
