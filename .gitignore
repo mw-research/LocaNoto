@@ -41,6 +41,8 @@ glossar.txt
 config/glossar.txt
 config/presets/
 config/tabellen_pfad.txt
+config/tabellen_kopf.json
+config/tabellen_kopf.json.neu
 config/tabellen_pfad.txt.neu
 config/*_prompt.txt
 config/*_prompt.txt.neu

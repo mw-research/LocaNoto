@@ -456,6 +456,29 @@ ihn nennen kann.
 Zwischengespeichert wird nur, solange Änderungsdatum und Größe gleich
 bleiben. Ein neuer Export wirkt damit ab der nächsten Frage.
 
+### Kopfzeilen
+
+Echte Tabellen fangen selten in Zeile 1 an — darüber stehen ein Titel, ein
+Ausdruckdatum oder eine Leerzeile, und darunter oft noch eine. Wer stur die
+erste Zeile nimmt, bekommt Spalten namens `Unnamed: 1`; die Antworten sind
+dann zwar richtig, das Modell kann seine Auskunft aber nicht benennen.
+
+Die Kopfzeile wird deshalb gesucht: gewertet nach gefüllten Zellen und
+Textanteil, denn eine Kopfzeile ist breit und besteht aus Wörtern, eine
+Datenzeile ist schmaler und enthält Zahlen. Leerzeilen unter der Tabelle
+fallen weg — eine Inventurliste mit 60 Positionen meldete sich vorher als
+1234 Zeilen.
+
+Unter **Erkannte Blätter** steht je Blatt, welche Zeile genommen wurde und
+wie die Spalten heißen. Verwalter können die Zeile dort korrigieren; die
+Angabe liegt in `config/tabellen_kopf.json` und gilt, bis sie
+zurückgenommen wird.
+
+Sieht eine Erkennung falsch aus, fällt das dort auf: Spalten heißen dann
+`Spalte 1`, `Spalte 2`, und darüber steht eine Warnung. Eine falsche
+Kopfzeile lässt das Blatt sichtbar falsch aussehen statt es aus dem Katalog
+zu entfernen.
+
 ### Bereiche
 
 Unterordner des Listenordners werden als **Bereich** übernommen — für Listen

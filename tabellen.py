@@ -126,6 +126,14 @@ KATALOG_MAX_CHARS = paths.env_int("TABELLEN_KATALOG_MAX_CHARS", 12_000)
 
 MAX_ZEILEN = paths.env_int("TABELLEN_MAX_ZEILEN", 200)
 
+# Von Hand gesetzte Kopfzeilen. Die Erkennung liegt meistens richtig --
+# wo nicht, ist der Katalog fuer diese Datei falsch, und das faellt erst
+# auf, wenn eine Antwort nicht stimmt.
+KOPF_DATEI = os.path.join(paths.CONFIG_DIR, "tabellen_kopf.json")
+
+# So viele Zeilen werden nach der Kopfzeile abgesucht.
+KOPF_SUCHEN = paths.env_int("TABELLEN_KOPF_SUCHEN", 15)
+
 MARKER_KEINE_ABFRAGE = "KEINE_ABFRAGE"
 
 _zwischenspeicher = {}
@@ -158,22 +166,131 @@ def sicherer_name(name, vergeben):
 
 # --- EINLESEN ---
 
-def _blaetter(pfad):
-    """(blattname, dataframe) je Blatt einer Datei."""
+_ZAHL = re.compile(r"[-+]?[\d.,]+\s*%?")
+
+
+def _ist_zahl(x):
+    return bool(_ZAHL.fullmatch(str(x).strip()))
+
+
+def finde_kopfzeile(roh, pruefen=None):
+    """Welche Zeile die Spaltennamen traegt.
+
+    Echte Tabellen fangen selten in Zeile 1 an: darueber stehen ein Titel,
+    ein Ausdruckdatum, eine Leerzeile. Wer stur die erste Zeile nimmt,
+    bekommt Spalten namens "Unnamed: 1" -- und das Sprachmodell weiss dann
+    nicht, was in ihnen steht, obwohl die Daten in Ordnung sind.
+
+    Gewertet wird nach gefuellten Zellen und Textanteil: eine Kopfzeile ist
+    breit und besteht aus Woertern, eine Datenzeile ist oft schmaler und
+    enthaelt Zahlen. Bei Gleichstand gewinnt die obere.
+    """
+    pruefen = KOPF_SUCHEN if pruefen is None else pruefen
+    beste, bestwert = 0, -1
+    for i in range(min(pruefen, len(roh))):
+        gefuellt = [str(x).strip() for x in roh.iloc[i] if str(x).strip()]
+        if len(gefuellt) < 2 or i >= len(roh) - 1:
+            continue
+        wert = len(gefuellt) + sum(1 for x in gefuellt if not _ist_zahl(x))
+        if wert > bestwert:
+            beste, bestwert = i, wert
+    return beste
+
+
+def _kopfzeilen():
+    """Von Hand gesetzte Kopfzeilen, je 'datei#blatt'."""
+    try:
+        with open(KOPF_DATEI, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def setze_kopfzeile(datei, blatt, zeile):
+    """Setzt die Kopfzeile eines Blattes von Hand. zeile=None loescht sie.
+
+    Die Erkennung liegt meistens richtig und manchmal daneben. Wo sie
+    danebenliegt, ist der Katalog fuer diese Datei falsch -- und das faellt
+    erst auf, wenn eine Antwort nicht stimmt. Deshalb muss sich das von Hand
+    richtigstellen lassen.
+    """
+    d = _kopfzeilen()
+    schluessel = f"{datei}#{blatt}" if blatt else datei
+    if zeile is None:
+        d.pop(schluessel, None)
+    else:
+        d[schluessel] = int(zeile)
+    try:
+        os.makedirs(paths.CONFIG_DIR, exist_ok=True)
+        vorlaeufig = KOPF_DATEI + ".neu"
+        with open(vorlaeufig, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=1, ensure_ascii=False)
+        os.replace(vorlaeufig, KOPF_DATEI)
+    except OSError as e:
+        return False, f"Konnte nicht gespeichert werden: {e}"
+    _zwischenspeicher.clear()
+    return True, "Gespeichert."
+
+
+def _aufbereiten(roh, schluessel):
+    """(dataframe, kopfzeile) -- Kopf gesetzt, Leerzeilen entfernt."""
+    gesetzt = _kopfzeilen().get(schluessel)
+    k = int(gesetzt) if gesetzt is not None else finde_kopfzeile(roh)
+    k = max(0, min(k, max(0, len(roh) - 1)))
+
+    rahmen = roh.iloc[k + 1:].copy()
+
+    # Namen eindeutig und nicht leer machen. Trifft die Kopfzeile
+    # daneben, sind alle Zellen leer -- ohne das bekaemen alle Spalten
+    # denselben Namen, der Zugriff darauf liefert eine Tabelle statt
+    # einer Spalte, und das Blatt landete mit einem pandas-Fehler in
+    # der Fehlerliste statt im Katalog. Eine falsche Kopfzeile soll
+    # sichtbar falsch sein, nicht verschwinden: "Spalte 1" faellt
+    # beim Durchsehen auf.
+    namen, gesehen = [], {}
+    for j, x in enumerate(roh.iloc[k]):
+        n = str(x).strip().replace("\n", " ") or f"Spalte {j + 1}"
+        if n in gesehen:
+            gesehen[n] += 1
+            n = f"{n} ({gesehen[n]})"
+        else:
+            gesehen[n] = 1
+        namen.append(n)
+    rahmen.columns = namen
+    # Leerzeilen unter der Tabelle sind in Exportdateien die Regel. Sie
+    # blaehen die Zeilenzahl auf und machen jede Zaehlung falsch: eine
+    # Inventurliste mit 60 Positionen meldete sich als 1234 Zeilen.
+    rahmen = rahmen[rahmen.apply(
+        lambda r: any(str(x).strip() for x in r), axis=1)]
+    return rahmen.reset_index(drop=True), k
+
+
+def _blaetter(voll):
+    """(blattname, dataframe, kopfzeile) je Blatt einer Datei."""
     import pandas as pd
 
-    endung = os.path.splitext(pfad)[1].lower()
+    try:
+        rel = os.path.relpath(voll, pfad()).replace(os.sep, "/")
+    except ValueError:
+        rel = os.path.basename(voll)
+
+    endung = os.path.splitext(voll)[1].lower()
     if endung in (".csv", ".tsv"):
         trenner = "\t" if endung == ".tsv" else None
         # sep=None laesst pandas den Trenner erkennen -- deutsche Exporte
         # verwenden haeufig das Semikolon.
-        yield "", pd.read_csv(pfad, sep=trenner, engine="python",
-                              dtype=str, keep_default_na=False)
+        roh = pd.read_csv(voll, sep=trenner, engine="python", header=None,
+                          dtype=str, keep_default_na=False)
+        rahmen, k = _aufbereiten(roh, rel)
+        yield "", rahmen, k
         return
 
-    mappe = pd.ExcelFile(pfad)
+    mappe = pd.ExcelFile(voll)
     for blatt in mappe.sheet_names:
-        yield blatt, mappe.parse(blatt, dtype=str, keep_default_na=False)
+        roh = mappe.parse(blatt, header=None, dtype=str, keep_default_na=False)
+        rahmen, k = _aufbereiten(roh, f"{rel}#{blatt}")
+        yield blatt, rahmen, k
 
 
 def _spaltenangaben(rahmen):
@@ -224,10 +341,11 @@ def baue_katalog():
             datei_pfad = os.path.join(wurzel, name)
             rel = os.path.relpath(datei_pfad, ordner).replace("\\", "/")
             try:
-                for blatt, rahmen in _blaetter(datei_pfad):
+                for blatt, rahmen, kopf in _blaetter(datei_pfad):
                     eintraege.append({
                         "datei": rel,
                         "blatt": blatt,
+                        "kopfzeile": kopf,
                         "zeilen": int(len(rahmen)),
                         "gross": len(rahmen) >= GROSS_AB,
                         "spalten": _spaltenangaben(rahmen),
@@ -394,7 +512,7 @@ def _lade(datei, blatt):
         return _zwischenspeicher[kennung]
 
     rahmen = None
-    for name, r in _blaetter(voll):
+    for name, r, _ in _blaetter(voll):
         if name == blatt or not blatt:
             rahmen = r
             break
