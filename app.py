@@ -21,6 +21,7 @@ import feedback
 import prompts
 import presets
 import tabellen
+import lesen
 import sqlpruefung
 from textutils import strip_boilerplate
 from tables import build_table_chunks
@@ -390,10 +391,27 @@ def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
     with open(pdf_path, "wb") as f:
         f.write(uploaded_file.getvalue())
         
-    doc = pymupdf.open(pdf_path)
     chunks = []
     metadatas = []
     ids = []
+
+    # --- WORD, MARKDOWN, TEXT ---
+    #
+    # Ohne Seiten und ohne Tabellenflaechen; ein Abschnitt tritt an die
+    # Stelle einer Seite. Siehe lesen.py.
+    if lesen.unterstuetzt(uploaded_file.name):
+        for nummer, _titel, text in lesen.abschnitte(pdf_path):
+            for i, chunk in enumerate(text_splitter.split_text(text)):
+                chunks.append(chunk)
+                metadatas.append({
+                    "file_name": uploaded_file.name, "page": nummer,
+                    "folder": sachgebiet, "access": access_type,
+                    "owner": st.session_state["username"], "type": "text"})
+                ids.append(f"{uploaded_file.name}_p{nummer}_c{i}")
+        _speichern_chunks(chunks, metadatas, ids)
+        return
+
+    doc = pymupdf.open(pdf_path)
     
     
     for page_num in range(len(doc)):
@@ -442,26 +460,38 @@ def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
                 })
                 ids.append(f"{uploaded_file.name}_p{page_num+1}_text_{i}")
                 
-    if chunks:
-        # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
-        # HTTP-Anfrage an den Modellserver.
-        embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
+    _speichern_chunks(chunks, metadatas, ids)
 
-        keep = [i for i, v in enumerate(embeddings) if v is not None]
-        if not keep:
-            return
 
-        collection.add(
-            ids=[ids[i] for i in keep],
-            embeddings=[embeddings[i] for i in keep],
-            documents=[chunks[i] for i in keep],
-            metadatas=[metadatas[i] for i in keep],
-        )
-        # Beide Indizes im selben Schritt fuellen, damit Vektor- und
-        # Keyword-Suche nie auseinanderlaufen.
-        keyword_index.add_chunks(
-            ((ids[i], chunks[i], metadatas[i]) for i in keep))
-        refresh_document_index()
+def _speichern_chunks(chunks, metadatas, ids):
+    """Vektorisiert die Abschnitte und legt sie in beiden Indizes ab.
+
+    Herausgeloest, weil beide Wege sie brauchen -- der ueber pymupdf
+    fuer PDFs und der ueber lesen.py fuer Word und Markdown. Zweimal
+    geschrieben waere es die Sorte Verdopplung, bei der eine Haelfte
+    irgendwann nachgezogen wird und die andere nicht.
+    """
+    if not chunks:
+        return
+    # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
+    # HTTP-Anfrage an den Modellserver.
+    embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
+
+    keep = [i for i, v in enumerate(embeddings) if v is not None]
+    if not keep:
+        return
+
+    collection.add(
+        ids=[ids[i] for i in keep],
+        embeddings=[embeddings[i] for i in keep],
+        documents=[chunks[i] for i in keep],
+        metadatas=[metadatas[i] for i in keep],
+    )
+    # Beide Indizes im selben Schritt fuellen, damit Vektor- und
+    # Keyword-Suche nie auseinanderlaufen.
+    keyword_index.add_chunks(
+        ((ids[i], chunks[i], metadatas[i]) for i in keep))
+    refresh_document_index()
 
 # --- LISTEN FÜR DIE UI ---
 # Gecacht, weil dieser Block auf Modulebene liegt und damit bei JEDEM
@@ -773,8 +803,11 @@ with st.sidebar:
     # Wie beim Listen-Upload: ohne wechselnden Schluessel bleibt die Datei
     # nach dem Verarbeiten im Feld stehen.
     _pdf_nr = st.session_state.setdefault("pdf_upload_nr", 0)
-    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf", "PDF"],
-                                     key=f"pdf_upload_{_pdf_nr}")
+    uploaded_file = st.file_uploader(
+        "Dokument hochladen", key=f"pdf_upload_{_pdf_nr}",
+        type=["pdf", "PDF", "docx", "md", "markdown", "txt"],
+        help="PDF, Word, Markdown oder Text. Wird vektorisiert und "
+             "durchsuchbar.")
     if uploaded_file:
         # --- SACHGEBIET ---
         #
@@ -1274,7 +1307,12 @@ if collection.count() > 0:
                             st.info(t)
                         
                         pdf_path = os.path.join(DOCS_DIR, file_n)
-                        if os.path.exists(pdf_path) and isinstance(page_n, int):
+                        # Nur bei PDFs: bei Word oder Markdown ist "Seite"
+                        # eine Abschnittsnummer, und pymupdf kann die Datei
+                        # ohnehin nicht oeffnen.
+                        if (file_n.lower().endswith(".pdf")
+                                and os.path.exists(pdf_path)
+                                and isinstance(page_n, int)):
                             # Einzigartiger Key für diese Nachricht und diese Seite
                             chk_key = f"chk_{file_n}_{page_n}_{i}"
                             

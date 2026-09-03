@@ -133,6 +133,24 @@ def env_float(name, standard):
         return standard
 
 
+# Formate, die vektorisiert werden koennen. PDFs gehen ueber pymupdf mit
+# Seiten und Tabellenerkennung, alles andere ueber lesen.py mit
+# Abschnitten -- siehe dort, warum das getrennt bleibt.
+DOKUMENT_ENDUNGEN = (".pdf", ".docx", ".md", ".markdown", ".txt")
+
+
+def dokument_dateien(ordner=None, endungen=None):
+    """Alle lesbaren Dokumente unterhalb von data/dokumente."""
+    endungen = tuple(e.lower() for e in (endungen or DOKUMENT_ENDUNGEN))
+    ordner = ordner or DOCS_DIR
+    gefunden = []
+    for wurzel, _, dateien in os.walk(ordner):
+        for name in dateien:
+            if name.lower().endswith(endungen) and not name.startswith("~$"):
+                gefunden.append(os.path.join(wurzel, name))
+    return sorted(gefunden)
+
+
 def pdf_dateien(ordner=None):
     """Alle PDFs unterhalb von data/dokumente, rekursiv und sortiert.
 

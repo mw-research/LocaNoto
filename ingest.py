@@ -30,6 +30,7 @@ import llm
 from embedding import embed_batch
 from textutils import strip_boilerplate
 from tables import build_table_chunks, table_caption
+import lesen
 
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
@@ -46,13 +47,14 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=20
 
 # Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe
 # folder_of), und unabhaengig von der Gross-/Kleinschreibung der Endung.
-pdf_dateien = paths.pdf_dateien(ORDNER_NAME)
+dokumente = paths.dokument_dateien(ORDNER_NAME)
 
-if not pdf_dateien:
+if not dokumente:
     print(f"Keine PDFs in '{ORDNER_NAME}' gefunden.")
     raise SystemExit(0)
 
-print(f"Insgesamt {len(pdf_dateien)} PDFs gefunden. Starte Verarbeitung...\n")
+print(f"Insgesamt {len(dokumente)} Dokumente gefunden. "
+      f"Starte Verarbeitung...\n")
 
 
 def folder_of(pdf_pfad):
@@ -166,7 +168,7 @@ def flush(pending, dateiname):
 
 
 # --- VERARBEITUNG ---
-for pdf_pfad in pdf_dateien:
+for pdf_pfad in dokumente:
     dateiname = os.path.basename(pdf_pfad)
     ordner = folder_of(pdf_pfad)
 
@@ -176,6 +178,37 @@ for pdf_pfad in pdf_dateien:
     print(f"⏳ VERARBEITE: '{dateiname}' [{ordner}]"
           + (f" -- {len(bekannt)} Chunks vorhanden, weiter ab Seite {ab_seite}"
              if bekannt else ""))
+
+    # --- WORD, MARKDOWN, TEXT ---
+    #
+    # Diese Formate haben keine Seiten und keine Tabellenflaechen. Ein
+    # Abschnitt tritt an die Stelle einer Seite: gezaehlt, in den Metadaten,
+    # in der Quellenangabe. Der Wiederanlauf ueber bekannte Chunk-IDs
+    # funktioniert dabei unveraendert.
+    if lesen.unterstuetzt(dateiname):
+        try:
+            pending, neu = [], 0
+            for nummer, _titel, text in lesen.abschnitte(pdf_pfad):
+                basis_meta = {"file_name": dateiname, "page": nummer,
+                              "folder": ordner, "access": "shared",
+                              "owner": "system"}
+                for i, chunk in enumerate(text_splitter.split_text(text)):
+                    chunk_id = f"{dateiname}_p{nummer}_c{i}"
+                    if chunk_id not in bekannt:
+                        pending.append((chunk_id, chunk,
+                                        dict(basis_meta, type="text")))
+                if len(pending) >= 256:
+                    neu += flush(pending, dateiname)
+                    pending = []
+            neu += flush(pending, dateiname)
+            if neu:
+                print(f"✅ ABGESCHLOSSEN: '{dateiname}' -- {neu} neue Chunks.\n")
+            else:
+                print(f"⏩ ÜBERSPRUNGEN: '{dateiname}' war bereits "
+                      f"vollständig.\n")
+        except Exception as e:
+            print(f"❌ FEHLER beim Lesen von '{dateiname}': {e}\n")
+        continue
 
     try:
         doc = pymupdf.open(pdf_pfad)
