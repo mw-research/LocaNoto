@@ -39,6 +39,7 @@ docker-compose.override.yml
 # ueberschreibt -- dieselbe Aufteilung wie bei der .env.
 glossar.txt
 config/glossar.txt
+config/presets/
 config/*_prompt.txt
 config/*_prompt.txt.neu
 config/glossar.txt.neu
