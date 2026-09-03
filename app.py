@@ -22,6 +22,7 @@ import prompts
 import presets
 import tabellen
 import lesen
+import hintergrund
 import sqlpruefung
 from textutils import strip_boilerplate
 from tables import build_table_chunks
@@ -845,6 +846,47 @@ with st.sidebar:
             st.session_state["pdf_upload_nr"] = _pdf_nr + 1
             time.sleep(1)
             st.rerun()
+
+    # --- LANGE LAEUFE ---
+    #
+    # Der Upload vektorisiert Text und Tabellen. Bilder bleiben aussen vor:
+    # eine Beschreibung dauert Minuten, und ein Dokument mit zehn
+    # Abbildungen wuerde den Knopf eine Stunde blockieren, waehrend der
+    # Nutzer vor einem Spinner sitzt.
+    #
+    # Deshalb hier, als eigener Prozess, der die Sitzung ueberlebt.
+    if is_admin():
+        with st.expander("🔄 Nachtragen und neu einlesen"):
+            for _name, (_skript, _log, _titel) in hintergrund.LAEUFE.items():
+                _aktiv = hintergrund.laeuft(_name)
+                if _aktiv:
+                    st.caption(f"**{_titel}** laeuft.")
+                    st.code(hintergrund.protokoll(_name, 8) or "(noch keine "
+                            "Ausgabe)", language="text")
+                    if st.button("Abbrechen", key=f"stop_{_name}",
+                                 use_container_width=True):
+                        hintergrund.abbrechen(_name)
+                        st.rerun()
+                else:
+                    if st.button(_titel, key=f"start_{_name}",
+                                 use_container_width=True,
+                                 help=f"Startet {_skript} als eigenen "
+                                      f"Vorgang. Bereits Verarbeitetes wird "
+                                      f"uebersprungen; die Oberflaeche "
+                                      f"bleibt benutzbar."):
+                        ok, meldung = hintergrund.starte(_name)
+                        if ok:
+                            st.success(meldung)
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(meldung)
+                    _letzte = hintergrund.protokoll(_name, 3)
+                    if _letzte:
+                        st.caption("Zuletzt:")
+                        st.code(_letzte, language="text")
+                st.markdown("---")
+            st.caption("Die Anzeige aktualisiert sich beim naechsten Klick.")
 
     st.subheader("Gemeinsamer Pool")
     if shared_files:

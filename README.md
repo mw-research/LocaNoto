@@ -116,6 +116,32 @@ Weboberfläche geht das mit:
 python rebuild_index.py
 ```
 
+### Nachtragen und neu einlesen
+
+Der Upload vektorisiert Text und Tabellen. **Bilder bleiben außen vor** —
+eine Beschreibung dauert je nach Sehmodell Minuten, und ein Dokument mit
+zehn Abbildungen würde den Upload-Knopf eine Stunde blockieren.
+
+Verwalter stoßen die beiden langen Läufe deshalb in der Seitenleiste unter
+**🔄 Nachtragen und neu einlesen** an:
+
+| Knopf | was er tut |
+|---|---|
+| Bilder nachtragen | `ingest_images.py` — beschreibt Bilder aus PDFs und Word-Dateien |
+| Dokumente neu einlesen | `ingest.py` — vektorisiert alles im Dokumentenordner |
+
+Beide laufen als **eigener Vorgang**: die Oberfläche bleibt benutzbar, ein
+Neuladen oder Abmelden beendet sie nicht. Bereits Verarbeitetes wird
+übersprungen, ein Abbruch kostet also nur Zeit. Während ein Lauf aktiv ist,
+zeigt der Abschnitt die letzten Protokollzeilen und bietet **Abbrechen**;
+die Anzeige aktualisiert sich beim nächsten Klick.
+
+Ein zweiter Start desselben Laufs wird abgelehnt, solange der erste läuft.
+
+Was es nicht gibt: eine Warteschlange, mehrere gleichzeitige Läufe, oder
+eine Wiederaufnahme nach einem Neustart des Containers. Das wäre ein
+Arbeiter neben der Anwendung — etwas anderes als ein Knopf.
+
 ## 🧠 Rangfolge der Treffer
 
 Nach der Suche werden die Ranglisten aller Sonden und beider Suchwege
