@@ -588,7 +588,7 @@ with st.sidebar:
     _katalog = tabellen.lies_katalog()
     _eintraege = _katalog.get("eintraege", [])
 
-    if _eintraege or tabellen.vorhanden():
+    if _eintraege or tabellen.vorhanden() or is_admin():
         st.markdown("---")
         st.header("\U0001f4ca Listen")
 
@@ -641,8 +641,32 @@ with st.sidebar:
         # Katalog neu anlegen. Noetig nur, wenn Dateien dazukommen oder sich
         # Spalten aendern -- neue Zeilen wirken ohne Zutun.
         if is_admin():
+            # Der Ordner laesst sich hier eintragen, statt Dateien
+            # hineinzukopieren: was die Fachabteilung ohnehin pflegt, soll
+            # niemand ein zweites Mal ablegen. Erreichbar ist nur, was in
+            # den Container eingehaengt ist -- und gelesen werden
+            # ausschliesslich Tabellendateien.
+            _pfad = st.text_input(
+                "Ordner", value=tabellen.pfad(),
+                help="Vollstaendiger Pfad, wie er im Container gilt -- etwa "
+                     "/listen. Leer lassen fuer die Vorgabe "
+                     "data/tabellen/.")
+            if _pfad.strip() != tabellen.pfad():
+                if st.button("Ordner verknuepfen und einlesen",
+                             use_container_width=True):
+                    ok, meldung = tabellen.setze_pfad(_pfad)
+                    if not ok:
+                        st.error(meldung)
+                    else:
+                        with st.spinner("Lese Listen ein ..."):
+                            neu, fehler = tabellen.baue_katalog()
+                        st.success(f"{meldung} {len(neu['eintraege'])} "
+                                   f"Blaetter eingelesen.")
+                        time.sleep(1)
+                        st.rerun()
+
             if st.button("Listen neu einlesen", use_container_width=True,
-                         help="Liest data/tabellen/ vollstaendig neu ein. "
+                         help="Liest den Ordner vollstaendig neu ein. "
                               "Fuer geaenderte Zeilen nicht noetig."):
                 with st.spinner("Lese Listen ein ..."):
                     neu, fehler = tabellen.baue_katalog()

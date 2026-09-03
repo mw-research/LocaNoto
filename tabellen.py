@@ -39,11 +39,73 @@ import sqlite3
 import paths
 import sqlpruefung
 
-VERZEICHNIS = paths.TABELLEN_DIR
+# Wo der Ordner liegt, steht an drei Stellen -- in dieser Reihenfolge:
+#
+#   1. config/tabellen_pfad.txt   in der Oberflaeche eingetragen
+#   2. TABELLEN_PFAD              in der .env
+#   3. data/tabellen              Vorgabe
+#
+# Der Weg ueber die Oberflaeche ist der praktische: Dateien in einen Ordner
+# zu kopieren, den die Fachabteilung ohnehin pflegt, ist doppelte Arbeit.
+# Erreichbar ist dabei nur, was jemand vorher in den Container eingehaengt
+# hat -- und der Katalog liest ausschliesslich Tabellendateien.
+PFAD_DATEI = os.path.join(paths.CONFIG_DIR, "tabellen_pfad.txt")
 
 # Der Katalog liegt bewusst NICHT beim Ordner: der kann ausserhalb und nur
 # lesbar eingehaengt sein, etwa ein Netzlaufwerk der Firma.
 KATALOG = os.path.join(paths.DATA_DIR, "tabellen_katalog.json")
+
+# Obergrenze fuer die Zahl der durchsuchten Dateien. Ein versehentlich
+# eingetragenes "/" wuerde sonst den ganzen Container durchlaufen.
+MAX_DATEIEN = paths.env_int("TABELLEN_MAX_DATEIEN", 500)
+
+
+def pfad():
+    """Der Ordner, in dem die Listen liegen."""
+    try:
+        with open(PFAD_DATEI, "r", encoding="utf-8") as f:
+            eigen = f.read().strip()
+        if eigen:
+            return eigen
+    except OSError:
+        pass
+    return paths.TABELLEN_DIR
+
+
+def pruefe_pfad(p):
+    """(ok, meldung) fuer einen eingetragenen Ordner."""
+    p = (p or "").strip()
+    if not p:
+        return True, "Zurueck auf die Vorgabe."
+    if not os.path.isabs(p):
+        return False, ("Bitte einen vollstaendigen Pfad angeben, wie er im "
+                       "Container gilt -- etwa /listen.")
+    if not os.path.exists(p):
+        return False, (f"'{p}' gibt es im Container nicht. Ist das "
+                       f"Verzeichnis eingehaengt? Siehe README, Abschnitt "
+                       f"Listen.")
+    if not os.path.isdir(p):
+        return False, f"'{p}' ist eine Datei, kein Ordner."
+    if not os.access(p, os.R_OK):
+        return False, f"'{p}' ist nicht lesbar."
+    return True, "Verknuepft."
+
+
+def setze_pfad(p):
+    """Legt den Ordner fest. (ok, meldung)."""
+    ok, meldung = pruefe_pfad(p)
+    if not ok:
+        return False, meldung
+    try:
+        os.makedirs(paths.CONFIG_DIR, exist_ok=True)
+        vorlaeufig = PFAD_DATEI + ".neu"
+        with open(vorlaeufig, "w", encoding="utf-8", newline="\n") as f:
+            f.write((p or "").strip())
+        os.replace(vorlaeufig, PFAD_DATEI)
+    except OSError as e:
+        return False, f"Konnte nicht gespeichert werden: {e}"
+    _zwischenspeicher.clear()
+    return True, meldung
 
 ENDUNGEN = (".xlsx", ".xlsm", ".csv", ".tsv")
 
@@ -139,33 +201,43 @@ def baue_katalog():
     eine unlesbare Datei soll den Katalog nicht verhindern, aber auch nicht
     stillschweigend fehlen.
     """
+    ordner = pfad()
     try:
-        os.makedirs(VERZEICHNIS, exist_ok=True)
+        os.makedirs(ordner, exist_ok=True)
     except OSError:
         pass
     eintraege, fehler = [], []
-    if not os.path.isdir(VERZEICHNIS):
-        fehler.append((VERZEICHNIS, "Ordner nicht erreichbar"))
+    if not os.path.isdir(ordner):
+        fehler.append((ordner, "Ordner nicht erreichbar"))
 
-    for wurzel, _, dateien in os.walk(VERZEICHNIS):
+    gesehen = 0
+    for wurzel, _, dateien in os.walk(ordner):
         for name in sorted(dateien):
             if not name.lower().endswith(ENDUNGEN) or name.startswith("~$"):
                 continue
-            pfad = os.path.join(wurzel, name)
-            rel = os.path.relpath(pfad, VERZEICHNIS).replace("\\", "/")
+            gesehen += 1
+            if gesehen > MAX_DATEIEN:
+                fehler.append((ordner, f"Mehr als {MAX_DATEIEN} Dateien -- "
+                                       f"abgebrochen. Zeigt der Pfad auf das "
+                                       f"richtige Verzeichnis?"))
+                break
+            datei_pfad = os.path.join(wurzel, name)
+            rel = os.path.relpath(datei_pfad, ordner).replace("\\", "/")
             try:
-                for blatt, rahmen in _blaetter(pfad):
+                for blatt, rahmen in _blaetter(datei_pfad):
                     eintraege.append({
                         "datei": rel,
                         "blatt": blatt,
                         "zeilen": int(len(rahmen)),
                         "gross": len(rahmen) >= GROSS_AB,
                         "spalten": _spaltenangaben(rahmen),
-                        "groesse": os.path.getsize(pfad),
-                        "geaendert": int(os.path.getmtime(pfad)),
+                        "groesse": os.path.getsize(datei_pfad),
+                        "geaendert": int(os.path.getmtime(datei_pfad)),
                     })
             except Exception as e:
                 fehler.append((rel, f"{type(e).__name__}: {e}"))
+        if gesehen > MAX_DATEIEN:
+            break
 
     katalog = {"eintraege": eintraege, "fehler": fehler}
     try:
@@ -191,9 +263,10 @@ def lies_katalog():
 
 def vorhanden():
     """Liegt ueberhaupt eine Tabellendatei im Ordner?"""
-    if not os.path.isdir(VERZEICHNIS):
+    ordner = pfad()
+    if not os.path.isdir(ordner):
         return False
-    for _, _, dateien in os.walk(VERZEICHNIS):
+    for _, _, dateien in os.walk(ordner):
         if any(d.lower().endswith(ENDUNGEN) and not d.startswith("~$")
                for d in dateien):
             return True
@@ -262,15 +335,15 @@ def _lade(datei, blatt):
     """
     import pandas as pd
 
-    pfad = os.path.join(VERZEICHNIS, datei)
-    if not os.path.isfile(pfad):
+    voll = os.path.join(pfad(), datei)
+    if not os.path.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
-    kennung = (datei, blatt, os.path.getmtime(pfad), os.path.getsize(pfad))
+    kennung = (voll, blatt, os.path.getmtime(voll), os.path.getsize(voll))
     if kennung in _zwischenspeicher:
         return _zwischenspeicher[kennung]
 
     rahmen = None
-    for name, r in _blaetter(pfad):
+    for name, r in _blaetter(voll):
         if name == blatt or not blatt:
             rahmen = r
             break
