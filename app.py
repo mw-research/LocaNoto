@@ -19,6 +19,7 @@ import vision
 import pipeline
 import feedback
 import prompts
+import presets
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -473,6 +474,29 @@ shared_files, private_files, all_folders = load_document_index(
 
 # --- SIDEBAR (UI) ---
 with st.sidebar:
+    # --- VOREINSTELLUNG ---
+    #
+    # Ganz oben, weil sie alles darunter faerbt: Modell, Umfang der Treffer,
+    # Sachgebiete und die Formulierung der Prompts. Ohne angelegte
+    # Voreinstellungen erscheint die Auswahl nicht -- ein Feld mit genau
+    # einem Eintrag ist keine Auswahl.
+    _namen = presets.namen()
+    if _namen:
+        _wahl = st.selectbox(
+            "🎛️ Voreinstellung", ["(Standard)"] + _namen,
+            format_func=lambda n: (n if n == "(Standard)"
+                                   else presets.lese(n)["bezeichnung"]),
+            help="Buendel aus Chat-Modell, Trefferzahl, Sachgebieten und "
+                 "Formulierung. Angelegt werden sie im Verwalterbereich.")
+        aktives_preset = None if _wahl == "(Standard)" else _wahl
+        _p = presets.lese(aktives_preset)
+        if _p.get("beschreibung"):
+            st.caption(_p["beschreibung"])
+        st.markdown("---")
+    else:
+        aktives_preset = None
+        _p = presets.lese(None)
+
     st.header("💬 Chats")
     
     # 1. Neuer Chat Button
@@ -522,7 +546,8 @@ with st.sidebar:
     selected_folders = st.multiselect(
         "Sachgebiet:",
         options=all_folders,
-        default=[],
+        default=[g for g in _p["sachgebiete"] if g in all_folders],
+        key=f"gebiete_{aktives_preset}",
         help="Leer lassen, um alle Sachgebiete zu durchsuchen."
     ) if all_folders else []
 
@@ -636,8 +661,19 @@ with st.sidebar:
                 st.rerun()
     
     st.markdown("---")
-    chat_model = st.text_input("Chat Modell", value=llm.modell("CHAT"))
-    embed_model = st.text_input("Embedding Modell", value=llm.modell("EMBEDDING"))
+    # Der Name des Chat-Modells laesst sich frei setzen, solange derselbe
+    # Endpunkt ihn kennt -- qwen3.8 gegen gemma4 ist eine Namensfrage.
+    #
+    # Das Embedding-Modell stand hier ebenfalls und ist bewusst entfernt:
+    # die Abschnitte im Bestand sind damit vektorisiert, ein anderes
+    # vergleicht Vektoren aus einem anderen Raum. Die Suche liefert dann
+    # Unsinn, ohne dass etwas fehlschlaegt -- die Antwort klingt normal und
+    # zitiert die falschen Stellen. Es gehoert zum Index, nicht zur
+    # Bedienung, und ein Wechsel verlangt einen neuen Ingest.
+    chat_model = st.text_input(
+        "Chat Modell", value=_p["chat_modell"] or llm.modell("CHAT"),
+        key=f"chatmodell_{aktives_preset}")
+    embed_model = llm.modell("EMBEDDING")
     with st.expander("🔌 Modell-Endpunkte"):
         st.code(llm.uebersicht() + f"\nRANGFOLGE   {rerank_info}",
                 language="text")
@@ -761,6 +797,69 @@ with st.sidebar:
                 except OSError as e:
                     st.error(f"Konnte nicht gespeichert werden: {e}")
 
+    # --- VOREINSTELLUNGEN VERWALTEN ---
+    #
+    # Angelegt werden sie von Verwaltern, ausgewaehlt von allen. Eine
+    # Voreinstellung buendelt, was zusammengehoert -- wer das jedes Mal von
+    # Hand umstellt, macht es entweder selten oder falsch.
+    if is_admin():
+        with st.expander("🎛️ Voreinstellungen verwalten"):
+            vorhanden = presets.namen()
+            bearbeiten = st.selectbox(
+                "Bearbeiten", ["(neu anlegen)"] + vorhanden,
+                format_func=lambda n: (n if n == "(neu anlegen)"
+                                       else presets.lese(n)["bezeichnung"]),
+                key="preset_bearbeiten")
+            neu = bearbeiten == "(neu anlegen)"
+            werte = presets.lese(None if neu else bearbeiten)
+
+            bez = st.text_input("Bezeichnung", value="" if neu
+                                else werte["bezeichnung"],
+                                key=f"pb_{bearbeiten}")
+            beschr = st.text_input("Beschreibung", value=werte["beschreibung"],
+                                   key=f"pd_{bearbeiten}",
+                                   help="Eine Zeile, die unter der Auswahl "
+                                        "steht.")
+            modell = st.text_input(
+                "Chat-Modell", value=werte["chat_modell"],
+                key=f"pm_{bearbeiten}",
+                help="Leer = das Modell aus der .env. Der Name muss dem "
+                     "eingetragenen Endpunkt bekannt sein.")
+            k = st.number_input("Relevante Abschnitte", min_value=0,
+                                max_value=30, value=int(werte["top_k"] or 0),
+                                key=f"pk_{bearbeiten}",
+                                help="0 = Vorgabe aus TOP_K.")
+            gebiete = st.multiselect(
+                "Sachgebiete", options=all_folders,
+                default=[g for g in werte["sachgebiete"] if g in all_folders],
+                key=f"pg_{bearbeiten}") if all_folders else []
+
+            links, rechts = st.columns(2)
+            with links:
+                if st.button("Speichern", key=f"psp_{bearbeiten}",
+                             use_container_width=True):
+                    ok, meldung = presets.speichern(bez, {
+                        "bezeichnung": bez, "beschreibung": beschr,
+                        "chat_modell": modell, "top_k": int(k),
+                        "sachgebiete": gebiete})
+                    if ok:
+                        st.success(f"Gespeichert als `{meldung}`.")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(meldung)
+            with rechts:
+                if st.button("Entfernen", key=f"pdl_{bearbeiten}",
+                             disabled=neu, use_container_width=True):
+                    if presets.loesche(bearbeiten):
+                        st.success("Entfernt.")
+                        time.sleep(1)
+                        st.rerun()
+
+            st.caption("Eigene Prompts und ein eigenes Glossar bekommt eine "
+                       "Voreinstellung ueber die Auswahl unter "
+                       "\u201cPrompts bearbeiten\u201d.")
+
     # --- PROMPT-VORLAGEN ---
     #
     # Sie bestimmen, wonach gesucht und wie geantwortet wird -- also genau
@@ -776,26 +875,42 @@ with st.sidebar:
             if not namen:
                 st.caption("Keine Vorlagen gefunden.")
             else:
+                # Fuer wen gilt die Fassung: fuer die ganze Installation
+                # oder nur fuer eine Voreinstellung? Genau hier bekommt ein
+                # Buendel seine eigene Sprache -- fuer Bedienhandbuecher ist
+                # "welche Maske, welches Feld" die richtige zweite Sonde,
+                # fuer Regelwerke "welcher Anhang, welche Tabelle".
+                geltung = st.selectbox(
+                    "Gilt fuer", ["Alle"] + presets.namen(),
+                    format_func=lambda n: (n if n == "Alle"
+                                           else presets.lese(n)["bezeichnung"]),
+                    key="prompt_geltung")
+                fuer = None if geltung == "Alle" else geltung
+
                 gewaehlt = st.selectbox(
                     "Vorlage", namen,
                     format_func=lambda n: f"{prompts.VORLAGEN[n]['titel']} ({n})")
                 angaben = prompts.VORLAGEN[gewaehlt]
                 st.caption(angaben["zweck"])
 
-                inhalt, eigen = prompts.lese(gewaehlt)
+                inhalt, herkunft = prompts.lese(gewaehlt, fuer)
                 text = st.text_area(
                     "Platzhalter: " + ", ".join(
                         list(angaben["pflicht"]) + list(angaben["optional"])),
-                    value=inhalt, height=340, key=f"prompt_{gewaehlt}")
+                    value=inhalt, height=340,
+                    key=f"prompt_{gewaehlt}_{fuer}")
 
-                st.caption("Bearbeitete Fassung aus `config/`" if eigen
-                           else "Mitgelieferte Vorlage")
+                st.caption({
+                    "preset": "Eigene Fassung dieser Voreinstellung",
+                    "eigen": "Bearbeitete Fassung aus `config/`",
+                    "vorlage": "Mitgelieferte Vorlage",
+                }[herkunft])
 
                 links, rechts = st.columns(2)
                 with links:
-                    if st.button("Speichern", key=f"sp_{gewaehlt}",
+                    if st.button("Speichern", key=f"sp_{gewaehlt}_{fuer}",
                                  use_container_width=True):
-                        ok, meldung = prompts.speichern(gewaehlt, text)
+                        ok, meldung = prompts.speichern(gewaehlt, text, fuer)
                         if ok:
                             st.success(meldung)
                             time.sleep(1)
@@ -803,10 +918,14 @@ with st.sidebar:
                         else:
                             st.error(meldung)
                 with rechts:
-                    if st.button("Auf Vorlage zuruecksetzen",
-                                 key=f"zr_{gewaehlt}", disabled=not eigen,
+                    # Zuruecksetzen entfernt nur die Fassung dieser Stufe.
+                    # Darunter gilt dann wieder, was ohnehin gelten wuerde.
+                    eigene_stufe = (herkunft == "preset" if fuer
+                                    else herkunft == "eigen")
+                    if st.button("Zuruecksetzen", key=f"zr_{gewaehlt}_{fuer}",
+                                 disabled=not eigene_stufe,
                                  use_container_width=True):
-                        if prompts.zuruecksetzen(gewaehlt):
+                        if prompts.zuruecksetzen(gewaehlt, fuer):
                             st.success("Zurueckgesetzt.")
                             time.sleep(1)
                             st.rerun()
@@ -847,7 +966,8 @@ with st.sidebar:
     # aufgebraucht. Der Standard bleibt dennoch 5; wer mehr braucht, zieht
     # den Regler oder setzt TOP_K.
     top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
-                      value=paths.env_int("TOP_K", 5))
+                      value=_p["top_k"] or paths.env_int("TOP_K", 5),
+                      key=f"topk_{aktives_preset}")
 
 # --- CHAT & RETRIEVAL ---
 if collection.count() > 0:
@@ -993,7 +1113,8 @@ if collection.count() > 0:
                 with st.spinner("Analysiere Frage und generiere Such-Sonden..."):
                     search_queries, sonden_hinweis = pipeline.sonden(
                         chat_client, chat_model, user_query,
-                        verlauf=verlauf, bild_texte=bild_texte)
+                        verlauf=verlauf, bild_texte=bild_texte,
+                        preset=aktives_preset)
 
                 if sonden_hinweis:
                     st.caption("\U0001f9e0 *Nutze Standard-Suche -- Sonden "
@@ -1048,7 +1169,7 @@ if collection.count() > 0:
                 # --- 4. ANTWORT ---
                 answer = st.write_stream(pipeline.antwort(
                     chat_client, chat_model,
-                    pipeline.systemprompt(dynamic_context),
+                    pipeline.systemprompt(dynamic_context, aktives_preset),
                     st.session_state.messages))
 
                 # --- 5. QUELLEN SPEICHERN ---

@@ -21,6 +21,7 @@ import os
 import paths
 import keyword_index
 import ranking
+import presets
 from embedding import embed_batch
 
 # --- ZEITLIMITS ---
@@ -59,7 +60,7 @@ RUECKFALL_SYSTEMPROMPT = ("Du bist ein {EXPERT_ROLE}.\n<context>\n"
                           "Beantworte die Frage nur anhand des Kontexts.")
 
 
-def _vorlage(dateiname, rueckfall):
+def _vorlage(dateiname, rueckfall, preset=None):
     """Prompt-Vorlage aus einer Datei neben dem Code.
 
     Als Datei, damit sich die Formulierung je Bestand anpassen laesst: was
@@ -69,14 +70,16 @@ def _vorlage(dateiname, rueckfall):
     mitgelieferte. Fehlt beides, greift der Rueckfall: eine geloeschte
     Vorlage legt die Anwendung nicht lahm.
     """
+    # Kette: Voreinstellung, dann config/, dann die mitgelieferte Fassung.
+    pfad = presets.vorlage_pfad(preset, dateiname) or paths.resolve_prompt(dateiname)
     try:
-        with open(paths.resolve_prompt(dateiname), "r", encoding="utf-8") as f:
+        with open(pfad, "r", encoding="utf-8") as f:
             return f.read()
     except OSError:
         return rueckfall
 
 
-def glossar():
+def glossar(preset=None):
     """Der Sprachgebrauch des Hauses, aus config/glossar.txt.
 
     Mitarbeiter fragen in ihren eigenen Abkuerzungen -- "BANF", "FA", "WE" --,
@@ -91,8 +94,9 @@ def glossar():
     """
     # Zeilen mit # sind Erklaerungen fuer den, der die Datei pflegt. Sie
     # gehoeren nicht in den Prompt: das Modell wuerde sie als Inhalt lesen.
+    pfad = presets.vorlage_pfad(preset, "glossar.txt") or paths.resolve_glossar()
     try:
-        with open(paths.resolve_glossar(), "r", encoding="utf-8") as f:
+        with open(pfad, "r", encoding="utf-8") as f:
             roh = f.read()
     except OSError:
         roh = ""
@@ -101,9 +105,9 @@ def glossar():
                         if z.strip() and not z.lstrip().startswith("#"))
 
 
-def _glossarblock():
+def _glossarblock(preset=None):
     """Der Glossartext, eingefasst -- oder nichts."""
-    text = glossar()
+    text = glossar(preset)
     if not text:
         return ""
     return ("Sprachgebrauch im Betrieb. Diese Zuordnungen stammen nicht aus "
@@ -121,7 +125,7 @@ def verlaufstext(nachrichten, ohne_letzte=True):
     return "\nChatverlauf:\n" + "\n".join(zeilen)
 
 
-def sonden(client, modell, frage, verlauf="", bild_texte=()):
+def sonden(client, modell, frage, verlauf="", bild_texte=(), preset=None):
     """Suchsonden zu einer Frage.
 
     Rueckgabe: (sonden, hinweis). hinweis ist None, wenn das Umschreiben
@@ -132,8 +136,8 @@ def sonden(client, modell, frage, verlauf="", bild_texte=()):
     liste = [frage]
     hinweis = None
 
-    prompt = (_vorlage("search_prompt.txt", RUECKFALL_SUCHPROMPT)
-              .replace("{GLOSSAR}", _glossarblock())
+    prompt = (_vorlage("search_prompt.txt", RUECKFALL_SUCHPROMPT, preset)
+              .replace("{GLOSSAR}", _glossarblock(preset))
               .replace("{HISTORY}", verlauf)
               .replace("{FRAGE}", frage))
     try:
@@ -278,12 +282,12 @@ def kontext(treffer, bild_texte=(), bloecke=()):
     return "\n\n".join(teile) + "\n\n"
 
 
-def systemprompt(kontexttext):
+def systemprompt(kontexttext, preset=None):
     """Vorlage mit Rolle und Kontext gefuellt."""
     rolle = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
-    return (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT)
+    return (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT, preset)
             .replace("{EXPERT_ROLE}", rolle)
-            .replace("{GLOSSAR}", _glossarblock())
+            .replace("{GLOSSAR}", _glossarblock(preset))
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
 
 

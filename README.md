@@ -370,6 +370,39 @@ für das, was wirklich haussprachlich ist.
 zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
 ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
 
+## 🎛️ Voreinstellungen
+
+Dieselbe Anlage taugt für verschiedene Anwendungen, aber nicht mit denselben
+Einstellungen. Eine Voreinstellung bündelt, was zusammengehört, und steht
+oben in der Seitenleiste als Auswahl:
+
+| enthalten | |
+|---|---|
+| Chat-Modell | derselbe Endpunkt, anderer Name — `qwen3.8` statt `gemma4` |
+| Relevante Abschnitte | Trefferzahl je Frage |
+| Sachgebiete | worin gesucht wird |
+| Prompts und Glossar | optional, eigene Fassungen je Voreinstellung |
+
+Fehlt einer Voreinstellung eine Prompt-Vorlage, gilt die aus `config/`,
+sonst die mitgelieferte — dieselbe Kette wie bisher, um eine Stufe
+verlängert. Angelegt werden sie unter **🎛️ Voreinstellungen verwalten**
+(Verwalter), ausgewählt von allen. Eigene Prompts bekommt eine
+Voreinstellung über die Auswahl **Gilt für** im Prompt-Editor.
+
+Ohne angelegte Voreinstellungen erscheint die Auswahl nicht.
+
+### Was bewusst nicht enthalten ist
+
+**Das Embedding-Modell.** Die Abschnitte im Bestand sind mit einem
+bestimmten Modell vektorisiert; ein anderes vergleicht Vektoren aus einem
+anderen Raum. Die Suche liefert dann Unsinn, ohne dass etwas fehlschlägt —
+die Antwort klingt normal und zitiert die falschen Stellen. Es gehört zum
+Index, nicht zur Bedienung, und ein Wechsel verlangt einen neuen Ingest. Aus
+demselben Grund ist das Eingabefeld dafür aus der Seitenleiste entfernt.
+
+**Adressen und Schlüssel.** Wohin die Fragen gehen, ist Sache der
+Installation und steht in der `.env`.
+
 ## 📜 Prompts anpassen
 
 Zwei Vorlagen bestimmen, wonach gesucht und wie geantwortet wird:

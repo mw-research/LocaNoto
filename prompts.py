@@ -18,6 +18,7 @@ den diese Anwendung kennt, und deshalb wird er beim Speichern abgelehnt.
 import os
 
 import paths
+import presets
 
 # Je Vorlage: Anzeigename, Zweck, und welche Platzhalter darin vorkommen
 # muessen. Optionale duerfen fehlen -- wer kein Glossar benutzt, braucht
@@ -49,8 +50,14 @@ def vorlage_pfad(name):
     return os.path.join(paths.BASE_DIR, name)
 
 
-def eigener_pfad(name):
-    """Die bearbeitete Fassung, im eingehaengten Verzeichnis."""
+def eigener_pfad(name, preset=None):
+    """Die bearbeitete Fassung.
+
+    Mit preset gehoert sie zu einer Voreinstellung, sonst gilt sie fuer die
+    ganze Installation.
+    """
+    if preset:
+        return os.path.join(presets.ORDNER, preset, name)
     return os.path.join(paths.CONFIG_DIR, name)
 
 
@@ -64,20 +71,28 @@ def verfuegbar():
             if os.path.exists(vorlage_pfad(n)) or os.path.exists(eigener_pfad(n))]
 
 
-def lese(name):
-    """(text, eigen) -- eigen sagt, ob die bearbeitete Fassung gilt."""
-    p = eigener_pfad(name)
-    if os.path.exists(p):
+def lese(name, preset=None):
+    """(text, herkunft) -- herkunft ist "preset", "eigen" oder "vorlage".
+
+    Dieselbe Kette wie zur Laufzeit: Voreinstellung, dann config/, dann die
+    mitgelieferte Fassung. Wer eine Voreinstellung bearbeitet und dort noch
+    keine eigene Fassung hat, bekommt die naechste Stufe vorgelegt -- also
+    das, was gerade tatsaechlich gilt.
+    """
+    stufen = []
+    if preset:
+        stufen.append((eigener_pfad(name, preset), "preset"))
+    stufen.append((eigener_pfad(name), "eigen"))
+    stufen.append((vorlage_pfad(name), "vorlage"))
+    for pfad, herkunft in stufen:
+        if not os.path.exists(pfad):
+            continue
         try:
-            with open(p, "r", encoding="utf-8") as f:
-                return f.read(), True
+            with open(pfad, "r", encoding="utf-8") as f:
+                return f.read(), herkunft
         except OSError:
-            pass
-    try:
-        with open(vorlage_pfad(name), "r", encoding="utf-8") as f:
-            return f.read(), False
-    except OSError:
-        return "", False
+            continue
+    return "", "vorlage"
 
 
 def pruefe(name, text):
@@ -96,16 +111,17 @@ def pruefe(name, text):
     return True, ""
 
 
-def speichern(name, text):
+def speichern(name, text, preset=None):
     """Legt die bearbeitete Fassung ab. (ok, meldung)."""
     ok, meldung = pruefe(name, text)
     if not ok:
         return False, meldung
     try:
-        os.makedirs(paths.CONFIG_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(eigener_pfad(name, preset)),
+                    exist_ok=True)
         # Erst daneben schreiben, dann umbenennen: bricht der Vorgang ab,
         # steht die alte Fassung noch vollstaendig da.
-        ziel = eigener_pfad(name)
+        ziel = eigener_pfad(name, preset)
         vorlaeufig = ziel + ".neu"
         with open(vorlaeufig, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
@@ -115,9 +131,9 @@ def speichern(name, text):
     return True, "Gespeichert. Wirkt ab der naechsten Frage."
 
 
-def zuruecksetzen(name):
-    """Entfernt die bearbeitete Fassung; die Vorlage gilt wieder."""
-    p = eigener_pfad(name)
+def zuruecksetzen(name, preset=None):
+    """Entfernt die bearbeitete Fassung; die naechste Stufe gilt wieder."""
+    p = eigener_pfad(name, preset)
     if not os.path.exists(p):
         return False
     try:
