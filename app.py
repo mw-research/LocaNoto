@@ -18,6 +18,7 @@ import ranking
 import vision
 import pipeline
 import feedback
+import prompts
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -759,6 +760,56 @@ with st.sidebar:
                     st.rerun()
                 except OSError as e:
                     st.error(f"Konnte nicht gespeichert werden: {e}")
+
+    # --- PROMPT-VORLAGEN ---
+    #
+    # Sie bestimmen, wonach gesucht und wie geantwortet wird -- also genau
+    # das, was man im Betrieb nachschaerft. Bearbeitbar zu machen kostet
+    # wenig; sie im Image zu lassen kostet fuer jede Formulierung einen
+    # Rebuild.
+    #
+    # Nur fuer Verwalter: eine unglueckliche Formulierung wirkt auf jede
+    # Antwort, die danach gegeben wird.
+    if is_admin():
+        with st.expander("📜 Prompts bearbeiten"):
+            namen = prompts.verfuegbar()
+            if not namen:
+                st.caption("Keine Vorlagen gefunden.")
+            else:
+                gewaehlt = st.selectbox(
+                    "Vorlage", namen,
+                    format_func=lambda n: f"{prompts.VORLAGEN[n]['titel']} ({n})")
+                angaben = prompts.VORLAGEN[gewaehlt]
+                st.caption(angaben["zweck"])
+
+                inhalt, eigen = prompts.lese(gewaehlt)
+                text = st.text_area(
+                    "Platzhalter: " + ", ".join(
+                        list(angaben["pflicht"]) + list(angaben["optional"])),
+                    value=inhalt, height=340, key=f"prompt_{gewaehlt}")
+
+                st.caption("Bearbeitete Fassung aus `config/`" if eigen
+                           else "Mitgelieferte Vorlage")
+
+                links, rechts = st.columns(2)
+                with links:
+                    if st.button("Speichern", key=f"sp_{gewaehlt}",
+                                 use_container_width=True):
+                        ok, meldung = prompts.speichern(gewaehlt, text)
+                        if ok:
+                            st.success(meldung)
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(meldung)
+                with rechts:
+                    if st.button("Auf Vorlage zuruecksetzen",
+                                 key=f"zr_{gewaehlt}", disabled=not eigen,
+                                 use_container_width=True):
+                        if prompts.zuruecksetzen(gewaehlt):
+                            st.success("Zurueckgesetzt.")
+                            time.sleep(1)
+                            st.rerun()
 
     # --- KONFIGURATION GEGEN DIE VORLAGE ---
     #
