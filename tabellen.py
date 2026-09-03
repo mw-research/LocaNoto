@@ -200,6 +200,29 @@ def vorhanden():
     return False
 
 
+def bereiche(eintraege):
+    """Die Unterordner, in denen Listen liegen.
+
+    Ein Bereich ist der oberste Unterordner unter dem Listenordner --
+    "einkauf/preise.xlsx" gehoert zu "einkauf". Damit lassen sich Listen
+    genauso eingrenzen wie Dokumente ueber ihr Sachgebiet, ohne dass
+    irgendwo ein Pfad eingegeben werden muss.
+    """
+    gefunden = set()
+    for e in eintraege:
+        teil, _, rest = e.get("datei", "").partition("/")
+        gefunden.add(teil if rest else "(Basis)")
+    return sorted(gefunden)
+
+
+def im_bereich(eintrag, gewaehlt):
+    """Gehoert ein Eintrag zu einem der gewaehlten Bereiche?"""
+    if not gewaehlt:
+        return True
+    teil, _, rest = eintrag.get("datei", "").partition("/")
+    return (teil if rest else "(Basis)") in gewaehlt
+
+
 # --- KATALOG FUER DEN PROMPT ---
 
 def als_text(eintraege):

@@ -49,6 +49,11 @@ FELDER = {
     "chat_modell": "",
     "top_k": 0,
     "sachgebiete": [],
+    # Welche Unterordner des Listenordners diese Voreinstellung benutzt.
+    # Ein Pfad steht hier bewusst nicht: der Wurzelordner ist Sache der
+    # Installation (TABELLEN_PFAD), sonst koennte eine Voreinstellung auf
+    # jedes Verzeichnis im Container zeigen -- auch auf config/.
+    "listen_bereiche": [],
 }
 
 

@@ -410,6 +410,28 @@ ihn nennen kann.
 Zwischengespeichert wird nur, solange Änderungsdatum und Größe gleich
 bleiben. Ein neuer Export wirkt damit ab der nächsten Frage.
 
+### Bereiche
+
+Unterordner des Listenordners werden als **Bereich** übernommen — für Listen
+dasselbe, was Sachgebiete für Dokumente sind:
+
+```
+/listen/
+    preisliste.xlsx        -> Bereich "(Basis)"
+    einkauf/               -> Bereich "einkauf"
+    fertigung/             -> Bereich "fertigung"
+```
+
+In der Seitenleiste lässt sich darauf eingrenzen, und eine Voreinstellung
+kann Bereiche mitbringen: „Einkauf" nimmt dann die Lieferantenlisten,
+„Fertigung" die Auftragslisten — passend zu den Sachgebieten derselben
+Voreinstellung.
+
+Der **Wurzelordner** bleibt in der `.env` (`TABELLEN_PFAD`) und ist bewusst
+nicht in der Oberfläche einstellbar: ein Textfeld, in das jemand
+`/app/config` schreiben kann, machte die Token- und Passwortdatei zu einer
+abfragbaren Liste. Eine Voreinstellung wählt einen Bereich, keinen Pfad.
+
 ### Ordner außerhalb des Containers
 
 Liegen die Listen im Netzlaufwerk der Firma und werden dort von den
@@ -470,6 +492,7 @@ oben in der Seitenleiste als Auswahl:
 | Chat-Modell | derselbe Endpunkt, anderer Name — `qwen3.8` statt `gemma4` |
 | Relevante Abschnitte | Trefferzahl je Frage |
 | Sachgebiete | worin gesucht wird |
+| Listenbereiche | welche Unterordner des Listenordners abgefragt werden |
 | Prompts und Glossar | optional, eigene Fassungen je Voreinstellung |
 
 Fehlt einer Voreinstellung eine Prompt-Vorlage, gilt die aus `config/`,
