@@ -250,6 +250,11 @@ for pdf_pfad in pdf_dateien:
         doc = pymupdf.open(pdf_pfad)
         total_pages = len(doc)
         images_found = 0
+        # Bereits beschriebene Bilder werden uebersprungen. Ohne Zaehler
+        # schweigt das Protokoll darueber, und die Rechnung "gefunden minus
+        # verworfen" ergibt scheinbar zu wenige Bilder -- genau so haben wir
+        # einen fehlerfreien Lauf fuer kaputt gehalten.
+        bereits_da = 0
         gespeichert = 0
         aufgaben = []
         
@@ -262,7 +267,8 @@ for pdf_pfad in pdf_dateien:
         for page_num in range(total_pages):
             if MELDE_ALLE and page_num and page_num % MELDE_ALLE == 0:
                 print(f"   ... Seite {page_num} von {total_pages}, "
-                      f"{images_found} Bilder bisher", flush=True)
+                      f"{images_found} Bilder bisher, {bereits_da} davon "
+                      f"schon beschrieben", flush=True)
             page = doc[page_num]
 
             # Torwaechter: steht auf dieser Seite ueberhaupt ein Bild?
@@ -321,7 +327,8 @@ for pdf_pfad in pdf_dateien:
                 # Check: Ist das Bild schon in der Datenbank?
                 existing = collection.get(ids=[chunk_id])
                 if existing and len(existing['ids']) > 0:
-                    continue # Bild wurde schon verarbeitet
+                    bereits_da += 1
+                    continue  # schon beschrieben, aus einem frueheren Lauf
 
                 print(f"   🖼️ Analysiere Bild {img_index+1} auf Seite {page_num+1}...")
 
@@ -402,7 +409,7 @@ for pdf_pfad in pdf_dateien:
         gespeichert += verarbeite(aufgaben)
         aufgaben = []
         print(f"FERTIG mit '{dateiname}': {images_found} Bilder gefunden, "
-              f"{gespeichert} beschrieben.")
+              f"{gespeichert} neu beschrieben, {bereits_da} schon vorhanden.")
         
     except Exception as e:
         print(f"❌ FEHLER beim Öffnen von '{dateiname}': {e}")
