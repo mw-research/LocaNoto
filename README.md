@@ -253,9 +253,11 @@ curl -N -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/jso
 | Aufruf | Zweck |
 |---|---|
 | `GET /gesundheit` | Lebenszeichen, ohne Token |
-| `GET /status` | Modelle, Ablage, Anzahl Abschnitte, sichtbare Dokumente |
+| `GET /status` | Modelle, Ablage, Abschnitte, Dokumente, Listen, Voreinstellungen |
 | `GET /dokumente` | was diese Kennung sehen darf |
+| `GET /voreinstellungen` | vorhandene Voreinstellungen und was sie setzen |
 | `POST /frage` | Antwort mit Quellen; `?strom=1` für laufende Ausgabe |
+| `POST /rueckmeldung` | `daumen_hoch` oder `daumen_runter` zu einer Antwort |
 | `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
 
 Im Rumpf von `/frage` sind `top_k`, `dateien`, `sachgebiete` und `verlauf`
@@ -264,6 +266,33 @@ optional — dieselben Einschränkungen wie die Filter in der Seitenleiste.
 `quellen` nennt standardmäßig nur Datei, Seite und die Zahl der Abschnitte.
 Ein Tabellenabschnitt ist mehrere Kilobyte groß; im Terminal überdeckt er
 die Antwort, um die es ging. Mit `"quellen_texte": true` kommen sie mit.
+
+### Voreinstellungen und Listen
+
+`"preset": "einkauf"` übernimmt Chat-Modell, Trefferzahl, Sachgebiete,
+Listenbereiche und die eigenen Prompts dieser Voreinstellung. Einzeln
+übergebene Werte gehen vor — wer zusätzlich `top_k` setzt, meint es so.
+
+```bash
+curl -s -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/json" -d '{"frage":"Bestand von A-100?","preset":"einkauf"}' http://127.0.0.1:8600/frage
+```
+
+Tabellendateien werden mit abgefragt, sofern ein Katalog vorliegt.
+`"listen": false` schaltet das ab, `"listen_bereiche": ["einkauf"]` grenzt
+ein, und `"listen_gross": true` bezieht die großen Blätter mit ein — sie
+werden dabei vollständig geladen und die Antwort dauert entsprechend. Unter
+`liste` steht in der Antwort, welches Blatt mit welcher Abfrage benutzt
+wurde.
+
+### Rückmeldungen
+
+```bash
+curl -s -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/json" -d '{"art":"daumen_runter","frage":"Was passiert bei einer BANF?"}' http://127.0.0.1:8600/rueckmeldung
+```
+
+Fragen ohne Treffer werden ohnehin vermerkt. Wer die Schnittstelle benutzt,
+fiele sonst aus der Auswertung heraus — und das sind gerade die Fälle, in
+denen jemand die Anlage ernsthaft ausprobiert.
 
 ### Erreichbarkeit
 
