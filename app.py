@@ -632,6 +632,49 @@ with st.sidebar:
         else:
             st.caption("Dateien vorhanden, aber noch nicht eingelesen.")
 
+        # --- ERKANNTE BLAETTER ---
+        #
+        # Die Kopfzeilenerkennung liegt meistens richtig. Wo nicht, ist der
+        # Katalog fuer diese Datei falsch -- Spalten heissen dann s_1 statt
+        # "Bezeichnung", und das Modell antwortet zwar richtig, kann seine
+        # Auskunft aber nicht benennen. Deshalb sichtbar und korrigierbar.
+        if _eintraege:
+            with st.expander(f"Erkannte Blaetter ({len(_eintraege)})"):
+                for _e in _eintraege:
+                    _kenn = _e["datei"] + (f"#{_e['blatt']}" if _e["blatt"]
+                                           else "")
+                    _kopf = int(_e.get("kopfzeile", 0))
+                    _felder = [s["feld"] for s in _e["spalten"]]
+                    _namenlos = sum(1 for s in _e["spalten"]
+                                    if not s["name"] or
+                                    s["name"].lower().startswith(
+                                        ("unnamed", "spalte ")))
+                    st.markdown(f"**{_kenn}** · Kopfzeile {_kopf + 1} "
+                                f"· {_e['zeilen']} Zeilen")
+                    if _namenlos:
+                        st.warning(f"{_namenlos} von {len(_felder)} Spalten "
+                                   f"ohne Namen -- vermutlich die falsche "
+                                   f"Kopfzeile.")
+                    st.caption(", ".join(_felder[:10])
+                               + (" ..." if len(_felder) > 10 else ""))
+
+                    if is_admin():
+                        _neu = st.number_input(
+                            "Kopfzeile", min_value=1, max_value=50,
+                            value=_kopf + 1, key=f"kopf_{_kenn}",
+                            help="Die Zeile mit den Spaltennamen, von 1 "
+                                 "gezaehlt.")
+                        if int(_neu) - 1 != _kopf:
+                            if st.button("Uebernehmen und neu einlesen",
+                                         key=f"kopfb_{_kenn}",
+                                         use_container_width=True):
+                                tabellen.setze_kopfzeile(
+                                    _e["datei"], _e["blatt"], int(_neu) - 1)
+                                with st.spinner("Lese neu ein ..."):
+                                    tabellen.baue_katalog()
+                                st.rerun()
+                    st.markdown("---")
+
         if _katalog.get("fehler"):
             with st.expander(f"Nicht lesbar ({len(_katalog['fehler'])})"):
                 for datei, grund in _katalog["fehler"]:
