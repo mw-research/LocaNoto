@@ -264,6 +264,29 @@ for pdf_pfad in pdf_dateien:
                 print(f"   ... Seite {page_num} von {total_pages}, "
                       f"{images_found} Bilder bisher", flush=True)
             page = doc[page_num]
+
+            # Torwaechter: steht auf dieser Seite ueberhaupt ein Bild?
+            #
+            # get_images() liefert das Ressourcen-Verzeichnis. Teilt sich ein
+            # PDF eines fuer alle Seiten, sind das jedes Mal saemtliche Bilder
+            # des Dokuments -- bei einem Handbuch mit 7833 Seiten 2040 Stueck
+            # je Seite, fuer die anschliessend je ein get_image_bbox() faellig
+            # waere. Gemessen: 31 Seiten pro Minute, fast alles davon fuer
+            # Bilder, die gar nicht auf der Seite stehen.
+            #
+            # get_image_info() liest stattdessen den Seiteninhalt und nennt
+            # nur die tatsaechlichen Platzierungen. Ist die Liste leer, kann
+            # auch kein Eintrag des Verzeichnisses auf dieser Seite stehen.
+            # Gemessen: 47000 Seiten pro Minute.
+            #
+            # Bewusst nur als Frage benutzt, nicht als Quelle: auf einigen
+            # Seiten nennt get_image_info eine andere xref als das
+            # Verzeichnis, und der Index im Verzeichnis steckt in der
+            # chunk_id. Wer die Bilder von dort naehme, veraenderte die IDs
+            # und machte die bereits beschriebenen Bilder zu Dubletten.
+            if not page.get_image_info():
+                continue
+
             image_list = page.get_images(full=True)
             
             for img_index, img_info in enumerate(image_list):
