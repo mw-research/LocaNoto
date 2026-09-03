@@ -584,6 +584,7 @@ with st.sidebar:
     # der Frage frisch gelesen.
     tabellen_aktiv = False
     tabellen_gross = False
+    tabellen_bereiche = []
     _katalog = tabellen.lies_katalog()
     _eintraege = _katalog.get("eintraege", [])
 
@@ -603,6 +604,20 @@ with st.sidebar:
                      "jeder Frage frisch gelesen.")
             st.caption(f"{len(_klein)} Blaetter bereit"
                        + (f", {len(_gross)} zu gross" if _gross else ""))
+
+            # Bereiche sind die Unterordner des Listenordners -- fuer Listen
+            # dasselbe, was Sachgebiete fuer Dokumente sind. Ein Pfad wird
+            # dabei nirgends eingegeben: der Wurzelordner steht in der .env,
+            # sonst koennte man von hier aus in jedes Verzeichnis des
+            # Containers sehen.
+            _bereiche = tabellen.bereiche(_eintraege)
+            if len(_bereiche) > 1 and tabellen_aktiv:
+                tabellen_bereiche = st.multiselect(
+                    "Bereich", options=_bereiche,
+                    default=[b for b in _p["listen_bereiche"]
+                             if b in _bereiche],
+                    key=f"listenbereich_{aktives_preset}",
+                    help="Leer lassen, um alle Listen einzubeziehen.")
 
             if _gross and tabellen_aktiv:
                 tabellen_gross = st.checkbox(
@@ -933,6 +948,15 @@ with st.sidebar:
                 default=[g for g in werte["sachgebiete"] if g in all_folders],
                 key=f"pg_{bearbeiten}") if all_folders else []
 
+            bereiche = st.multiselect(
+                "Listenbereiche", options=tabellen.bereiche(_eintraege),
+                default=[b for b in werte["listen_bereiche"]
+                         if b in tabellen.bereiche(_eintraege)],
+                key=f"pl_{bearbeiten}",
+                help="Unterordner des Listenordners. Leer = alle. Der "
+                     "Wurzelordner selbst steht in der .env "
+                     "(TABELLEN_PFAD).") if _eintraege else []
+
             links, rechts = st.columns(2)
             with links:
                 if st.button("Speichern", key=f"psp_{bearbeiten}",
@@ -940,7 +964,8 @@ with st.sidebar:
                     ok, meldung = presets.speichern(bez, {
                         "bezeichnung": bez, "beschreibung": beschr,
                         "chat_modell": modell, "top_k": int(k),
-                        "sachgebiete": gebiete})
+                        "sachgebiete": gebiete,
+                        "listen_bereiche": bereiche})
                     if ok:
                         st.success(f"Gespeichert als `{meldung}`.")
                         time.sleep(1)
@@ -1260,7 +1285,8 @@ if collection.count() > 0:
                 # Blatt.
                 if tabellen_aktiv and _eintraege:
                     auswahl = [e for e in _eintraege
-                               if tabellen_gross or not e.get("gross")]
+                               if (tabellen_gross or not e.get("gross"))
+                               and tabellen.im_bereich(e, tabellen_bereiche)]
                     if auswahl:
                         with st.spinner("Suche in den Listen ..."):
                             t_datei = t_blatt = t_ergebnis = ""
