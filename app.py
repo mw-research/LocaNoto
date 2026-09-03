@@ -20,6 +20,8 @@ import pipeline
 import feedback
 import prompts
 import presets
+import tabellen
+import sqlpruefung
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -558,6 +560,69 @@ with st.sidebar:
         help="Leer lassen, um in allen Dokumenten zu suchen."
     )
 
+
+    # --- LISTEN ---
+    #
+    # Tabellendateien liegen in data/tabellen/ und werden NICHT vektorisiert:
+    # eine Liste mit zehntausenden Zeilen zeilenweise einzubetten kostet
+    # Stunden Modellzeit, ist beim naechsten Export veraltet, und
+    # semantische Aehnlichkeit ist bei Teilenummern das falsche Werkzeug.
+    #
+    # Stattdessen haelt ein Katalog die Struktur, und die Zeilen werden bei
+    # der Frage frisch gelesen.
+    tabellen_aktiv = False
+    tabellen_gross = False
+    _katalog = tabellen.lies_katalog()
+    _eintraege = _katalog.get("eintraege", [])
+
+    if _eintraege or tabellen.vorhanden():
+        st.markdown("---")
+        st.header("\U0001f4ca Listen")
+
+        if _eintraege:
+            _gross = [e for e in _eintraege if e.get("gross")]
+            _klein = [e for e in _eintraege if not e.get("gross")]
+            tabellen_aktiv = st.checkbox(
+                "Listen mit abfragen",
+                value=os.getenv("TABELLEN_DEFAULT_ON", "1").strip().lower()
+                not in ("0", "false", "nein", "no"),
+                help="Das Modell waehlt die passende Liste und formuliert "
+                     "eine lesende Abfrage darauf. Die Zeilen werden bei "
+                     "jeder Frage frisch gelesen.")
+            st.caption(f"{len(_klein)} Blaetter bereit"
+                       + (f", {len(_gross)} zu gross" if _gross else ""))
+
+            if _gross and tabellen_aktiv:
+                tabellen_gross = st.checkbox(
+                    f"Grosse Listen einbeziehen ({len(_gross)})",
+                    value=False,
+                    help="Diese Blaetter haben sehr viele Zeilen und werden "
+                         "bei jeder Frage vollstaendig geladen. Das kann "
+                         "sehr lange dauern.")
+                if tabellen_gross:
+                    st.warning("Grosse Listen sind einbezogen -- eine Frage "
+                               "kann dadurch deutlich laenger dauern.")
+        else:
+            st.caption("Dateien vorhanden, aber noch nicht eingelesen.")
+
+        if _katalog.get("fehler"):
+            with st.expander(f"Nicht lesbar ({len(_katalog['fehler'])})"):
+                for datei, grund in _katalog["fehler"]:
+                    st.caption(f"`{datei}` -- {grund}")
+
+        # Neu einlesen heisst: den Ordner vollstaendig durchgehen und den
+        # Katalog neu anlegen. Noetig nur, wenn Dateien dazukommen oder sich
+        # Spalten aendern -- neue Zeilen wirken ohne Zutun.
+        if is_admin():
+            if st.button("Listen neu einlesen", use_container_width=True,
+                         help="Liest data/tabellen/ vollstaendig neu ein. "
+                              "Fuer geaenderte Zeilen nicht noetig."):
+                with st.spinner("Lese Listen ein ..."):
+                    neu, fehler = tabellen.baue_katalog()
+                st.success(f"{len(neu['eintraege'])} Blaetter eingelesen"
+                           + (f", {len(fehler)} nicht lesbar" if fehler else ""))
+                time.sleep(1)
+                st.rerun()
 
     # 1. NEUER UPLOAD-BEREICH
     # Beide Schreibweisen: Streamlit vergleicht die Endung mit dieser Liste,
@@ -1150,8 +1215,57 @@ if collection.count() > 0:
                                f"Treffer aus {zahlen['ranglisten']} Ranglisten "
                                f"auf die besten {len(treffer)} destilliert.*")
 
+                bloecke = []
+
+                # --- LISTEN ABFRAGEN ---
+                #
+                # Erst entscheiden, WO die Antwort stehen koennte, dann dort
+                # gezielt nachsehen -- dasselbe Vorgehen wie bei einer
+                # Datenbank. Ausgefuehrt wird kein erzeugter Code, sondern
+                # eine gepruefte SELECT-Anweisung gegen das eine gewaehlte
+                # Blatt.
+                if tabellen_aktiv and _eintraege:
+                    auswahl = [e for e in _eintraege
+                               if tabellen_gross or not e.get("gross")]
+                    if auswahl:
+                        with st.spinner("Suche in den Listen ..."):
+                            t_datei = t_blatt = t_ergebnis = ""
+                            t_sql = t_grund = ""
+                            try:
+                                t_datei, t_blatt, t_sql = tabellen.formuliere(
+                                    chat_client, chat_model, user_query,
+                                    tabellen.als_text(auswahl), verlauf)
+                                if not t_sql:
+                                    t_grund = ("Keine der Listen passt zu "
+                                               "dieser Frage.")
+                            except Exception as e:
+                                t_grund = f"Abfrage nicht erzeugt: {e}"
+
+                            if t_sql:
+                                try:
+                                    sp, ze = tabellen.fuehre_aus(
+                                        t_datei, t_blatt, t_sql)
+                                    t_ergebnis = sqlpruefung.als_tabelle(sp, ze)
+                                except ValueError as e:
+                                    t_grund = str(e)
+                                except Exception as e:
+                                    t_grund = f"Liste nicht lesbar: {e}"
+
+                        if t_ergebnis:
+                            quelle = t_datei + (f"#{t_blatt}" if t_blatt else "")
+                            bloecke += [
+                                ("liste_abfrage", f"{quelle}\n{t_sql}"),
+                                ("liste_ergebnis", t_ergebnis)]
+                            with st.expander(f"\U0001f4ca Liste: {quelle}"):
+                                st.code(t_sql, language="sql")
+                                st.markdown(t_ergebnis)
+                        elif t_grund:
+                            st.caption(f"\U0001f4ca *Listen nicht verwendet: "
+                                       f"{t_grund}*")
+
                 # --- 3. KONTEXT FÜR DAS LLM ---
-                dynamic_context = pipeline.kontext(treffer, bild_texte)
+                dynamic_context = pipeline.kontext(treffer, bild_texte,
+                                                   bloecke=bloecke)
 
                 with st.expander("\U0001f6e0\ufe0f Debug-Röntgenblick (Was sieht das LLM?)"):
                     st.write(f"**Generierte Sonden:** {search_queries}")

@@ -36,6 +36,12 @@ VORLAGEN = {
         "pflicht": ("{FRAGE}",),
         "optional": ("{HISTORY}", "{GLOSSAR}"),
     },
+    "tabellen_prompt.txt": {
+        "titel": "Listenabfrage",
+        "zweck": "Welche Liste zur Frage passt und wie darin gesucht wird.",
+        "pflicht": ("{KATALOG}", "{FRAGE}", "{MARKER}"),
+        "optional": ("{HISTORY}",),
+    },
     "sql_prompt.txt": {
         "titel": "Datenbankabfrage",
         "zweck": "Wie aus der Frage eine lesende SQL-Abfrage wird.",
