@@ -670,10 +670,15 @@ with st.sidebar:
             # Ohne das ginge es nur ueber das Terminal. Wer eine Liste hat,
             # soll sie ablegen koennen, ohne Serverzugang zu brauchen.
             if tabellen.beschreibbar():
+                # Der Schluessel traegt eine laufende Nummer: Streamlit
+                # behaelt die Datei im Feld, bis das Widget einen neuen
+                # bekommt. Ohne das steht die abgelegte Datei weiter da,
+                # als sei nichts geschehen.
+                _nr = st.session_state.setdefault("listen_upload_nr", 0)
                 _hoch = st.file_uploader(
                     "Liste hochladen", accept_multiple_files=True,
                     type=[e.lstrip(".") for e in tabellen.ENDUNGEN],
-                    key="listen_upload")
+                    key=f"listen_upload_{_nr}")
                 if _hoch:
                     _bekannt = [b for b in tabellen.bereiche(_eintraege)
                                 if b != "(Basis)"]
@@ -702,6 +707,7 @@ with st.sidebar:
                         for m in _misslungen:
                             st.error(m)
                         if _abgelegt:
+                            st.session_state["listen_upload_nr"] = _nr + 1
                             time.sleep(1)
                             st.rerun()
             else:
@@ -721,7 +727,11 @@ with st.sidebar:
     # 1. NEUER UPLOAD-BEREICH
     # Beide Schreibweisen: Streamlit vergleicht die Endung mit dieser Liste,
     # und eine Datei mit der Endung .PDF wuerde sonst abgelehnt.
-    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf", "PDF"])
+    # Wie beim Listen-Upload: ohne wechselnden Schluessel bleibt die Datei
+    # nach dem Verarbeiten im Feld stehen.
+    _pdf_nr = st.session_state.setdefault("pdf_upload_nr", 0)
+    uploaded_file = st.file_uploader("PDF hochladen", type=["pdf", "PDF"],
+                                     key=f"pdf_upload_{_pdf_nr}")
     if uploaded_file:
         # --- SACHGEBIET ---
         #
@@ -756,6 +766,7 @@ with st.sidebar:
                 process_uploaded_pdf(uploaded_file, is_shared, sachgebiet)
             st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' hinzugefügt!")
             refresh_document_index()
+            st.session_state["pdf_upload_nr"] = _pdf_nr + 1
             time.sleep(1)
             st.rerun()
 
