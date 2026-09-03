@@ -81,6 +81,12 @@ Tabellen aus Word werden zu eigenen Abschnitten mit der vorangehenden
 Überschrift als Kontext. `xlsx` und `csv` gehören **nicht** hierher; für
 Listen siehe *Listen aus Tabellendateien*.
 
+**Bilder aus Word-Dateien** liest `ingest_images.py` mit — dasselbe
+Sehmodell, derselbe Größenfilter, dieselbe Wiederaufnahme wie bei PDFs. Als
+Zusammenhang dienen die Überschrift des Abschnitts und der Absatz davor;
+die Bildunterschrift steht in Word meistens genau dort. Markdown und Text
+haben keine eingebetteten Bilder und werden übersprungen.
+
 Die Vorschau der Originalseite unter einer Quelle gibt es nur bei PDFs.
 
 ## ⚙️ Ingest

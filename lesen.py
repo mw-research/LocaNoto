@@ -137,3 +137,61 @@ def abschnitte(pfad):
         yield from _markdown(pfad)
     else:
         raise ValueError(f"Kein unterstuetztes Format: {endung}")
+
+
+# --- BILDER ---
+
+def bilder(pfad):
+    """(nummer, kontext, rohdaten) je Bild einer Word-Datei.
+
+    Der Zusammenhang ist dasselbe Problem wie beim PDF: ein freigestellter
+    Ausschnitt laesst das Sehmodell Geometrie beschreiben statt Bedeutung.
+    Was hier hilft, ist die zuletzt gesehene Ueberschrift und der Absatz
+    davor -- die Bildunterschrift steht in Word meistens genau dort.
+    """
+    if not pfad.lower().endswith(".docx"):
+        return
+
+    from docx import Document
+    from docx.text.paragraph import Paragraph
+
+    doc = Document(pfad)
+    dateiname = os.path.basename(pfad)
+    nummer, titel, davor = 0, "", ""
+
+    for kind in doc.element.body.iterchildren():
+        if kind.tag.split("}")[-1] != "p":
+            continue
+        absatz = Paragraph(kind, doc)
+        text = absatz.text.strip()
+        stil = (absatz.style.name or "").lower() if absatz.style else ""
+
+        if text and stil.startswith(("heading", "überschrift", "ueberschrift")):
+            nummer += 1
+            titel = text
+            davor = ""
+            continue
+
+        # Bilder haengen als Zeichnung im Absatz; die Beziehungs-Kennung
+        # verweist auf den eingebetteten Teil der Datei.
+        for blip in kind.iter(
+                "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"):
+            rid = blip.get("{http://schemas.openxmlformats.org/officeDocument"
+                           "/2006/relationships}embed")
+            if not rid:
+                continue
+            try:
+                teil = doc.part.related_parts[rid]
+            except KeyError:
+                continue
+            teile = [f"Abbildung aus {dateiname}"]
+            if titel:
+                teile.append(f"Abschnitt: {titel}")
+            if davor:
+                teile.append(davor[:400])
+            if text:
+                teile.append(text[:400])
+            yield max(nummer, 1), chr(10).join(teile), teil.blob
+
+        if text:
+            davor = text

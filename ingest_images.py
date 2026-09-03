@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import paths
+import lesen
 import store
 import keyword_index
 import llm
@@ -87,9 +88,9 @@ def folder_of(pdf_pfad):
 
 # Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe
 # folder_of), und unabhaengig von der Gross-/Kleinschreibung der Endung.
-pdf_dateien = paths.pdf_dateien(ORDNER_NAME)
+dokumente = paths.dokument_dateien(ORDNER_NAME)
 
-if not pdf_dateien:
+if not dokumente:
     print(f"Keine PDFs im Ordner '{ORDNER_NAME}' gefunden.")
     exit()
 
@@ -240,11 +241,89 @@ gesehene_bilder = set()
 fehlgeschlagen = []
 
 
+def bild_aufbereiten(rohdaten):
+    """(image_url, breite, hoehe) -- url ist None, wenn das Bild zu klein ist.
+
+    Herausgeloest, weil beide Quellen sie brauchen: Bilder aus PDF-Seiten und
+    Bilder aus Word-Dateien. Der Groessenfilter zweimal geschrieben waere
+    die Sorte Verdopplung, bei der eine Haelfte irgendwann nachgezogen wird
+    und die andere nicht.
+    """
+    image = Image.open(io.BytesIO(rohdaten))
+    width, height = image.size
+
+    # Bewusst NICHT "width < X or height < X": technische Dokumente
+    # enthalten viele breite, flache Detailzeichnungen. Eine Mindestgroesse
+    # auf BEIDEN Kanten verwirft davon einen erheblichen Teil als "Logo".
+    # Lange Kante und Flaeche trifft Logos, behaelt aber Zeichnungen.
+    if max(width, height) < MIN_LONG_EDGE or width * height < MIN_AREA:
+        return None, width, height
+
+    # Die laengste Seite auf 1024 Pixel normieren: kleine Bilder werden
+    # groesser, damit das Modell die Bildbereiche besser liest, grosse
+    # kleiner, um Speicher zu sparen. LANCZOS haelt Schrift dabei scharf.
+    ziel = 1024
+    faktor = ziel / max(width, height)
+    if faktor != 1.0:
+        image = image.resize((int(width * faktor), int(height * faktor)),
+                             Image.Resampling.LANCZOS)
+    if image.mode in ("RGBA", "P", "LA"):
+        image = image.convert("RGB")
+
+    puffer = io.BytesIO()
+    image.save(puffer, format="JPEG", quality=95)
+    b64 = base64.b64encode(puffer.getvalue()).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}", width, height
+
+
 # --- VERARBEITUNG ---
-for pdf_pfad in pdf_dateien:
+for pdf_pfad in dokumente:
     dateiname = os.path.basename(pdf_pfad)
     ordner = folder_of(pdf_pfad)
     print(f"\n⏳ Durchsuche '{dateiname}' nach Bildern...")
+
+    # --- WORD ---
+    #
+    # Bilder in Word haengen an Absaetzen, nicht an Seiten. Zusammenhang
+    # geben Ueberschrift und Bildunterschrift -- siehe lesen.bilder().
+    if lesen.unterstuetzt(dateiname):
+        if not dateiname.lower().endswith(".docx"):
+            continue
+        try:
+            aufgaben, gespeichert, bereits_da, gefunden = [], 0, 0, 0
+            for nummer, kontext, rohdaten in lesen.bilder(pdf_pfad):
+                gefunden += 1
+                chunk_id = f"{dateiname}_p{nummer}_img{gefunden}"
+                if collection.get(ids=[chunk_id])["ids"]:
+                    bereits_da += 1
+                    continue
+                try:
+                    image_url, breite, hoehe = bild_aufbereiten(rohdaten)
+                except Exception as e:
+                    print(f"   [!] Fehler bei der Bildoptimierung: {e}")
+                    continue
+                if image_url is None:
+                    print(f"   ⏩ Überspringe winziges Bild "
+                          f"({breite}x{hoehe} px) - vermutlich ein Logo.")
+                    continue
+                print(f"   🖼️ Analysiere Bild {gefunden} in Abschnitt {nummer}...")
+                aufgaben.append((chunk_id, image_url, kontext,
+                                 {"file_name": dateiname, "page": nummer,
+                                  "folder": ordner, "access": "shared",
+                                  "owner": "system",
+                                  "source": "uploaded_pdfs",
+                                  "type": "image"}))
+                if len(aufgaben) >= VISION_PARALLEL * 3:
+                    gespeichert += verarbeite(aufgaben)
+                    aufgaben = []
+            gespeichert += verarbeite(aufgaben)
+            print(f"FERTIG mit '{dateiname}': {gefunden} Bilder gefunden, "
+                  f"{gespeichert} neu beschrieben, {bereits_da} schon "
+                  f"vorhanden.")
+        except Exception as e:
+            print(f"❌ FEHLER beim Lesen von '{dateiname}': {e}")
+        continue
+
     
     try:
         doc = pymupdf.open(pdf_pfad)
@@ -345,51 +424,15 @@ for pdf_pfad in pdf_dateien:
                 base_image = doc.extract_image(xref)
                 image_bytes = base_image["image"]
                 
-                # --- NEU: BILD-OPTIMIERUNG MIT PILLOW ---
+                # --- BILD-OPTIMIERUNG ---
                 try:
-                    # Bild in den Arbeitsspeicher laden
-                    image = Image.open(io.BytesIO(image_bytes))
-                    width, height = image.size
-                    
-                    # 1. GRÖSSENFILTER: Kleine Grafiken überspringen
-                    #    (Logos, Icons, Trennlinien)
-                    #
-                    # Bewusst NICHT "width < 400 or height < 400": technische
-                    # Dokumente enthalten viele breite, flache Detailzeichnungen.
-                    # Eine Mindestgröße auf BEIDEN Kanten verwirft davon einen
-                    # erheblichen Teil als "Logo".
-                    # Lange Kante + Fläche trifft Logos, behält aber Zeichnungen.
-                    if max(width, height) < MIN_LONG_EDGE or width * height < MIN_AREA:
-                        print(f"   ⏩ Überspringe winziges Bild ({width}x{height} px) - vermutlich ein Logo.")
-                        continue
-                    
-                    # 2. RESIZING: Wir normieren die längste Seite auf 1024 Pixel.
-                    # Kleine Bilder werden vergrößert (damit das Modell die Patches besser lesen kann),
-                    # riesige Bilder werden verkleinert (um VRAM zu sparen).
-                    target_max = 1024
-                    ratio = target_max / max(width, height)
-                    
-                    if ratio != 1.0:
-                        new_width = int(width * ratio)
-                        new_height = int(height * ratio)
-                        # LANCZOS ist der beste Algorithmus, um Schriften beim Skalieren scharf zu halten
-                        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    
-                    # Wenn PDFs transparente Bilder (PNG) haben, müssen wir sie für JPEGs in RGB konvertieren
-                    if image.mode in ("RGBA", "P"):
-                        image = image.convert("RGB")
-                        
-                    # Das optimierte Bild wieder in Bytes umwandeln
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="JPEG", quality=95)
-                    optimized_bytes = buffered.getvalue()
-                    
-                    # In Base64 umwandeln für die Vision API
-                    base64_image = base64.b64encode(optimized_bytes).decode('utf-8')
-                    image_url = f"data:image/jpeg;base64,{base64_image}"
-                    
+                    image_url, width, height = bild_aufbereiten(image_bytes)
                 except Exception as e:
                     print(f"   [!] Fehler bei der Bildoptimierung: {e}")
+                    continue
+                if image_url is None:
+                    print(f"   ⏩ Überspringe winziges Bild "
+                          f"({width}x{height} px) - vermutlich ein Logo.")
                     continue
                 # ----------------------------------------
                 # access/owner MUESSEN gesetzt sein: die Vektorsuche filtert
