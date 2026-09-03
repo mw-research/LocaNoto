@@ -419,6 +419,23 @@ die Antwort stehen könnte, dann dort gezielt nachsehen.
 
 ### Der Katalog
 
+### Dateien hineinbekommen
+
+Verwalter laden sie in der Seitenleiste unter **📊 Listen** hoch — mehrere
+auf einmal, mit Auswahl des Bereichs und **+ neues anlegen** für einen neuen.
+Abgelegt und eingelesen wird in einem Schritt.
+
+Ist der Ordner nur lesend eingehängt, entfällt der Upload: dann werden die
+Dateien dort gepflegt, wo sie liegen, und ein zweiter Ablageort wäre genau
+das Problem, das die Einhängung löst.
+
+Auf dem Server geht es auch von Hand — `data/` ist eingehängt, ein Neustart
+ist nicht nötig:
+
+```bash
+cp bestandsliste.xlsx data/tabellen/
+```
+
 Beim Einlesen wird je Datei und Blatt mechanisch erfasst, was darin steht:
 Spaltennamen, Zeilenzahl, und bei Spalten mit wenigen verschiedenen Werten
 deren Liste. Der letzte Teil ist der nützlichste — eine Spalte `Status` sagt

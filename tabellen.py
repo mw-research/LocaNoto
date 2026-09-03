@@ -273,6 +273,57 @@ def vorhanden():
     return False
 
 
+def beschreibbar():
+    """Laesst sich in den Listenordner schreiben?
+
+    Bei einer Nur-Lese-Einhaengung nicht -- dann pflegt die Fachabteilung
+    die Dateien, und ein Upload waere ohnehin der falsche Weg.
+    """
+    ordner = pfad()
+    return os.path.isdir(ordner) and os.access(ordner, os.W_OK)
+
+
+def sicherer_dateiname(name):
+    """Ein Dateiname ohne Pfadanteile. Leer, wenn nichts uebrig bleibt."""
+    name = os.path.basename((name or "").replace(chr(92), "/")).strip()
+    name = re.sub(r"[^0-9A-Za-zäöüÄÖÜß ._-]",
+                  "", name).strip(" .")
+    if not name.lower().endswith(ENDUNGEN):
+        return ""
+    return name
+
+
+def lege_ab(daten, name, bereich=""):
+    """Speichert eine hochgeladene Tabellendatei. (ok, meldung)."""
+    if not beschreibbar():
+        return False, ("Der Listenordner ist nicht beschreibbar -- "
+                       "vermutlich nur lesend eingehaengt.")
+    sicher = sicherer_dateiname(name)
+    if not sicher:
+        return False, (f"'{name}' ist kein zulaessiger Name. Erlaubt sind "
+                       f"{', '.join(ENDUNGEN)}.")
+
+    bereich = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]",
+                     "", (bereich or "").strip()).strip()
+    wurzel = os.path.realpath(pfad())
+    ziel_ordner = os.path.join(wurzel, bereich) if bereich else wurzel
+    ziel = os.path.realpath(os.path.join(ziel_ordner, sicher))
+
+    # Nach dem Aufloesen muss die Datei noch im Listenordner liegen. Sonst
+    # haette ein praeparierter Name aus ihm herausgefuehrt.
+    if not (ziel == wurzel or ziel.startswith(wurzel + os.sep)):
+        return False, "Ziel liegt ausserhalb des Listenordners."
+
+    try:
+        os.makedirs(os.path.dirname(ziel), exist_ok=True)
+        with open(ziel, "wb") as f:
+            f.write(daten)
+    except OSError as e:
+        return False, f"Konnte nicht gespeichert werden: {e}"
+    _zwischenspeicher.clear()
+    return True, os.path.relpath(ziel, wurzel).replace(os.sep, "/")
+
+
 def bereiche(eintraege):
     """Die Unterordner, in denen Listen liegen.
 
