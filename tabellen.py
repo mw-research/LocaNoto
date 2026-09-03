@@ -259,8 +259,9 @@ def _aufbereiten(roh, schluessel):
         namen.append(n)
     rahmen.columns = namen
     # Leerzeilen unter der Tabelle sind in Exportdateien die Regel. Sie
-    # blaehen die Zeilenzahl auf und machen jede Zaehlung falsch: eine
-    # Inventurliste mit 60 Positionen meldete sich als 1234 Zeilen.
+    # blaehen die Zeilenzahl auf und machen jede Zaehlung falsch --
+    # beobachtet an einer Liste, die sich mit dem Zwanzigfachen ihrer
+    # tatsaechlichen Positionen meldete.
     rahmen = rahmen[rahmen.apply(
         lambda r: any(str(x).strip() for x in r), axis=1)]
     return rahmen.reset_index(drop=True), k
@@ -303,9 +304,13 @@ def _spaltenangaben(rahmen):
         werte = rahmen[spalte].astype(str).str.strip()
         werte = werte[werte != ""]
         verschieden = werte.unique()
-        if 0 < len(verschieden) <= BEISPIELE_BIS:
+        # BEISPIELE_BIS=0 heisst: keine Werte in den Katalog. Frueher
+        # rutschte dann trotzdem einer durch den elif-Zweig -- wer die
+        # Beispielwerte abschaltet, will keinen einzigen, und einer ist
+        # bei einer Lieferantenliste schon ein Name zu viel.
+        if BEISPIELE_BIS > 0 and 0 < len(verschieden) <= BEISPIELE_BIS:
             eintrag["werte"] = [str(w)[:60] for w in verschieden[:BEISPIELE_MAX]]
-        elif len(verschieden):
+        elif BEISPIELE_BIS > 0 and len(verschieden):
             eintrag["beispiel"] = str(verschieden[0])[:60]
         angaben.append(eintrag)
     return angaben
