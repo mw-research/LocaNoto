@@ -53,7 +53,10 @@ PFAD_DATEI = os.path.join(paths.CONFIG_DIR, "tabellen_pfad.txt")
 
 # Der Katalog liegt bewusst NICHT beim Ordner: der kann ausserhalb und nur
 # lesbar eingehaengt sein, etwa ein Netzlaufwerk der Firma.
-KATALOG = os.path.join(paths.DATA_DIR, "tabellen_katalog.json")
+# Ableitbar: der Katalog entsteht aus den Tabellendateien und laesst sich
+# jederzeit neu einlesen. Deshalb neben den Index und nicht auf den
+# persistenten Speicher.
+KATALOG = os.path.join(paths.INDEX_DIR, "tabellen_katalog.json")
 
 # Obergrenze fuer die Zahl der durchsuchten Dateien. Ein versehentlich
 # eingetragenes "/" wuerde sonst den ganzen Container durchlaufen.

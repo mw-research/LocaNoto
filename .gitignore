@@ -20,8 +20,26 @@ log_*.txt
 # Benutzerdatei (enthaelt Passwort-Hashes) -- gehoert nie ins Repo
 users.json
 config/users.json
+config/users.json.neu
 config/tokens.json
 config/tokens.json.neu
+
+# Der Installationsschluessel. Mit ihm sind alle Chatverlaeufe lesbar und
+# jede Signatur faelschbar -- er ist das eine Geheimnis, das auf keinen Fall
+# in ein Repository geraet, auch nicht in ein privates.
+config/schluessel.key
+config/schluessel.key.neu
+
+# Raeume samt Mitgliedschaften: kein Geheimnis, aber betriebsspezifisch.
+# Im Repo wuerde ein Update die Zuordnungen ueberschreiben.
+config/raeume.json
+config/raeume.json.neu
+
+# Zuordnung ownCloud-Ordner -> Raum. Kein Geheimnis, aber
+# betriebsspezifisch -- im Repo wuerde ein Update sie
+# ueberschreiben.
+config/owncloud.json
+config/owncloud.json.neu
 !config/.gitkeep
 
 # Standortspezifische Compose-Erweiterung (Netze, GPU, Ports)

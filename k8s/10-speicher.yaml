@@ -1,0 +1,80 @@
+# --- SPEICHER ---
+#
+# Zwei Volumes, und das erste enthaelt die bekannte data/-Struktur
+# vollstaendig -- so wie sie bisher neben der Compose-Datei lag:
+#
+#     /app/data/
+#         dokumente/              Originaldateien
+#         chats/                  Verlaeufe je Nutzer, verschluesselt
+#         chroma_db/              die Vektordatenbank
+#         keyword_index.sqlite3   Stichwortindex
+#         tabellen_katalog.json   Listenkatalog
+#         feedback.jsonl          Rueckmeldungen
+#         sicherungen/            Abzuege
+#         owncloud/               Stand des Abgleichs
+#
+# Nichts davon liegt im Abbild und nichts im Pod. Der Pod ist das Geruest,
+# dieses Volume ist der Bestand.
+#
+# Getrennt davon nur die Konfiguration -- weil dort der Schluessel liegt,
+# mit dem alle Chatverlaeufe lesbar sind. Andere Rechte, andere
+# Aufbewahrung, andere Sicherung. Eine Sicherung der Dokumente soll ihn
+# nicht mitnehmen.
+#
+# EIN PUNKT ZUM PRUEFEN, bevor du eine storageClassName einsetzt:
+#
+#   Das Datenvolume traegt SQLite-Dateien (chroma_db, keyword_index). Es
+#   braucht deshalb ein echtes Dateisystem -- Blockspeicher, eine
+#   angeschlossene Platte, Ceph RBD, iSCSI, EBS, local PV. Alles das ist
+#   persistent und voellig in Ordnung.
+#
+#   Eine Freigabe ueber NFS oder SMB ist es NICHT: SQLite braucht im
+#   WAL-Betrieb gemeinsamen Speicher im selben Dateisystem, den es dort
+#   nicht gibt, und die Dateisperren sind unzuverlaessig. Wenn dein
+#   persistenter Speicher eine Freigabe ist, nimm zusaetzlich
+#   90-variante-freigabe.yaml -- dort werden die Datenbanken auf ein
+#   eigenes Blockvolume gelegt und der Rest bleibt auf der Freigabe.
+#
+#   Die Oberflaeche zeigt unter "Speicherorte" den tatsaechlichen
+#   Journalmodus. Steht dort nicht "wal", liegt genau dieser Fall vor.
+#
+# kubectl get storageclass  zeigt, was der Cluster anbietet.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-daten
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  # ReadWriteOnce: alles laeuft in einem Pod, und das Volume traegt
+  # Datenbanken -- genau ein Knoten haengt es ein. Das ist die Betriebsart,
+  # die jeder Cluster kann; ReadWriteMany bieten viele Standardklassen
+  # nicht an, und ein PVC, das niemand erfuellen kann, bleibt still auf
+  # "Pending" stehen.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      # Die Originaldateien sind der Hauptteil: 1,6 GB PDF ergeben rund
+      # 320.000 Abschnitte, und die Dateien bleiben daneben liegen, weil
+      # die Quellenansicht sie oeffnet. Dazu die Vektordatenbank (gemessen
+      # rund 100 MB je 20.000 Abschnitte bei Dimension 1024), der
+      # Stichwortindex (520 MB bei 324.000) und die Abzuege.
+      storage: 100Gi
+  # storageClassName: local-path
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-konfig
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      # Winzig: Nutzer, Token, Schluessel, Raeume, Prompts,
+      # Voreinstellungen. Eigenes Volume nur, damit es eigenen Rechten und
+      # einer eigenen Sicherung unterliegt.
+      storage: 1Gi
+  # storageClassName: local-path

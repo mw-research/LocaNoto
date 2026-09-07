@@ -26,15 +26,32 @@ LAEUFE = {
                "Bilder nachtragen"),
     "text": ("ingest.py", "ingest.log",
              "Dokumente neu einlesen"),
+    # Holt aus ownCloud und liest anschliessend ein. Ohne Argumente heisst
+    # das: alle eingerichteten Raeume. Wer einen einzelnen abgleichen will,
+    # nimmt das Skript von Hand -- ein Knopf je Raum waere eine Reihe
+    # Knoepfe, die alle dasselbe tun.
+    "abgleich": ("abgleich.py", "abgleich.log",
+                 "Aus ownCloud abgleichen"),
+    # Der Abzug der Vektordatenbank. Dauert bei 20.000 Abschnitten
+    # Sekunden, bei 324.000 rund eine Minute -- trotzdem abgekoppelt, damit
+    # ein Neuladen der Oberflaeche ihn nicht abschneidet.
+    "sicherung": ("sicherung.py", "sicherung.log",
+                  "Vektordatenbank sichern"),
 }
 
 
+# INDEX_DIR und nicht DATA_DIR, und hier ist es keine Frage der
+# Bequemlichkeit: eine Prozesskennung gilt nur auf ihrem eigenen Rechner.
+# Liegt die Datei auf gemeinsamem Speicher, findet ein Container die PID
+# eines anderen, prueft mit os.kill(pid, 0) irgendeinen fremden Prozess und
+# haelt dessen Lauf fuer seinen eigenen -- oder verweigert den Start, weil
+# angeblich schon einer laeuft.
 def _pid_datei(name):
-    return os.path.join(paths.DATA_DIR, f"lauf_{name}.pid")
+    return os.path.join(paths.INDEX_DIR, f"lauf_{name}.pid")
 
 
 def protokoll_pfad(name):
-    return os.path.join(paths.DATA_DIR, LAEUFE[name][1])
+    return os.path.join(paths.INDEX_DIR, LAEUFE[name][1])
 
 
 def laeuft(name):

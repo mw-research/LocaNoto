@@ -3,10 +3,8 @@ import pymupdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import time
-import json
 from datetime import datetime
 import re
-import bcrypt
 
 import paths
 import store
@@ -22,6 +20,12 @@ import prompts
 import presets
 import tabellen
 import lesen
+import raeume
+import owncloud
+import sicherung
+import benutzer
+import chats
+import geheim
 import hintergrund
 import sqlpruefung
 from textutils import strip_boilerplate
@@ -54,61 +58,92 @@ title_client = llm.client("TITLE")
 embed_client = llm.client("EMBEDDING")
 
 # --- LOGIN SYSTEM ---
-USER_FILE = paths.resolve_user_file()
+#
+# Passwortpruefung, Rollen und das Protokoll liegen in benutzer.py -- die
+# Oberflaeche entscheidet nichts davon selbst. Vorher stand die
+# bcrypt-Pruefung hier, eine zweite in create_user.py und eine dritte in
+# manage_users.py; wer eine davon aenderte, aenderte die anderen nicht mit.
+# Nach dieser Zeit ohne Klick ist die Sitzung vorbei. Vorher gab es keine
+# Grenze: ein offener Browser an einem Arbeitsplatz blieb angemeldet, bis
+# jemand von Hand ausloggte oder der Container neu startete.
+SITZUNG_MINUTEN = paths.env_int("SITZUNG_MINUTEN", 480)
 
 
-def load_users():
-    """Laedt die Benutzerdatei. Fehlt sie oder ist sie leer/kaputt, gilt das
-    als 'noch keine Benutzer angelegt' -- nicht als Absturz."""
-    if not os.path.exists(USER_FILE) or os.path.getsize(USER_FILE) == 0:
-        return {}
-    try:
-        with open(USER_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        st.error(
-            f"'{os.path.basename(USER_FILE)}' ist beschaedigt und konnte nicht "
-            "gelesen werden. Bitte pruefen oder loeschen und mit "
-            "create_user.py neu anlegen."
-        )
-        st.stop()
+def sitzung_abgelaufen():
+    if SITZUNG_MINUTEN <= 0:
+        return False
+    letzte = st.session_state.get("letzte_tat")
+    if letzte is None:
+        return False
+    return (time.time() - letzte) > SITZUNG_MINUTEN * 60
+
+
+if "username" in st.session_state and sitzung_abgelaufen():
+    for schluessel in ("username", "letzte_tat", "current_chat_id",
+                       "messages", "last_loaded_chat"):
+        st.session_state.pop(schluessel, None)
+    st.session_state["sitzung_lief_ab"] = True
 
 if "username" not in st.session_state:
     st.markdown("<h1 style='text-align: center; margin-top: 10vh;'>🔐 LocaNoto Login</h1>", unsafe_allow_html=True)
-    
-    users = load_users()
-    if not users:
-        st.warning("Keine Benutzer gefunden. Bitte führe zuerst 'create_user.py' auf dem Server aus.")
+
+    if st.session_state.pop("sitzung_lief_ab", False):
+        st.info(f"Die Sitzung war laenger als {SITZUNG_MINUTEN} Minuten "
+                f"ohne Eingabe und wurde beendet.")
+
+    zustand = benutzer.zustand()
+    if zustand == benutzer.LEER:
+        st.warning("Keine Benutzer gefunden. Bitte führe zuerst "
+                   "'create_user.py' auf dem Server aus.")
         st.stop()
-        
+    if zustand == benutzer.MANIPULIERT:
+        # Kein Abbruch: die Anmeldung der bestehenden Nutzer funktioniert
+        # weiter. Was nicht funktioniert, ist die Anmeldung eines von Hand
+        # eingetragenen Zugangs -- und genau das soll hier stehen.
+        gesperrt = benutzer.ungueltige()
+        st.error("Die Benutzerdatei wurde ausserhalb der Anwendung "
+                 "geändert."
+                 + (f" Gesperrt: {', '.join(gesperrt)}." if gesperrt else ""))
+
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         with st.form("login_form"):
             login_user = st.text_input("Benutzername").strip().lower()
             login_pass = st.text_input("Passwort", type="password")
             submit_button = st.form_submit_button("Einloggen", use_container_width=True)
-            
+
             if submit_button:
-                if login_user in users:
-                    # Das eingegebene Passwort mit dem gespeicherten Hash abgleichen
-                    stored_hash = users[login_user].encode('utf-8')
-                    if bcrypt.checkpw(login_pass.encode('utf-8'), stored_hash):
-                        st.session_state["username"] = login_user
-                        st.rerun()
-                    else:
-                        st.error("Falsches Passwort.")
+                # Eine Meldung fuer beide Faelle. "Benutzer existiert nicht"
+                # verriet, welche Kennungen es gibt -- die halbe Arbeit fuer
+                # jemanden, der Passwoerter durchprobiert.
+                if benutzer.pruefe(login_user, login_pass):
+                    st.session_state["username"] = login_user
+                    st.session_state["letzte_tat"] = time.time()
+                    st.rerun()
                 else:
-                    st.error("Benutzer existiert nicht.")
-    
+                    st.error("Anmeldung fehlgeschlagen.")
+
     st.stop()
 
-# --- ADMIN SETUP ---
-admin_env = os.getenv("ADMIN_USERS", "admin")
-ADMIN_USERS = [user.strip().lower() for user in admin_env.split(",")]
+st.session_state["letzte_tat"] = time.time()
+
+# Jeder Nutzer hat einen eigenen Raum, und zwar von der Anmeldung an
+# und nicht erst nach dem ersten Upload. Vorher war er nur gedacht:
+# die Suche nahm ihn mit, in der Verwaltung stand er nicht, und ein
+# Abzug haette ihn uebergangen.
+raeume.sichere_anlage_privat(st.session_state["username"])
 
 
+# --- ADMIN ---
+#
+# Die Rolle steht in der Benutzerdatei und ist mitsigniert. ADMIN_USERS aus
+# der Umgebung greift nur noch, solange die Datei aus der Zeit vor den
+# Signaturen stammt -- eine Umgebungsvariable laesst sich am Container
+# setzen, ohne die Benutzerdatei anzufassen, und war damit ein Weg, sich
+# Verwalterrechte zu geben.
 def is_admin():
-    return st.session_state.get("username", "").lower() in ADMIN_USERS
+    return benutzer.ist_admin(st.session_state.get("username", ""))
+
 
 # --- SIDEBAR (UI) ---
 with st.sidebar:
@@ -181,58 +216,47 @@ def make_chat_title(user_query, model):
     return keywords or "Chat"
 
 
-# --- CHAT-SPEICHERUNG (MULTI-USER) ---
+# --- CHAT-SPEICHERUNG ---
+#
+# Liegt in chats.py: verschluesselt, und der Titel steht in der Datei statt
+# im Dateinamen. Vorher hiess ein Verlauf "Pruefristen_Kessel_26-08-26.json"
+# -- damit verriet schon das Verzeichnis, worum es ging, ohne dass jemand
+# eine Datei oeffnen musste.
 def get_user_chat_dir():
-    """Gibt den Pfad zum persönlichen Chat-Ordner des eingeloggten Nutzers zurück."""
-    user_dir = os.path.join(CHATS_DIR, st.session_state["username"])
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-    return user_dir
+    return chats.ordner(st.session_state["username"])
+
 
 def get_all_chats():
-    """Gibt eine nach Datum sortierte Liste aller Chat-Dateien des Nutzers zurück."""
-    user_dir = get_user_chat_dir()
-    files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
-    # Sortieren nach Änderungsdatum (neueste zuerst)
-    files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
-    return files
+    """[(kennung, titel, geaendert)], neueste zuerst."""
+    return chats.liste(st.session_state["username"])
+
 
 def load_chat(chat_id):
-    """Lädt einen bestimmten Chat anhand seiner ID aus dem Nutzer-Ordner."""
-    user_dir = get_user_chat_dir()
-    path = os.path.join(user_dir, chat_id)
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-            # Beschaedigte Chat-Datei soll die App nicht blockieren.
-            return []
-    return []
+    return chats.lade(st.session_state["username"], chat_id)
 
-def save_chat(chat_id, messages):
-    """Speichert den Verlauf im Nutzer-Ordner."""
-    user_dir = get_user_chat_dir()
-    path = os.path.join(user_dir, chat_id)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(messages, f, ensure_ascii=False, indent=2)
+
+def save_chat(chat_id, messages, titel=None):
+    chats.speichere(st.session_state["username"], chat_id, messages, titel)
+
 
 def delete_chat(chat_id):
-    """Löscht eine Chat-Datei aus dem Nutzer-Ordner."""
-    user_dir = get_user_chat_dir()
-    path = os.path.join(user_dir, chat_id)
-    if os.path.exists(path):
-        os.remove(path)
+    chats.loesche(st.session_state["username"], chat_id)
+
+
+def chat_titel(chat_id):
+    return chats.titel(st.session_state["username"], chat_id)
+
 
 # --- CHAT STATE INITIALISIEREN ---
 # Welcher Chat ist gerade aktiv?
 if "current_chat_id" not in st.session_state:
-    existing_chats = get_all_chats()
-    if existing_chats:
-        st.session_state.current_chat_id = existing_chats[0]
+    vorhanden = get_all_chats()
+    if vorhanden:
+        st.session_state.current_chat_id = vorhanden[0][0]
     else:
-        # Wenn es noch keine Chats gibt, erstelle eine neue ID
-        st.session_state.current_chat_id = f"Chat_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        # Die Kennung ist zufaellig und sagt nichts. Der Titel entsteht nach
+        # der ersten Frage und steht in der Datei, nicht im Dateinamen.
+        st.session_state.current_chat_id = chats.neue_kennung()
 
 # Lade die Nachrichten für den gerade aktiven Chat
 if "messages" not in st.session_state or st.session_state.get("last_loaded_chat") != st.session_state.current_chat_id:
@@ -246,9 +270,21 @@ def init_chromadb():
     # Der Zugang liegt in store.py -- dieselbe Stelle, die auch die
     # Skripte und die Schnittstelle benutzen. Mit CHROMA_HOST wird daraus
     # ein Server statt einer Dateiablage, ohne dass es hier auffaellt.
-    return store.client(), store.collection()
+    return store.client()
 
-chroma_client, collection = init_chromadb()
+chroma_client = init_chromadb()
+
+
+def raum_sammlung(kennung, anlegen=True):
+    """Die Sammlung eines Raums."""
+    return store.sammlung(raeume.sammlung(kennung), anlegen=anlegen)
+
+
+def meine_sammlungen(nur=None):
+    """[(raum, sammlung)] fuer den angemeldeten Nutzer."""
+    return pipeline.sammlungen(st.session_state["username"], nur=nur)
+
+
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
 # --- KEYWORD-INDEX (SQLite FTS5, plattenbasiert) ---
@@ -271,10 +307,37 @@ def init_keyword_index():
     Faellt er leer aus, obwohl Chunks vorhanden sind, stammt die Datenbank aus
     einer Installation vor diesem Index -- dann einmalig nachbauen.
     """
-    have = keyword_index.count()
-    if have == 0 and collection.count() > 0:
-        have = keyword_index.rebuild_from_collection(collection)
-    return have
+    if not keyword_index.schema_aktuell():
+        # Ein Index von vor den Raeumen hat keine Raumspalte und kann
+        # deshalb nicht nach Raum filtern. Er wird aus den Sammlungen neu
+        # aufgebaut -- ohne Modell, ohne die Originaldateien.
+        return keyword_index.rebuild_from_raeume(_alle_raum_sammlungen())
+
+    # Zahlen vergleichen statt nur "ist er leer": schreibt ein anderer
+    # Prozess in die Sammlungen -- ein abgekoppelter Ingest, ein CronJob im
+    # Cluster --, dann erreicht er diesen Index nicht. Ohne die Pruefung
+    # fehlen dessen Treffer bis zum naechsten Start, und niemand sieht
+    # warum, weil die Vektorsuche ja antwortet.
+    paare = _alle_raum_sammlungen()
+    passt, im_index, in_sammlungen = keyword_index.passt_zu(paare)
+    if not passt:
+        return keyword_index.rebuild_from_raeume(paare)
+    return im_index
+
+
+def _alle_raum_sammlungen():
+    """[(raum, sammlung)] ueber ALLE Raeume -- nur fuer den Indexaufbau.
+
+    Nicht fuer die Suche: dort entscheidet die Berechtigung, welche
+    Sammlungen gefragt werden. Der Stichwortindex dagegen enthaelt alles
+    und filtert beim Lesen.
+    """
+    paare = []
+    for kennung in raeume.liste():
+        sml = raum_sammlung(kennung, anlegen=False)
+        if sml is not None:
+            paare.append((kennung, sml))
+    return paare
 
 
 init_keyword_index()
@@ -297,89 +360,158 @@ def init_reranker():
 reranker, rerank_info = init_reranker()
 
 # --- DOKUMENTEN-LOGIK ---
-def make_document_public(filename):
-    """Ändert den Status eines privaten Dokuments auf 'shared'."""
-    existing_data = collection.get(
-        where={
-            "$and": [
-                {"file_name": filename},
-                {"owner": st.session_state["username"]}
-            ]
-        }
-    )
-    if existing_data and existing_data["ids"]:
-        new_metadatas = []
-        for meta in existing_data["metadatas"]:
-            meta["access"] = "shared"
-            new_metadatas.append(meta)
-        collection.update(ids=existing_data["ids"], metadatas=new_metadatas)
-        keyword_index.set_access(filename, st.session_state["username"], "shared")
-        refresh_document_index()
-        return True
-    return False
+def verschiebe_dokument(filename, von_raum, nach_raum):
+    """Verschiebt ein Dokument samt Abschnitten in einen anderen Raum.
+
+    Das ist der Nachfolger der Freigabe. Fruher wurde ein Merkmal in den
+    Metadaten umgeschrieben -- ein Zeichen, und aus privat wurde
+    oeffentlich. Jetzt wandern die Abschnitte tatsaechlich in eine andere
+    Sammlung, weil die Sammlung die Grenze ist.
+
+    Die Vektoren werden mitgenommen, nicht neu berechnet: sie liegen vor,
+    und ein Neueinlesen waere Modellzeit fuer ein vorhandenes Ergebnis.
+    """
+    quelle = raum_sammlung(von_raum, anlegen=False)
+    if quelle is None:
+        return False, "Der Ausgangsraum hat keine Daten."
+    daten = quelle.get(where={"file_name": filename},
+                       include=["documents", "metadatas", "embeddings"])
+    ids = daten.get("ids") or []
+    if not ids:
+        return False, "Keine Abschnitte gefunden."
+    vektoren = daten.get("embeddings")
+    if vektoren is None or len(vektoren) != len(ids):
+        return False, ("Die Vektoren fehlen -- ohne sie waere das ein "
+                       "Neueinlesen.")
+
+    metas = []
+    for m in daten.get("metadatas") or []:
+        meta = dict(m or {})
+        meta["raum"] = nach_raum
+        # access und owner bleiben als Herkunftsangabe stehen, sie steuern
+        # aber nichts mehr. Sie zu loeschen wuerde nur die Frage "wer hat
+        # das hochgeladen" unbeantwortbar machen.
+        metas.append(meta)
+
+    ziel = raum_sammlung(nach_raum)
+    ziel.upsert(ids=ids, documents=daten.get("documents") or [],
+                metadatas=metas, embeddings=vektoren)
+    quelle.delete(ids=ids)
+
+    keyword_index.delete_document(filename, raum=von_raum)
+    keyword_index.add_chunks(
+        zip(ids, daten.get("documents") or [], metas))
+    refresh_document_index()
+    return True, f"Nach '{raeume.bezeichnung(nach_raum)}' verschoben."
+
 
 def remove_pdf_if_orphaned(filename):
-    """Loescht die PDF von der Platte -- aber nur, wenn kein Chunk mehr auf
-    sie zeigt.
+    """Loescht die Datei von der Platte -- aber nur, wenn kein Abschnitt
+    mehr auf sie zeigt.
 
-    Alle Nutzer teilen sich DOCS_DIR. Wird die Datei bedingungslos entfernt,
-    verliert ein gleichnamiges geteiltes Dokument seine Quellenansicht,
-    sobald jemand seine private Kopie loescht -- und umgekehrt.
+    Alle Raeume teilen sich DOCS_DIR. Wird die Datei bedingungslos
+    entfernt, verliert ein gleichnamiges Dokument in einem anderen Raum
+    seine Quellenansicht.
     """
-    if collection.get(where={"file_name": filename}, include=[])["ids"]:
-        return False
+    for _raum, sml in _alle_raum_sammlungen():
+        try:
+            if sml.get(where={"file_name": filename}, include=[])["ids"]:
+                return False
+        except Exception:
+            # Lieber die Datei behalten als sie einem Raum wegnehmen,
+            # dessen Sammlung gerade nicht antwortet.
+            return False
     file_path = os.path.join(DOCS_DIR, filename)
     if os.path.exists(file_path):
         os.remove(file_path)
     return True
 
 
-def delete_private_document(filename, owner):
-    """Loescht ein privates Dokument -- ausschliesslich die Chunks des
-    angegebenen Eigentuemers.
+def loesche_dokument(filename, raum):
+    """Loescht ein Dokument aus genau einem Raum.
 
-    Ohne den owner-Filter loescht der where-Ausdruck jeden Chunk mit diesem
-    Dateinamen: die privaten Kopien anderer Nutzer und die des gemeinsamen
-    Pools gleich mit.
+    Der Raum ist nicht optional. Ohne ihn traefe der Loeschbefehl jeden
+    Abschnitt dieses Dateinamens -- auch die in anderen Raeumen, auf die
+    der Loeschende gar keinen Zugriff hat.
     """
-    collection.delete(where={"$and": [
-        {"file_name": filename},
-        {"access": "private"},
-        {"owner": owner},
-    ]})
-    keyword_index.delete_document(filename, access="private", owner=owner)
-
+    sml = raum_sammlung(raum, anlegen=False)
+    if sml is None:
+        return False, "Der Raum hat keine Daten."
+    sml.delete(where={"file_name": filename})
+    keyword_index.delete_document(filename, raum=raum)
     remove_pdf_if_orphaned(filename)
     refresh_document_index()
+    return True, f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
 
 
 def list_foreign_private_documents(current_user):
-    """(owner, file_name) aller privaten Dokumente ausser denen des Nutzers.
+    """(raum, file_name) fremder Raeume -- nur wo das erlaubt ist.
 
-    Nur fuer den Admin-Verwaltungsbereich. Diese Dokumente werden bewusst
-    nicht ins Retrieval aufgenommen.
+    Fuer den Verwaltungsbereich, damit verwaiste Ablagen ausgeschiedener
+    Mitarbeiter loeschbar bleiben. Aufgelistet werden Raum und Dateiname,
+    nie der Inhalt: ein Loeschrecht ist kein Leserecht.
+
+    Im strengen Betrieb (PRIVAT_STRENG) faellt auch der Dateiname weg. Dort
+    gilt "jeder weiss nur, was er wissen muss", und ein Dateiname ist eine
+    Auskunft: "Angebot_Kunde_Meier.pdf" verraet den Vorgang, ohne dass
+    jemand die Datei oeffnet. Was dann bleibt, steht in fremde_raeume() --
+    Raum und Anzahl.
     """
-    data = collection.get(where={"access": "private"}, include=["metadatas"])
     seen = set()
-    for m in data["metadatas"] or []:
-        if not m:
+    for kennung, sml in _alle_raum_sammlungen():
+        if raeume.darf_lesen(current_user, kennung):
             continue
-        owner = m.get("owner", "")
-        fname = m.get("file_name", "")
-        if owner and fname and owner != current_user:
-            seen.add((owner, fname))
+        if not raeume.darf_dateien_sehen(current_user, kennung,
+                                         ist_verwalter=is_admin()):
+            continue
+        try:
+            data = sml.get(include=["metadatas"])
+        except Exception:
+            continue
+        for m in data.get("metadatas") or []:
+            if not m:
+                continue
+            fname = m.get("file_name", "")
+            if fname:
+                seen.add((kennung, fname))
     return sorted(seen)
 
 
-def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
-    """Liest ein PDF ein, speichert es dauerhaft, isoliert Tabellen und vektorisiert beides.
+def fremde_raeume(current_user):
+    """[(raum, anzahl)] der Raeume, die dieser Nutzer nicht lesen darf.
 
-    sachgebiet bestimmt den Unterordner und die Metadaten der Abschnitte --
-    dieselbe Zuordnung, die der Ingest aus der Ordnerstruktur ableitet. Ohne
-    Angabe landet die Datei wie zuvor direkt in data/dokumente/.
+    Ohne Dateinamen. Das ist die Ansicht, die im strengen Betrieb bleibt:
+    ein Verwalter sieht, DASS ein Raum Inhalt hat, und kann ihn als Ganzes
+    loeschen -- ohne zu erfahren, was darin liegt.
     """
-    access_type = "shared" if is_shared else "private"
+    aus = []
+    for kennung, sml in _alle_raum_sammlungen():
+        if raeume.darf_lesen(current_user, kennung):
+            continue
+        try:
+            anzahl = sml.count()
+        except Exception:
+            continue
+        if anzahl:
+            aus.append((kennung, anzahl))
+    return sorted(aus)
+
+
+def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
+    """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
+    vektorisiert beides.
+
+    raum bestimmt, in welche Sammlung die Abschnitte gehen -- und damit,
+    wer sie sehen kann. sachgebiet bestimmt den Unterordner und die
+    Metadaten, dieselbe Zuordnung, die der Ingest aus der Ordnerstruktur
+    ableitet. Ohne Angabe landet die Datei direkt in data/dokumente/.
+    """
     sachgebiet = (sachgebiet or "(Basis)").strip() or "(Basis)"
+    # Die Ablage entscheidet sich hier und nicht in der Oberflaeche: ein
+    # Raum, in den dieser Nutzer nicht schreiben darf, wird durch den
+    # eigenen ersetzt statt abgewiesen.
+    if raum not in raeume.schreibbar(st.session_state["username"]):
+        raum = raeume.sichere_anlage_privat(st.session_state["username"])
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
     # In den Unterordner des Sachgebiets, damit ein spaeterer
@@ -406,10 +538,12 @@ def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
                 chunks.append(chunk)
                 metadatas.append({
                     "file_name": uploaded_file.name, "page": nummer,
-                    "folder": sachgebiet, "access": access_type,
+                    "folder": sachgebiet, "raum": raum,
+                    "access": "shared" if raum == raeume.ALLGEMEIN
+                              else "private",
                     "owner": st.session_state["username"], "type": "text"})
                 ids.append(f"{uploaded_file.name}_p{nummer}_c{i}")
-        _speichern_chunks(chunks, metadatas, ids)
+        _speichern_chunks(chunks, metadatas, ids, raum)
         return
 
     doc = pymupdf.open(pdf_path)
@@ -433,7 +567,7 @@ def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
                     "file_name": uploaded_file.name,
                     "page": page_num + 1,
                     "folder": sachgebiet,
-                    "access": access_type,
+                    "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "table"
                 })
@@ -455,16 +589,16 @@ def process_uploaded_pdf(uploaded_file, is_shared, sachgebiet="(Basis)"):
                     "file_name": uploaded_file.name,
                     "page": page_num + 1,
                     "folder": sachgebiet,
-                    "access": access_type,
+                    "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "text"
                 })
                 ids.append(f"{uploaded_file.name}_p{page_num+1}_text_{i}")
                 
-    _speichern_chunks(chunks, metadatas, ids)
+    _speichern_chunks(chunks, metadatas, ids, raum)
 
 
-def _speichern_chunks(chunks, metadatas, ids):
+def _speichern_chunks(chunks, metadatas, ids, raum):
     """Vektorisiert die Abschnitte und legt sie in beiden Indizes ab.
 
     Herausgeloest, weil beide Wege sie brauchen -- der ueber pymupdf
@@ -482,7 +616,7 @@ def _speichern_chunks(chunks, metadatas, ids):
     if not keep:
         return
 
-    collection.add(
+    raum_sammlung(raum).add(
         ids=[ids[i] for i in keep],
         embeddings=[embeddings[i] for i in keep],
         documents=[chunks[i] for i in keep],
@@ -505,8 +639,8 @@ def _speichern_chunks(chunks, metadatas, ids):
 # Die ttl faengt zusaetzlich Aenderungen ab, die ein ANDERER Nutzer
 # vorgenommen hat -- dessen Cache-Leerung erreicht diese Sitzung nicht.
 @st.cache_data(ttl=60, show_spinner=False)
-def load_document_index(_collection, username):
-    return pipeline.dokumente(_collection, username)
+def load_document_index(username):
+    return pipeline.dokumente(username)
 
 
 def refresh_document_index():
@@ -514,8 +648,11 @@ def refresh_document_index():
     load_document_index.clear()
 
 
-shared_files, private_files, all_folders = load_document_index(
-    collection, st.session_state["username"])
+dateien_je_raum, all_folders = load_document_index(
+    st.session_state["username"])
+meine_raeume = sorted(dateien_je_raum)
+all_available_files = sorted({d for liste in dateien_je_raum.values()
+                              for d in liste})
 
 # --- SIDEBAR (UI) ---
 with st.sidebar:
@@ -546,22 +683,29 @@ with st.sidebar:
     
     # 1. Neuer Chat Button
     if st.button("➕ Neuer Chat", use_container_width=True):
-        st.session_state.current_chat_id = f"Chat_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        st.session_state.current_chat_id = chats.neue_kennung()
         st.session_state.messages = []
         st.rerun()
 
     # 2. Chat-Verlauf Dropdown
-    existing_chats = get_all_chats()
-    if existing_chats:
-        # Wenn der aktuelle Chat noch nicht gespeichert wurde (weil noch keine Nachricht geschrieben wurde), fügen wir ihn temp. zur Liste hinzu
+    #
+    # Die Kennung ist zufaellig, der Titel kommt aus dem verschluesselten
+    # Verzeichnis. Angezeigt wird der Titel, ausgewaehlt die Kennung.
+    _eintraege = get_all_chats()
+    _titel = {k: t for k, t, _g in _eintraege}
+    existing_chats = [k for k, _t, _g in _eintraege]
+    if existing_chats or st.session_state.current_chat_id:
+        # Ein noch nicht gespeicherter Chat steht nicht im Verzeichnis --
+        # ohne ihn faende die Auswahl ihren eigenen Eintrag nicht.
         if st.session_state.current_chat_id not in existing_chats:
             existing_chats.insert(0, st.session_state.current_chat_id)
-            
+            _titel.setdefault(st.session_state.current_chat_id, "Neuer Chat")
+
         selected_chat = st.selectbox(
-            "Vorherige Chats laden:", 
+            "Vorherige Chats laden:",
             existing_chats,
             index=existing_chats.index(st.session_state.current_chat_id),
-            format_func=lambda x: x.replace(".json", "").replace("_", " ") # Macht den Namen hübscher
+            format_func=lambda x: _titel.get(x, "Chat")
         )
         
         # Wechselt den Chat, wenn ein anderer im Dropdown ausgewählt wurde
@@ -581,10 +725,24 @@ with st.sidebar:
     st.header("📚 Datenbank")
     
     # Alle verfügbaren Dokumente für den Filter sammeln
-    all_available_files = list(set(shared_files + private_files))
-    
     st.markdown("---")
     st.header("🎯 Dokumenten-Filter")
+
+    # --- RAUM ---
+    #
+    # Zuerst der Raum, weil er die groebste Einschraenkung ist: er
+    # entscheidet, welche Sammlungen ueberhaupt gefragt werden. Leer
+    # gelassen werden alle erlaubten durchsucht -- das ist der Normalfall
+    # und soll keine Klicks kosten.
+    raum_optionen = [r for r, _s in meine_sammlungen()]
+    selected_raeume = st.multiselect(
+        "Raum:",
+        options=raum_optionen,
+        default=[],
+        format_func=raeume.bezeichnung,
+        help="Leer lassen, um alle Räume zu durchsuchen, die du sehen "
+             "darfst."
+    ) if len(raum_optionen) > 1 else []
     # Grenzt die Suche auf die Dokumente eines Unterordners ein. Steht vor
     # dem Dokumentenfilter, weil die Auswahl bei vielen Dateien schneller
     # geht als das Zusammensuchen einzelner Dokumente.
@@ -831,16 +989,32 @@ with st.sidebar:
         else:
             sachgebiet = _wahl
 
-        # Nur Admins duerfen in den globalen Pool schreiben -- passend dazu,
-        # dass auch nur sie daraus loeschen koennen.
-        if is_admin():
-            is_shared = st.checkbox("🌍 Für alle Nutzer freigeben", value=False)
+        # --- RAUM ---
+        #
+        # Der Raum entscheidet, wer das Dokument sehen kann. Vorgabe ist
+        # der eigene: wer nicht nachdenkt, teilt nichts. Der allgemeine
+        # Raum bleibt Admins vorbehalten -- passend dazu, dass auch nur sie
+        # daraus loeschen koennen.
+        _mein = raeume.privat_kennung(st.session_state["username"])
+        _ziele = [r for r in raeume.schreibbar(st.session_state["username"])
+                  if r != raeume.ALLGEMEIN or is_admin()]
+        if _mein not in _ziele:
+            _ziele.insert(0, _mein)
+        ziel_raum = st.selectbox(
+            "Raum", _ziele, index=_ziele.index(_mein),
+            format_func=raeume.bezeichnung,
+            help="Bestimmt, wer das Dokument finden kann.")
+        if ziel_raum == _mein:
+            st.caption("Nur für dich sichtbar.")
         else:
-            is_shared = False
-            st.caption("Der Upload ist privat und nur für dich sichtbar.")
+            _m = (raeume.raum(ziel_raum) or {}).get("mitglieder") or []
+            st.caption("Sichtbar für alle." if "*" in _m
+                       else f"Sichtbar für {len(_m)} Mitglieder.")
+
         if st.button("Hochladen & Vektorisieren", disabled=not sachgebiet):
-            with st.spinner("Verarbeite PDF (das kann kurz dauern)..."):
-                process_uploaded_pdf(uploaded_file, is_shared, sachgebiet)
+            with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
+                raeume.sichere_anlage_privat(st.session_state["username"])
+                process_uploaded_pdf(uploaded_file, ziel_raum, sachgebiet)
             st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' hinzugefügt!")
             refresh_document_index()
             st.session_state["pdf_upload_nr"] = _pdf_nr + 1
@@ -888,88 +1062,120 @@ with st.sidebar:
                 st.markdown("---")
             st.caption("Die Anzeige aktualisiert sich beim naechsten Klick.")
 
-    st.subheader("Gemeinsamer Pool")
-    if shared_files:
-        # 1. Alle Dokumente auflisten (für jeden sichtbar)
-        for f in shared_files:
-            st.caption(f"🌍 {f}")
-            
-        # 2. Admin-Kontrollen (nur sichtbar, wenn man in ADMIN_USERS steht)
-        if is_admin():
+    # --- DOKUMENTE JE RAUM ---
+    #
+    # Vorher standen hier zwei Listen, "gemeinsamer Pool" und "deine
+    # privaten Dokumente", und dazu ein Admin-Bereich fuer die privaten
+    # Dokumente anderer. Das waren drei Sonderfaelle eines einzigen
+    # Gedankens: in welchem Raum liegt das Dokument.
+    st.subheader("Dokumente")
+    _raum_liste = [r for r, _s in meine_sammlungen()]
+    if not _raum_liste:
+        st.caption("Noch keine Dokumente.")
+    for _r in _raum_liste:
+        _dateien = dateien_je_raum.get(_r, [])
+        with st.expander(f"{raeume.bezeichnung(_r)} ({len(_dateien)})",
+                         expanded=(len(_raum_liste) == 1)):
+            if not _dateien:
+                st.caption("Leer.")
+                continue
+            for f in _dateien:
+                st.caption(f"📄 {f}")
+
+            # Verwalten darf, wer den Raum schreiben darf; den allgemeinen
+            # Raum nur ein Admin.
+            _darf = (_r in raeume.schreibbar(st.session_state["username"])
+                     and (_r != raeume.ALLGEMEIN or is_admin()))
+            if not _darf:
+                st.caption("Nur lesen.")
+                continue
+
             st.markdown("---")
-            st.caption("👑 **Admin-Bereich**")
-            file_to_delete_shared = st.selectbox("Geteiltes Dokument entfernen:", shared_files)
-            if st.button("🗑️ Für alle löschen", use_container_width=True):
-                # Löscht das Dokument global aus der Datenbank
-                collection.delete(
-                    where={
-                        "$and": [
-                            {"file_name": file_to_delete_shared},
-                            {"access": "shared"}
-                        ]
-                    }
-                )
-                keyword_index.delete_document(file_to_delete_shared, access="shared")
-                remove_pdf_if_orphaned(file_to_delete_shared)
-                refresh_document_index()
-
-                st.success(f"'{file_to_delete_shared}' wurde global gelöscht!")
-                time.sleep(1)
-                st.rerun()
-    else:
-        st.caption("Keine geteilten Dokumente.")
-
-    st.subheader("Deine privaten Dokumente")
-    if private_files:
-        file_to_manage = st.selectbox("Dokument verwalten:", private_files)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            # Freigeben schreibt in den globalen Pool -- gleiche Huerde wie
-            # das Loeschen daraus, sonst koennte jeder Nutzer den Pool
-            # befuellen, aber nur Admins ihn wieder aufraeumen.
-            if is_admin():
-                if st.button("🌍 Freigeben", use_container_width=True):
-                    make_document_public(file_to_manage)
-                    st.success("Freigegeben!")
+            _datei = st.selectbox("Dokument verwalten:", _dateien,
+                                  key=f"verw_{_r}")
+            _spalte1, _spalte2 = st.columns(2)
+            with _spalte1:
+                _andere = [x for x in raeume.schreibbar(
+                    st.session_state["username"])
+                    if x != _r and (x != raeume.ALLGEMEIN or is_admin())]
+                _nach = st.selectbox("verschieben nach:",
+                                     ["-"] + _andere,
+                                     format_func=lambda x: (
+                                         "-" if x == "-"
+                                         else raeume.bezeichnung(x)),
+                                     key=f"nach_{_r}")
+                if st.button("Verschieben", key=f"vsch_{_r}",
+                             disabled=(_nach == "-"),
+                             use_container_width=True):
+                    ok, meldung = verschiebe_dokument(_datei, _r, _nach)
+                    (st.success if ok else st.error)(meldung)
                     time.sleep(1)
                     st.rerun()
-            else:
-                st.button("🌍 Freigeben", use_container_width=True, disabled=True,
-                          help="Nur Administratoren können Dokumente global freigeben.")
-        with col2:
-            if st.button("🗑️ Löschen", use_container_width=True):
-                # Owner-Filter ist zwingend: ohne ihn loescht dieser Aufruf
-                # JEDEN Chunk mit diesem Dateinamen -- auch die anderer
-                # Nutzer und die des gemeinsamen Pools.
-                delete_private_document(file_to_manage, st.session_state["username"])
-                st.success("Gelöscht!")
-                time.sleep(1)
-                st.rerun()
-    else:
-        st.caption("Keine privaten Dokumente.")
+            with _spalte2:
+                if st.button("🗑️ Löschen", key=f"del_{_r}",
+                             use_container_width=True):
+                    ok, meldung = loesche_dokument(_datei, _r)
+                    (st.success if ok else st.error)(meldung)
+                    time.sleep(1)
+                    st.rerun()
 
-    # --- ADMIN: fremde private Dokumente ---
-    # Bewusst nur hier sichtbar und nie im Retrieval: Admins brauchen das
-    # Loeschrecht (verwaiste Dokumente ausgeschiedener Nutzer), aber private
-    # Dokumente sollen nicht in fremde Antworten einflieszen.
+    # --- ADMIN: fremde Raeume ---
+    #
+    # Bewusst nur Raum und Dateiname, nie der Inhalt: Admins brauchen das
+    # Loeschrecht fuer verwaiste Ablagen ausgeschiedener Mitarbeiter, aber
+    # ein Loeschrecht ist kein Leserecht.
     if is_admin():
         foreign = list_foreign_private_documents(st.session_state["username"])
+        _stille = [(r, n) for r, n in
+                   fremde_raeume(st.session_state["username"])
+                   if r not in {x for x, _f in foreign}]
+
         if foreign:
             st.markdown("---")
-            st.caption("👑 **Admin: private Dokumente anderer Nutzer**")
-            st.caption("Nur zur Verwaltung – diese Dokumente werden nicht durchsucht.")
+            st.caption("👑 **Admin: Dokumente in fremden Räumen**")
+            st.caption("Nur zur Verwaltung – diese Dokumente werden für "
+                       "dich nicht durchsucht.")
             label = st.selectbox(
                 "Fremdes Dokument entfernen:",
-                [f"{owner} / {fname}" for owner, fname in foreign],
-            )
+                [f"{raum} / {fname}" for raum, fname in foreign])
             if st.button("🗑️ Endgültig löschen", use_container_width=True):
-                owner, fname = label.split(" / ", 1)
-                delete_private_document(fname, owner)
-                st.success(f"'{fname}' von '{owner}' gelöscht!")
+                _raum_f, _name_f = label.split(" / ", 1)
+                ok, meldung = loesche_dokument(_name_f, _raum_f)
+                (st.success if ok else st.error)(meldung)
                 time.sleep(1)
                 st.rerun()
-    
+
+        # --- STRENGER BETRIEB ---
+        #
+        # Persoenliche Raeume anderer erscheinen hier ohne Dateinamen: dort
+        # gilt "jeder weiss nur, was er wissen muss", und ein Dateiname ist
+        # eine Auskunft. Was bleibt, ist ein Loeschrecht ohne Leserecht --
+        # der Raum als Ganzes, mit Anzahl, ohne Inhalt.
+        if _stille:
+            st.markdown("---")
+            st.caption("👑 **Admin: fremde persönliche Räume**")
+            st.caption("Ohne Dateinamen – der strenge Betrieb "
+                       "(`PRIVAT_STRENG`) ist eingeschaltet. Löschbar nur "
+                       "als Ganzes.")
+            _zahlen = dict(_stille)
+            _wahl_s = st.selectbox(
+                "Raum", [r for r, _n in _stille],
+                format_func=lambda r: (raeume.bezeichnung(r) + " – "
+                                       + format(_zahlen[r], ",")
+                                       + " Abschnitte"),
+                key="streng_wahl")
+            _ok_s = st.checkbox(
+                "Alle Abschnitte dieses Raums endgültig löschen",
+                key="streng_ok")
+            if st.button("🗑️ Raum leeren",
+                         use_container_width=True, disabled=not _ok_s):
+                ok, meldung = store.loesche(raeume.sammlung(_wahl_s))
+                keyword_index.delete_document_by_raum(_wahl_s)
+                (st.success if ok else st.error)(meldung)
+                refresh_document_index()
+                time.sleep(1)
+                st.rerun()
+
     st.markdown("---")
     # Der Name des Chat-Modells laesst sich frei setzen, solange derselbe
     # Endpunkt ihn kennt -- qwen3.8 gegen gemma4 ist eine Namensfrage.
@@ -1039,12 +1245,13 @@ with st.sidebar:
                 # wird ausgewertet, nicht nur angesehen, und dafuer braucht
                 # man sie vollstaendig.
                 if os.path.exists(feedback.DATEI):
-                    with open(feedback.DATEI, "rb") as f:
-                        st.download_button(
-                            "Protokoll herunterladen", f.read(),
-                            file_name="feedback.jsonl",
-                            mime="application/x-ndjson",
-                            use_container_width=True)
+                    # Entschluesselt: auf der Platte liegt es
+                    # verschluesselt, ausgewertet wird es im Klartext.
+                    st.download_button(
+                        "Protokoll herunterladen", feedback.als_text(),
+                        file_name="feedback.jsonl",
+                        mime="application/x-ndjson",
+                        use_container_width=True)
 
                 alte = feedback.ablagen()
                 if alte:
@@ -1065,6 +1272,692 @@ with st.sidebar:
     # nachtraegt sitzt nicht am Server. Die Datei liegt unter config/ und
     # ist damit eingehaengt -- die Aenderung wirkt bei der naechsten Frage,
     # ohne Rebuild und ohne Neustart.
+    # --- BENUTZER VERWALTEN ---
+    #
+    # Vorher gab es das nur im Terminal, und dort ohne jede Nachfrage: wer
+    # create_user.py starten konnte, legte sich einen Zugang an. Jetzt
+    # verlangt das Skript die Anmeldung eines Verwalters -- und derselbe
+    # Vorgang steht hier, weil ein Verwalter dafuer nicht auf den Server
+    # steigen sollte.
+    if is_admin():
+        with st.expander("👥 Benutzer verwalten"):
+            _zustand = benutzer.zustand()
+            _gesperrt = benutzer.ungueltige()
+
+            if _zustand == benutzer.UNSIGNIERT:
+                st.warning(
+                    "Die Benutzerdatei stammt aus der Zeit vor den "
+                    "Signaturen. Bis sie signiert ist, gilt weiter "
+                    "`ADMIN_USERS` aus der `.env`, und ein von Hand "
+                    "eingetragener Zugang käme herein.")
+                if st.button("Jetzt signieren", use_container_width=True):
+                    ok, meldung = benutzer.neu_signieren(
+                        von=st.session_state["username"])
+                    (st.success if ok else st.error)(meldung)
+                    time.sleep(1)
+                    st.rerun()
+            elif _zustand == benutzer.MANIPULIERT:
+                st.error(
+                    "Die Benutzerdatei wurde außerhalb der Anwendung "
+                    "geändert."
+                    + (f" Gesperrt, weil ohne gültige Signatur: "
+                       f"{', '.join(_gesperrt)}." if _gesperrt else
+                       " Es fehlt oder es kam ein Eintrag hinzu."))
+
+            for _n in benutzer.namen():
+                _e = benutzer.eintrag(_n) or {}
+                _marke = "" if _e.get("_gueltig", True) else "  GESPERRT"
+                st.caption(f"**{_n}** · {_e.get('rolle', '?')}"
+                           f"{_marke}")
+
+            st.markdown("---")
+            _wahl = st.selectbox(
+                "Bearbeiten", ["(neu anlegen)"] + benutzer.namen(),
+                key="benutzer_wahl")
+
+            if _wahl == "(neu anlegen)":
+                _name = st.text_input("Kennung", key="benutzer_neu_name")
+                _rolle = st.selectbox("Rolle", list(benutzer.ROLLEN),
+                                      key="benutzer_neu_rolle")
+                _pw1 = st.text_input(
+                    f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+                    type="password", key="benutzer_neu_pw1")
+                _pw2 = st.text_input("Passwort wiederholen", type="password",
+                                     key="benutzer_neu_pw2")
+                if st.button("Benutzer anlegen", use_container_width=True,
+                             disabled=not (_name.strip() and _pw1)):
+                    if _pw1 != _pw2:
+                        st.error("Die Eingaben stimmen nicht überein.")
+                    else:
+                        ok, meldung = benutzer.anlege(
+                            _name, _pw1, _rolle,
+                            von=st.session_state["username"])
+                        (st.success if ok else st.error)(meldung)
+                        if ok:
+                            time.sleep(1)
+                            st.rerun()
+            else:
+                _e = benutzer.eintrag(_wahl) or {}
+                st.caption(f"Angelegt: {_e.get('angelegt', 'unbekannt')} "
+                           f"· von: {_e.get('von', 'unbekannt')}")
+                _neue_rolle = st.selectbox(
+                    "Rolle", list(benutzer.ROLLEN),
+                    index=(list(benutzer.ROLLEN).index(_e.get("rolle"))
+                           if _e.get("rolle") in benutzer.ROLLEN else 1),
+                    key=f"benutzer_rolle_{_wahl}")
+                if _neue_rolle != _e.get("rolle"):
+                    if st.button("Rolle übernehmen", use_container_width=True,
+                                 key=f"benutzer_rs_{_wahl}"):
+                        ok, meldung = benutzer.rolle_setzen(
+                            _wahl, _neue_rolle,
+                            von=st.session_state["username"])
+                        (st.success if ok else st.error)(meldung)
+                        time.sleep(1)
+                        st.rerun()
+
+                _pw1 = st.text_input("Neues Passwort", type="password",
+                                     key=f"benutzer_pw1_{_wahl}")
+                _pw2 = st.text_input("Wiederholen", type="password",
+                                     key=f"benutzer_pw2_{_wahl}")
+                if st.button("Passwort setzen", use_container_width=True,
+                             disabled=not _pw1, key=f"benutzer_pws_{_wahl}"):
+                    if _pw1 != _pw2:
+                        st.error("Die Eingaben stimmen nicht überein.")
+                    else:
+                        ok, meldung = benutzer.passwort_setzen(
+                            _wahl, _pw1, von=st.session_state["username"])
+                        (st.success if ok else st.error)(meldung)
+
+                # Loeschen entfernt den Zugang, nicht die Daten. Chats und
+                # der persoenliche Raum bleiben -- wer beides in einem Klick
+                # zusammenlegt, loescht irgendwann mehr als gemeint.
+                _sicher = st.checkbox(f"'{_wahl}' wirklich löschen",
+                                      key=f"benutzer_x_{_wahl}")
+                if st.button("Benutzer löschen", use_container_width=True,
+                             disabled=not _sicher,
+                             key=f"benutzer_del_{_wahl}"):
+                    ok, meldung = benutzer.loesche(
+                        _wahl, von=st.session_state["username"])
+                    (st.success if ok else st.error)(meldung)
+                    if ok:
+                        time.sleep(1)
+                        st.rerun()
+
+            # --- PROTOKOLL ---
+            #
+            # Verkettet: jeder Eintrag traegt den Hash des vorherigen. Eine
+            # entfernte Zeile bricht die Kette, und die Pruefung sagt, an
+            # welcher Stelle. Das verhindert nichts -- es macht ein
+            # Aufraeumen im Nachhinein sichtbar.
+            st.markdown("---")
+            _kette_ok, _zeilen = benutzer.protokoll_pruefen()
+            if _kette_ok:
+                st.caption(f"Protokoll: {_zeilen} Einträge, Kette in Ordnung.")
+            else:
+                st.error(f"Das Protokoll ist ab Zeile {_zeilen} verändert "
+                         f"oder es fehlt eine Zeile.")
+            _log = benutzer.protokoll(letzte=20)
+            if _log:
+                st.code(chr(10).join(
+                    f"{e.get('zeit', '?')}  {e.get('aktion', ''):<12} "
+                    f"{e.get('ziel', ''):<16} von={e.get('von', '')} "
+                    f"{e.get('hinweis', '')}".rstrip()
+                    for e in reversed(_log)), language="text")
+
+    # --- VERSCHLUESSELUNG ---
+    #
+    # Was verschluesselt ist, was nicht, und warum. Steht in der
+    # Oberflaeche, weil ein Zustand, den man nur im Quelltext nachlesen
+    # kann, bei einer Datenschutzfrage nicht hilft.
+    if is_admin():
+        with st.expander("🔐 Verschlüsselung"):
+            st.caption(f"Zustand: **{geheim.beschreibung()}**")
+            if not geheim.verfuegbar():
+                st.error(
+                    "Chats, Anhänge und Rückmeldungen liegen im Klartext. "
+                    "Ohne das Paket `cryptography` im Image kann nicht "
+                    "verschlüsselt werden — `requirements.txt` prüfen und "
+                    "neu bauen.")
+            else:
+                st.caption(
+                    "Verschlüsselt: Chatverläufe samt Titeln, angehängte "
+                    "Bilder, das Rückmeldungsprotokoll. Signiert: "
+                    "Benutzerdatei und Zugangstoken, je Eintrag einzeln.")
+                st.caption(
+                    "**Nicht** verschlüsselt: der Text der Dokumente in der "
+                    "Vektordatenbank. Er muss durchsuchbar bleiben und liegt "
+                    "neben dem Vektor. Dafür ist die Verschlüsselung des "
+                    "Datenträgers zuständig.")
+
+            _offen_chats = chats.zaehle_klartext(st.session_state["username"])
+            if _offen_chats:
+                st.warning(f"{_offen_chats} eigene Chatdateien noch im "
+                           f"Klartext. Sie werden beim nächsten Öffnen "
+                           f"übernommen.")
+
+            _offen_fb = feedback.klartextzeilen()
+            if _offen_fb:
+                st.warning(f"Im Rückmeldungsprotokoll stehen {_offen_fb} "
+                           f"Zeilen noch im Klartext.")
+                if st.button("Protokoll neu verschlüsseln",
+                             use_container_width=True):
+                    ok, anzahl = feedback.neu_verschluesseln()
+                    if ok:
+                        st.success(f"{anzahl} Zeilen neu geschrieben.")
+                    else:
+                        st.error("Konnte nicht geschrieben werden.")
+                    time.sleep(1)
+                    st.rerun()
+
+            # Die Grenze ausdruecklich nennen. Ein Verwalter, der glaubt,
+            # die Verschluesselung schuetze auch gegen jemanden mit
+            # Serverzugang, traegt eine falsche Auskunft weiter.
+            st.caption(
+                "Der Schlüssel gehört der Installation, nicht dem Nutzer: "
+                "ein Passwortwechsel lässt die Chats lesbar, und wer "
+                "Dateizugriff auf `config/` hat, kann entschlüsseln. Das "
+                "schützt gegen eine abgeflossene Sicherung oder ein "
+                "kopiertes Volume, nicht gegen Serverzugang.")
+
+    # --- RAEUME VERWALTEN ---
+    #
+    # Ein Raum ist eine Sammlung und eine Mitgliederliste. Die Sammlung
+    # entsteht beim ersten Upload, nicht hier: ein Raum ohne Inhalt braucht
+    # keine Sammlung, und eine leere anzulegen wuerde jede Suche mit einer
+    # weiteren Abfrage belasten.
+    if is_admin():
+        with st.expander("🚪 Räume verwalten"):
+            _alle = raeume.liste()
+            _bekannt = benutzer.namen()
+            _mit_daten = {r: sml.count()
+                          for r, sml in _alle_raum_sammlungen()}
+
+            for _k, _e in sorted(_alle.items()):
+                _m = _e.get("mitglieder") or []
+                _wer = "alle" if "*" in _m else f"{len(_m)} Mitglieder"
+                if _e.get("gruppe"):
+                    _wer += f" + Gruppe {_e['gruppe']}"
+                st.caption(f"**{_e.get('bezeichnung') or _k}** · "
+                           f"{_wer} · "
+                           f"{_mit_daten.get(_k, 0):,} Abschnitte "
+                           f"· `{_k}`")
+
+            st.markdown("---")
+            _bearbeiten = st.selectbox(
+                "Bearbeiten", ["(neu anlegen)"] + sorted(_alle),
+                format_func=lambda n: (
+                    n if n == "(neu anlegen)"
+                    else (_alle.get(n, {}).get("bezeichnung") or n)),
+                key="raum_bearbeiten")
+
+            if _bearbeiten == "(neu anlegen)":
+                _name = st.text_input("Bezeichnung", key="raum_neu_name")
+                _besch = st.text_input("Beschreibung (optional)",
+                                       key="raum_neu_besch")
+                _mitglieder = st.multiselect(
+                    "Mitglieder", _bekannt, key="raum_neu_mit",
+                    help="Nur diese Nutzer sehen die Dokumente des Raums.")
+                if st.button("Raum anlegen", use_container_width=True,
+                             disabled=not _name.strip()):
+                    ok, meldung = raeume.anlegen(_name, _name, _besch,
+                                                 _mitglieder)
+                    if ok:
+                        st.success(f"Raum '{_name}' angelegt.")
+                        refresh_document_index()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(meldung)
+            else:
+                _e = _alle.get(_bearbeiten, {})
+                _m = _e.get("mitglieder") or []
+                if "*" in _m:
+                    st.caption("Dieser Raum ist für alle sichtbar. Eine "
+                               "Mitgliederliste gilt hier nicht.")
+                _name = st.text_input("Bezeichnung",
+                                      value=_e.get("bezeichnung") or "",
+                                      key=f"raum_b_{_bearbeiten}")
+                _besch = st.text_input("Beschreibung",
+                                       value=_e.get("beschreibung") or "",
+                                       key=f"raum_d_{_bearbeiten}")
+                # Ein persoenlicher Raum gehoert genau einem Nutzer.
+                # Mitglieder hinzuzufuegen waere eine Hintertuer, und im
+                # strengen Betrieb widerspricht sie dem Zweck.
+                _ist_privat = raeume.ist_privat(_bearbeiten)
+                if _ist_privat:
+                    st.caption(
+                        "Persönlicher Raum – nur sein Eigentümer sieht "
+                        "ihn. Eine Mitgliederliste gibt es hier nicht."
+                        + (" Löschbar als Ganzes unter *fremde "
+                           "persönliche Räume*." if raeume.PRIVAT_STRENG
+                           else ""))
+                    _neu_m = [x for x in _m if x != "*"]
+                else:
+                    _neu_m = st.multiselect(
+                        "Mitglieder",
+                        sorted(set(_bekannt) | {x for x in _m if x != "*"}),
+                        default=[x for x in _m if x != "*"],
+                        key=f"raum_m_{_bearbeiten}",
+                        disabled=("*" in _m))
+                    # "Fuer alle sichtbar" ist eine Vorgabe, keine
+                    # Notwendigkeit. Wo der Grundsatz "nur was man wissen
+                    # muss" gilt, bekommt auch der allgemeine Raum eine
+                    # Liste.
+                    if "*" in _m:
+                        if st.button("Auf eine Mitgliederliste umstellen",
+                                     use_container_width=True,
+                                     key=f"raum_zu_{_bearbeiten}",
+                                     help="Danach sehen nur noch die "
+                                          "eingetragenen Nutzer diesen "
+                                          "Raum."):
+                            raeume.mitglieder_setzen(
+                                _bearbeiten,
+                                [st.session_state["username"]])
+                            st.success("Umgestellt. Jetzt Mitglieder "
+                                       "eintragen.")
+                            time.sleep(1)
+                            st.rerun()
+                    elif st.button("Wieder für alle öffnen",
+                                   use_container_width=True,
+                                   key=f"raum_auf_{_bearbeiten}"):
+                        raeume.fuer_alle_oeffnen(_bearbeiten)
+                        st.success("Für alle sichtbar.")
+                        time.sleep(1)
+                        st.rerun()
+                # --- MITGLIEDSCHAFT AUS OWNCLOUD ---
+                #
+                # Vereinigung, nicht Ersetzung: ein Verwalter, den die
+                # Firma nicht in der Abteilungsgruppe fuehrt, soll sich
+                # nicht selbst aussperren, indem er eine Gruppe eintraegt.
+                _gruppe_alt = str(_e.get("gruppe") or "")
+                _gruppe = st.text_input(
+                    "ownCloud-Gruppe (optional)", value=_gruppe_alt,
+                    key=f"raum_g_{_bearbeiten}",
+                    help="Ihre Mitglieder kommen zu den oben "
+                         "eingetragenen hinzu. Leer lassen, um die "
+                         "Mitgliedschaft nur hier zu pflegen.")
+                if _gruppe.strip():
+                    _von_hand, _aus_gruppe = raeume.mitglieder_gesamt(
+                        _bearbeiten)
+                    _gueltig, _alter, _grund = raeume.stand_gueltig()
+                    if not _gueltig:
+                        st.warning(
+                            f"Der Gruppenstand gilt nicht ({_grund}) -- "
+                            f"die Mitglieder dieser Gruppe kommen gerade "
+                            f"NICHT herein. Der Abgleich laeuft unter "
+                            f"*Nachtragen und neu einlesen*.")
+                    else:
+                        st.caption(
+                            "Aus der Gruppe: "
+                            + (", ".join(_aus_gruppe) if _aus_gruppe
+                               else "niemand")
+                            + (f" -- Stand {_alter:.0f} min alt"
+                               if _alter is not None else ""))
+                        _unbekannt = [x for x in _aus_gruppe
+                                      if x not in _bekannt]
+                        if _unbekannt:
+                            # Der Fall, in dem alles richtig aussieht und
+                            # trotzdem niemand hereinkommt.
+                            st.warning(
+                                f"Nicht als Benutzer angelegt und damit "
+                                f"wirkungslos: {', '.join(_unbekannt)}")
+
+                if st.button("Speichern", use_container_width=True,
+                             key=f"raum_s_{_bearbeiten}"):
+                    raeume.beschriften(_bearbeiten, _name, _besch)
+                    if "*" not in _m and not _ist_privat:
+                        raeume.mitglieder_setzen(_bearbeiten, _neu_m)
+                    if _gruppe.strip() != _gruppe_alt:
+                        raeume.gruppe_setzen(_bearbeiten, _gruppe)
+                    st.success("Gespeichert.")
+                    refresh_document_index()
+                    time.sleep(1)
+                    st.rerun()
+
+                # Entfernen und Loeschen sind zwei Dinge. Das erste nimmt
+                # den Raum aus der Verwaltung und laesst die Daten liegen,
+                # das zweite loescht sie. Ein Knopf fuer beides waere ein
+                # Knopf, den man einmal zu oft drueckt.
+                if _bearbeiten != raeume.ALLGEMEIN:
+                    st.markdown("---")
+                    _sp1, _sp2 = st.columns(2)
+                    with _sp1:
+                        if st.button("Raum entfernen",
+                                     use_container_width=True,
+                                     key=f"raum_e_{_bearbeiten}",
+                                     help="Nimmt den Raum aus der "
+                                          "Verwaltung. Die Dokumente "
+                                          "bleiben erhalten."):
+                            ok, meldung = raeume.entfernen(_bearbeiten)
+                            (st.success if ok else st.error)(meldung)
+                            refresh_document_index()
+                            time.sleep(1)
+                            st.rerun()
+                    with _sp2:
+                        _zahl = _mit_daten.get(_bearbeiten, 0)
+                        _sicher = st.checkbox(
+                            f"{_zahl:,} Abschnitte endgültig löschen",
+                            key=f"raum_x_{_bearbeiten}")
+                        if st.button("Daten löschen",
+                                     use_container_width=True,
+                                     disabled=not _sicher,
+                                     key=f"raum_l_{_bearbeiten}"):
+                            ok, meldung = store.loesche(
+                                raeume.sammlung(_bearbeiten))
+                            keyword_index.delete_document_by_raum(_bearbeiten)
+                            (st.success if ok else st.error)(meldung)
+                            refresh_document_index()
+                            time.sleep(1)
+                            st.rerun()
+
+            # --- ALTBESTAND ---
+            #
+            # Eine Installation von vor den Raeumen hat ihre Abschnitte noch
+            # in der gemeinsamen Sammlung. Der Hinweis steht hier, damit man
+            # es sieht, ohne ins Protokoll zu schauen.
+            try:
+                _alt_zahl = store.collection(anlegen=False).count()
+            except Exception:
+                _alt_zahl = 0
+            if _alt_zahl:
+                st.markdown("---")
+                st.warning(
+                    f"In der alten, gemeinsamen Sammlung liegen noch "
+                    f"{_alt_zahl:,} Abschnitte. Sie werden nicht mehr "
+                    f"durchsucht. `python umsortieren.py --pruefen` zeigt, "
+                    f"wohin sie gehören, `python umsortieren.py` verschiebt "
+                    f"sie — ohne neu zu vektorisieren.")
+
+    # --- OWNCLOUD ---
+    #
+    # Ein Ordner in ownCloud wird auf einen Raum abgebildet. Damit liegen
+    # die Dokumente dort, wo sie gepflegt werden, und die Rechte auf dem
+    # Ordner sind die von ownCloud -- die Mitgliedschaft des Raums
+    # entscheidet dann, wer die daraus gebauten Abschnitte sieht.
+    if is_admin():
+        with st.expander("☁️ ownCloud"):
+            _ok, _meldung = (False, owncloud.beschreibung())
+            if owncloud.eingerichtet():
+                _ok, _meldung = owncloud.pruefe()
+            (st.success if _ok else st.warning)(_meldung)
+
+            if not owncloud.eingerichtet():
+                st.caption(
+                    "Einzurichten in der `.env`: `OWNCLOUD_URL` (die Wurzel, "
+                    "etwa `https://cloud.firma.de`), `OWNCLOUD_USER` und "
+                    "`OWNCLOUD_PASSWORT`. Bei aktiver Zwei-Faktor-Anmeldung "
+                    "braucht es ein **App-Passwort**, nicht das "
+                    "Anmeldepasswort. Ein Lesezugriff genügt — die "
+                    "Anwendung schreibt nie nach ownCloud zurück.")
+            else:
+                _zu = owncloud.zuordnung()
+                for _r, _o in sorted(_zu.items()):
+                    _b = owncloud.letzter_bericht(_r)
+                    _stand = (f"{_b['dateien']} Dateien, zuletzt "
+                              f"{(_b['zuletzt'] or '?')[:16]}"
+                              if _b else "noch nicht abgeglichen")
+                    st.caption(f"**{raeume.bezeichnung(_r)}** "
+                               f"· `{_o}` · {_stand}")
+                if not _zu:
+                    st.caption("Noch keine Zuordnung.")
+
+                st.markdown("---")
+                _raum_wahl = st.selectbox(
+                    "Raum", sorted(raeume.liste()),
+                    format_func=raeume.bezeichnung, key="oc_raum")
+                _ordner = st.text_input(
+                    "Ordner in ownCloud", value=_zu.get(_raum_wahl, ""),
+                    placeholder="/Abteilungen/Einkauf/Handbücher",
+                    key=f"oc_ordner_{_raum_wahl}",
+                    help="Pfad relativ zum Wurzelverzeichnis des "
+                         "angemeldeten Kontos. Unterordner werden zu "
+                         "Sachgebieten.")
+                _sp1, _sp2 = st.columns(2)
+                with _sp1:
+                    if st.button("Zuordnung speichern",
+                                 use_container_width=True,
+                                 disabled=not _ordner.strip()):
+                        _zu[_raum_wahl] = _ordner.strip()
+                        owncloud.setze_zuordnung(_zu)
+                        st.success("Gespeichert.")
+                        time.sleep(1)
+                        st.rerun()
+                with _sp2:
+                    if st.button("Zuordnung entfernen",
+                                 use_container_width=True,
+                                 disabled=_raum_wahl not in _zu,
+                                 help="Der Raum wird nicht mehr "
+                                      "abgeglichen. Bereits geholte "
+                                      "Dateien und ihre Abschnitte "
+                                      "bleiben."):
+                        _zu.pop(_raum_wahl, None)
+                        owncloud.setze_zuordnung(_zu)
+                        st.success("Entfernt.")
+                        time.sleep(1)
+                        st.rerun()
+
+                # --- PRUEFEN ---
+                #
+                # Vor dem ersten Abgleich, und zwar nicht aus Vorsicht,
+                # sondern weil eine falsch eingerichtete Zuordnung genau
+                # wie "alles geloescht" aussieht: der Ordner ist leer,
+                # also gilt jede bekannte Datei als entfallen. Danach sind
+                # die Abschnitte weg.
+                if _raum_wahl in _zu:
+                    st.markdown("---")
+                    if st.button("Änderungen prüfen",
+                                 use_container_width=True,
+                                 key=f"oc_pruef_{_raum_wahl}"):
+                        try:
+                            with st.spinner("Frage ownCloud ab ..."):
+                                _neu, _geae, _entf, _unv = owncloud.plane(
+                                    _raum_wahl)
+                            st.caption(f"unverändert: {len(_unv)}")
+                            for _titel, _liste in (("neu", _neu),
+                                                   ("geändert", _geae),
+                                                   ("entfallen", _entf)):
+                                if _liste:
+                                    st.caption(f"**{_titel}: "
+                                               f"{len(_liste)}**")
+                                    st.code(chr(10).join(_liste[:30]),
+                                            language="text")
+                            if not (_neu or _geae or _entf):
+                                st.info("Nichts zu tun.")
+                        except Exception as e:
+                            st.error(f"Abfrage fehlgeschlagen: {e}")
+
+                # --- MITGLIEDSCHAFTEN ---
+                st.markdown("---")
+                _gz = owncloud.gruppen_zuordnung()
+                _gueltig, _alter, _grund = raeume.stand_gueltig()
+                if _gz:
+                    for _r, _g in sorted(_gz.items()):
+                        _vh, _ag = raeume.mitglieder_gesamt(_r)
+                        st.caption(f"**{raeume.bezeichnung(_r)}** "
+                                   f"· Gruppe `{_g}` · "
+                                   f"{len(_ag)} aus der Gruppe, "
+                                   f"{len(_vh)} von Hand")
+                    if _gueltig:
+                        st.caption("Gruppenstand: "
+                                   + (f"{_alter:.0f} Minuten alt"
+                                      if _alter is not None
+                                      else "unbekannt"))
+                    else:
+                        st.warning(f"Gruppenstand gilt nicht: {_grund}. "
+                                   f"Bis zum nächsten Abgleich wirken "
+                                   f"nur die von Hand eingetragenen "
+                                   f"Mitglieder.")
+                    if st.button("Mitgliedschaften jetzt nachziehen",
+                                 use_container_width=True):
+                        with st.spinner("Frage ownCloud ab ..."):
+                            _b = owncloud.gruppen_abgleich()
+                        (st.success if _b["geschrieben"]
+                         else st.warning)(_b["meldung"])
+                        for _f in _b["fehler"]:
+                            st.error(f"Gruppe '{_f['gruppe']}': "
+                                     f"{_f['grund']}")
+                        time.sleep(1)
+                        st.rerun()
+                else:
+                    st.caption(
+                        "Noch keine Raumgruppe eingetragen. Sie gehört "
+                        "in den Raum selbst — unter *Räume "
+                        "verwalten*, Feld ownCloud-Gruppe. Die "
+                        "Gruppenabfrage braucht in ownCloud ein Konto mit "
+                        "Verwalterrechten (`OWNCLOUD_ADMIN_USER`); "
+                        "für die Dateien genügt Lesen.")
+
+                st.caption(
+                    "Der eigentliche Abgleich läuft abgekoppelt — unter "
+                    "*Nachtragen und neu einlesen*, Eintrag „Aus ownCloud "
+                    "abgleichen“. Er holt neue und geänderte Dateien, "
+                    "entfernt die Abschnitte entfallener und liest "
+                    "anschließend ein. Für den Dauerbetrieb gehört das in "
+                    "einen Zeitplan auf dem Server: "
+                    "`docker compose exec -T locanoto_bot python "
+                    "abgleich.py`")
+
+    # --- SICHERUNG DER VEKTORDATENBANK ---
+    #
+    # Der einzige Zustand, der nicht ableitbar ist und trotzdem nicht auf
+    # den Netzspeicher gehoert: SQLite plus binaere Indexdateien. Deshalb
+    # der laufende Bestand auf lokalem oder Blockspeicher und ein Abzug
+    # davon auf dem persistenten Speicher.
+    #
+    # Gelesen wird ueber die Schnittstelle, nicht als Dateikopie: eine
+    # Kopie mitten in einem Schreibvorgang ist ein Abzug, der sich nicht
+    # zurueckholen laesst -- und das zeigt sich erst beim Zurueckholen.
+    if is_admin():
+        with st.expander("🗃️ Sicherung der Vektordatenbank"):
+            _abzuege = sicherung.liste()
+            st.caption(f"Ablage: `{sicherung.ORDNER}`"
+                       + (f" · es werden "
+                          f"{sicherung.BEHALTEN} Abzüge behalten"
+                          if sicherung.BEHALTEN else
+                          " · alle Abzüge werden behalten"))
+
+            if not _abzuege:
+                st.warning(
+                    "Noch kein Abzug. Ohne einen wäre der Verlust der "
+                    "Vektordatenbank ein vollständiges Neueinlesen — "
+                    "Stunden Modellzeit für ein Ergebnis, das schon "
+                    "vorlag.")
+            else:
+                st.code(chr(10).join(
+                    f"{_n:<22} {_gr / 1e6:9.1f} MB  "
+                    f"{_st.get('abschnitte', '?'):>8} Abschnitte  "
+                    f"{len(_st.get('raeume') or {})} Räume"
+                    for _n, _p, _gr, _st in _abzuege), language="text")
+
+            _laeuft = hintergrund.laeuft("sicherung")
+            if _laeuft:
+                st.caption("Ein Abzug läuft gerade.")
+                st.code(hintergrund.protokoll("sicherung", 6) or "...",
+                        language="text")
+            elif st.button("Jetzt sichern", use_container_width=True,
+                           help="Läuft abgekoppelt weiter, auch wenn die "
+                                "Oberfläche neu lädt."):
+                _ok, _meldung = hintergrund.starte("sicherung")
+                (st.success if _ok else st.error)(_meldung)
+                time.sleep(1)
+                st.rerun()
+
+            # --- ZURUECKHOLEN ---
+            #
+            # Bewusst mit Haken und in einem eigenen Schritt: ein Abzug
+            # ueberschreibt vorhandene Abschnitte. Wer ihn einspielt, weil
+            # er die Liste sehen wollte, verliert Arbeit.
+            if _abzuege:
+                st.markdown("---")
+                _wahl = st.selectbox(
+                    "Abzug einspielen", [_n for _n, _p, _g, _s in _abzuege],
+                    key="sich_wahl")
+                _st = dict(_abzuege[[_n for _n, _p, _g, _s
+                                     in _abzuege].index(_wahl)][3])
+                st.caption(
+                    f"{_st.get('abschnitte', '?')} Abschnitte in "
+                    + ", ".join(sorted((_st.get('raeume') or {}))))
+                _sicher = st.checkbox(
+                    "Vorhandene Abschnitte dürfen überschrieben werden",
+                    key="sich_ok")
+                if st.button("Einspielen", use_container_width=True,
+                             disabled=not _sicher):
+                    with st.spinner("Spiele ein — das dauert länger als "
+                                    "das Sichern, weil der Suchindex neu "
+                                    "gebaut wird ..."):
+                        _b = sicherung.hole_zurueck(_wahl)
+                    for _r, _n2 in sorted(_b["raeume"].items()):
+                        st.caption(f"{_r}: {_n2} Abschnitte")
+                    for _f in _b["fehler"]:
+                        st.error(str(_f))
+                    if not _b["fehler"]:
+                        st.success("Eingespielt. Der Stichwortindex baut "
+                                   "sich beim nächsten Start neu auf.")
+                    refresh_document_index()
+
+            st.caption(
+                "Der Abzug enthält Abschnitte, Metadaten **und die "
+                "Vektoren** — ein Einspielen braucht kein Modell und "
+                "keinen Endpunkt. Gemessen: 20.500 Abschnitte in 2,6 s "
+                "(112 MB), Einspielen 29 s. Hochgerechnet auf 324.000 "
+                "Abschnitte: rund 40 s und 1,8 GB, Einspielen etwa acht "
+                "Minuten. Der Schlüssel geht **nicht** mit in den Abzug — "
+                "er gehört in eine andere Aufbewahrung als die Daten, die "
+                "er lesbar macht.")
+
+    # --- SPEICHERORTE ---
+    #
+    # Wo welcher Zustand liegt, auf einem Bildschirm. Bei einer Frage nach
+    # der Datenhaltung ist "schau in die docker-compose.yaml und in fuenf
+    # Module" keine Antwort.
+    if is_admin():
+        with st.expander("💾 Speicherorte"):
+            for _name, _pfad, _gesetzt in paths.wurzeln():
+                st.caption(f"**{_name}** · `{_pfad}` · "
+                           + ("von außen gesetzt" if _gesetzt
+                              else "Standard neben dem Code"))
+
+            st.markdown("---")
+            _klassen = {
+                "quelle": "Quellen — werden gepflegt, nur gelesen",
+                "nutzerdaten": "Nutzerdaten — müssen den Container "
+                               "überleben",
+                "konfiguration": "Konfiguration — getrennt aufzubewahren",
+                "index": "Ableitbar — gehört auf die lokale Platte",
+            }
+            _bestand = paths.bestand()
+            for _klasse, _beschriftung in _klassen.items():
+                st.caption(f"**{_beschriftung}**")
+                _zeilen = [z for z in _bestand if z[1] == _klasse]
+                st.code(chr(10).join(
+                    f"{_b:<26} {_gr / 1e6:9.2f} MB {_n:>6} Dateien  {_p}"
+                    for _b, _k, _p, _gr, _n in _zeilen), language="text")
+
+            _modus = keyword_index.journal_modus()
+            if _modus.lower() != "wal":
+                # Der stille Rueckfall. PRAGMA journal_mode=WAL schlaegt
+                # nicht fehl, wenn das Dateisystem es nicht kann -- SQLite
+                # bleibt beim alten Modus und sagt nichts. Genau das
+                # passiert auf einem Netzlaufwerk.
+                st.error(
+                    f"Der Stichwortindex läuft im Journalmodus `{_modus}` "
+                    f"statt `wal`. Das heißt fast immer: er liegt auf "
+                    f"einem Netzlaufwerk, wo SQLite den WAL-Betrieb nicht "
+                    f"aufsetzen kann. Setze `LOCANOTO_INDEX` auf ein "
+                    f"containerlokales Verzeichnis — der Index baut sich "
+                    f"dort in Sekunden neu auf.")
+            else:
+                st.caption(f"Stichwortindex: Journalmodus `{_modus}`.")
+
+            st.caption(
+                "Ableitbares gehört nicht auf den Netzspeicher: "
+                "Vektordatenbank und Stichwortindex sind SQLite-Dateien, "
+                "und der WAL-Betrieb braucht gemeinsamen Speicher im "
+                "selben Dateisystem — über NFS oder SMB gibt es den nicht, "
+                "und die Dateisperren sind unzuverlässig. Der Verlust "
+                "kostet nichts: der Stichwortindex baut sich mit rund "
+                "18.600 Abschnitten je Sekunde neu auf.")
+
     if is_admin():
         with st.expander("\U0001f5e3\ufe0f Glossar bearbeiten"):
             pfad = paths.resolve_glossar()
@@ -1290,15 +2183,23 @@ with st.sidebar:
                       key=f"topk_{aktives_preset}")
 
 # --- CHAT & RETRIEVAL ---
-if collection.count() > 0:
+#
+# Gezaehlt wird ueber die Raeume dieses Nutzers: wer in keinem Raum etwas
+# hat, dem hilft die Meldung "noch keine Dokumente" -- und nicht die
+# Auskunft, dass anderswo etwas liegt.
+_bestand = sum(sml.count() for _r, sml in meine_sammlungen())
+if _bestand > 0:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             # Angehaengte Bilder vor dem Text, so wie der Nutzer sie
             # geschickt hat. Fehlt die Datei -- etwa weil der Chat-Ordner
             # aufgeraeumt wurde -- wird sie stillschweigend uebergangen.
             for bild in msg.get("bilder", []):
-                if os.path.exists(bild):
-                    st.image(bild, width=360)
+                # Nicht st.image(pfad): die Datei ist verschluesselt, und
+                # Streamlit wuerde nur Bytes sehen, die kein Bild sind.
+                rohbild = vision.lade(bild)
+                if rohbild:
+                    st.image(rohbild, width=360)
             st.write(msg["content"])
             
             # --- RUECKMELDUNG ---
@@ -1348,7 +2249,10 @@ if collection.count() > 0:
                         for t in source["texts"]:
                             st.info(t)
                         
-                        pdf_path = os.path.join(DOCS_DIR, file_n)
+                        # Nicht join(DOCS_DIR, name): mit Sachgebieten und
+                        # erst recht mit aus ownCloud geholten Ordnern liegt
+                        # kaum ein Dokument noch direkt dort.
+                        pdf_path = paths.finde_dokument(file_n) or ""
                         # Nur bei PDFs: bei Word oder Markdown ist "Seite"
                         # eine Abschnittsnummer, und pymupdf kann die Datei
                         # ohnehin nicht oeffnen.
@@ -1391,7 +2295,8 @@ if collection.count() > 0:
                 rohdaten = datei.getvalue()
                 try:
                     endung = os.path.splitext(datei.name)[1].lower() or ".jpg"
-                    name = (f"{st.session_state.current_chat_id[:-5]}"
+                    kennung = st.session_state.current_chat_id
+                    name = (f"{kennung.rsplit('.', 1)[0]}"
                             f"_{len(st.session_state.messages)}_{n}{endung}")
                     bild_pfade.append(vision.speichern(
                         rohdaten, st.session_state["username"], name))
@@ -1409,24 +2314,19 @@ if collection.count() > 0:
         st.session_state.messages.append({"role": "user", "content": user_query,
                                           "bilder": bild_pfade})
         
-        # --- NEU: Dynamische Chat-Benennung beim 1. Prompt ---
+        # --- BENENNUNG BEIM ERSTEN PROMPT ---
+        #
+        # Frueher wurde dafuer die Datei umbenannt: neue Datei schreiben,
+        # alte loeschen, und der Titel stand im Namen. Jetzt aendert sich
+        # nur ein Eintrag im verschluesselten Verzeichnis -- die Datei
+        # heisst weiter nach ihrer zufaelligen Kennung.
+        _titel = None
         if len(st.session_state.messages) == 1:
-            old_chat_id = st.session_state.current_chat_id
-            date_str = datetime.now().strftime('%y-%m-%d')
-            
-            keywords = make_chat_title(user_query, chat_model)
+            _titel = (f"{make_chat_title(user_query, chat_model)} "
+                      f"{datetime.now().strftime('%y-%m-%d')}")
 
-            new_chat_id = f"{keywords}_{date_str}.json"
-            
-            # Falls die Datei exakt so schon existiert, Sekunden anhängen
-            if os.path.exists(os.path.join(get_user_chat_dir(), new_chat_id)):
-                new_chat_id = f"{keywords}_{datetime.now().strftime('%y-%m-%d_%H-%M-%S')}.json"
-                
-            st.session_state.current_chat_id = new_chat_id
-            delete_chat(old_chat_id) # Alte Datums-Datei sofort löschen
-        # -------------------------------------------------------
-        
-        save_chat(st.session_state.current_chat_id, st.session_state.messages)
+        save_chat(st.session_state.current_chat_id,
+                  st.session_state.messages, _titel)
         
         with st.chat_message("user"):
             st.write(user_query)
@@ -1452,7 +2352,8 @@ if collection.count() > 0:
                 with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
                     try:
                         treffer, zahlen = pipeline.suche(
-                            collection, embed_client, embed_model,
+                            meine_sammlungen(nur=selected_raeume or None),
+                            embed_client, embed_model,
                             search_queries, st.session_state["username"], top_k,
                             dateien=selected_docs or None,
                             ordner=selected_folders or None,

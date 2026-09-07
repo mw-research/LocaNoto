@@ -1,0 +1,142 @@
+# --- WIEDERKEHRENDE LAEUFE ---
+#
+# Der ownCloud-Abgleich und der Abzug der Vektordatenbank sollen naechtlich
+# laufen. Das ist in Kubernetes weniger geradlinig, als es aussieht, und
+# der Grund gehoert hierher:
+#
+# Ein CronJob startet einen EIGENEN Pod. Der koennte das Indexvolume nicht
+# einhaengen -- es ist ReadWriteOnce und haengt am Anwendungspod. Und
+# selbst wenn: sein Ingest wuerde einen Stichwortindex schreiben, den die
+# Anwendung nicht sieht.
+#
+# Deshalb fuehrt der CronJob den Lauf IM Anwendungspod aus, ueber
+# kubectl exec. Das braucht ein Dienstkonto mit dem Recht "pods/exec" --
+# die drei Objekte darunter. Eng gefasst: nur exec, nur in diesem
+# Namensraum.
+#
+# Die Alternative ohne RBAC: die Knoepfe in der Seitenleiste unter
+# "Nachtragen und neu einlesen". Die Laeufe sind dort abgekoppelt und
+# ueberleben ein Neuladen der Oberflaeche -- nur eben nicht ohne einen
+# Menschen, der sie anstoesst.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: locanoto-zeitplan
+  labels:
+    app.kubernetes.io/name: locanoto
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: locanoto-exec
+  labels:
+    app.kubernetes.io/name: locanoto
+rules:
+  # Pods auflisten, um den Namen zu finden, und exec, um darin zu starten.
+  # Kein create, kein delete, kein Zugriff auf Secrets.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: locanoto-exec
+  labels:
+    app.kubernetes.io/name: locanoto
+subjects:
+  - kind: ServiceAccount
+    name: locanoto-zeitplan
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: locanoto-exec
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: locanoto-abgleich
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  # Drei Uhr: Gruppen, Dokumente, Einlesen. Die Gruppen zuerst -- wer aus
+  # einer Abteilung ausgeschieden ist, soll deren Unterlagen nicht mehr
+  # finden, und darauf soll niemand warten, bis Stunden Ingest durch sind.
+  schedule: "0 3 * * *"
+  # Kein zweiter Lauf, wenn der erste noch arbeitet. Ein Ingest kann
+  # Stunden dauern; zwei gleichzeitig schreiben in dieselben Sammlungen.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Ein Fehlversuch. Ein Abgleich, der scheitert, scheitert meist aus
+      # einem Grund, den ein zweiter Versuch nicht behebt -- ownCloud
+      # nicht erreichbar, Anmeldung abgelehnt.
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: locanoto-zeitplan
+          restartPolicy: Never
+          containers:
+            - name: exec
+              # Irgendein Abbild mit kubectl. Version festgelegt und
+              # nicht "latest": ein Zeitplan, der sich beim naechsten Lauf
+              # ein anderes Werkzeug holt, faellt irgendwann nachts aus.
+              # Nimm das Abbild, das in deiner Umgebung freigegeben ist --
+              # dieses hier ist ein Platzhalter, den ich nicht pruefen
+              # konnte.
+              image: bitnami/kubectl:1.31
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  POD=$(kubectl get pod \
+                    -l app.kubernetes.io/name=locanoto,app.kubernetes.io/component=app \
+                    -o jsonpath='{.items[0].metadata.name}')
+                  echo "Anwendungspod: $POD"
+                  kubectl exec "$POD" -c app -- python abgleich.py
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: locanoto-sicherung
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  # Vier Uhr, also nach dem Abgleich: der Abzug soll den neuen Bestand
+  # enthalten und nicht den von gestern.
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: locanoto-zeitplan
+          restartPolicy: Never
+          containers:
+            - name: exec
+              # Irgendein Abbild mit kubectl. Version festgelegt und
+              # nicht "latest": ein Zeitplan, der sich beim naechsten Lauf
+              # ein anderes Werkzeug holt, faellt irgendwann nachts aus.
+              # Nimm das Abbild, das in deiner Umgebung freigegeben ist --
+              # dieses hier ist ein Platzhalter, den ich nicht pruefen
+              # konnte.
+              image: bitnami/kubectl:1.31
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  POD=$(kubectl get pod \
+                    -l app.kubernetes.io/name=locanoto,app.kubernetes.io/component=app \
+                    -o jsonpath='{.items[0].metadata.name}')
+                  kubectl exec "$POD" -c app -- python sicherung.py

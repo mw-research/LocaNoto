@@ -1,0 +1,218 @@
+# --- DER POD ---
+#
+# Drei Container, ein Volume fuer den Bestand:
+#
+#     chroma   die Vektordatenbank, auf /app/data/chroma_db
+#     app      die Oberflaeche (Streamlit)
+#     api      die HTTP-Schnittstelle (uvicorn)
+#
+# Warum alle drei in EINEM Pod und nicht als getrennte Dienste: sie greifen
+# auf denselben Bestand zu, und der liegt auf einem Volume, das genau ein
+# Knoten einhaengt. Getrennte Pods brauchten getrennte Volumes -- und damit
+# waere die data/-Struktur auseinandergerissen, was nicht das Ziel ist.
+#
+# Warum Chroma trotzdem ein eigener Prozess und keine Dateiablage in jedem
+# Container: sonst schrieben Oberflaeche und Schnittstelle gleichzeitig in
+# dieselben SQLite-Dateien. Das ist kein sauberer Fehler, sondern ein
+# beschaedigter Index, der erst auffaellt, wenn Antworten fehlen. Als
+# Dienst entscheidet Chroma selbst, wer schreibt; die anderen beiden sind
+# Clients auf localhost.
+#
+# Chroma steht als initContainer mit restartPolicy: Always -- das ist ein
+# nativer Sidecar (Kubernetes ab 1.29). Er startet VOR den anderen und
+# laeuft weiter, und die anderen warten auf seine startupProbe. Ohne das
+# ist die Startreihenfolge in einem Pod nicht festgelegt: die Oberflaeche
+# waere kurz da, bevor die Datenbank antwortet, und muesste sich
+# neustarten.
+#
+# Auf einem Cluster vor 1.29: den chroma-Block nach "containers" verschieben
+# und restartPolicy sowie startupProbe entfernen. Dann startet die
+# Oberflaeche unter Umstaenden einmal neu, bis Chroma antwortet -- das
+# faellt nur beim ersten Start auf.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  selector:
+    app.kubernetes.io/name: locanoto
+    app.kubernetes.io/component: app
+  ports:
+    - name: web
+      port: 8501
+      targetPort: 8501
+    - name: api
+      port: 8600
+      targetPort: 8600
+  # Chroma ist absichtlich NICHT im Service: er kennt keine Nutzer, und wer
+  # ihn erreicht, liest alles und darf Sammlungen loeschen. Auf localhost
+  # im Pod ist er genau richtig eingeschlossen.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto
+  labels:
+    app.kubernetes.io/name: locanoto
+    app.kubernetes.io/component: app
+spec:
+  # EINE Instanz. Drei Gruende, und jeder allein genuegt:
+  #
+  #   1. Das Datenvolume ist ReadWriteOnce -- ein zweiter Pod koennte es
+  #      nicht einhaengen.
+  #   2. Streamlit haelt den Sitzungszustand im Arbeitsspeicher. Ein
+  #      zweiter Pod braeuchte klebende Sitzungen, sonst landet jeder
+  #      zweite Klick bei einer Instanz, die den Chat nicht kennt.
+  #   3. Die Kennungen laufender Prozesse (PID) gelten nur auf ihrem
+  #      Rechner.
+  #
+  # Was mehrere Instanzen moeglich machen wuerde: Stichwortindex und
+  # Sitzungszustand in eine Server-Datenbank verlegen. Das ist ein Umbau,
+  # keine Einstellung.
+  replicas: 1
+  strategy:
+    # Recreate: beim Ausrollen darf nicht kurz ein zweiter Pod dasselbe
+    # Volume einhaengen wollen. Er kaeme nicht hoch, und der alte wuerde
+    # nicht abgeloest.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: locanoto
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: locanoto
+        app.kubernetes.io/component: app
+    spec:
+      securityContext:
+        # Ohne fsGroup gehoert das eingehaengte Volume root, und ein
+        # Container, der nicht als root laeuft, scheitert beim ersten
+        # Schreiben -- mit einer Meldung, die nach einem Datenbankfehler
+        # aussieht.
+        fsGroup: 1000
+
+      initContainers:
+        # --- VEKTORDATENBANK (nativer Sidecar) ---
+        - name: chroma
+          image: locanoto:lokal
+          restartPolicy: Always
+          command:
+            - chroma
+            - run
+            - --path
+            - /app/data/chroma_db
+            - --host
+            - "127.0.0.1"
+            - --port
+            - "8000"
+          env:
+            - name: ANONYMIZED_TELEMETRY
+              value: "False"
+            - name: CHROMA_ANONYMIZED_TELEMETRY
+              value: "False"
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+          startupProbe:
+            httpGet:
+              path: /api/v2/heartbeat
+              port: 8000
+              host: 127.0.0.1
+            periodSeconds: 3
+            failureThreshold: 40
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 250m
+            limits:
+              # HNSW haelt seinen Index im Arbeitsspeicher. Bei 324.000
+              # Abschnitten mit Dimension 1024 sind das mehrere GB --
+              # dieser Wert ist eine Untergrenze fuer den vollen Bestand,
+              # keine Empfehlung.
+              memory: 8Gi
+
+      containers:
+        # --- OBERFLAECHE ---
+        - name: app
+          image: locanoto:lokal
+          command: ["streamlit", "run", "app.py",
+                    "--server.port=8501", "--server.address=0.0.0.0"]
+          envFrom:
+            - configMapRef:
+                name: locanoto
+            - secretRef:
+                name: locanoto
+          ports:
+            - containerPort: 8501
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+            - name: konfig
+              mountPath: /app/config
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            # Grosszuegig: beim ersten Start laedt der Reranker sein Modell
+            # aus dem Abbild, und der Stichwortindex baut sich neu auf,
+            # falls er nicht zu den Sammlungen passt -- gemessen rund 17
+            # Sekunden bei 324.000 Abschnitten.
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 500m
+            limits:
+              # Der CrossEncoder aus dem Abbild ist der groesste Posten.
+              # Laeuft die Rangfolge ueber einen Endpunkt
+              # (RERANKER_BASE_URL), reicht deutlich weniger.
+              memory: 6Gi
+
+        # --- HTTP-SCHNITTSTELLE ---
+        - name: api
+          image: locanoto:lokal
+          command: ["uvicorn", "api:app",
+                    "--host", "0.0.0.0", "--port", "8600"]
+          envFrom:
+            - configMapRef:
+                name: locanoto
+            - secretRef:
+                name: locanoto
+          ports:
+            - containerPort: 8600
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+            - name: konfig
+              mountPath: /app/config
+          readinessProbe:
+            httpGet:
+              path: /gesundheit
+              port: 8600
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 100m
+            limits:
+              memory: 4Gi
+
+      volumes:
+        - name: daten
+          persistentVolumeClaim:
+            claimName: locanoto-daten
+        - name: konfig
+          persistentVolumeClaim:
+            claimName: locanoto-konfig
