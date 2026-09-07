@@ -1,0 +1,65 @@
+# --- VARIANTE: PERSISTENTER SPEICHER IST EINE DATEIFREIGABE ---
+#
+# NUR NOETIG, WENN dein persistenter Speicher NFS, SMB, CephFS oder EFS
+# ist. Ist er Blockspeicher -- eine angeschlossene Platte, Ceph RBD,
+# iSCSI, EBS, local path --, dann brauchst du diese Datei NICHT: dort
+# liegt die data/-Struktur vollstaendig auf einem Volume, so wie sie
+# gedacht ist, und 10 bis 40 genuegen.
+#
+# Das Problem, das diese Variante loest: die data/-Struktur enthaelt zwei
+# SQLite-Bestaende, chroma_db und keyword_index.sqlite3. SQLite braucht im
+# WAL-Betrieb gemeinsamen Speicher im selben Dateisystem. Ueber eine
+# Freigabe gibt es den nicht, und die Dateisperren sind unzuverlaessig --
+# das Ergebnis ist kein Fehler, sondern ein beschaedigter Index. SQLite
+# faellt dabei STILL auf einen anderen Journalmodus zurueck; die
+# Oberflaeche liest ihn zurueck und meldet es unter "Speicherorte", wenn
+# dort nicht "wal" steht.
+#
+# Die Aufteilung: Dokumente, Chats, Rueckmeldungen und Abzuege bleiben auf
+# der Freigabe -- es sind gewoehnliche Dateien. Die beiden Datenbanken
+# ziehen auf ein kleines Blockvolume um. Auch das ist persistenter
+# Speicher, nur eben eines mit Dateisystem statt eines Netzprotokolls.
+#
+# So wird sie angewendet:
+#
+#   1. In 10-speicher.yaml bei locanoto-daten die Freigabeklasse
+#      einsetzen, und dort gern ReadWriteMany.
+#   2. Diese Datei anwenden -- sie legt das Indexvolume an.
+#   3. In der ConfigMap LOCANOTO_INDEX auf /var/lib/locanoto setzen:
+#        kubectl patch configmap locanoto --type merge \
+#          -p '{"data":{"LOCANOTO_INDEX":"/var/lib/locanoto"}}'
+#   4. In 30-anwendung.yaml drei Dinge aendern:
+#        - beim chroma-Sidecar --path auf /var/lib/locanoto/chroma_db
+#        - allen drei Containern diesen volumeMount geben:
+#            - name: index
+#              mountPath: /var/lib/locanoto
+#        - unter volumes ergaenzen:
+#            - name: index
+#              persistentVolumeClaim:
+#                claimName: locanoto-index
+#   5. Neu ausrollen. Der Stichwortindex baut sich von selbst neu auf
+#      (gemessen 18.600 Abschnitte je Sekunde). Die Vektordatenbank NICHT
+#      -- sie muss vorher umkopiert oder aus einem Abzug eingespielt
+#      werden:
+#        kubectl exec deploy/locanoto -c app -- python sicherung.py
+#        ... umstellen, neu ausrollen ...
+#        kubectl exec deploy/locanoto -c app -- python sicherung.py liste
+#        kubectl exec deploy/locanoto -c app -- python sicherung.py zurueck NAME
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-index
+  labels:
+    app.kubernetes.io/name: locanoto
+spec:
+  # ReadWriteOnce und eine BLOCKKLASSE. Genau ein Knoten haengt es ein,
+  # und es traegt ein Dateisystem statt eines Netzprotokolls.
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      # Vektordatenbank und Stichwortindex. Gemessen: 20.000 Abschnitte
+      # mit Dimension 1024 sind rund 100 MB in der Sammlung, der
+      # Stichwortindex bei 324.000 Abschnitten rund 520 MB.
+      storage: 20Gi
+  # storageClassName: ceph-block

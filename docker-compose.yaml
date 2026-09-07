@@ -75,6 +75,44 @@ x-umgebung: &umgebung
   - TABELLEN_DEFAULT_ON=${TABELLEN_DEFAULT_ON:-}
   - CHROMA_HOST=${CHROMA_HOST:-}
   - CHROMA_PORT=${CHROMA_PORT:-}
+  - CHROMA_SSL=${CHROMA_SSL:-}
+  - CHROMA_TOKEN=${CHROMA_TOKEN:-}
+  - CHROMA_TOKEN_HEADER=${CHROMA_TOKEN_HEADER:-}
+  - CHROMA_CLOUD_KEY=${CHROMA_CLOUD_KEY:-}
+  - CHROMA_CLOUD_TENANT=${CHROMA_CLOUD_TENANT:-}
+  - CHROMA_CLOUD_DATABASE=${CHROMA_CLOUD_DATABASE:-}
+  - INGEST_RAUM=${INGEST_RAUM:-}
+  # Verschluesselung und Anmeldung. Der Schluessel liegt normalerweise in
+  # config/schluessel.key -- hier durchgereicht fuer den Fall, dass er als
+  # Secret aus der Umgebung kommen soll.
+  - LOCANOTO_SCHLUESSEL=${LOCANOTO_SCHLUESSEL:-}
+  - SITZUNG_MINUTEN=${SITZUNG_MINUTEN:-}
+  # Speicherwurzeln IM Container. Wohin sie vom Host zeigen, steht bei den
+  # volumes; hier steht nur, wo die Anwendung sie erwartet. LOCANOTO_INDEX
+  # zeigt bewusst NICHT unter /app/data: dort liegt der persistente
+  # Bestand, und ableitbare SQLite-Dateien gehoeren auf die lokale Platte.
+  - LOCANOTO_DATEN=/app/data
+  - LOCANOTO_KONFIG=/app/config
+  - LOCANOTO_INDEX=${LOCANOTO_INDEX:-/app/data}
+  # Dokumente aus ownCloud oder Nextcloud. Bei aktiver
+  # Zwei-Faktor-Anmeldung ein App-Passwort, nicht das Anmeldepasswort.
+  - OWNCLOUD_URL=${OWNCLOUD_URL:-}
+  - OWNCLOUD_USER=${OWNCLOUD_USER:-}
+  - OWNCLOUD_PASSWORT=${OWNCLOUD_PASSWORT:-}
+  - OWNCLOUD_TIMEOUT=${OWNCLOUD_TIMEOUT:-}
+  # Die Gruppenabfrage verlangt in ownCloud Verwalterrechte; das
+  # Holen der Dateien nicht. Deshalb getrennt setzbar.
+  - OWNCLOUD_ADMIN_USER=${OWNCLOUD_ADMIN_USER:-}
+  - OWNCLOUD_ADMIN_PASSWORT=${OWNCLOUD_ADMIN_PASSWORT:-}
+  - OWNCLOUD_GRUPPEN_HOECHSTALTER=${OWNCLOUD_GRUPPEN_HOECHSTALTER:-}
+  - INGEST_ORDNER=${INGEST_ORDNER:-}
+  # Abzug der Vektordatenbank -- der einzige nicht ableitbare
+  # Zustand, der nicht auf den Netzspeicher gehoert.
+  - SICHERUNG_PFAD=${SICHERUNG_PFAD:-}
+  - SICHERUNG_BEHALTEN=${SICHERUNG_BEHALTEN:-}
+  # Strenger Betrieb: auch ein Verwalter erfaehrt nichts ueber
+  # fremde persoenliche Raeume, nicht einmal Dateinamen.
+  - PRIVAT_STRENG=${PRIVAT_STRENG:-}
 
 services:
   locanoto_bot:
@@ -115,12 +153,23 @@ services:
       # Frueher lagen hier drei Einzel-Mounts nach /app/chroma_db,
       # /app/dokumente und /app/chats. Die App las aber aus /app/data/... --
       # also aus einem ungemounteten, leeren Verzeichnis.
-      - ./data:/app/data
+      #
+      # DATEN_PFAD und KONFIG_PFAD zeigen auf den persistenten Speicher des
+      # Servers oder Clusters. Ohne Angabe bleibt es bei ./data und ./config
+      # neben der Compose-Datei -- richtig fuer eine Einzelinstallation,
+      # aber nichts, worauf man einen Cluster stellt.
+      - ${DATEN_PFAD:-./data}:/app/data
 
       # Als Verzeichnis gemountet, nicht als Einzeldatei: ein Bind-Mount auf
       # eine einzelne Datei bricht, sobald ein Werkzeug sie ersetzt statt sie
       # zu ueberschreiben.
-      - ./config:/app/config
+      - ${KONFIG_PFAD:-./config}:/app/config
+
+      # Ableitbare Zwischenstaende: Vektordatenbank, Stichwortindex,
+      # Listenkatalog, Kennungen laufender Prozesse. Ein benanntes Volume
+      # und kein Bind-Mount auf den Netzspeicher -- siehe LOCANOTO_INDEX
+      # oben. Wird nur benutzt, wenn LOCANOTO_INDEX darauf zeigt.
+      - locanoto_index:/var/lib/locanoto
 
   # --- VEKTORDATENBANK ALS DIENST ---
   #
@@ -141,12 +190,14 @@ services:
     container_name: ${CONTAINER_NAME:-locanoto_app}_chroma
     restart: unless-stopped
     command: >
-      chroma run --path /app/data/chroma_db --host 0.0.0.0 --port 8000
+      chroma run --path ${LOCANOTO_INDEX:-/app/data}/chroma_db
+      --host 0.0.0.0 --port 8000
     environment:
       - ANONYMIZED_TELEMETRY=False
       - CHROMA_ANONYMIZED_TELEMETRY=False
     volumes:
-      - ./data:/app/data
+      - ${DATEN_PFAD:-./data}:/app/data
+      - locanoto_index:/var/lib/locanoto
     # Bewusst ohne ports: erreichbar nur innerhalb des Compose-Netzes. Der
     # Chroma-Server kennt keine Rechte -- wer ihn erreicht, liest alles.
 
@@ -169,8 +220,9 @@ services:
       # von aussen gehoert ein Reverse Proxy mit TLS davor.
       - "127.0.0.1:${API_PORT:-8600}:8600"
     volumes:
-      - ./data:/app/data
-      - ./config:/app/config
+      - ${DATEN_PFAD:-./data}:/app/data
+      - ${KONFIG_PFAD:-./config}:/app/config
+      - locanoto_index:/var/lib/locanoto
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8600/gesundheit')"]
@@ -198,3 +250,19 @@ services:
 #   networks:
 #     mein-netz:
 #       external: true
+
+# --- ABLEITBARE ZWISCHENSTAENDE ---
+#
+# Ein benanntes Volume, absichtlich kein Bind-Mount. Hier liegen die
+# SQLite-Dateien: Vektordatenbank und Stichwortindex. Sie muessen auf
+# einem Dateisystem liegen, das Dateisperren und gemeinsamen Speicher
+# beherrscht -- ueber NFS oder SMB tut es das nicht, und das Ergebnis ist
+# kein Fehler, sondern ein beschaedigter Index.
+#
+# Der Verlust kostet nichts: der Stichwortindex baut sich aus den
+# Sammlungen neu auf, gemessen rund 18.600 Abschnitte je Sekunde. Die
+# Vektordatenbank muesste allerdings neu eingelesen werden -- wer sie
+# ebenfalls persistent haben will, gibt dem Volume einen Treiber auf
+# Blockspeicher, nicht auf ein Netzlaufwerk.
+volumes:
+  locanoto_index:

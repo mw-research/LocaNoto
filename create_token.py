@@ -6,26 +6,39 @@
 
 Das Token wird genau einmal ausgegeben. Gespeichert ist nur sein Hashwert;
 verloren heisst neu anlegen.
+
+Anlegen und Widerrufen verlangen die Anmeldung eines Verwalters. Vorher
+genuegte es, das Skript zu starten -- damit war ein Token fuer jede Kennung
+eine Frage von einer Zeile. Auflisten bleibt frei: es zeigt keine Token,
+nur ihre Kennungen.
 """
 import argparse
-import json
-import os
+import getpass
 import sys
 
+import benutzer
 import paths
 import auth
 
 
+def anmelden():
+    """Kennung eines angemeldeten Verwalters, oder None."""
+    if not benutzer.namen():
+        print("Noch kein Benutzer angelegt. Erst 'python create_user.py'.",
+              file=sys.stderr)
+        return None
+    for versuch in range(3):
+        name = input("Verwalter-Kennung: ").strip().lower()
+        passwort = getpass.getpass("Passwort: ")
+        if benutzer.pruefe(name, passwort) and benutzer.ist_admin(name):
+            return name
+        print(f"   Anmeldung fehlgeschlagen ({versuch + 1}/3).")
+    return None
+
+
 def _benutzer():
     """Die angelegten Kennungen -- ein Token soll auf eine davon zeigen."""
-    datei = paths.resolve_user_file()
-    if not os.path.exists(datei) or os.path.getsize(datei) == 0:
-        return []
-    try:
-        with open(datei, "r", encoding="utf-8") as f:
-            return sorted(json.load(f).keys())
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return []
+    return benutzer.namen()
 
 
 def main():
@@ -55,11 +68,18 @@ def main():
             if bis:
                 zusatz = (zusatz + " ") if zusatz else ""
                 zusatz += f"(bis {bis[:10]})"
+            if not e.get("gueltig", True):
+                # Ohne gueltige Signatur: von Hand eingetragen oder
+                # veraendert. Es gilt nicht -- und wird genau deshalb
+                # gezeigt, statt verschwiegen.
+                zusatz = (zusatz + " " if zusatz else "") + "[UNGUELTIG]"
             print(f"{h[:8]:10} {e.get('benutzer', '?'):16} "
                   f"{e.get('erstellt', '?')[:19]:22} {zusatz}")
         return
 
     if args.widerrufe:
+        if anmelden() is None:
+            sys.exit(1)
         anzahl = auth.widerrufe(args.widerrufe)
         if anzahl == 1:
             print("Token widerrufen.")
@@ -75,18 +95,24 @@ def main():
     if not args.benutzer:
         p.error("Kennung angeben, oder --liste / --widerrufe verwenden.")
 
-    benutzer = args.benutzer.strip().lower()
+    # Nicht "benutzer": so heisst das Modul, das die Anmeldung prueft.
+    kennung = args.benutzer.strip().lower()
     bekannt = _benutzer()
-    if bekannt and benutzer not in bekannt:
+    if bekannt and kennung not in bekannt:
         # Ein Token auf eine nicht angelegte Kennung waere still wirkungslos:
         # es kaeme durch die Pruefung und faende dann nur geteilte Dokumente.
-        print(f"'{benutzer}' ist keine angelegte Kennung. Vorhanden: "
+        print(f"'{kennung}' ist keine angelegte Kennung. Vorhanden: "
               f"{', '.join(bekannt)}", file=sys.stderr)
         sys.exit(1)
 
-    token = auth.erzeuge(benutzer, args.bezeichnung, args.tage)
+    von = anmelden()
+    if von is None:
+        sys.exit(1)
+
+    token = auth.erzeuge(kennung, args.bezeichnung, args.tage)
+    benutzer.protokolliere("token", kennung, von, args.bezeichnung or "-")
     print()
-    print(f"  Token fuer '{benutzer}':")
+    print(f"  Token fuer '{kennung}':")
     print()
     print(f"    {token}")
     print()

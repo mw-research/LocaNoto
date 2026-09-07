@@ -11,9 +11,10 @@ Zugang ueber ein Token im Kopf der Anfrage:
     curl -H "X-LocaNoto-Token: lnt_..." http://127.0.0.1:8600/status
 
 Das Token bildet auf eine Kennung ab, und diese Kennung geht als benutzer
-in die Suche. Die Trennung zwischen privaten und geteilten Dokumenten gilt
-damit hier genauso wie in der Oberflaeche -- ohne Sonderbehandlung, ohne
-einen Schalter, der sie umgeht.
+in die Suche. Durchsucht werden genau die Raeume, in denen sie Mitglied
+ist -- ohne Sonderbehandlung und ohne einen Schalter, der das umgeht. Eine
+mitgegebene Raumliste kann nur einschraenken; ein Raum ausserhalb der
+Berechtigung wird still verworfen.
 
 Betrieb: uvicorn api:app --host 0.0.0.0 --port 8600
 """
@@ -28,6 +29,7 @@ import paths
 import auth
 import llm
 import pipeline
+import raeume
 import feedback
 import presets
 import tabellen
@@ -99,6 +101,13 @@ class Frage(BaseModel):
         default=None, description="nur in diesen Dokumenten suchen")
     sachgebiete: list[str] | None = Field(
         default=None, description="nur in diesen Unterordnern suchen")
+    raeume: list[str] | None = Field(
+        default=None,
+        description="nur in diesen Raeumen suchen. Ohne Angabe alle, die "
+                    "die Kennung lesen darf -- siehe /raeume. Ein Raum "
+                    "ausserhalb der Berechtigung wird still verworfen, "
+                    "nicht abgewiesen: eine Fehlermeldung waere die "
+                    "Auskunft, dass es ihn gibt.")
     verlauf: list[dict] | None = Field(
         default=None,
         description="frueherer Austausch als [{'role','content'}], "
@@ -138,12 +147,15 @@ def gesundheit():
 @app.get("/status")
 def status(kennung: str = Depends(benutzer)):
     """Was diese Installation gerade benutzt."""
-    sammlung = store.collection()
-    geteilt, privat, sachgebiete = pipeline.dokumente(sammlung, kennung)
+    paare = pipeline.sammlungen(kennung)
+    nach_raum, sachgebiete = pipeline.dokumente(kennung)
     return {
         "benutzer": kennung,
-        "abschnitte": sammlung.count(),
-        "dokumente": {"geteilt": len(geteilt), "privat": len(privat)},
+        "abschnitte": sum(sml.count() for _r, sml in paare),
+        "raeume": {r: {"bezeichnung": raeume.bezeichnung(r),
+                       "abschnitte": sml.count(),
+                       "dokumente": len(nach_raum.get(r, []))}
+                   for r, sml in paare},
         "sachgebiete": sachgebiete,
         "ablage": store.beschreibung(),
         "rangfolge": BEWERTER_INFO,
@@ -168,9 +180,30 @@ def _listenstand():
 
 @app.get("/dokumente")
 def dokumente(kennung: str = Depends(benutzer)):
-    """Welche Dokumente diese Kennung sehen darf."""
-    geteilt, privat, sachgebiete = pipeline.dokumente(store.collection(), kennung)
-    return {"geteilt": geteilt, "privat": privat, "sachgebiete": sachgebiete}
+    """Welche Dokumente diese Kennung sehen darf -- nach Raum."""
+    nach_raum, sachgebiete = pipeline.dokumente(kennung)
+    return {"raeume": {r: {"bezeichnung": raeume.bezeichnung(r),
+                           "dateien": d}
+                       for r, d in sorted(nach_raum.items())},
+            "sachgebiete": sachgebiete}
+
+
+@app.get("/raeume")
+def raeume_liste(kennung: str = Depends(benutzer)):
+    """Die Raeume, die diese Kennung lesen darf.
+
+    Bewusst nur die eigenen: eine Liste aller Raeume waere schon eine
+    Auskunft -- welche Abteilungen es gibt und wie sie heissen.
+    """
+    erlaubt = raeume.lesbar(kennung)
+    vorhanden = {r for r, _s in pipeline.sammlungen(kennung)}
+    return {"raeume": [{"kennung": r,
+                        "bezeichnung": raeume.bezeichnung(r),
+                        "beschreibung": (raeume.raum(r) or {}).get(
+                            "beschreibung", ""),
+                        "privat": raeume.ist_privat(r),
+                        "hat_daten": r in vorhanden}
+                       for r in erlaubt]}
 
 
 def _listen_abfragen(anfrage, modell, verlauf_text):
@@ -235,7 +268,8 @@ def _suchen(anfrage, kennung):
                                       preset=anfrage.preset)
     try:
         treffer, zahlen = pipeline.suche(
-            store.collection(), embed_client, EMBED_MODELL, sonden, kennung,
+            pipeline.sammlungen(kennung, nur=anfrage.raeume),
+            embed_client, EMBED_MODELL, sonden, kennung,
             top_k, dateien=anfrage.dateien, ordner=gebiete,
             bewerter=_bewerter)
     except ValueError as e:

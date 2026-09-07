@@ -25,6 +25,7 @@ import re
 
 import paths
 import store
+import raeume
 import keyword_index
 import llm
 from embedding import embed_batch
@@ -36,11 +37,23 @@ print("Starte Batch-Hintergrund-Vektorisierung...")
 
 # --- KONFIGURATION ---
 paths.bootstrap()
-ORDNER_NAME = paths.DOCS_DIR
+# Welcher Ordner eingelesen wird. Ohne Angabe alles unter
+# data/dokumente. INGEST_ORDNER schraenkt ein -- gebraucht fuer den
+# Abgleich mit ownCloud, der je Raum in einen eigenen Unterordner holt:
+# dann sollen die Unterordner DARIN die Sachgebiete sein und nicht der
+# Raumname selbst.
+ORDNER_NAME = os.getenv("INGEST_ORDNER", "").strip() or paths.DOCS_DIR
 EMBEDDING_MODEL = llm.modell("EMBEDDING")
 client = llm.client("EMBEDDING")
 
-collection = store.collection()
+# Der Ingest liest data/dokumente -- den Bestand, den alle sehen sollen.
+# Er geht deshalb in den allgemeinen Raum. INGEST_RAUM setzt einen anderen,
+# etwa um einen Abteilungsbestand einzulesen, ohne ihn vorher fuer alle
+# sichtbar zu machen.
+RAUM = raeume.sichere_kennung(
+    os.getenv("INGEST_RAUM", "").strip()) or raeume.ALLGEMEIN
+collection = store.sammlung(raeume.sammlung(RAUM))
+print(f"Ziel: Raum '{RAUM}' -> Sammlung '{raeume.sammlung(RAUM)}'")
 kw = keyword_index.connect()
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
@@ -190,7 +203,8 @@ for pdf_pfad in dokumente:
             pending, neu = [], 0
             for nummer, _titel, text in lesen.abschnitte(pdf_pfad):
                 basis_meta = {"file_name": dateiname, "page": nummer,
-                              "folder": ordner, "access": "shared",
+                              "folder": ordner, "raum": RAUM,
+                              "access": "shared",
                               "owner": "system"}
                 for i, chunk in enumerate(text_splitter.split_text(text)):
                     chunk_id = f"{dateiname}_p{nummer}_c{i}"
@@ -224,7 +238,8 @@ for pdf_pfad in dokumente:
 
             page = doc[page_num]
             basis_meta = {"file_name": dateiname, "page": page_num + 1,
-                          "folder": ordner, "access": "shared",
+                          "folder": ordner, "raum": RAUM,
+                          "access": "shared",
                           "owner": "system"}
 
             # --- TABELLEN ISOLIEREN UND ANREICHERN ---

@@ -22,14 +22,25 @@ sie zeigt, welche Fragen der Bestand gut traegt. Nur die Fehlschlaege zu
 kennen sagt nichts darueber, ob eine Aenderung etwas verbessert oder nur
 verschoben hat.
 
-Eine Zeile je Ereignis (JSON Lines), angehaengt. Zwei Prozesse -- die
-Oberflaeche und die Schnittstelle -- schreiben in dieselbe Datei; das
-Anhaengen kurzer Zeilen ist dafuer der unempfindlichste Weg.
+Eine Zeile je Ereignis, angehaengt. Zwei Prozesse -- die Oberflaeche und
+die Schnittstelle -- schreiben in dieselbe Datei; das Anhaengen kurzer
+Zeilen ist dafuer der unempfindlichste Weg.
+
+Jede Zeile ist verschluesselt (siehe geheim.py) und base64-kodiert, damit
+sie eine Zeile bleibt. Das ist nicht uebertrieben: hier stehen die Fragen
+der Mitarbeiter im Wortlaut, mit Namen daneben. Wer nur die Chats
+verschluesselt und diese Datei offen liegen laesst, hat eine Mitschrift
+derselben Fragen an einer zweiten Stelle.
+
+Alte, unverschluesselte Zeilen werden weiter gelesen -- eine Umstellung
+soll das Protokoll nicht abschneiden.
 """
+import base64
 import json
 import os
 from datetime import datetime, timezone
 
+import geheim
 import paths
 
 DATEI = os.path.join(paths.DATA_DIR, "feedback.jsonl")
@@ -67,11 +78,44 @@ def notiere(art, benutzer, frage, sonden=(), zahlen=None, quellen=(),
     }
     try:
         os.makedirs(os.path.dirname(DATEI), exist_ok=True)
+        roh = json.dumps(eintrag, ensure_ascii=False).encode("utf-8")
+        zeile = base64.b64encode(geheim.verschluessele(roh)).decode("ascii")
         with open(DATEI, "a", encoding="utf-8") as f:
-            f.write(json.dumps(eintrag, ensure_ascii=False) + "\n")
+            f.write(zeile + "\n")
         return True
     except OSError:
         return False
+
+
+def _zeile_lesen(zeile):
+    """Eine Protokollzeile zu einem Eintrag. None, wenn unlesbar.
+
+    Beide Formen: verschluesselt und base64-kodiert, oder eine alte Zeile
+    im Klartext. Erkannt wird das an der Zeile selbst, nicht an einem
+    Schalter -- eine Datei hat nach der Umstellung beides.
+    """
+    if zeile.startswith("{"):
+        try:
+            return json.loads(zeile)
+        except json.JSONDecodeError:
+            return None
+    try:
+        roh = geheim.entschluessele(base64.b64decode(zeile, validate=True))
+        return json.loads(roh.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def als_text(grenze=10 ** 9):
+    """Das Protokoll als lesbares JSON Lines -- fuer den Download.
+
+    Entschluesselt, weil ein Verwalter, der es herunterlaedt, es auswerten
+    will. Die Verschluesselung schuetzt die Datei auf der Platte, nicht die
+    Auskunft an den, der sie ohnehin auf dem Bildschirm sieht.
+    """
+    zeilen = [json.dumps(e, ensure_ascii=False)
+              for e in reversed(lese(grenze=grenze))]
+    return ("\n".join(zeilen) + "\n").encode("utf-8") if zeilen else b""
 
 
 def lese(grenze=None, art=None):
@@ -91,9 +135,8 @@ def lese(grenze=None, art=None):
                 zeile = zeile.strip()
                 if not zeile:
                     continue
-                try:
-                    e = json.loads(zeile)
-                except json.JSONDecodeError:
+                e = _zeile_lesen(zeile)
+                if e is None:
                     # Eine abgebrochene Zeile -- etwa bei einem Absturz
                     # mitten im Schreiben. Sie kostet einen Eintrag, nicht
                     # das Protokoll.
@@ -104,6 +147,48 @@ def lese(grenze=None, art=None):
     except OSError:
         return []
     return list(reversed(eintraege))[:grenze]
+
+
+def klartextzeilen():
+    """Wie viele Zeilen noch unverschluesselt daliegen."""
+    if not os.path.exists(DATEI):
+        return 0
+    offen = 0
+    try:
+        with open(DATEI, "r", encoding="utf-8", errors="replace") as f:
+            for zeile in f:
+                if zeile.strip().startswith("{"):
+                    offen += 1
+    except OSError:
+        return 0
+    return offen
+
+
+def neu_verschluesseln():
+    """Schreibt das Protokoll vollstaendig verschluesselt neu.
+
+    Fuer den Umstieg: bestehende Zeilen bleiben sonst im Klartext liegen und
+    werden nur weiter gelesen. Die Reihenfolge bleibt, der Inhalt bleibt --
+    was sich aendert, ist die Form auf der Platte.
+
+    Rueckgabe: (ok, Anzahl neu geschriebener Zeilen).
+    """
+    if not os.path.exists(DATEI):
+        return True, 0
+    eintraege = list(reversed(lese(grenze=10 ** 9)))
+    if not eintraege:
+        return True, 0
+    vorlaeufig = DATEI + ".neu"
+    try:
+        with open(vorlaeufig, "w", encoding="utf-8") as f:
+            for e in eintraege:
+                roh = json.dumps(e, ensure_ascii=False).encode("utf-8")
+                f.write(base64.b64encode(
+                    geheim.verschluessele(roh)).decode("ascii") + "\n")
+        os.replace(vorlaeufig, DATEI)
+    except OSError:
+        return False, 0
+    return True, len(eintraege)
 
 
 def archiviere():

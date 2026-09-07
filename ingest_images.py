@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import paths
 import lesen
 import store
+import raeume
 import keyword_index
 import llm
 from embedding import embed_batch
@@ -18,7 +19,7 @@ print("Starte nachträgliche Bild-Vektorisierung...")
 
 # --- KONFIGURATION ---
 paths.bootstrap()
-ORDNER_NAME = paths.DOCS_DIR
+ORDNER_NAME = os.getenv("INGEST_ORDNER", "").strip() or paths.DOCS_DIR
 # Bildbeschreibung und Vektorisierung koennen auf getrennten Servern
 # liegen -- VISION_BASE_URL und EMBEDDING_BASE_URL steuern das.
 VISION_MODEL = llm.modell("VISION")
@@ -77,7 +78,14 @@ def get_embedding(text, model=EMBEDDING_MODEL):
 
 # Bewusst ohne Anlegen: eine frisch erzeugte, leere Sammlung waere
 # hier kein Ausgangspunkt, sondern ein Hinweis auf den falschen Pfad.
-collection = store.collection(anlegen=False)
+RAUM = raeume.sichere_kennung(
+    os.getenv("INGEST_RAUM", "").strip()) or raeume.ALLGEMEIN
+collection = store.sammlung(raeume.sammlung(RAUM), anlegen=False)
+if collection is None:
+    print(f"Der Raum '{RAUM}' hat noch keine Sammlung. Erst Text einlesen "
+          f"(ingest.py) oder umsortieren.py laufen lassen.")
+    raise SystemExit(1)
+print(f"Ziel: Raum '{RAUM}'")
 kw = keyword_index.connect()
 
 
@@ -309,7 +317,8 @@ for pdf_pfad in dokumente:
                 print(f"   🖼️ Analysiere Bild {gefunden} in Abschnitt {nummer}...")
                 aufgaben.append((chunk_id, image_url, kontext,
                                  {"file_name": dateiname, "page": nummer,
-                                  "folder": ordner, "access": "shared",
+                                  "folder": ordner, "raum": RAUM,
+                                  "access": "shared",
                                   "owner": "system",
                                   "source": "uploaded_pdfs",
                                   "type": "image"}))
@@ -438,7 +447,8 @@ for pdf_pfad in dokumente:
                 # access/owner MUESSEN gesetzt sein: die Vektorsuche filtert
                 # ueber diese Keys -- fehlen sie, matcht ein Chunk nie.
                 bild_meta = {"file_name": dateiname, "page": page_num + 1,
-                             "folder": ordner, "access": "shared",
+                             "folder": ordner, "raum": RAUM,
+                             "access": "shared",
                              "owner": "system", "source": "uploaded_pdfs",
                              "type": "image"}
                 aufgaben.append((chunk_id, image_url, kontext, bild_meta))

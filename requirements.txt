@@ -21,6 +21,9 @@ charset-normalizer==3.5.0
 chromadb==1.5.9
 click==8.4.2
 coloredlogs==15.0.1
+# Verschluesselung der Chatverlaeufe, Anhaenge und Rueckmeldungen
+# sowie die Signatur der Benutzer- und Tokendatei (geheim.py).
+cryptography==50.0.1
 cuda-bindings==13.3.1
 cuda-pathfinder==1.6.0
 cuda-toolkit==13.0.3.0

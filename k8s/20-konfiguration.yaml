@@ -1,0 +1,103 @@
+# --- KONFIGURATION UND GEHEIMNISSE ---
+#
+# Getrennt, weil das eine in ein Repository darf und das andere nicht.
+#
+# Die Pfade IM CONTAINER stehen hier; wohin sie zeigen, steht in
+# 10-speicher.yaml. LOCANOTO_INDEX zeigt bewusst NICHT unter /app/data:
+# dort liegt der Bestand auf einer Freigabe, und SQLite gehoert auf ein
+# Blockgeraet.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locanoto
+  labels:
+    app.kubernetes.io/name: locanoto
+data:
+  # --- Speicherorte im Container ---
+  #
+  # LOCANOTO_INDEX ist ABSICHTLICH nicht gesetzt. Ohne den Wert liegen
+  # Vektordatenbank, Stichwortindex und Listenkatalog unter /app/data --
+  # also in der bekannten data/-Struktur, vollstaendig auf dem externen
+  # Volume. Genau das ist das Ziel: nichts im Abbild, nichts im Pod.
+  #
+  # Gesetzt wird er nur, wenn der persistente Speicher eine Freigabe
+  # (NFS/SMB) ist -- siehe 90-variante-freigabe.yaml.
+  LOCANOTO_DATEN: "/app/data"
+  LOCANOTO_KONFIG: "/app/config"
+
+  # --- Vektordatenbank als Dienst im selben Pod ---
+  #
+  # localhost, weil Chroma als Sidecar daneben laeuft und dasselbe
+  # Datenvolume einhaengt. Ohne den Dienst legte jeder Container eine
+  # eigene Dateiablage an, und zwei Prozesse auf denselben SQLite-Dateien
+  # sind kein sauberer Fehler, sondern ein beschaedigter Index. Mit dem
+  # Dienst entscheidet er, wer schreibt.
+  CHROMA_HOST: "127.0.0.1"
+  CHROMA_PORT: "8000"
+
+  # --- Modelle ---
+  #
+  # Die Adressen des eigenen Modellservers. Schluessel gehoeren NICHT
+  # hierher, sondern in das Secret darunter.
+  OPENAI_BASE_URL: "http://litellm:4000"
+  CHAT_MODEL: "qwen3.8:27b"
+  EMBEDDING_MODEL: "qwen3-embedding:8b"
+  VISION_MODEL: "qwen3-vl:32b"
+  RERANKER_BASE_URL: "http://litellm:4000"
+  RERANKER_API_MODEL: "rerank"
+
+  APP_TOPIC: "Allgemein"
+  COMPANY_NAME: "Musterfirma"
+  EXPERT_ROLE: "technischer Assistent"
+  TOP_K: "12"
+  MAX_TABLE_CHARS: "3000"
+  SITZUNG_MINUTEN: "480"
+
+  # Strenger Betrieb der persoenlichen Raeume: dann erfaehrt auch ein
+  # Verwalter nichts ueber fremde -- nicht einmal die Dateinamen.
+  PRIVAT_STRENG: "0"
+
+  # Abzug der Vektordatenbank. Innerhalb des Datenvolumes ist er der
+  # Rueckweg nach einem Fehlgriff; gegen den Verlust des Volumes selbst
+  # hilft nur ein eigenes Ziel -- ein zweites PVC oder ein eingehaengtes
+  # Sicherungslaufwerk.
+  SICHERUNG_PFAD: "/app/data/sicherungen"
+  SICHERUNG_BEHALTEN: "7"
+
+  # --- ownCloud ---
+  # OWNCLOUD_URL: "https://cloud.firma.de"
+  # OWNCLOUD_USER: "locanoto"
+  # OWNCLOUD_GRUPPEN_HOECHSTALTER: "0"
+---
+# NICHT SO AUSLIEFERN. Diese Datei ist eine Vorlage; ein Secret mit
+# echten Werten gehoert nicht in ein Repository.
+#
+# Besser aus dem Stand erzeugen und diese Datei gar nicht anwenden:
+#
+#   kubectl create secret generic locanoto \
+#     --from-literal=OPENAI_API_KEY=... \
+#     --from-literal=OWNCLOUD_PASSWORT=... \
+#     --from-file=LOCANOTO_SCHLUESSEL=/pfad/zum/schluessel
+#
+# LOCANOTO_SCHLUESSEL ist der Installationsschluessel, mit dem alle
+# Chatverlaeufe verschluesselt sind. Ohne Angabe legt die Anwendung ihn
+# beim ersten Start als config/schluessel.key auf dem Konfigvolume ab --
+# das genuegt und ist einfacher. Ueber das Secret liegt er nicht im
+# Dateisystem, sondern nur im Speicher des Pods.
+#
+# ACHTUNG: dieser Schluessel gehoert in die Sicherung. Geht er verloren,
+# sind alle Verlaeufe unlesbar, und zwar OHNE Fehlermeldung -- die Dateien
+# sind ja noch da.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: locanoto
+  labels:
+    app.kubernetes.io/name: locanoto
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "bitte-ersetzen"
+  # OWNCLOUD_PASSWORT: ""
+  # OWNCLOUD_ADMIN_PASSWORT: ""
+  # LOCANOTO_SCHLUESSEL: ""

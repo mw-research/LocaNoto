@@ -18,6 +18,7 @@ import base64
 import io
 import os
 
+import geheim
 import paths
 import llm
 
@@ -119,6 +120,10 @@ def anhang_verzeichnis(benutzer):
     return pfad
 
 
+def _zusatz(benutzer, name):
+    return f"bild:{benutzer}:{name}".encode("utf-8")
+
+
 def speichern(daten, benutzer, name):
     """Legt das Bild ab und gibt den Pfad zurueck.
 
@@ -128,5 +133,31 @@ def speichern(daten, benutzer, name):
     """
     ziel = os.path.join(anhang_verzeichnis(benutzer), name)
     with open(ziel, "wb") as f:
-        f.write(vorbereiten(daten))
+        # Verschluesselt, an Nutzer und Dateiname gebunden. Ein
+        # Bildschirmfoto aus dem ERP ist oft der heikelste Teil eines
+        # Verlaufs -- ein Chat ohne Klartext, dessen Anhaenge daneben offen
+        # liegen, waere halb.
+        f.write(geheim.verschluessele(vorbereiten(daten),
+                                      _zusatz(benutzer, name)))
     return ziel
+
+
+def lade(pfad):
+    """Das abgelegte Bild als Bytes. None, wenn es nicht zu lesen ist.
+
+    None und keine Ausnahme: ein fehlendes oder unlesbares Bild soll einen
+    Verlauf nicht unbenutzbar machen.
+    """
+    if not pfad or not os.path.exists(pfad):
+        return None
+    # Die Ablage ist chats/<nutzer>/anhaenge/<name> -- zwei Ebenen hoch,
+    # nicht eine. Eine Ebene waere "anhaenge", und die Zusatzdaten passten
+    # nicht mehr zu denen beim Speichern.
+    name = os.path.basename(pfad)
+    benutzer = os.path.basename(
+        os.path.dirname(os.path.dirname(pfad)))
+    try:
+        with open(pfad, "rb") as f:
+            return geheim.entschluessele(f.read(), _zusatz(benutzer, name))
+    except (OSError, ValueError):
+        return None

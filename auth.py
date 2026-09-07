@@ -19,6 +19,13 @@ Passwoerter erratbar sind und Rechenzeit das Durchprobieren verteuern soll.
 Ein Token aus 32 zufaelligen Bytes ist nicht erratbar; Streckung bringt
 dort nichts und kostet nur. Gespeichert wird trotzdem nur der Hashwert --
 wer die Datei liest, hat damit noch keinen Zugang.
+
+Der Hashwert allein reicht aber nicht: wer die Datei SCHREIBEN kann, traegt
+einen eigenen Eintrag ein -- sha256 eines selbst gewaehlten Tokens ist in
+einer Zeile berechnet. Deshalb ist jeder Eintrag zusaetzlich mit dem
+Installationsschluessel signiert, und ein Eintrag ohne gueltige Signatur
+gilt nicht. Dieselbe Ueberlegung wie bei den Benutzern; siehe
+benutzer.py.
 """
 import hashlib
 import json
@@ -26,6 +33,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import geheim
 import paths
 
 TOKEN_FILE = os.path.join(paths.CONFIG_DIR, "tokens.json")
@@ -44,6 +52,19 @@ def _jetzt():
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _eintrag_daten(kennung, eintrag):
+    """Was die Signatur beglaubigt: Kennung, Nutzer, Ablauf.
+
+    Die Bezeichnung ist nicht dabei -- sie ist eine Notiz fuer Menschen und
+    soll sich aendern lassen, ohne den Zugang zu brechen.
+    """
+    return geheim.kanonisch({
+        "kennung": kennung,
+        "benutzer": eintrag.get("benutzer") or "",
+        "gueltig_bis": eintrag.get("gueltig_bis") or "",
+    })
+
+
 def laden():
     """Alle Eintraege. Fehlt die Datei, gibt es eben noch keine Token."""
     if not os.path.exists(TOKEN_FILE) or os.path.getsize(TOKEN_FILE) == 0:
@@ -55,16 +76,47 @@ def laden():
         # Eine beschaedigte Datei darf nicht dazu fuehren, dass jeder
         # hereinkommt. Keine Token heisst: kein Zugang.
         return {}
-    return daten if isinstance(daten, dict) else {}
+    if not isinstance(daten, dict):
+        return {}
+
+    return daten
+
+
+def nachsichtig(daten=None):
+    """Stammt die Datei aus der Zeit vor den Signaturen?
+
+    Dann hat KEIN Eintrag eine, und alle gelten -- ein Update darf keinem
+    Nutzer sein Token nehmen. Sobald ein einziger Eintrag signiert ist,
+    gilt die strenge Regel, und ein nachtraeglich von Hand eingefuegter
+    faellt auf.
+
+    Bewusst kein Nachsignieren beim Lesen: laden() laeuft bei jeder
+    Anfrage, und eine Konfiguration, die nur lesend eingehaengt ist, haette
+    damit alle ausgesperrt. Signiert wird beim naechsten Schreiben.
+    """
+    daten = laden() if daten is None else daten
+    if not daten:
+        return False
+    return not any(isinstance(e, dict) and e.get("signatur")
+                   for e in daten.values())
 
 
 def speichern(daten):
     os.makedirs(paths.CONFIG_DIR, exist_ok=True)
     # Erst daneben schreiben, dann umbenennen. Bricht der Vorgang ab, steht
     # die alte Datei noch vollstaendig da statt halb.
+    fertig = {}
+    for kennung, eintrag in daten.items():
+        if not isinstance(eintrag, dict):
+            continue
+        eintrag = dict(eintrag)
+        eintrag["signatur"] = geheim.signiere(
+            _eintrag_daten(kennung, eintrag))
+        fertig[kennung] = eintrag
+
     vorlaeufig = TOKEN_FILE + ".neu"
     with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump(daten, f, indent=2, ensure_ascii=False)
+        json.dump(fertig, f, indent=2, ensure_ascii=False)
     os.replace(vorlaeufig, TOKEN_FILE)
     try:
         os.chmod(TOKEN_FILE, 0o600)
@@ -102,8 +154,18 @@ def pruefe(token):
     """
     if not token:
         return None
-    eintrag = laden().get(_hash(token.strip()))
+    kennung = _hash(token.strip())
+    alle = laden()
+    eintrag = alle.get(kennung)
     if not eintrag:
+        return None
+
+    # Ohne gueltige Signatur kein Zugang -- selbst wenn der Hashwert passt.
+    # Das ist der Unterschied zwischen "die Datei lesen" und "die Datei
+    # schreiben duerfen".
+    if not nachsichtig(alle) and not geheim.pruefe_signatur(
+            _eintrag_daten(kennung, eintrag),
+            eintrag.get("signatur") or ""):
         return None
 
     bis = eintrag.get("gueltig_bis")
@@ -118,8 +180,21 @@ def pruefe(token):
 
 
 def liste():
-    """Alle Token als (kennung, eintrag) -- ohne die Token selbst."""
-    return sorted(laden().items(), key=lambda p: p[1].get("erstellt", ""))
+    """Alle Token als (kennung, eintrag) -- ohne die Token selbst.
+
+    Jeder Eintrag traegt "gueltig": ob seine Signatur passt. Ein Eintrag
+    ohne gueltige wird nicht verschwiegen, sondern als solcher gezeigt --
+    sonst wuesste niemand, dass jemand es versucht hat.
+    """
+    alle = laden()
+    frei = nachsichtig(alle)
+    eintraege = []
+    for kennung, e in alle.items():
+        e = dict(e)
+        e["gueltig"] = frei or geheim.pruefe_signatur(
+            _eintrag_daten(kennung, e), e.get("signatur") or "")
+        eintraege.append((kennung, e))
+    return sorted(eintraege, key=lambda p: p[1].get("erstellt", ""))
 
 
 def widerrufe(kennung):

@@ -61,6 +61,12 @@ ENV ANONYMIZED_TELEMETRY=False \
     CHROMA_ANONYMIZED_TELEMETRY=False \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
+# Keine .pyc-Dateien zur Laufzeit. Sie landeten sonst in der
+# Schreibschicht des Containers -- unnoetig, weil sie bei jedem neuen
+# Pod neu entstehen, und ein Hindernis, sobald das Wurzeldateisystem
+# nur lesbar eingehaengt ist (readOnlyRootFilesystem in Kubernetes).
+ENV PYTHONDONTWRITEBYTECODE=1
+
 COPY . .
 
 EXPOSE 8501

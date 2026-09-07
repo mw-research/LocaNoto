@@ -21,7 +21,17 @@ import sqlite3
 
 import paths
 
-DB_PATH = os.path.join(paths.DATA_DIR, "keyword_index.sqlite3")
+# INDEX_DIR und nicht DATA_DIR: eine SQLite-Datei braucht ein echtes
+# Dateisystem. Ueber NFS oder SMB funktioniert der WAL-Betrieb nicht --
+# SQLite braucht dafuer gemeinsamen Speicher im selben Dateisystem -- und
+# die Dateisperren sind unzuverlaessig. Ein PersistentVolume auf
+# Blockspeicher traegt sie dagegen einwandfrei, und dort gehoert sie hin:
+# persistent, aber keine Freigabe.
+#
+# Der Neuaufbau aus den Sammlungen kostet gemessen rund 17 Sekunden bei
+# 324.000 Abschnitten -- diese Datei allein waere also ersetzbar. Die
+# Vektordatenbank daneben ist es nicht.
+DB_PATH = os.path.join(paths.INDEX_DIR, "keyword_index.sqlite3")
 
 # Ab dieser Laenge wird ein Suchbegriff als Praefix gesucht. Kuerzere Begriffe
 # ergaeben zu unspezifische Treffer ("der*", "und*").
@@ -36,10 +46,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
     owner     UNINDEXED,
     folder    UNINDEXED,
     doc_type  UNINDEXED,
+    raum      UNINDEXED,
     text,
     tokenize = "unicode61 remove_diacritics 2"
 );
 """
+
+# Spalten, die ein aktuelles Schema haben muss. Eine FTS5-Tabelle laesst
+# sich nicht per ALTER TABLE erweitern, also wird sie bei Bedarf neu
+# aufgebaut -- verlustfrei, weil der Index vollstaendig aus den Sammlungen
+# ableitbar ist.
+_SPALTEN = ("chunk_id", "file_name", "page", "access", "owner", "folder",
+            "doc_type", "raum", "text")
 
 
 def connect():
@@ -54,6 +72,91 @@ def connect():
     con.execute("PRAGMA busy_timeout=5000")
     con.executescript(_SCHEMA)
     return con
+
+
+def journal_modus(con=None):
+    """Welcher Journalmodus tatsaechlich gilt.
+
+    PRAGMA journal_mode=WAL schlaegt nicht fehl, wenn das Dateisystem es
+    nicht kann -- SQLite bleibt dann still beim alten Modus. Genau das
+    passiert auf einem Netzlaufwerk. Ohne Rueckfrage merkt es niemand, und
+    die Anwendung laeuft langsamer und empfindlicher als gedacht.
+    """
+    own = con is None
+    con = con or connect()
+    try:
+        return (con.execute("PRAGMA journal_mode").fetchone() or ["?"])[0]
+    except sqlite3.Error:
+        return "?"
+    finally:
+        if own:
+            con.close()
+
+
+def schema_aktuell(con=None):
+    """Hat die Tabelle die Raumspalte?
+
+    Ein Index aus der Zeit vor den Raeumen hat sie nicht. Er ist dann nicht
+    kaputt, aber er kann nicht nach Raum filtern -- und ein Stichworttreffer
+    ohne Raumfilter waere genau das Leck, das die Raeume schliessen sollen.
+    """
+    own = con is None
+    con = con or connect()
+    try:
+        vorhanden = {r[1] for r in con.execute("PRAGMA table_info(chunks)")}
+        return "raum" in vorhanden
+    except sqlite3.Error:
+        return False
+    finally:
+        if own:
+            con.close()
+
+
+def passt_zu(paare, con=None):
+    """(passt, im_index, in_sammlungen).
+
+    Ein Vergleich der Anzahlen, kein Abgleich Abschnitt fuer Abschnitt --
+    der waere teuer und muesste den ganzen Bestand lesen. Die Anzahl
+    genuegt fuer die Frage, die hier zaehlt: hat ein anderer Prozess in die
+    Sammlungen geschrieben, ohne diesen Index zu erreichen?
+
+    Das ist kein erfundener Fall. Laeuft der Ingest als eigener Job -- in
+    Kubernetes ein CronJob, im Container ein abgekoppelter Lauf --, dann
+    fuellt er die Sammlungen ueber den Chroma-Dienst, aber der
+    Stichwortindex liegt an einer anderen Stelle. Ohne diese Pruefung
+    fehlen dessen Treffer, bis jemand neu startet, und niemand sieht
+    warum: die Vektorsuche antwortet ja.
+    """
+    own = con is None
+    con = con or connect()
+    try:
+        im_index = count(con)
+    finally:
+        if own:
+            con.close()
+    in_sammlungen = 0
+    for _kennung, sml in paare:
+        try:
+            in_sammlungen += sml.count()
+        except Exception:
+            # Eine Sammlung, die gerade nicht antwortet, darf keinen
+            # Neuaufbau ausloesen -- das waere ein Neuaufbau bei jedem
+            # Wackler.
+            return True, im_index, im_index
+    return im_index == in_sammlungen, im_index, in_sammlungen
+
+
+def neu_anlegen(con=None):
+    """Verwirft die Tabelle und legt sie mit aktuellem Schema an."""
+    own = con is None
+    con = con or connect()
+    try:
+        con.execute("DROP TABLE IF EXISTS chunks")
+        con.executescript(_SCHEMA)
+        con.commit()
+    finally:
+        if own:
+            con.close()
 
 
 def count(con=None):
@@ -82,13 +185,14 @@ def add_chunks(rows, con=None):
                 meta.get("owner", ""),
                 meta.get("folder", ""),
                 meta.get("type", ""),
+                meta.get("raum", ""),
                 text or "",
             ))
         if not payload:
             return 0
         con.executemany(
             "INSERT INTO chunks (chunk_id, file_name, page, access, owner, "
-            "folder, doc_type, text) VALUES (?,?,?,?,?,?,?,?)", payload)
+            "folder, doc_type, raum, text) VALUES (?,?,?,?,?,?,?,?,?)", payload)
         con.commit()
         return len(payload)
     finally:
@@ -96,7 +200,7 @@ def add_chunks(rows, con=None):
             con.close()
 
 
-def delete_document(file_name, access=None, owner=None, con=None):
+def delete_document(file_name, access=None, owner=None, con=None, raum=None):
     """Entfernt Eintraege eines Dokuments. Spiegelt die Filter der
     Chroma-Loeschung, damit beide Indizes deckungsgleich bleiben."""
     own = con is None
@@ -110,7 +214,27 @@ def delete_document(file_name, access=None, owner=None, con=None):
         if owner is not None:
             sql += " AND owner = ?"
             args.append(owner)
+        if raum is not None:
+            sql += " AND raum = ?"
+            args.append(raum)
         con.execute(sql, args)
+        con.commit()
+    finally:
+        if own:
+            con.close()
+
+
+def delete_document_by_raum(raum, con=None):
+    """Entfernt alle Eintraege eines Raums.
+
+    Gegenstueck zum Loeschen einer Sammlung: bliebe der Stichwortindex
+    stehen, wuerden Treffer auf Abschnitte zeigen, die es nicht mehr gibt --
+    mit Text, denn den haelt diese Tabelle selbst.
+    """
+    own = con is None
+    con = con or connect()
+    try:
+        con.execute("DELETE FROM chunks WHERE raum = ?", (raum,))
         con.commit()
     finally:
         if own:
@@ -149,12 +273,18 @@ def build_match_query(text):
     return " OR ".join(parts)
 
 
-def search(query_text, username, limit=5, file_names=None, folders=None, con=None):
+def search(query_text, username, limit=5, file_names=None, folders=None,
+           con=None, raeume=None):
     """BM25-gerankte Keyword-Suche mit Rechtefilter.
 
-    Der Rechtefilter laeuft in SQL statt wie bisher nachtraeglich in Python.
-    Dort war er auf meta.get('access', 'shared') angewiesen -- Chunks ohne
+    Der Rechtefilter laeuft in SQL statt nachtraeglich in Python. Dort war
+    er auf meta.get('access', 'shared') angewiesen -- Chunks ohne
     access-Key galten damit als oeffentlich.
+
+    Mit raeume wird nach Raum gefiltert, ohne nach access/owner. Ein
+    Abschnitt ohne Raum faellt dann heraus, statt als oeffentlich zu
+    gelten: bei einer unfertigen Umsortierung fehlen lieber Treffer, als
+    dass fremde erscheinen.
     """
     match = build_match_query(query_text)
     if not match:
@@ -164,9 +294,18 @@ def search(query_text, username, limit=5, file_names=None, folders=None, con=Non
     con = con or connect()
     try:
         sql = ["SELECT chunk_id, file_name, page, access, owner, folder, "
-               "doc_type, text, bm25(chunks) AS score FROM chunks "
-               "WHERE chunks MATCH ? AND (access = 'shared' OR owner = ?)"]
-        args = [match, username]
+               "doc_type, text, bm25(chunks) AS score, raum FROM chunks "
+               "WHERE chunks MATCH ?"]
+        args = [match]
+        if raeume is None:
+            sql.append("AND (access = 'shared' OR owner = ?)")
+            args.append(username)
+        elif raeume:
+            sql.append("AND raum IN (%s)" % ",".join("?" * len(raeume)))
+            args.extend(raeume)
+        else:
+            # Keine Raeume heisst kein Zugang, nicht kein Filter.
+            return []
 
         if file_names:
             sql.append("AND file_name IN (%s)" % ",".join("?" * len(file_names)))
@@ -187,7 +326,7 @@ def search(query_text, username, limit=5, file_names=None, folders=None, con=Non
                 "score": r[8],
                 "meta": {"file_name": r[1], "page": _as_int(r[2]),
                          "access": r[3], "owner": r[4],
-                         "folder": r[5], "type": r[6]},
+                         "folder": r[5], "type": r[6], "raum": r[9]},
             })
         return out
     except sqlite3.OperationalError:
@@ -206,29 +345,43 @@ def _as_int(v):
         return v
 
 
-def rebuild_from_collection(collection, batch_size=5000, progress=None):
-    """Baut den Index vollstaendig aus einer bestehenden ChromaDB neu auf.
+def rebuild_from_raeume(paare, batch_size=5000, progress=None):
+    """Baut den Index aus mehreren Raum-Sammlungen neu auf.
 
-    Fuer Installationen, deren Vektordatenbank aelter ist als dieser Index.
+    paare: Iterable von (raumkennung, sammlung). Der Raum kommt aus dem
+    Paar und nicht aus den Metadaten des Abschnitts -- die Sammlung, in der
+    ein Abschnitt liegt, ist die Wahrheit; ein abweichender Metadateneintrag
+    waere ein Fehler und darf den Index nicht in die Irre fuehren.
     """
     con = connect()
     try:
-        con.execute("DELETE FROM chunks")
-        con.commit()
-
-        total = collection.count()
-        done = 0
-        while done < total:
-            batch = collection.get(include=["documents", "metadatas"],
-                                   limit=batch_size, offset=done)
-            ids = batch.get("ids") or []
-            if not ids:
-                break
-            add_chunks(zip(ids, batch.get("documents") or [],
-                           batch.get("metadatas") or []), con=con)
-            done += len(ids)
-            if progress:
-                progress(done, total)
-        return done
+        neu_anlegen(con)
+        gesamt = 0
+        for kennung, sml in paare:
+            if sml is None:
+                continue
+            total = sml.count()
+            done = 0
+            while done < total:
+                batch = sml.get(include=["documents", "metadatas"],
+                                limit=batch_size, offset=done)
+                ids = batch.get("ids") or []
+                if not ids:
+                    break
+                dokumente = batch.get("documents") or []
+                metas = batch.get("metadatas") or []
+                zeilen = []
+                for i, kennung_chunk in enumerate(ids):
+                    meta = dict(metas[i] if i < len(metas) else {})
+                    meta["raum"] = kennung
+                    zeilen.append((kennung_chunk,
+                                   dokumente[i] if i < len(dokumente) else "",
+                                   meta))
+                add_chunks(zeilen, con=con)
+                done += len(ids)
+                gesamt += len(ids)
+                if progress:
+                    progress(kennung, done, total)
+        return gesamt
     finally:
         con.close()

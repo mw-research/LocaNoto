@@ -20,8 +20,10 @@ import os
 
 import paths
 import keyword_index
+import raeume
 import ranking
 import presets
+import store
 from embedding import embed_batch
 
 # --- ZEITLIMITS ---
@@ -167,21 +169,84 @@ def sonden(client, modell, frage, verlauf="", bild_texte=(), preset=None):
     return liste, hinweis
 
 
-def _where(benutzer, dateien=None, ordner=None):
-    """Rechte- und Auswahlfilter fuer die Vektorsuche."""
-    grund = {"$or": [{"access": {"$eq": "shared"}},
-                     {"owner": {"$eq": benutzer}}]}
-    bedingungen = [grund]
+def _where(dateien=None, ordner=None):
+    """Auswahlfilter fuer die Vektorsuche -- ohne Rechte.
+
+    Die Rechte stehen nicht mehr in diesem Filter. Sie liegen darin, WELCHE
+    Sammlungen ueberhaupt gefragt werden: eine nicht gefragte Sammlung kann
+    nichts preisgeben, ein vergessener Filter dagegen alles. Gemessen an
+    3.000 Abschnitten: ohne Trennung erschienen in 200 Proben 75 fremde
+    Treffer in den ersten fuenf, mit Trennung keiner.
+    """
+    bedingungen = []
     if dateien:
         bedingungen.append({"file_name": {"$in": list(dateien)}})
     if ordner:
         bedingungen.append({"folder": {"$in": list(ordner)}})
-    return {"$and": bedingungen} if len(bedingungen) > 1 else grund
+    if not bedingungen:
+        return None
+    return {"$and": bedingungen} if len(bedingungen) > 1 else bedingungen[0]
 
 
-def suche(collection, embed_client, embed_modell, sonden_liste, benutzer,
-          top_k, dateien=None, ordner=None, bewerter=None):
+def sammlungen(benutzer, nur=None):
+    """Die Sammlungen, die dieser Nutzer fragen darf: [(raum, sammlung)].
+
+    nur schraenkt zusaetzlich ein -- fuer die Auswahl in der Oberflaeche.
+    Raeume ausserhalb der Berechtigung werden dabei still verworfen und
+    nicht als Fehler gemeldet: eine Auswahl kommt vom Client, und ein
+    Client darf sich nicht mehr nehmen, als ihm zusteht.
+    """
+    erlaubt = raeume.lesbar(benutzer)
+    if nur:
+        gewaehlt = set(nur)
+        erlaubt = [r for r in erlaubt if r in gewaehlt]
+    paare = []
+    for r in erlaubt:
+        sml = store.sammlung(raeume.sammlung(r), anlegen=False)
+        if sml is not None:
+            paare.append((r, sml))
+    return paare
+
+
+def _vektortreffer(paare_sammlungen, vektoren, breit, filter_):
+    """Eine Rangliste je Sonde, ueber alle Raeume zusammengefuehrt.
+
+    Bewusst NICHT eine Rangliste je Raum: die Fusion gewichtet nach Rang,
+    und der beste Treffer eines Raums mit fuenfzig Abschnitten bekaeme
+    denselben Rang 1 wie der beste aus dem gemeinsamen Bestand -- ein
+    winziger Raum wuerde die Rangfolge dominieren.
+
+    Stattdessen wird nach Abstand zusammengeschoben und abgeschnitten.
+    Damit steht am Ende genau das, was eine einzige gefilterte Sammlung
+    geliefert haette.
+    """
+    je_sonde = [[] for _ in vektoren]
+    for raum, sml in paare_sammlungen:
+        try:
+            res = sml.query(query_embeddings=vektoren, n_results=breit,
+                            where=filter_,
+                            include=["documents", "metadatas", "distances"])
+        except Exception:
+            # Ein Raum, dessen Sammlung gerade nicht antwortet, darf die
+            # Suche in den anderen nicht mitnehmen.
+            continue
+        for i in range(len(vektoren)):
+            texte = res["documents"][i]
+            metas = res["metadatas"][i]
+            abstaende = res["distances"][i]
+            for t, m, d in zip(texte, metas, abstaende):
+                meta = dict(m or {})
+                meta["raum"] = raum
+                je_sonde[i].append((d, t, meta))
+    return [sorted(l, key=lambda x: x[0])[:breit] for l in je_sonde]
+
+
+def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
+          benutzer, top_k, dateien=None, ordner=None, bewerter=None,
+          raeume_liste=None):
     """Hybride Suche und Rangfolge.
+
+    paare_sammlungen: [(raum, sammlung)] -- aus sammlungen(benutzer).
 
     Rueckgabe: (treffer, zahlen). treffer ist eine Liste aus
     {"text", "meta"} in der Reihenfolge der Rangfolge; zahlen nennt
@@ -202,22 +267,25 @@ def suche(collection, embed_client, embed_modell, sonden_liste, benutzer,
 
     breit = max(10, top_k * 3)
 
+    # Die Stichwortsuche kennt keine Sammlungen -- sie liegt in einer
+    # Tabelle. Ihr Rechtefilter ist deshalb die Raumliste, und sie kommt
+    # aus derselben Quelle wie die Sammlungen: nicht vom Client.
+    erlaubte_raeume = ([r for r, _ in paare_sammlungen]
+                       if paare_sammlungen is not None
+                       else raeume.lesbar(benutzer))
+
     # Jede Sonde und jeder Suchweg liefert eine EIGENE Rangliste. Die
     # Reihenfolge innerhalb der Listen ist die eigentliche Information fuer
     # die Fusion -- frueher wurde sie beim Entdoppeln weggeworfen.
     ranglisten = []
 
-    # A. VEKTORSUCHE
-    treffer = collection.query(
-        query_embeddings=[v for _, v in paare],
-        n_results=breit,
-        where=_where(benutzer, dateien, ordner),
-    )
-    for i, (texte, metas) in enumerate(zip(treffer["documents"],
-                                           treffer["metadatas"])):
+    # A. VEKTORSUCHE -- je Raum eine Abfrage, danach zusammengefuehrt
+    for i, liste_roh in enumerate(_vektortreffer(
+            paare_sammlungen, [v for _, v in paare], breit,
+            _where(dateien, ordner))):
         probe = paare[i][0]
         liste = [{"text": t, "meta": m, "probe": probe}
-                 for t, m in zip(texte, metas)]
+                 for _d, t, m in liste_roh]
         if liste:
             ranglisten.append(liste)
 
@@ -230,7 +298,8 @@ def suche(collection, embed_client, embed_modell, sonden_liste, benutzer,
         gefunden = keyword_index.search(
             probe, benutzer, limit=breit,
             file_names=list(dateien) if dateien else None,
-            folders=list(ordner) if ordner else None)
+            folders=list(ordner) if ordner else None,
+            raeume=erlaubte_raeume)
         liste = [{"text": h["text"], "meta": h["meta"], "probe": probe}
                  for h in gefunden]
         if liste:
@@ -331,18 +400,24 @@ def quellen(treffer):
             for (datei, seite), texte in gesammelt.items()]
 
 
-def dokumente(collection, benutzer):
-    """Welche Dokumente dieser Nutzer sehen darf.
+def dokumente(benutzer, nur=None):
+    """Welche Dokumente dieser Nutzer sehen darf, je Raum.
 
-    Dieselbe Trennung wie in der Suche: geteilte Dokumente sehen alle,
-    private nur ihr Eigentuemer. Steht hier statt in der Oberflaeche, damit
+    Dieselbe Quelle wie die Suche: durchgegangen werden genau die Raeume
+    aus sammlungen(benutzer). Steht hier statt in der Oberflaeche, damit
     Oberflaeche und Schnittstelle nicht zwei Auffassungen davon entwickeln,
     was sichtbar ist.
 
-    Rueckgabe: (geteilt, privat, sachgebiete) -- jeweils sortierte Listen.
+    Rueckgabe: (nach_raum, sachgebiete). nach_raum ist
+    {raum: sortierte Dateiliste}, sachgebiete die Vereinigung aller Ordner.
     """
-    def sammle(daten):
-        dateien, ordner = set(), set()
+    nach_raum, ordner = {}, set()
+    for raum, sml in sammlungen(benutzer, nur=nur):
+        dateien = set()
+        try:
+            daten = sml.get(include=["metadatas"])
+        except Exception:
+            continue
         for m in (daten.get("metadatas") or []):
             if not m:
                 continue
@@ -350,11 +425,5 @@ def dokumente(collection, benutzer):
                 dateien.add(m["file_name"])
             if m.get("folder"):
                 ordner.add(m["folder"])
-        return sorted(dateien), sorted(ordner)
-
-    geteilt, ordner_g = sammle(collection.get(where={"access": "shared"},
-                                              include=["metadatas"]))
-    privat, ordner_p = sammle(collection.get(
-        where={"$and": [{"access": "private"}, {"owner": benutzer}]},
-        include=["metadatas"]))
-    return geteilt, privat, sorted(set(ordner_g) | set(ordner_p))
+        nach_raum[raum] = sorted(dateien)
+    return nach_raum, sorted(ordner)

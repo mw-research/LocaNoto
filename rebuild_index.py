@@ -11,13 +11,29 @@ zur Datenbank passt.
 
 import paths
 import store
+import raeume
 import keyword_index
 
 paths.bootstrap()
 
-collection = store.collection()
+# Alle Raeume, nicht einer: der Stichwortindex liegt in einer Tabelle und
+# filtert beim Lesen nach Raum. Ein Index, der nur einen Raum kennt, laesst
+# die anderen stumm -- ohne Fehlermeldung, es fehlen einfach Treffer.
+paare = []
+for _kennung in raeume.liste():
+    _sml = store.sammlung(raeume.sammlung(_kennung), anlegen=False)
+    if _sml is not None:
+        paare.append((_kennung, _sml))
 
-total = collection.count()
+if not paare:
+    print("Keine Raum-Sammlungen gefunden. Erst umsortieren.py laufen "
+          "lassen.")
+    raise SystemExit(1)
+
+for _k, _s in paare:
+    print(f"  {_k:<40} {_s.count():>8,} Abschnitte")
+
+total = sum(_s.count() for _k, _s in paare)
 print(f"Vektordatenbank enthaelt {total:,} Chunks.")
 print(f"Keyword-Index vorher    : {keyword_index.count():,} Chunks")
 
@@ -26,11 +42,11 @@ if total == 0:
     raise SystemExit(0)
 
 
-def show(done, tot):
-    print(f"   ... {done:,} / {tot:,}", end="\r")
+def zeige(raum, done, tot):
+    print(f"   {raum}: {done:,} / {tot:,}", end="\r")
 
 
-written = keyword_index.rebuild_from_collection(collection, progress=show)
+written = keyword_index.rebuild_from_raeume(paare, progress=zeige)
 print(" " * 40, end="\r")
 print(f"Keyword-Index nachher   : {written:,} Chunks")
 print(f"Indexdatei              : {keyword_index.DB_PATH}")
