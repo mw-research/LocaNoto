@@ -33,6 +33,11 @@ from embedding import embed_batch
 HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)    # Sonden
 ANSWER_TIMEOUT = paths.env_float("ANSWER_TIMEOUT", 300)   # Antwort
 
+# Zeitlimit fuer das Vektorisieren der Sonden. Kuerzer als das des
+# Ingest (EMBED_TIMEOUT=120): dort wartet niemand zu, hier sitzt ein
+# Mensch vor einem Spinner. Laeuft es ab, sagt die Meldung warum.
+SUCHE_EMBED_TIMEOUT = paths.env_float("SUCHE_EMBED_TIMEOUT", 45)
+
 # So viele Sonden erzeugt das Modell, und so viele werden verwendet.
 SONDEN_ANZAHL = 3
 
@@ -256,14 +261,29 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     laesst -- dann ist der Embedding-Endpunkt nicht erreichbar, und eine
     leere Trefferliste waere die falsche Auskunft.
     """
+    # KEIN keep_alive=0. Der Wert bedeutet in diesem Code 'Modell jetzt
+    # entladen' -- die Ingest-Skripte schicken ihn genau einmal am Ende
+    # unter der Ueberschrift VRAM freigeben. Bei jeder Suche geschickt,
+    # wies er den Server an, das 8B-Embeddingmodell nach JEDER Frage
+    # wegzuwerfen: die naechste Frage zahlte den Kaltstart, ganz gleich
+    # wie kurz sie darauf folgte.
+    #
+    # Und keine Einzelnacharbeit: drei kurze Sonden koennen das
+    # Kontextfenster nicht ueberschreiten. Sie kostete bei einem
+    # haengenden Endpunkt dreimal das Zeitlimit obendrauf -- gemessen
+    # acht Minuten Spinner, bevor eine Meldung erschien.
     vektoren = embed_batch(embed_client, list(sonden_liste), embed_modell,
-                           keep_alive=0)
+                           timeout=SUCHE_EMBED_TIMEOUT,
+                           nacharbeit=False)
     # Sonde und Vektor gemeinsam filtern. Wuerde man nur die Vektoren
     # zusammenschieben, verschoeben sich die Indizes und die Treffer
     # bekaemen die falsche Sonde zugeordnet.
     paare = [(s, v) for s, v in zip(sonden_liste, vektoren) if v is not None]
     if not paare:
-        raise ValueError("Keine Suchanfrage konnte vektorisiert werden.")
+        grund = getattr(embed_batch, "letzter_fehler", None)
+        raise ValueError(
+            "Keine Suchanfrage konnte vektorisiert werden"
+            + (f": {type(grund).__name__}: {grund}" if grund else "."))
 
     breit = max(10, top_k * 3)
 

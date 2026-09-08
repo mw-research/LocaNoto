@@ -77,23 +77,39 @@ def _embed_einzeln(client, text, model, extra, timeout):
 
 
 def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
-                progress=None):
+                progress=None, timeout=None, nacharbeit=True):
     """Vektorisiert eine Liste von Texten und behaelt die Reihenfolge bei.
 
-    Faellt ein Batch aus (zu lang, Serverfehler), wird er einzeln
-    nachgearbeitet. Andernfalls wuerde ein einzelner fehlerhafter Chunk den
-    gesamten Batch verwerfen.
+    Faellt ein Batch aus, WEIL EIN TEXT ZU LANG IST, wird er einzeln
+    nachgearbeitet und der zu lange Text gekuerzt -- sonst verwuerfe ein
+    einzelner Chunk den ganzen Batch.
+
+    Bei jedem anderen Fehler -- Zeitueberschreitung, Serverfehler, Netz
+    -- hilft die Einzelnacharbeit nicht, sie multipliziert nur die
+    Wartezeit. Das war ein echter Fehler: bei drei Sonden und 120 s
+    Zeitlimit kostete ein haengender Endpunkt 120 s fuer den Batch und
+    dann dreimal 120 s einzeln -- acht Minuten, bevor ueberhaupt eine
+    Meldung erschien. Solche Fehler gehen jetzt sofort weiter.
+
+    nacharbeit=False schaltet die Nacharbeit ganz ab. Fuer die Suche
+    richtig: drei kurze Sonden koennen das Kontextfenster nicht
+    ueberschreiten, dort ist jede Nacharbeit reine Wartezeit.
+
+    timeout ueberschreibt DEFAULT_TIMEOUT -- die Suche darf ein
+    kuerzeres Zeitlimit haben als der Ingest, dort wartet niemand zu.
     """
     texts = list(texts)
     if not texts:
         return []
 
     batch_size = batch_size or DEFAULT_BATCH_SIZE
+    zeitlimit = DEFAULT_TIMEOUT if timeout is None else timeout
     extra = {"drop_params": True}
     if keep_alive is not None:
         extra["keep_alive"] = keep_alive
 
     out = [None] * len(texts)
+    fehler = []
 
     def ein_batch(start):
         """Vektorisiert einen Abschnitt und schreibt ihn an seine feste Stelle.
@@ -103,28 +119,43 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
         geschrieben wird immer an dieselbe Position in out.
         """
         chunk = texts[start:start + batch_size]
-        cleaned = [t.replace("\n", " ") for t in chunk]
+        cleaned = [t.replace(chr(10), " ") for t in chunk]
         try:
             resp = client.embeddings.create(
-                input=cleaned, model=model, timeout=DEFAULT_TIMEOUT,
+                input=cleaned, model=model, timeout=zeitlimit,
                 encoding_format="float", extra_body=extra)
             # Die API darf die Reihenfolge aendern -- ueber .index zuordnen.
             for item in resp.data:
                 out[start + item.index] = item.embedding
-        except Exception:
-            for i, single in enumerate(cleaned):
-                try:
-                    vektor, gekuerzt = _embed_einzeln(
-                        client, single, model, extra, DEFAULT_TIMEOUT)
-                    out[start + i] = vektor
-                    if gekuerzt:
-                        print(f"   [i] Chunk {start + i} war fuer das "
-                              f"Kontextfenster zu lang -- Vektor aus dem "
-                              f"Anfang des Textes, gespeichert wird der "
-                              f"vollstaendige Text.")
-                except Exception as e:
-                    print(f"   [!] Embedding fehlgeschlagen (Chunk "
-                          f"{start + i}): {e}")
+            return
+        except Exception as e:
+            fehler.append(e)
+            # Nur ein Kontextfehler laesst sich einzeln retten. Bei allem
+            # anderen -- Zeitueberschreitung, 5xx, Netz -- wiederholte die
+            # Nacharbeit dieselbe Wartezeit je Text, ohne je zu helfen.
+            if not nacharbeit:
+                print(f"   [!] Embedding fehlgeschlagen "
+                      f"({type(e).__name__}: {str(e)[:200]})")
+                return
+            if not _ist_kontextfehler(e):
+                print(f"   [!] Embedding fehlgeschlagen "
+                      f"({type(e).__name__}: {str(e)[:200]})")
+                return
+
+        for i, single in enumerate(cleaned):
+            try:
+                vektor, gekuerzt = _embed_einzeln(
+                    client, single, model, extra, zeitlimit)
+                out[start + i] = vektor
+                if gekuerzt:
+                    print(f"   [i] Chunk {start + i} war fuer das "
+                          f"Kontextfenster zu lang -- Vektor aus dem "
+                          f"Anfang des Textes, gespeichert wird der "
+                          f"vollstaendige Text.")
+            except Exception as e:
+                fehler.append(e)
+                print(f"   [!] Embedding fehlgeschlagen (Chunk "
+                      f"{start + i}): {e}")
 
     starts = list(range(0, len(texts), batch_size))
 
@@ -141,6 +172,12 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
                 if progress:
                     progress(min(fertig * batch_size, len(texts)), len(texts))
 
+    # Den letzten Fehler mitgeben: der Aufrufer soll den Grund nennen
+    # koennen statt nur 'konnte nicht vektorisiert werden'.
+    if fehler:
+        embed_batch.letzter_fehler = fehler[-1]
+    else:
+        embed_batch.letzter_fehler = None
     return out
 
 

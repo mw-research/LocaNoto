@@ -252,17 +252,47 @@ class Bewerter:
         self._ausfall_grund = ""
         self._zuletzt_endpunkt = None   # True/False: hat der letzte Aufruf
                                         # den Endpunkt erreicht?
+        self._weckt = False   # laeuft gerade ein Weckversuch?
         self.startprobe = None
 
     # --- Entscheidungen ---
 
     def _endpunkt_dran(self):
-        if not RERANKER_BASE_URL:
-            return False
-        if self._ausfall_zeit is None:
-            return True
-        import time
-        return (time.time() - self._ausfall_zeit) >= RERANKER_ERNEUT
+        return bool(RERANKER_BASE_URL) and self._ausfall_zeit is None
+
+    def _aufwaermen(self):
+        """Nach einem Ausfall im Hintergrund anklopfen.
+
+        Nicht im Anfrageweg. Ein Modellserver, der Modelle nach fuenf
+        Minuten Ruhe entlaedt, braucht zum Aufwachen laenger als das
+        Zeitlimit -- die erste Frage nach jeder Pause zahlte sonst 30 s
+        Wartezeit fuer eine Bewertung, die dann doch nicht kam. Jetzt
+        klopft ein Faden nebenher an, und erst wenn er durchkommt, geht
+        die naechste Frage wieder ueber den Endpunkt.
+        """
+        import threading, time
+        if self._weckt or self._ausfall_zeit is None:
+            return
+        if (time.time() - self._ausfall_zeit) < RERANKER_ERNEUT:
+            return
+
+        def klopfen():
+            try:
+                _api_bewerte([["test", "test"]])
+                with self._sperre:
+                    self._ausfall_zeit = None
+                    self._ausfall_grund = ""
+                    self.startprobe = None
+            except Exception as e:
+                with self._sperre:
+                    # Wartezeit neu beginnen, nicht dauerhaft klopfen.
+                    self._ausfall_zeit = time.time()
+                    self._ausfall_grund = f"{type(e).__name__}: {e}"
+            finally:
+                self._weckt = False
+
+        self._weckt = True
+        threading.Thread(target=klopfen, daemon=True).start()
 
     def _modell_holen(self):
         """Das CPU-Modell, einmal geladen. None, wenn es nicht ladbar ist."""
@@ -288,8 +318,6 @@ class Bewerter:
                 self._ausfall_zeit = None
                 self._ausfall_grund = ""
                 self._zuletzt_endpunkt = True
-                # Die Probe vom Start war ein Hinweis; sobald der Endpunkt
-                # einmal geantwortet hat, ist er erledigt.
                 self.startprobe = None
                 return werte
             except Exception as e:
@@ -298,16 +326,21 @@ class Bewerter:
                 self._zuletzt_endpunkt = False
                 if RERANKER_RUECKFALL != "image":
                     return None
-        elif RERANKER_BASE_URL and RERANKER_RUECKFALL != "image":
-            # Endpunkt ausgefallen, Wartezeit noch nicht um.
+        elif RERANKER_BASE_URL:
+            # Ausgefallen. Nebenher wecken und diese Frage nicht warten
+            # lassen -- das ist der Unterschied zwischen 30 s Stille und
+            # einer Antwort in Fusionsreihenfolge.
+            self._aufwaermen()
             self._zuletzt_endpunkt = False
-            return None
+            if RERANKER_RUECKFALL != "image":
+                return None
 
         modell = self._modell_holen()
         if modell is None:
             return None
         self._zuletzt_endpunkt = False
         return modell(paare)
+
 
     # --- Anzeige ---
 
@@ -354,14 +387,16 @@ def lade_bewerter():
 
     b = Bewerter()
     if RERANKER_BASE_URL:
-        try:
-            _api_bewerte([["test", "test"]])
-            b.startprobe = None
-        except Exception as e:
-            import time
-            b._ausfall_zeit = time.time()
-            b._ausfall_grund = f"{type(e).__name__}: {e}"
-            b.startprobe = f"Probe beim Start fehlgeschlagen ({b._ausfall_grund})"
+        # Die Probe laeuft NEBENHER. Vorher blockierte sie den ersten
+        # Skriptlauf von Streamlit und den Import von api.py um bis zu
+        # RERANKER_TIMEOUT Sekunden -- bei einem kalten Modellserver also
+        # jeden Containerstart. Bis sie durch ist, gilt der Endpunkt als
+        # unbestaetigt und die Rangfolge kommt aus der Fusion.
+        import time
+        b._ausfall_zeit = time.time() - RERANKER_ERNEUT
+        b._ausfall_grund = "Probe laeuft noch"
+        b.startprobe = "Probe beim Start laeuft"
+        b._aufwaermen()
     return b, b.beschreibung()
 
 
