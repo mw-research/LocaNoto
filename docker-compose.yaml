@@ -8,7 +8,7 @@ x-bau: &bau
     # Wird beim Bauen in das Image geladen und zur Laufzeit von dort
     # gelesen. Leer lassen ist nicht vorgesehen -- wer ohne Modell
     # arbeiten will, setzt RERANKER_MODEL im environment auf "".
-    RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+    RERANKER_MODEL: ${RERANKER_MODEL-BAAI/bge-reranker-v2-m3}
     # Auf 0 setzen, wenn der Xet-Weg in eurem Netz schneller ist.
     HF_HUB_DISABLE_XET: ${HF_HUB_DISABLE_XET:-1}
 
@@ -53,13 +53,21 @@ x-umgebung: &umgebung
   - TITLE_BASE_URL=${TITLE_BASE_URL:-}
   - TITLE_API_KEY=${TITLE_API_KEY:-}
   - TITLE_API_VERSION=${TITLE_API_VERSION:-}
-  - RERANKER_MODEL=${RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+  - RERANKER_MODEL=${RERANKER_MODEL-BAAI/bge-reranker-v2-m3}
   - RERANKER_BASE_URL=${RERANKER_BASE_URL:-}
   - RERANKER_API_KEY=${RERANKER_API_KEY:-}
   - RERANKER_API_MODEL=${RERANKER_API_MODEL:-}
   - RERANKER_TIMEOUT=${RERANKER_TIMEOUT:-}
   - RERANKER_RUECKFALL=${RERANKER_RUECKFALL:-}
   - RERANKER_ERNEUT=${RERANKER_ERNEUT:-}
+  # Zeitlimits, die der Code liest und die bisher nicht ankamen:
+  # ohne sie war EMBED_TIMEOUT im Container nicht einstellbar,
+  # und ein haengender Modellserver kostete 120 s je Anfrage.
+  - EMBED_TIMEOUT=${EMBED_TIMEOUT:-}
+  - SUCHE_EMBED_TIMEOUT=${SUCHE_EMBED_TIMEOUT:-}
+  - EMBED_BATCH_SIZE=${EMBED_BATCH_SIZE:-}
+  - RERANKER_MAX_LENGTH=${RERANKER_MAX_LENGTH:-}
+  - RRF_K=${RRF_K:-}
   - TOP_K=${TOP_K:-}
   - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-}
   - HELPER_TIMEOUT=${HELPER_TIMEOUT:-}
