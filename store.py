@@ -96,6 +96,27 @@ def collection(anlegen=True):
     return c.get_collection(name=paths.COLLECTION_NAME)
 
 
+# Gefundene Sammlungen behalten.
+#
+# get_collection() ist ein HTTP-Aufruf. Streamlit fuehrt das Skript bei
+# JEDEM Klick von oben nach unten aus, und die Sammlungen werden dabei an
+# mehreren Stellen aufgeloest -- gemessen 13 bis 16 Rundlaeufe je Klick,
+# nur um Handles zu holen, die sich nie aendern.
+#
+# Nur ERFOLGE werden behalten. Ein None -- die Sammlung gibt es noch nicht
+# -- darf nicht haengen bleiben, sonst waere ein Raum nach seinem ersten
+# Upload bis zum Neustart leer. Wer loescht, raeumt hier mit auf.
+_sammlungen = {}
+
+
+def vergiss(name=None):
+    """Gemerkte Handles verwerfen -- alle oder eines."""
+    if name is None:
+        _sammlungen.clear()
+    else:
+        _sammlungen.pop(name, None)
+
+
 def sammlung(name, anlegen=True):
     """Eine Sammlung nach Namen. None, wenn sie nicht existiert.
 
@@ -107,13 +128,19 @@ def sammlung(name, anlegen=True):
     Und None statt einer leeren, frisch angelegten Sammlung, weil das Lesen
     sonst Sammlungen anlegt -- eine Suche wuerde den Bestand veraendern.
     """
+    gemerkt = _sammlungen.get(name)
+    if gemerkt is not None:
+        return gemerkt
     c = client()
     if anlegen:
-        return c.get_or_create_collection(name=name)
-    try:
-        return c.get_collection(name=name)
-    except Exception:
-        return None
+        sml = c.get_or_create_collection(name=name)
+    else:
+        try:
+            sml = c.get_collection(name=name)
+        except Exception:
+            return None
+    _sammlungen[name] = sml
+    return sml
 
 
 # --- SCHREIBEN ---
@@ -200,8 +227,10 @@ def loesche(name):
     """Loescht eine Sammlung samt Inhalt. (ok, meldung)."""
     try:
         client().delete_collection(name=name)
+        vergiss(name)
         return True, "Geloescht."
     except Exception as e:
+        vergiss(name)
         return False, str(e)
 
 
