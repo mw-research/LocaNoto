@@ -23,9 +23,9 @@ import paths
 import raeume
 import store
 
-# Chroma nimmt hoechstens 5461 Eintraege je Aufruf. Mit Vektoren haengt an
-# jedem Eintrag ein Tausender-Feld, deshalb kleinere Haeppchen: 2000 Stueck
-# sind rund 30 MB und damit unauffaellig.
+# Wie viele Abschnitte je Griff AUS der alten Sammlung geholt werden. Das
+# Schreiben teilt store.schreibe selbst auf -- dort gilt ueber HTTP eine
+# Groessengrenze, die von der Vektorlaenge des Modells abhaengt.
 STAPEL = 2000
 
 
@@ -127,11 +127,13 @@ def main():
             sml = sammlungen.get(k) or store.sammlung(raeume.sammlung(k))
             sammlungen[k] = sml
             try:
-                # upsert statt add: ein zweiter Lauf soll den Bestand nicht
-                # verdoppeln und nicht an bekannten Kennungen scheitern.
-                sml.upsert(ids=kids, documents=docs, metadatas=ms,
-                           embeddings=vs)
-                geschrieben[k] = geschrieben.get(k, 0) + len(kids)
+                # store.schreibe statt sml.upsert: ueber HTTP lehnt der
+                # Server eine zu grosse Anfrage ab, und wie gross zu gross
+                # ist, haengt an der Vektorlaenge. Die Funktion halbiert
+                # den Stapel, bis er durchgeht. upsert, damit ein zweiter
+                # Lauf nichts verdoppelt.
+                geschrieben[k] = geschrieben.get(k, 0) + store.schreibe(
+                    sml, kids, documents=docs, metadatas=ms, embeddings=vs)
             except Exception as e:
                 uebersprungen += len(kids)
                 print(f"  [!] {k}: {e}")

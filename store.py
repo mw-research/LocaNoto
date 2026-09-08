@@ -116,6 +116,78 @@ def sammlung(name, anlegen=True):
         return None
 
 
+# --- SCHREIBEN ---
+#
+# Der Grund fuer diese Funktion ist ein Fehlgriff, den man gegen eine
+# Dateiablage nicht sieht: dort nimmt Chroma jeden Stapel an, egal wie
+# gross. Ueber HTTP nicht -- der Server lehnt eine zu grosse Anfrage mit
+# "Payload too large" ab.
+#
+# Wie gross zu gross ist, haengt an Vektorlaenge und Textmenge und damit am
+# Modell und am Bestand. Eine feste Zahl waere also entweder unnoetig klein
+# oder irgendwann wieder zu gross. Deshalb halbiert diese Funktion den
+# Stapel, wenn genau dieser Fehler kommt, und nur dann: bei jedem anderen
+# Fehler wird weitergegeben, statt sich in tausend kleine Anfragen zu
+# zerlegen, die alle scheitern.
+
+SCHREIBSTAPEL = paths.env_int("CHROMA_SCHREIBSTAPEL", 500)
+
+
+def _zu_gross(fehler):
+    t = str(fehler).lower()
+    return "too large" in t or "413" in t or "request entity" in t
+
+
+def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
+             stapel=None, ersetzen=True, fortschritt=None):
+    """Schreibt Abschnitte in Stapeln. Anzahl der geschriebenen.
+
+    ersetzen=True nimmt upsert: ein zweiter Lauf verdoppelt nichts und
+    scheitert nicht an bekannten Kennungen. False nimmt add -- dort ist
+    eine bekannte Kennung ein Fehler, und manchmal ist das gewollt.
+    """
+    n = len(ids)
+    if not n:
+        return 0
+    stapel = max(1, stapel or SCHREIBSTAPEL)
+    geschrieben = 0
+    a = 0
+    while a < n:
+        teil = min(stapel, n - a)
+        while True:
+            try:
+                _schreibe_teil(sammlung, ids[a:a + teil],
+                               documents, metadatas, embeddings, a, teil,
+                               ersetzen)
+                break
+            except Exception as e:
+                if teil > 1 and _zu_gross(e):
+                    # Halbieren und noch einmal. Der kleinere Stapel gilt
+                    # ab hier weiter -- sonst laeuft man bei jedem
+                    # Durchgang erneut in die Grenze.
+                    teil = max(1, teil // 2)
+                    stapel = teil
+                    continue
+                raise
+        a += teil
+        geschrieben += teil
+        if fortschritt:
+            fortschritt(geschrieben, n)
+    return geschrieben
+
+
+def _schreibe_teil(sammlung, kennungen, documents, metadatas, embeddings,
+                   ab, wie_viele, ersetzen):
+    args = {"ids": list(kennungen)}
+    if documents is not None:
+        args["documents"] = list(documents[ab:ab + wie_viele])
+    if metadatas is not None:
+        args["metadatas"] = list(metadatas[ab:ab + wie_viele])
+    if embeddings is not None:
+        args["embeddings"] = list(embeddings[ab:ab + wie_viele])
+    (sammlung.upsert if ersetzen else sammlung.add)(**args)
+
+
 def namen():
     """Die Namen aller vorhandenen Sammlungen."""
     try:
