@@ -16,6 +16,18 @@ config/
 .env.*
 !.env.example
 
+# Betriebszustand im Wurzelverzeichnis. Aeltere Installationen legten die
+# Benutzerdatei und das Glossar hierhin, bevor es config/ gab -- und weil
+# das Wurzelverzeichnis KEIN eingehaengtes Volume ist, hatte das zwei
+# Folgen: die Passwort-Hashes wanderten bei jedem Build in das Abbild, und
+# jede Aenderung aus dem Container heraus landete in dessen Schreibschicht
+# und war beim naechsten Neuanlegen weg.
+#
+# Der richtige Ort ist config/ -- paths.resolve_user_file() bevorzugt ihn
+# ohnehin. Diese Zeilen halten den Altbestand nur aus dem Abbild heraus.
+users.json
+glossar.txt
+
 # VPN-Zugang: Zertifikate, privater Schluessel, Anmeldedaten.
 vpn/
 *.ovpn
