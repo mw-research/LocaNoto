@@ -13,6 +13,21 @@ Rueckmeldungen und der Abzug samt Einspielen.
     docker compose run --rm locanoto_bot python selbsttest.py
 """
 import os, random, shutil, sys, tempfile, types
+
+# --- ISOLATION ERZWINGEN ---
+#
+# Ohne das schreibt dieser Test in die BETRIEBSDATENBANK. store.py
+# liest CHROMA_HOST beim Import in eine Modulkonstante; ist die Variable
+# gesetzt -- im Container ist sie das --, spricht der Client den
+# Chroma-Dienst an, und ein umgebogenes paths.CHROMA_DIR aendert daran
+# nichts. Genau das ist beim ersten Lauf auf einem Server passiert: der
+# Test wollte Testvektoren nach raum_allgemein schreiben. Gerettet hat
+# nur die Dimensionspruefung von Chroma.
+#
+# Deshalb hier, VOR jedem Import von store: die Variable weg. Und
+# darunter eine Wache, die abbricht, falls doch ein Server antwortet.
+for _v in ("CHROMA_HOST", "CHROMA_CLOUD_KEY", "CHROMA_SSL", "CHROMA_TOKEN"):
+    os.environ.pop(_v, None)
 tmp = tempfile.mkdtemp(prefix="ende_")
 os.environ["ADMIN_USERS"] = "markus"
 import paths
@@ -32,7 +47,20 @@ benutzer._datei = lambda: paths.USER_FILE
 raeume.DATEI = os.path.join(paths.CONFIG_DIR, "raeume.json")
 keyword_index.DB_PATH = os.path.join(paths.DATA_DIR, "kw.sqlite3")
 feedback.DATEI = os.path.join(paths.DATA_DIR, "feedback.jsonl")
-store._client = None; store.vergiss()
+store.CHROMA_HOST = ""          # falls doch etwas durchkam
+store._client = None
+store.vergiss()
+
+_ablage = store.beschreibung()
+if "Dateiablage" not in _ablage:
+    print("ABBRUCH: Dieser Test wuerde gegen " + _ablage
+          + " schreiben.")
+    print("Er darf ausschliesslich auf einer eigenen Dateiablage "
+          "laufen -- niemals gegen den Betrieb.")
+    sys.exit(2)
+if not _ablage.endswith(paths.CHROMA_DIR):
+    print(f"ABBRUCH: Ablage {_ablage} liegt nicht im Testverzeichnis.")
+    sys.exit(2)
 
 ok = []
 def pruef(was, bedingung, zusatz=""):
