@@ -53,11 +53,9 @@ RRF_K = paths.env_int("RRF_K", 60)
 # versucht, der dort nichts zu suchen hat.
 RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "").strip()
 
-# Der Schluessel dagegen faellt auf OPENAI_API_KEY zurueck, wie bei allen
-# anderen Aufgaben auch (siehe llm.py). Wer alles ueber denselben Zugang
-# faehrt, soll ihn nicht zweimal eintragen muessen.
-RERANKER_API_KEY = (os.getenv("RERANKER_API_KEY", "").strip()
-                    or os.getenv("OPENAI_API_KEY", "").strip())
+# Der Schluessel faellt auf OPENAI_API_KEY zurueck -- aber nur, wenn der
+# Endpunkt auf denselben Wirt zeigt. Siehe _schluessel(): ein gehosteter
+# Dienst soll nicht den Schluessel des eigenen Gateways bekommen.
 # Modellname am Endpunkt. Ohne Angabe wird RERANKER_MODEL verwendet.
 RERANKER_API_MODEL = os.getenv("RERANKER_API_MODEL", "").strip()
 RERANKER_TIMEOUT = paths.env_float("RERANKER_TIMEOUT", 30)
@@ -98,11 +96,47 @@ def _rerank_url():
     return basis if basis.endswith("/rerank") else basis + "/rerank"
 
 
+def _gleicher_wirt(a, b):
+    """Zeigen zwei Adressen auf denselben Wirt?"""
+    from urllib.parse import urlparse
+    if not a or not b:
+        return False
+    return (urlparse(a).hostname or "").lower() == \
+           (urlparse(b).hostname or "").lower()
+
+
+def _schluessel():
+    """Der Schluessel fuer den Rerank-Endpunkt.
+
+    Rueckfall auf OPENAI_API_KEY NUR, wenn der Endpunkt auf denselben Wirt
+    zeigt wie OPENAI_BASE_URL. Wer alles ueber ein Gateway faehrt, soll den
+    Schluessel nicht zweimal eintragen muessen -- wer aber einen gehosteten
+    Dienst eintraegt, soll ihm nicht versehentlich den Schluessel des
+    eigenen Gateways schicken. Ein Zugangsschluessel, der an einen fremden
+    Dienst geht, ist dort angekommen; zurueckholen laesst er sich nicht.
+    """
+    eigen = os.getenv("RERANKER_API_KEY", "").strip()
+    if eigen:
+        return eigen
+    if _gleicher_wirt(RERANKER_BASE_URL, os.getenv("OPENAI_BASE_URL", "")):
+        return os.getenv("OPENAI_API_KEY", "").strip()
+    return ""
+
+
 def _api_bewerte(paare):
     """Bewertet ueber den Rerank-Endpunkt.
 
-    Das Schema (query + documents rein, results mit index und
-    relevance_score raus) ist bei LiteLLM, Jina, TEI und vLLM gleich.
+    Hinein geht query und documents, heraus kommen Treffer mit index und
+    relevance_score. Dieses Schema sprechen LiteLLM, Cohere, Jina, Together,
+    TEI und vLLM gleichermaszen -- sie sind nur uneins darueber, wie die
+    Liste heisst: "results" bei den meisten, "data" bei Voyage und
+    Mixedbread.
+
+    Beide werden gelesen. Findet sich KEINE der beiden, wird abgebrochen
+    statt Nullen zurueckzugeben: eine Rangfolge, in der jeder Kandidat den
+    Wert 0.0 hat, ist keine Rangfolge, sondern Zufall -- und sie faellt
+    niemandem auf, weil kein Fehler erscheint. Ein Abbruch dagegen laesst
+    die Fusionsreihenfolge stehen und steht in der Seitenleiste.
 
     Eine Anfrage traegt genau eine query. Die Sonde ist bei einer
     Multi-Query-Suche aber je Kandidat verschieden, deshalb wird nach Sonde
@@ -112,8 +146,9 @@ def _api_bewerte(paare):
     import httpx  # kommt ohnehin mit dem OpenAI-Client
 
     kopf = {"Content-Type": "application/json"}
-    if RERANKER_API_KEY:
-        kopf["Authorization"] = f"Bearer {RERANKER_API_KEY}"
+    schluessel = _schluessel()
+    if schluessel:
+        kopf["Authorization"] = f"Bearer {schluessel}"
     modell = RERANKER_API_MODEL or RERANKER_MODEL
 
     nach_sonde = {}
@@ -129,14 +164,34 @@ def _api_bewerte(paare):
                 "documents": [t for _, t in eintraege],
                 "top_n": len(eintraege),
             })
-            antwort.raise_for_status()
+            if antwort.status_code >= 400:
+                # Den Rumpf mitnehmen: "401" allein sagt nichts, "invalid
+                # api key" oder "model not found" beantwortet die Frage.
+                raise RuntimeError(
+                    f"HTTP {antwort.status_code} von {_rerank_url()}: "
+                    f"{antwort.text[:300]}")
             daten = antwort.json()
-            for treffer in daten.get("results", []):
+            treffer_liste = daten.get("results")
+            if treffer_liste is None:
+                treffer_liste = daten.get("data")
+            if treffer_liste is None:
+                raise RuntimeError(
+                    f"Antwort von {_rerank_url()} enthaelt weder 'results' "
+                    f"noch 'data' -- Schluessel: "
+                    f"{sorted(daten)[:8]}. Passt die Adresse zu einem "
+                    f"Rerank-Dienst?")
+            if not treffer_liste and eintraege:
+                raise RuntimeError(
+                    f"{_rerank_url()} hat {len(eintraege)} Abschnitte "
+                    f"bekommen und keinen bewertet.")
+            for treffer in treffer_liste:
                 platz = treffer.get("index")
                 if platz is None or platz >= len(eintraege):
                     continue
-                werte[eintraege[platz][0]] = float(
-                    treffer.get("relevance_score", treffer.get("score", 0.0)))
+                wert = treffer.get("relevance_score")
+                if wert is None:
+                    wert = treffer.get("score", 0.0)
+                werte[eintraege[platz][0]] = float(wert)
     return werte
 
 
