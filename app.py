@@ -158,7 +158,7 @@ raeume.sichere_anlage_privat(st.session_state["username"])
 # setzen, ohne die Benutzerdatei anzufassen, und war damit ein Weg, sich
 # Verwalterrechte zu geben.
 def is_admin():
-    return benutzer.ist_admin(st.session_state.get("username", ""))
+    return _ist_verwalter(st.session_state.get("username", ""))
 
 
 # --- SIDEBAR (UI) ---
@@ -678,6 +678,79 @@ def load_document_index(username):
 def refresh_document_index():
     """Nach jeder Aenderung an Dokumenten aufrufen."""
     load_document_index.clear()
+    _leeren()
+
+
+# --- ANZEIGEWERTE ZWISCHENSPEICHERN ---
+#
+# Streamlit fuehrt dieses Skript bei JEDEM Klick von oben nach unten aus,
+# und st.expander ist nicht traege: sein Inhalt laeuft mit, ob er offen ist
+# oder nicht. Ein Klick auf irgendeinen Knopf kostete deshalb eine
+# PROPFIND-Anfrage an ownCloud, mehrere vollstaendige Metadatenabzuege ueber
+# HTTP, drei Verzeichnisdurchlaeufe und rund zwanzig HMAC-Pruefungen der
+# Benutzerdatei -- fuer Zahlen, die sich in dieser Sekunde nicht geaendert
+# haben.
+#
+# Die Haltbarkeiten sind danach gewaehlt, wie schnell eine Aenderung
+# sichtbar werden MUSS, nicht danach, was billig waere:
+#
+#   Rechte          5 s   -- eine entzogene Rolle soll schnell greifen
+#   eigene Zahlen  15 s   -- Anzeige, nach einem Upload ohnehin geleert
+#   Verwaltung     30 s   -- Verzeichnisse, Abzuege, Rueckmeldungen
+#   ownCloud       60 s   -- eine Anfrage ueber das Netz
+
+def _leeren():
+    """Nach jeder Aenderung an Dokumenten oder Raeumen aufrufen."""
+    _zahl_abschnitte.clear()
+    _fremdes.clear()
+    _verwaltungsstand.clear()
+    store.vergiss()
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _ist_verwalter(name):
+    """Rolle aus der signierten Benutzerdatei -- hoechstens alle 5 s neu.
+
+    is_admin() wird je Durchlauf zwanzigmal gefragt, und jede Frage las die
+    Datei und prueft eine HMAC-Signatur je Eintrag.
+    """
+    return benutzer.ist_admin(name)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _zahl_abschnitte(name, raeume_liste):
+    """Wie viele Abschnitte dieser Nutzer sehen kann."""
+    return sum(sml.count() for _r, sml in pipeline.sammlungen(name))
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fremdes(name, ist_verwalter):
+    """(dateien, raeume) fremder Raeume -- zwei volle Metadatenabzuege."""
+    return (list_foreign_private_documents(name), fremde_raeume(name))
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _verwaltungsstand():
+    """Verzeichnisse und Zaehler fuer die Verwaltungsbereiche."""
+    return {
+        "bestand": paths.bestand(),
+        "abzuege": sicherung.liste(),
+        "rueckmeldungen": feedback.zaehle(),
+        "journal": keyword_index.journal_modus(),
+    }
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _owncloud_stand():
+    """Erreichbarkeit von ownCloud -- eine Anfrage ueber das Netz.
+
+    Sie stand bisher im Aufbau der Seitenleiste und lief damit bei jedem
+    Klick. Ist ownCloud langsam oder nicht erreichbar, wartete die ganze
+    Oberflaeche darauf.
+    """
+    if not owncloud.eingerichtet():
+        return False, owncloud.beschreibung()
+    return owncloud.pruefe()
 
 
 dateien_je_raum, all_folders = load_document_index(
@@ -1157,9 +1230,9 @@ with st.sidebar:
     # Loeschrecht fuer verwaiste Ablagen ausgeschiedener Mitarbeiter, aber
     # ein Loeschrecht ist kein Leserecht.
     if is_admin():
-        foreign = list_foreign_private_documents(st.session_state["username"])
-        _stille = [(r, n) for r, n in
-                   fremde_raeume(st.session_state["username"])
+        foreign, _alle_fremd = _fremdes(
+            st.session_state["username"], is_admin())
+        _stille = [(r, n) for r, n in _alle_fremd
                    if r not in {x for x, _f in foreign}]
 
         if foreign:
@@ -1240,7 +1313,7 @@ with st.sidebar:
     # Die Arbeitsliste fuer glossar.txt und fuer Luecken im Bestand: hier
     # steht, was gefragt wurde und nichts fand.
     if is_admin():
-        zahlen = feedback.zaehle()
+        zahlen = _verwaltungsstand()["rueckmeldungen"]
         gesamt = sum(zahlen.values())
         if gesamt:
             with st.expander(f"\U0001f4dd Rueckmeldungen ({gesamt})"):
@@ -1730,9 +1803,7 @@ with st.sidebar:
     # entscheidet dann, wer die daraus gebauten Abschnitte sieht.
     if is_admin():
         with st.expander("☁️ ownCloud"):
-            _ok, _meldung = (False, owncloud.beschreibung())
-            if owncloud.eingerichtet():
-                _ok, _meldung = owncloud.pruefe()
+            _ok, _meldung = _owncloud_stand()
             (st.success if _ok else st.warning)(_meldung)
 
             if not owncloud.eingerichtet():
@@ -1883,7 +1954,7 @@ with st.sidebar:
     # zurueckholen laesst -- und das zeigt sich erst beim Zurueckholen.
     if is_admin():
         with st.expander("🗃️ Sicherung der Vektordatenbank"):
-            _abzuege = sicherung.liste()
+            _abzuege = _verwaltungsstand()["abzuege"]
             st.caption(f"Ablage: `{sicherung.ORDNER}`"
                        + (f" · es werden "
                           f"{sicherung.BEHALTEN} Abzüge behalten"
@@ -1979,7 +2050,7 @@ with st.sidebar:
                 "konfiguration": "Konfiguration — getrennt aufzubewahren",
                 "index": "Ableitbar — gehört auf die lokale Platte",
             }
-            _bestand = paths.bestand()
+            _bestand = _verwaltungsstand()["bestand"]
             for _klasse, _beschriftung in _klassen.items():
                 st.caption(f"**{_beschriftung}**")
                 _zeilen = [z for z in _bestand if z[1] == _klasse]
@@ -1987,7 +2058,7 @@ with st.sidebar:
                     f"{_b:<26} {_gr / 1e6:9.2f} MB {_n:>6} Dateien  {_p}"
                     for _b, _k, _p, _gr, _n in _zeilen), language="text")
 
-            _modus = keyword_index.journal_modus()
+            _modus = _verwaltungsstand()["journal"]
             if _modus.lower() != "wal":
                 # Der stille Rueckfall. PRAGMA journal_mode=WAL schlaegt
                 # nicht fehl, wenn das Dateisystem es nicht kann -- SQLite
@@ -2241,7 +2312,8 @@ with st.sidebar:
 # Gezaehlt wird ueber die Raeume dieses Nutzers: wer in keinem Raum etwas
 # hat, dem hilft die Meldung "noch keine Dokumente" -- und nicht die
 # Auskunft, dass anderswo etwas liegt.
-_bestand = sum(sml.count() for _r, sml in meine_sammlungen())
+_bestand = _zahl_abschnitte(st.session_state["username"],
+                            tuple(meine_raeume))
 if _bestand > 0:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
