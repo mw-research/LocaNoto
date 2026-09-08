@@ -394,8 +394,8 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
         metas.append(meta)
 
     ziel = raum_sammlung(nach_raum)
-    ziel.upsert(ids=ids, documents=daten.get("documents") or [],
-                metadatas=metas, embeddings=vektoren)
+    store.schreibe(ziel, ids, documents=daten.get("documents") or [],
+                   metadatas=metas, embeddings=vektoren)
     quelle.delete(ids=ids)
 
     keyword_index.delete_document(filename, raum=von_raum)
@@ -616,11 +616,15 @@ def _speichern_chunks(chunks, metadatas, ids, raum):
     if not keep:
         return
 
-    raum_sammlung(raum).add(
-        ids=[ids[i] for i in keep],
-        embeddings=[embeddings[i] for i in keep],
+    # store.schreibe statt add: ein grosses Dokument kann in einem Aufruf
+    # die Groessengrenze des Chroma-Servers ueberschreiten -- gegen eine
+    # Dateiablage faellt das nie auf, ueber HTTP schon.
+    store.schreibe(
+        raum_sammlung(raum),
+        [ids[i] for i in keep],
         documents=[chunks[i] for i in keep],
         metadatas=[metadatas[i] for i in keep],
+        embeddings=[embeddings[i] for i in keep],
     )
     # Beide Indizes im selben Schritt fuellen, damit Vektor- und
     # Keyword-Suche nie auseinanderlaufen.

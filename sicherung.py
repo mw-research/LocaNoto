@@ -294,20 +294,20 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None):
 
         sml = store.sammlung(_sammlungsname(kennung))
         geschrieben = 0
-        for a in range(0, len(zeilen), STAPEL):
-            teil = zeilen[a:a + STAPEL]
-            try:
-                sml.upsert(
-                    ids=[z["id"] for z in teil],
-                    documents=[z.get("text") or "" for z in teil],
-                    metadatas=[z.get("meta") or {} for z in teil],
-                    embeddings=matrix[a:a + len(teil)].tolist())
-                geschrieben += len(teil)
-            except Exception as e:
-                bericht["fehler"].append({"raum": kennung, "grund": str(e)})
-                break
-            if fortschritt:
-                fortschritt(kennung, geschrieben, len(zeilen))
+        try:
+            # store.schreibe teilt selbst auf: ueber HTTP lehnt der Server
+            # eine zu grosse Anfrage ab, und wie gross zu gross ist, haengt
+            # an der Vektorlaenge des Modells.
+            geschrieben = store.schreibe(
+                sml,
+                [z["id"] for z in zeilen],
+                documents=[z.get("text") or "" for z in zeilen],
+                metadatas=[z.get("meta") or {} for z in zeilen],
+                embeddings=matrix.tolist(),
+                fortschritt=(lambda n, g, k=kennung: fortschritt(k, n, g))
+                if fortschritt else None)
+        except Exception as e:
+            bericht["fehler"].append({"raum": kennung, "grund": str(e)})
         bericht["raeume"][kennung] = geschrieben
 
     # Der Stichwortindex wird NICHT aus dem Abzug geholt, sondern neu
