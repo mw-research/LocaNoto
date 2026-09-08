@@ -78,10 +78,26 @@ def sitzung_abgelaufen():
     return (time.time() - letzte) > SITZUNG_MINUTEN * 60
 
 
-if "username" in st.session_state and sitzung_abgelaufen():
-    for schluessel in ("username", "letzte_tat", "current_chat_id",
-                       "messages", "last_loaded_chat"):
+# Was zu einer Sitzung gehoert -- an EINER Stelle. Vorher stand die
+# Liste beim Ablauf, und der Abmeldeknopf loeschte nur den Namen: der
+# Chat des Vorgaengers blieb im Sitzungszustand stehen. Wer sich danach
+# am selben Browser anmeldete, sah dessen Verlauf samt Bildern -- und
+# die erste eigene Frage speicherte ihn unter dem neuen Namen. Die
+# Verschluesselung half nicht: die Kopie war fuer den Neuen
+# verschluesselt.
+SITZUNGSSCHLUESSEL = ("username", "letzte_tat", "current_chat_id",
+                      "messages", "last_loaded_chat", "chat_besitzer",
+                      "pdf_upload_nr", "listen_upload_nr")
+
+
+def beende_sitzung():
+    """Alles vergessen, was zu dieser Anmeldung gehoert."""
+    for schluessel in SITZUNGSSCHLUESSEL:
         st.session_state.pop(schluessel, None)
+
+
+if "username" in st.session_state and sitzung_abgelaufen():
+    beende_sitzung()
     st.session_state["sitzung_lief_ab"] = True
 
 if "username" not in st.session_state:
@@ -150,7 +166,7 @@ with st.sidebar:
     # --- NEU: LOGOUT HIER OBEN ---
     st.caption(f"👤 Angemeldet als: **{st.session_state['username']}**")
     if st.button("🚪 Ausloggen", use_container_width=True):
-        del st.session_state["username"]
+        beende_sitzung()
         st.rerun()
     st.markdown("---")
     
@@ -246,6 +262,18 @@ def delete_chat(chat_id):
 def chat_titel(chat_id):
     return chats.titel(st.session_state["username"], chat_id)
 
+
+# --- WESSEN CHAT LIEGT HIER? ---
+#
+# Zweite Sicherung neben beende_sitzung(): der Sitzungszustand kann
+# einen Chat tragen, der einem anderen gehoert -- nach einem Abbruch,
+# einem Browser, der die Sitzung wiederherstellt, einem Fehler in einer
+# kuenftigen Aenderung. Gehoert er nicht dem Angemeldeten, wird er
+# verworfen statt weitergeschrieben.
+if st.session_state.get("chat_besitzer") != st.session_state["username"]:
+    for schluessel in ("current_chat_id", "messages", "last_loaded_chat"):
+        st.session_state.pop(schluessel, None)
+    st.session_state["chat_besitzer"] = st.session_state["username"]
 
 # --- CHAT STATE INITIALISIEREN ---
 # Welcher Chat ist gerade aktiv?
@@ -1316,6 +1344,19 @@ with st.sidebar:
                     + (f" Gesperrt, weil ohne gültige Signatur: "
                        f"{', '.join(_gesperrt)}." if _gesperrt else
                        " Es fehlt oder es kam ein Eintrag hinzu."))
+
+            # Kollidierende Kennungen: zwei Nutzer, ein persoenlicher
+            # Raum. Beim Anlegen wird das jetzt abgewiesen -- ein
+            # Bestand kann es aber schon enthalten.
+            _konflikte = raeume.konflikte(benutzer.namen())
+            if _konflikte:
+                st.error(
+                    "Diese Kennungen teilen sich einen persoenlichen Raum "
+                    "und sehen damit die Unterlagen des jeweils anderen: "
+                    + "; ".join(
+                        f"{', '.join(n)} -> {k}" for k, n in _konflikte)
+                    + ". Eine der Kennungen umbenennen (neu anlegen, "
+                    + "Dokumente verschieben, alte loeschen).")
 
             for _n in benutzer.namen():
                 _e = benutzer.eintrag(_n) or {}

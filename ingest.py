@@ -58,9 +58,86 @@ kw = keyword_index.connect()
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
 
+# --- WAS GEHOERT SCHON EINEM ANDEREN RAUM? ---
+#
+# Der Fehler, den das verhindert: die Oberflaeche legt JEDEN Upload nach
+# data/dokumente, ganz gleich in welchen Raum seine Abschnitte gehen -- und
+# owncloud.ablage() legt die Abteilungsordner ebenfalls dorthin, damit
+# dieser Ingest sie findet. Er lief also ueber alles und pruefte "schon
+# eingelesen?" nur in der ZIELsammlung. Ein privat hochgeladenes Dokument
+# war dort unbekannt und wurde nach raum_allgemein vektorisiert, mit
+# access=shared. Danach fand es jeder.
+#
+# Der Knopf, der das ausloest, heisst "Dokumente neu einlesen" und sagt im
+# Hilfetext "Bereits Verarbeitetes wird uebersprungen".
+#
+# Deshalb wird vor dem Lauf gesammelt, welche Dateinamen in ANDEREN
+# Raeumen liegen. Sie werden uebersprungen und benannt -- nicht still, denn
+# wer sie dort haben will, soll den Grund sehen.
+def fremde_dateien(eigener_raum):
+    """{dateiname: raum} fuer alles, was in einem anderen Raum liegt."""
+    fremd = {}
+    for name in store.namen():
+        if not name.startswith("raum_"):
+            continue
+        kennung = name[len("raum_"):]
+        if kennung == eigener_raum:
+            continue
+        sml = store.sammlung(name, anlegen=False)
+        if sml is None:
+            continue
+        try:
+            for m in (sml.get(include=["metadatas"]).get("metadatas") or []):
+                if m and m.get("file_name"):
+                    fremd.setdefault(m["file_name"], kennung)
+        except Exception as e:
+            # Lieber abbrechen als ungeprueft weiterlaufen: eine Sammlung,
+            # die nicht antwortet, koennte genau die sein, deren Dateien
+            # sonst in den allgemeinen Raum wandern.
+            print(f"FEHLER: Sammlung '{name}' ist nicht lesbar ({e}). "
+                  f"Abbruch -- ohne diese Pruefung koennten private "
+                  f"Dokumente im Zielraum landen.")
+            raise SystemExit(1)
+    return fremd
+
+
+def fremde_ordner(wurzel, eigener_raum):
+    """Verzeichnisse, die einem anderen Raum als Zwischenspeicher dienen.
+
+    owncloud.ablage() legt je Raum einen Unterordner unter data/dokumente
+    an. Laeuft der Ingest ohne INGEST_ORDNER ueber alles, gehoeren die
+    Ordner der ANDEREN Raeume nicht dazu -- abgeglichen werden sie von
+    abgleich.py, das Raum und Ordner passend setzt.
+    """
+    aus = set()
+    try:
+        import owncloud
+        for raum in owncloud.zuordnung():
+            if raum == eigener_raum:
+                continue
+            aus.add(os.path.normpath(
+                os.path.join(paths.DOCS_DIR, paths.sicherer_teil(raum))))
+    except Exception:
+        pass
+    return aus
+
+
 # Rekursiv, damit Unterordner als Sachgebiet dienen koennen (siehe
 # folder_of), und unabhaengig von der Gross-/Kleinschreibung der Endung.
 dokumente = paths.dokument_dateien(ORDNER_NAME)
+
+# Ordner anderer Raeume heraus, bevor ueberhaupt gezaehlt wird.
+_fremde_ordner = fremde_ordner(ORDNER_NAME, RAUM)
+if _fremde_ordner:
+    _vorher = len(dokumente)
+    dokumente = [d for d in dokumente
+                 if not any(os.path.normpath(d).startswith(o + os.sep)
+                            for o in _fremde_ordner)]
+    if _vorher != len(dokumente):
+        print(f"{_vorher - len(dokumente)} Dateien in Ordnern anderer "
+              f"Raeume uebersprungen (abgleich.py liest sie ein).")
+
+_fremd = fremde_dateien(RAUM)
 
 if not dokumente:
     print(f"Keine PDFs in '{ORDNER_NAME}' gefunden.")
@@ -184,6 +261,12 @@ def flush(pending, dateiname):
 for pdf_pfad in dokumente:
     dateiname = os.path.basename(pdf_pfad)
     ordner = folder_of(pdf_pfad)
+
+    # Liegt die Datei schon in einem anderen Raum, gehoert sie dort hin.
+    if dateiname in _fremd:
+        print(f"UEBERSPRUNGEN: '{dateiname}' liegt im Raum "
+              f"'{_fremd[dateiname]}' -- nicht in '{RAUM}' doppeln.")
+        continue
 
     bekannt = existing_chunk_ids(dateiname)
     ab_seite = letzte_seite(dateiname, bekannt)

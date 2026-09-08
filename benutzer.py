@@ -276,6 +276,22 @@ def anlege(name, passwort, rolle="nutzer", von="?"):
     nutzer, _z = lade()
     if name in nutzer:
         return False, f"'{name}' gibt es schon."
+
+    # Der persoenliche Raum wird aus dem Namen gebildet, und dabei gehen
+    # Zeichen verloren: "m.wilhelm" und "m_wilhelm" ergeben denselben Raum.
+    # Zwei Menschen wuerden sich dann eine private Ablage teilen, ohne es zu
+    # merken. Siehe raeume.kennungskonflikt().
+    try:
+        import raeume
+        andere = raeume.kennungskonflikt(name, nutzer)
+    except Exception:
+        andere = None
+    if andere:
+        return False, (f"'{name}' und '{andere}' ergaeben denselben "
+                       f"persoenlichen Raum ({raeume.privat_kennung(name)}) "
+                       f"-- beide saehen die Unterlagen des anderen. Bitte "
+                       f"eine Kennung waehlen, die sich um mehr als ein "
+                       f"Sonderzeichen unterscheidet.")
     nutzer[name] = {
         "passwort": bcrypt.hashpw(passwort.encode("utf-8"),
                                   bcrypt.gensalt()).decode("utf-8"),
