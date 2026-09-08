@@ -134,6 +134,48 @@ def privat_kennung(benutzer):
     return PRIVAT + sichere_kennung(benutzer)
 
 
+def kennungskonflikt(name, vorhandene):
+    """Kollidiert der persoenliche Raum dieses Namens mit einem anderen?
+
+    Rueckgabe: der bereits vergebene Name, oder None.
+
+    sichere_kennung() ist verlustbehaftet -- sie muss es sein, weil ein
+    Raumname in einen Sammlungsnamen passen muss. "m.wilhelm" und
+    "m_wilhelm" werden beide zu "m_wilhelm", und damit bekaemen zwei
+    verschiedene Menschen denselben persoenlichen Raum: jeder saehe die
+    Unterlagen des anderen, koennte sie verschieben und loeschen.
+
+    Deshalb wird die Kollision beim Anlegen abgewiesen, statt die Kennung
+    eindeutig zu machen. Ein Namensschema wie privat_m_wilhelm_1a2b3c waere
+    zwar kollisionsfrei, aber in der Raumverwaltung nicht mehr lesbar -- und
+    es wuerde die persoenlichen Raeume aller bestehenden Nutzer umbenennen,
+    also deren Ablage vom Namen trennen. Der Preis dafuer ist hoeher als der
+    Nutzen: dass zwei Kennungen ueberhaupt so aehnlich sind, ist ein
+    Sonderfall, den man beim Anlegen bemerken soll.
+    """
+    ziel = privat_kennung(name)
+    name = (name or "").strip().lower()
+    for andere in vorhandene:
+        if (andere or "").strip().lower() == name:
+            continue
+        if privat_kennung(andere) == ziel:
+            return andere
+    return None
+
+
+def konflikte(namen):
+    """Bestehende Kollisionen: [(kennung, [name, name, ...])].
+
+    Fuer die Anzeige. Ein Bestand kann sie schon enthalten, wenn die Nutzer
+    angelegt wurden, bevor beim Anlegen geprueft wurde.
+    """
+    nach_kennung = {}
+    for n in namen:
+        nach_kennung.setdefault(privat_kennung(n), []).append(n)
+    return sorted((k, sorted(v)) for k, v in nach_kennung.items()
+                  if len(v) > 1)
+
+
 def ist_privat(kennung):
     return str(kennung).startswith(PRIVAT)
 
