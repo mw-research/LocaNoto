@@ -158,7 +158,8 @@ def status(kennung: str = Depends(benutzer)):
                    for r, sml in paare},
         "sachgebiete": sachgebiete,
         "ablage": store.beschreibung(),
-        "rangfolge": BEWERTER_INFO,
+        "rangfolge": (_bewerter.beschreibung()
+                      if hasattr(_bewerter, "beschreibung") else BEWERTER_INFO),
         "modelle": {"chat": CHAT_MODELL, "embedding": EMBED_MODELL},
         "voreinstellungen": presets.namen(),
         "listen": _listenstand(),

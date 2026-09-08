@@ -1195,8 +1195,17 @@ with st.sidebar:
         key=f"chatmodell_{aktives_preset}")
     embed_model = llm.modell("EMBEDDING")
     with st.expander("🔌 Modell-Endpunkte"):
-        st.code(llm.uebersicht() + f"\nRANGFOLGE   {rerank_info}",
+        # beschreibung() statt rerank_info: der Schnappschuss vom Start
+        # wuerde "Endpunkt" zeigen, wenn der laengst ausgefallen ist -- oder
+        # "Modell aus dem Image", wenn der Endpunkt laengst wieder da ist.
+        _rangfolge = (reranker.beschreibung()
+                      if hasattr(reranker, "beschreibung") else rerank_info)
+        st.code(llm.uebersicht() + "\nRANGFOLGE   " + _rangfolge,
                 language="text")
+        if getattr(reranker, "endpunkt_erreichbar", lambda: True)() is False:
+            st.warning("Der Rerank-Endpunkt antwortet gerade nicht. Die "
+                       "Rangfolge kommt vorlaeufig aus der Fusion; der "
+                       "Endpunkt wird von selbst wieder versucht.")
 
     # --- RUECKMELDUNGEN ---
     #
