@@ -18,8 +18,174 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 | **Anbindung** | ownCloud für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
 | **Betrieb** | Docker Compose oder Kubernetes; der Container hält keinen Zustand |
 
-**[→ Einrichten](#-einrichten)** · [Betrieb](#-betrieb) ·
+**[→ In Kürze](#-in-kürze)** · [Einrichten](#-einrichten) · [Betrieb](#-betrieb) ·
 [Wie es funktioniert](#-wie-es-funktioniert)
+
+---
+
+## ⚡ In Kürze
+
+Alles, was für einen laufenden Stand nötig ist — auf einem Bildschirm.
+Ausführlich mit Begründungen steht dasselbe unter
+[Einrichten](#-einrichten).
+
+### 1. `.env` anlegen
+
+```bash
+cp .env.example .env
+```
+
+Diese Werte reichen. Alles andere in `.env.example` hat Vorgaben:
+
+```ini
+# --- PFLICHT ---
+OPENAI_BASE_URL=http://192.168.1.10:4000     # Modellserver oder Gateway
+OPENAI_API_KEY=dein-schluessel               # bei Ollama beliebig
+CHAT_MODEL=qwen3.8:27b                       # antwortet
+EMBEDDING_MODEL=qwen3-embedding:8b           # vektorisiert
+ADMIN_USERS=markus                           # erster Verwalter, klein
+
+# --- DRINGEND EMPFOHLEN ---
+CHROMA_HOST=chroma                           # Vektordatenbank als Dienst
+CHROMA_PORT=8000                             #   sonst schreiben zwei
+                                             #   Prozesse dieselben Dateien
+DATEN_PFAD=/mnt/speicher/locanoto/daten      # Bestand, extern
+KONFIG_PFAD=/mnt/speicher/locanoto/konfig    # Schlüssel, extern und getrennt
+
+# --- NACH BEDARF ---
+VISION_MODEL=qwen3-vl:32b                    # Bilder in Dokumenten und Chat
+RERANKER_BASE_URL=http://192.168.1.10:4000   # Rangfolge über Endpunkt
+RERANKER_API_MODEL=rerank                    #   Name AN DEINEM Gateway
+TOP_K=12                                     # Abschnitte je Antwort
+APP_PORT=8501
+CONTAINER_NAME=locanoto
+COMPANY_NAME=Musterfirma                     # erscheint in Antworten
+APP_TOPIC=Technische Dokumentation
+```
+
+**Blockspeicher, keine Freigabe.** Unter `DATEN_PFAD` liegen zwei
+SQLite-Bestände. Auf NFS oder SMB ist das kein Fehler, sondern ein
+beschädigter Index — [warum](#persistent-ist-nicht-dasselbe-wie-dateifreigabe).
+
+### 2. Bauen und starten
+
+```bash
+docker compose build && docker compose up -d
+```
+
+Der erste Build lädt das Reranker-Modell in das Abbild (~2 GB).
+
+### 3. Ersten Benutzer anlegen
+
+```bash
+docker compose exec locanoto_bot python create_user.py
+```
+
+Der erste wird Verwalter. Oberfläche: `http://localhost:8501`
+
+### 4. Absichern — beides wird gern übersehen
+
+```bash
+docker compose run --rm -v "$HOME:/aus" locanoto_bot sh -c "cp /app/config/schluessel.key /aus/locanoto-schluessel.key && chown $(id -u):$(id -g) /aus/locanoto-schluessel.key"
+```
+
+Ohne diesen Schlüssel sind alle Chatverläufe unlesbar — **ohne
+Fehlermeldung**. Und in der Seitenleiste unter *Benutzer verwalten* auf
+**Jetzt signieren**: danach kann sich ein von Hand in `config/users.json`
+eingetragener Zugang nicht mehr anmelden.
+
+### 5. Dokumente einlesen
+
+```bash
+docker compose exec locanoto_bot python ingest.py
+```
+
+Dateien vorher nach `data/dokumente/` legen; Unterordner werden zu
+Sachgebieten. Für Abbildungen zusätzlich `python ingest_images.py`.
+
+### 6. Prüfen
+
+Seitenleiste als Verwalter:
+
+| | soll zeigen |
+|---|---|
+| *Verschlüsselung* | „an" |
+| *Speicherorte* | Journalmodus `wal` |
+| *Modell-Endpunkte* | `RANGFOLGE  Endpunkt …` (nicht „Modell aus dem Image") |
+| *Benutzer verwalten* | „signiert", Kette in Ordnung |
+
+Dann eine Testfrage. Treffer mit Datei und Seite = fertig.
+
+---
+
+### ownCloud in Kürze
+
+Ein Ordner wird auf einen Raum abgebildet, eine Gruppe bestimmt, wer ihn
+sieht. Ausführlich: [Dokumente aus ownCloud](#-dokumente-aus-owncloud).
+
+**a) Zugang in die `.env`:**
+
+```ini
+OWNCLOUD_URL=https://cloud.firma.de     # WURZEL, nicht der WebDAV-Pfad
+OWNCLOUD_USER=locanoto
+OWNCLOUD_PASSWORT=app-passwort          # bei 2FA ein APP-Passwort!
+
+# Nur für Gruppen -- braucht in ownCloud VERWALTERRECHTE.
+# Ohne diese zwei wird das Konto von oben benutzt, das dann Verwalter sein
+# muss. Für die Dateien allein genügt Lesen.
+OWNCLOUD_ADMIN_USER=admin
+OWNCLOUD_ADMIN_PASSWORT=app-passwort
+```
+
+**b) Zuordnung in der Oberfläche** — Seitenleiste → *ownCloud*:
+
+| Feld | Beispiel |
+|---|---|
+| Raum | `Einkauf` (vorher unter *Räume verwalten* anlegen) |
+| Ordner in ownCloud | `/Abteilungen/Einkauf/Handbücher` |
+
+Und am Raum selbst (*Räume verwalten* → „ownCloud-Gruppe"): den
+Gruppennamen, z. B. `Einkauf`. Deren Mitglieder kommen zu den von Hand
+eingetragenen **hinzu**.
+
+**c) Prüfen, dann abgleichen:**
+
+```bash
+docker compose exec locanoto_bot python abgleich.py --pruefen
+```
+
+Zeigt, was sich geändert hat, und **fasst nichts an**. Unbedingt zuerst:
+ein falsch eingerichteter Ordner sieht genau wie „alles gelöscht" aus, und
+danach sind die Abschnitte weg.
+
+```bash
+docker compose exec locanoto_bot python abgleich.py
+```
+
+Holt Gruppen, dann Dateien, dann liest ein. Für den Dauerbetrieb:
+
+```
+0 3 * * *  docker compose exec -T locanoto_bot python abgleich.py
+0 4 * * *  docker compose exec -T locanoto_bot python sicherung.py
+```
+
+**Die Kennungen müssen übereinstimmen.** Heißt jemand in ownCloud
+`m.wilhelm` und hier `markus`, sieht alles richtig aus und er kommt nicht
+in seinen Raum. Der Abgleich nennt die Kennungen, die er nicht zuordnen
+kann.
+
+---
+
+### Wenn etwas nicht geht
+
+| Symptom | Ursache |
+|---|---|
+| Suche hängt nach den Sonden | Modellserver kalt oder nicht erreichbar. Meldung nennt jetzt den Grund; `SUCHE_EMBED_TIMEOUT` steuert die Wartezeit. |
+| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
+| Journalmodus nicht `wal` | `data/` liegt auf einer Dateifreigabe. Siehe [Speicherorte](#-speicherorte). |
+| Suche findet nichts nach einem Update | Abschnitte noch in der alten Sammlung: `python umsortieren.py --pruefen` |
+| „Benutzerdatei außerhalb der Anwendung geändert" | Signatur passt nicht. Bestehende Nutzer arbeiten weiter, neue Einträge sind gesperrt. |
+| Rechte-/Modellprobleme unklar | Seitenleiste → *Konfiguration* zeigt fehlende und abweichende Einträge (nur Namen, keine Werte). |
 
 ---
 
@@ -499,6 +665,25 @@ nicht, wenn der Schlüssel danebenliegt.
 
 Zum Weitergeben genügt `data/dokumente/` und `data/chroma_db/`: daraus
 entsteht beim ersten Start alles Übrige von selbst.
+
+---
+
+### Nach einem Update: Selbsttest
+
+```bash
+docker compose run --rm locanoto_bot python selbsttest.py
+```
+
+31 Prüfungen über den echten Suchpfad — echte Sammlungen, echter
+Stichwortindex, echte Verschlüsselung, echte Rechteprüfung. Attrappen sind
+nur Embedding- und Rerank-Modell, damit er ohne Modellserver in Sekunden
+durchläuft. Er arbeitet in einem eigenen Verzeichnis und lässt den Bestand
+unberührt.
+
+Läuft er durch, stehen: Anmeldung und Rollen, Raumtrennung (auch dass ein
+Nutzer fremde Räume **nicht** sieht), Suche mit Quellenangabe,
+Chatverschlüsselung, Rückmeldungen, und der Abzug samt Einspielen ohne
+Modell.
 
 ---
 
