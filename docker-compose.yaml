@@ -68,6 +68,15 @@ x-umgebung: &umgebung
   - EMBED_BATCH_SIZE=${EMBED_BATCH_SIZE:-}
   - RERANKER_MAX_LENGTH=${RERANKER_MAX_LENGTH:-}
   - RRF_K=${RRF_K:-}
+  # Feineinstellungen, die der Code liest und die bisher nicht
+  # ankamen. CHROMA_EINZELN erlaubt der Schnittstelle bewusst die
+  # Dateiablage statt des Dienstes -- ohne Durchreichung war das
+  # dokumentiert, aber unmoeglich.
+  - CHROMA_EINZELN=${CHROMA_EINZELN:-}
+  - CHROMA_SCHREIBSTAPEL=${CHROMA_SCHREIBSTAPEL:-}
+  - EMBED_MIN_CHARS=${EMBED_MIN_CHARS:-}
+  - MAX_KOPFZEILE_CHARS=${MAX_KOPFZEILE_CHARS:-}
+  - CAPTION_HEIGHT=${CAPTION_HEIGHT:-}
   - TOP_K=${TOP_K:-}
   - MAX_TABLE_CHARS=${MAX_TABLE_CHARS:-}
   - HELPER_TIMEOUT=${HELPER_TIMEOUT:-}
