@@ -24,13 +24,17 @@ Fuer Stufe 2 gibt es drei Moeglichkeiten, in dieser Reihenfolge:
 
   2. Das CrossEncoder-Modell aus dem Image (RERANKER_MODEL). Es wird beim
      Bauen hineingeladen, HF_HUB_OFFLINE=1 verhindert danach jeden
-     Netzzugriff. Das ist der Rueckfall, wenn kein Endpunkt gesetzt ist oder
-     der Endpunkt nicht antwortet.
+     Netzzugriff. Es ist der Bewerter, wenn KEIN Endpunkt gesetzt ist -- und
+     nur auf Wunsch (RERANKER_RUECKFALL=image) der Ersatz, wenn ein gesetzter
+     Endpunkt gerade nicht antwortet.
 
   3. Gar keiner. Dann entscheidet allein die Fusion aus Stufe 1.
 
-Keine dieser Stufen darf den Start verhindern: schlaegt eine fehl, wird die
-naechste genommen.
+Keine dieser Stufen darf den Start verhindern, und keine Entscheidung ist
+endgueltig: faellt der Endpunkt aus, wird er nach einer Wartezeit erneut
+versucht. Eine einmal beim Start gescheiterte Probe hatte frueher fuer die
+gesamte Laufzeit das CPU-Modell eingeschaltet -- Minuten je Frage, ohne
+dass jemand den Grund sah.
 """
 import os
 
@@ -143,36 +147,167 @@ def _lade_cross_encoder():
     return lambda paare: modell.predict(paare)
 
 
-def lade_bewerter():
-    """Waehlt den Bewerter nach der Reihenfolge Endpunkt, Modell, keiner.
+# --- Rueckfall und Wiederholung ---
+#
+# Was passiert, wenn der Endpunkt gesetzt ist, aber gerade nicht antwortet?
+#
+#   fusion   Die Reihenfolge aus der Fusion bleibt stehen, und beim naechsten
+#            Aufruf wird der Endpunkt wieder versucht. Voreinstellung.
+#   image    Das CPU-Modell aus dem Image bewertet stattdessen.
+#
+# Warum "fusion" die Voreinstellung ist und nicht "image": das CPU-Modell
+# braucht fuer die 36 Kandidatenpaare einer Frage auf einem gewoehnlichen
+# Server ein bis zwei Minuten. Wer einen Endpunkt eingerichtet hat, hat eine
+# Grafikkarte dafuer -- und ein Ausfall des Endpunkts ist bei einem Server,
+# der Modelle nach fuenf Minuten Ruhe entlaedt, kein Ausnahmefall, sondern
+# jeder Morgen. Zwei Minuten Wartezeit sehen fuer den Nutzer aus wie ein
+# Haenger; eine Antwort in Fusionsreihenfolge sieht aus wie eine Antwort.
+RERANKER_RUECKFALL = (os.getenv("RERANKER_RUECKFALL", "").strip().lower()
+                      or "fusion")
 
-    Rueckgabe: (bewerter_oder_None, beschreibung). Die Beschreibung ist fuer
-    die Anzeige gedacht und nennt auch den Grund, wenn eine Stufe uebersprungen
-    wurde.
+# Nach wie vielen Sekunden ein ausgefallener Endpunkt erneut versucht wird.
+# Nicht bei jedem Aufruf: sonst wartet jede Frage RERANKER_TIMEOUT lang auf
+# einen Dienst, der gerade nicht da ist.
+RERANKER_ERNEUT = paths.env_float("RERANKER_ERNEUT", 60)
+
+
+class Bewerter:
+    """Ein Bewerter, der nach einem Ausfall zum Endpunkt zurueckfindet.
+
+    Der Vorgaenger entschied beim Start ein einziges Mal: Endpunkt oder
+    Modell aus dem Image. Schlug die Probe fehl -- weil das Rerank-Modell auf
+    dem GPU-Server gerade entladen war und zum Aufwachen laenger als das
+    Zeitlimit brauchte --, blieb es fuer die gesamte Laufzeit beim
+    CPU-Modell. Jede Frage kostete dann Minuten, und niemand sah, woran es
+    lag: die Anzeige sagte "Modell aus dem Image", und das klang wie eine
+    Einstellung, nicht wie ein Fehler.
+
+    Jetzt wird bei jedem Aufruf entschieden. Faellt der Endpunkt aus, gilt
+    der Rueckfall (RERANKER_RUECKFALL), und nach RERANKER_ERNEUT Sekunden
+    wird der Endpunkt wieder versucht. beschreibung() nennt den Zustand von
+    JETZT, nicht den vom Start.
     """
+
+    def __init__(self):
+        import threading
+        self._sperre = threading.Lock()
+        self._modell = None
+        self._modell_fehler = None
+        self._ausfall_zeit = None
+        self._ausfall_grund = ""
+        self._zuletzt_endpunkt = None   # True/False: hat der letzte Aufruf
+                                        # den Endpunkt erreicht?
+        self.startprobe = None
+
+    # --- Entscheidungen ---
+
+    def _endpunkt_dran(self):
+        if not RERANKER_BASE_URL:
+            return False
+        if self._ausfall_zeit is None:
+            return True
+        import time
+        return (time.time() - self._ausfall_zeit) >= RERANKER_ERNEUT
+
+    def _modell_holen(self):
+        """Das CPU-Modell, einmal geladen. None, wenn es nicht ladbar ist."""
+        if not RERANKER_MODEL or self._modell_fehler:
+            return None
+        with self._sperre:
+            if self._modell is None and not self._modell_fehler:
+                try:
+                    self._modell = _lade_cross_encoder()
+                except Exception as e:
+                    self._modell_fehler = f"{type(e).__name__}: {e}"
+        return self._modell
+
+    # --- Aufruf ---
+
+    def __call__(self, paare):
+        """Bewertungen zu den Paaren -- oder None, wenn gerade keine zu
+        haben sind. None heisst fuer rank(): Fusionsreihenfolge behalten."""
+        import time
+        if self._endpunkt_dran():
+            try:
+                werte = _api_bewerte(paare)
+                self._ausfall_zeit = None
+                self._ausfall_grund = ""
+                self._zuletzt_endpunkt = True
+                # Die Probe vom Start war ein Hinweis; sobald der Endpunkt
+                # einmal geantwortet hat, ist er erledigt.
+                self.startprobe = None
+                return werte
+            except Exception as e:
+                self._ausfall_zeit = time.time()
+                self._ausfall_grund = f"{type(e).__name__}: {e}"
+                self._zuletzt_endpunkt = False
+                if RERANKER_RUECKFALL != "image":
+                    return None
+        elif RERANKER_BASE_URL and RERANKER_RUECKFALL != "image":
+            # Endpunkt ausgefallen, Wartezeit noch nicht um.
+            self._zuletzt_endpunkt = False
+            return None
+
+        modell = self._modell_holen()
+        if modell is None:
+            return None
+        self._zuletzt_endpunkt = False
+        return modell(paare)
+
+    # --- Anzeige ---
+
+    def beschreibung(self):
+        """Der Zustand von jetzt, fuer die Seitenleiste."""
+        import time
+        if RERANKER_BASE_URL:
+            if self._ausfall_zeit is None:
+                stand = f"Endpunkt {_rerank_url()}"
+                if self.startprobe:
+                    stand += f" -- {self.startprobe}"
+                return stand
+            wieder = max(0, int(RERANKER_ERNEUT
+                                - (time.time() - self._ausfall_zeit)))
+            ersatz = ("Modell aus dem Image" if RERANKER_RUECKFALL == "image"
+                      and RERANKER_MODEL else "nur Rangfolge-Fusion")
+            return (f"Endpunkt {_rerank_url()} AUSGEFALLEN "
+                    f"({self._ausfall_grund}) -- vorlaeufig {ersatz}, "
+                    f"naechster Versuch in {wieder} s")
+        if RERANKER_MODEL and not self._modell_fehler:
+            return f"Modell aus dem Image ({RERANKER_MODEL})"
+        grund = f" -- {self._modell_fehler}" if self._modell_fehler else ""
+        return "nur Rangfolge-Fusion" + grund
+
+    def endpunkt_erreichbar(self):
+        return bool(RERANKER_BASE_URL) and self._ausfall_zeit is None
+
+
+def lade_bewerter():
+    """Richtet den Bewerter ein. Rueckgabe: (bewerter, beschreibung).
+
+    Die Beschreibung ist ein Schnappschuss vom Start. Wer den Zustand von
+    jetzt will, ruft bewerter.beschreibung() -- sie aendert sich, sobald der
+    Endpunkt ausfaellt oder zurueckkommt.
+
+    Die Probe beim Start bleibt, aber sie ENTSCHEIDET nichts mehr. Sie
+    zeigt einen falschen Pfad oder einen falschen Schluessel sofort in der
+    Seitenleiste, statt erst bei der ersten Frage eines Nutzers. Schlaegt
+    sie fehl, weil das Modell gerade aufwacht, ist das ein Hinweis -- und
+    beim naechsten Aufruf ein neuer Versuch.
+    """
+    if not RERANKER_BASE_URL and not RERANKER_MODEL:
+        return None, "nur Rangfolge-Fusion"
+
+    b = Bewerter()
     if RERANKER_BASE_URL:
         try:
-            bewerter = _api_bewerte
-            # Einmal gegen den Endpunkt sprechen, damit ein falscher Pfad oder
-            # ein nicht erreichbarer Dienst sofort auffaellt und nicht erst
-            # bei der ersten Frage eines Nutzers.
-            bewerter([["test", "test"]])
-            return bewerter, f"Endpunkt {_rerank_url()}"
+            _api_bewerte([["test", "test"]])
+            b.startprobe = None
         except Exception as e:
-            grund = f"Endpunkt nicht nutzbar ({type(e).__name__}: {e})"
-    else:
-        grund = None
-
-    if RERANKER_MODEL:
-        try:
-            return _lade_cross_encoder(), (
-                f"Modell aus dem Image ({RERANKER_MODEL})"
-                + (f" -- {grund}" if grund else ""))
-        except Exception as e:
-            grund = ((grund + "; ") if grund else "") + \
-                    f"Modell nicht ladbar ({type(e).__name__}: {e})"
-
-    return None, "nur Rangfolge-Fusion" + (f" -- {grund}" if grund else "")
+            import time
+            b._ausfall_zeit = time.time()
+            b._ausfall_grund = f"{type(e).__name__}: {e}"
+            b.startprobe = f"Probe beim Start fehlgeschlagen ({b._ausfall_grund})"
+    return b, b.beschreibung()
 
 
 def rank(ranked_lists, top_k, bewerter=None):
@@ -201,6 +336,11 @@ def rank(ranked_lists, top_k, bewerter=None):
     try:
         werte = bewerter(paare)
     except Exception:
+        return fusioniert[:top_k]
+    # None heisst: gerade keine Bewertung zu haben -- der Endpunkt ist
+    # ausgefallen und der Rueckfall ist "fusion". Dann bleibt die Reihenfolge
+    # aus der Fusion stehen, statt dass die Frage unbeantwortet bleibt.
+    if werte is None:
         return fusioniert[:top_k]
 
     neu = sorted(zip(werte, vorauswahl), key=lambda x: x[0], reverse=True)
