@@ -52,7 +52,13 @@ import paths
 
 PROTOKOLL = os.path.join(paths.DATA_DIR, "benutzer.log")
 
-ROLLEN = ("admin", "nutzer")
+# "notzugang" ist bewusst KEINE Steigerung von "admin", sondern etwas
+# daneben: die Rolle darf nichts, ausser den Notzugang eines Verwalters zu
+# einem persoenlichen Raum zu bestaetigen. Sie gehoert deshalb nicht in
+# die IT, sondern woandershin -- Geschaeftsfuehrung, Personalrat, wer auch
+# immer. Koennten Verwalter sich selbst bestaetigen, waere das Ganze eine
+# Formalie: die IT genehmigte sich den Blick in fremde Ablagen selbst.
+ROLLEN = ("admin", "notzugang", "nutzer")
 MIN_PASSWORT = 8
 
 # Zustaende der Benutzerdatei
@@ -215,6 +221,28 @@ def ist_admin(name):
         return name in _admins_aus_umgebung()
     e = nutzer.get(name) or {}
     return bool(e.get("_gueltig")) and e.get("rolle") == "admin"
+
+
+def hat_rolle(name, rolle):
+    """Traegt dieser Nutzer diese Rolle? Ohne gueltige Signatur nie.
+
+    Der Umstiegsnachlass gilt hier NICHT: ADMIN_USERS macht jemanden zum
+    Verwalter, wenn die Benutzerdatei noch aus der Zeit vor den Signaturen
+    stammt. Fuer den Notzugang waere das der falsche Weg -- eine
+    Umgebungsvariable laesst sich am Container setzen, und dann bestaetigt
+    sich der Verwalter seinen Notzugang doch wieder selbst.
+    """
+    name = (name or "").strip().lower()
+    nutzer, _z = lade()
+    e = nutzer.get(name) or {}
+    return bool(e.get("_gueltig")) and e.get("rolle") == rolle
+
+
+def traeger(rolle):
+    """Alle Nutzer mit dieser Rolle, mit gueltiger Signatur."""
+    nutzer, _z = lade()
+    return sorted(n for n, e in nutzer.items()
+                  if e.get("_gueltig") and e.get("rolle") == rolle)
 
 
 def admins():
