@@ -48,6 +48,8 @@ NONCE_LAENGE = 12
 
 _schluessel = None
 _aes = None
+# Warum kein Schluessel da ist -- fuer die Anzeige und den Start.
+_grund = ""
 
 
 def verfuegbar():
@@ -68,11 +70,22 @@ def verfuegbar():
 def schluessel():
     """Der Installationsschluessel, 32 Byte. None, wenn keiner zu holen ist.
 
-    Reihenfolge: Umgebung, dann Datei, dann neu erzeugen. Die Umgebung geht
-    vor, damit der Schluessel als Docker-Secret uebergeben werden kann und
-    gar nicht erst im Dateisystem liegt.
+    Reihenfolge: Umgebung, dann Datei, dann -- NUR wenn keine Datei da ist --
+    neu erzeugen. Die Umgebung geht vor, damit der Schluessel als
+    Docker-Secret uebergeben werden kann und gar nicht erst im Dateisystem
+    liegt.
+
+    Der Nachsatz "nur wenn keine Datei da ist" ist der Kern. Vorher fiel
+    jeder Lesefehler in das Erzeugen: eine abgeschnittene Datei, ein
+    beschaedigtes base64, ein fehlendes Leserecht -- und die Anwendung
+    schrieb einen NEUEN Schluessel darueber. Damit waren alle Chatverlaeufe
+    und alle Rueckmeldungen endgueltig unlesbar, ohne eine einzige
+    Fehlermeldung: die Dateien lagen ja noch da, sie liessen sich nur nicht
+    mehr oeffnen. Ein zerstoerter Schluessel ist nicht wiederherstellbar,
+    ein Lesefehler dagegen fast immer behebbar -- also darf nur der
+    eindeutige Fall "es gibt keine Datei" zum Erzeugen fuehren.
     """
-    global _schluessel
+    global _schluessel, _grund
     if _schluessel is not None:
         return _schluessel
 
@@ -87,16 +100,44 @@ def schluessel():
         _schluessel = roh if len(roh) == 32 else hashlib.sha256(roh).digest()
         return _schluessel
 
+    if not os.path.exists(SCHLUESSEL_DATEI):
+        return _erzeuge()
+
     try:
         with open(SCHLUESSEL_DATEI, "rb") as f:
-            roh = base64.urlsafe_b64decode(f.read().strip())
-        if len(roh) == 32:
-            _schluessel = roh
-            return _schluessel
-    except (OSError, ValueError):
-        pass
+            inhalt = f.read().strip()
+    except OSError as e:
+        _grund = (f"{SCHLUESSEL_DATEI} ist nicht lesbar ({e}). "
+                  f"Rechte pruefen.")
+        return None
 
-    return _erzeuge()
+    try:
+        roh = base64.urlsafe_b64decode(inhalt)
+    except Exception:
+        roh = b""
+    if len(roh) != 32:
+        _grund = (f"{SCHLUESSEL_DATEI} enthaelt keinen brauchbaren "
+                  f"Schluessel ({len(inhalt)} Byte gelesen). Die Datei wird "
+                  f"NICHT ueberschrieben -- sonst waeren alle Chatverlaeufe "
+                  f"endgueltig unlesbar. Stelle sie aus der Sicherung wieder "
+                  f"her. Ist wirklich keine Sicherung vorhanden, benenne sie "
+                  f"um; dann entsteht ein neuer Schluessel, und alles "
+                  f"bisher Verschluesselte bleibt unlesbar.")
+        return None
+
+    _schluessel = roh
+    return _schluessel
+
+
+def zustand():
+    """("ok"|"neu"|"unlesbar"|"aus", meldung) -- fuer Start und Anzeige."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa
+    except Exception:
+        return "aus", "Das Paket cryptography fehlt im Abbild."
+    if schluessel() is None:
+        return "unlesbar", _grund or "Kein Schluessel zu holen."
+    return "ok", beschreibung()
 
 
 def _erzeuge():
@@ -238,7 +279,7 @@ def beschreibung():
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa
         except Exception:
             return "aus (Paket cryptography fehlt)"
-        return "aus (kein Schluessel schreibbar)"
+        return "AUS -- " + (_grund or "kein Schluessel schreibbar")
     if os.getenv("LOCANOTO_SCHLUESSEL", "").strip():
         return "an (Schluessel aus der Umgebung)"
     return f"an (Schluessel in {os.path.basename(SCHLUESSEL_DATEI)})"

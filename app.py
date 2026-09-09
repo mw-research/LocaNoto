@@ -33,6 +33,23 @@ from tables import build_table_chunks
 
 paths.bootstrap()
 
+# --- SCHLUESSEL DA? ---
+#
+# Anhalten statt weiterlaufen, und zwar bevor irgendetwas geschrieben
+# wird. Ohne Schluessel liest die Anwendung keinen verschluesselten
+# Chat -- sie wuerde ihn fuer leer halten und beim naechsten Speichern
+# im Klartext ueberschreiben. Aus einem behebbaren Lesefehler waere
+# damit ein Datenverlust geworden.
+_schl_zustand, _schl_meldung = geheim.zustand()
+if _schl_zustand == "unlesbar":
+    st.error("Der Installationsschluessel ist nicht lesbar.")
+    st.code(_schl_meldung, language="text")
+    st.caption("Die Anwendung haelt hier an. Liefe sie weiter, "
+               "wuerde sie vorhandene Chatverlaeufe fuer leer "
+               "halten und beim naechsten Speichern im Klartext "
+               "ueberschreiben.")
+    st.stop()
+
 # 1. Werte aus der docker-compose.yml holen
 thema = os.getenv("APP_TOPIC", "Allgemein")
 firma = os.getenv("COMPANY_NAME", "LocaNoto")

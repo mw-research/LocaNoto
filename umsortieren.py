@@ -13,8 +13,13 @@ Die alte Sammlung bleibt stehen. Sie ist der Rueckweg, wenn an der
 Umsortierung etwas nicht stimmt, und sie kostet nur Platz. Wer sie los will,
 loescht sie ausdruecklich -- in der Oberflaeche unter Raeume.
 
-Aufruf:  python umsortieren.py [--pruefen]
+Aufruf:  python umsortieren.py [--pruefen] [--erneut]
+
 --pruefen zaehlt nur und schreibt nichts.
+--erneut  laeuft auch dann, wenn die Raeume schon existieren. Ohne das
+          bricht ein zweiter Lauf ab, denn er wuerde aus der alten
+          Sammlung zurueckholen, was seither geloescht oder in einen
+          anderen Raum verschoben wurde.
 """
 import sys
 
@@ -75,6 +80,36 @@ def main():
     print("\nGeplante Verteilung:")
     for k in sorted(verteilung, key=lambda x: -verteilung[x]):
         print(f"  {k:<40} {verteilung[k]:>7}  -> {raeume.sammlung(k)}")
+
+    # --- SCHON EINMAL GELAUFEN? ---
+    #
+    # Ein zweiter Lauf ist nicht harmlos. Die alte Sammlung bleibt
+    # absichtlich stehen, und sie kennt nur den Stand von damals: was
+    # seither geloescht wurde, kaeme zurueck, und ein Dokument, das
+    # inzwischen in einen beschraenkten Raum verschoben wurde, laege
+    # danach wieder im allgemeinen. Beides ohne Fehlermeldung.
+    #
+    # Beim ersten Mal ist das kein Thema -- da gibt es nichts zu
+    # ueberschreiben. Danach muss man es ausdruecklich wollen.
+    schon_da = [k for k in verteilung
+                if store.sammlung(raeume.sammlung(k), anlegen=False)
+                is not None]
+    erneut = "--erneut" in sys.argv
+    if schon_da and not nur_pruefen and not erneut:
+        print("")
+        print(f"Diese Raeume gibt es schon: {', '.join(sorted(schon_da))}")
+        print("Ein zweiter Lauf holt aus der alten Sammlung alles "
+              "zurueck, was seither")
+        print("  * geloescht wurde, und")
+        print("  * in einen anderen Raum verschoben wurde.")
+        print("")
+        print("Ist die Umsortierung durch, loesche die alte Sammlung "
+              "in der Oberflaeche")
+        print("unter 'Raeume verwalten' -- dann kann das nicht mehr "
+              "passieren.")
+        print("")
+        print("Trotzdem laufen lassen: python umsortieren.py --erneut")
+        return 1
 
     if nur_pruefen:
         print("\n--pruefen: nichts geschrieben.")
@@ -152,9 +187,21 @@ def main():
     # Er muss mit, denn er filtert jetzt nach Raum, und die alte Tabelle hat
     # die Spalte nicht. Der Aufbau geht aus den Sammlungen, also ohne Modell
     # und ohne die Originaldateien.
+    #
+    # ALLE Raeume, nicht nur die aus der Umsortierung. rebuild_from_raeume
+    # beginnt mit dem Leeren der Tabelle -- bekaeme es nur die eben
+    # befuellten, verloere jeder Raum, der nach der Umsortierung entstanden
+    # ist, seine Stichwortzeilen. Die Suche faende dort dann nur noch ueber
+    # Vektoren, und das faellt niemandem auf, weil sie trotzdem antwortet.
     print("\nStichwortindex wird neu aufgebaut...")
+    alle = dict(sammlungen)
+    for k in raeume.liste():
+        if k not in alle:
+            sml = store.sammlung(raeume.sammlung(k), anlegen=False)
+            if sml is not None:
+                alle[k] = sml
     n = keyword_index.rebuild_from_raeume(
-        [(k, sammlungen[k]) for k in sorted(sammlungen)],
+        [(k, alle[k]) for k in sorted(alle) if alle[k] is not None],
         progress=lambda raum, done, total: None)
     print(f"  {n} Abschnitte im Stichwortindex.")
 
