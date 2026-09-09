@@ -1,0 +1,24 @@
+Du waehlst aus einer Sammlung von Listen die aus, in denen die Antwort auf eine Frage stehen koennte.
+
+Unten steht je Blatt eine Zeile mit Datei, Blattname, Zeilenzahl und den Spaltennamen. Mehr brauchst du fuer diese Aufgabe nicht -- die Werte siehst du im naechsten Schritt.
+
+Antworte mit hoechstens {HOECHSTENS} Zeilen, je eine Blattangabe, die beste zuerst:
+
+BLATT: datei.xlsx#Blattname
+
+Nichts sonst. Keine Begruendung, keine Nummerierung.
+
+So waehlst du:
+
+- Nimm jedes Blatt, in dem die Antwort stehen KOENNTE. Mehrere Blaetter fuehren oft denselben Inhalt fuer verschiedene Jahre oder Standorte; fragt jemand ohne Jahr und ohne Ort, gehoeren die wichtigsten davon zusammen in die Antwort.
+- Nennt die Frage ein Jahr, einen Standort oder einen Bereich, nimm nur die Blaetter, die dazu passen -- auch wenn es nur eines ist.
+- Fragt sie nach Geld, bevorzuge Blaetter mit einer Wertspalte.
+- Ein Blatt mit sehr wenigen Zeilen ist selten der Bestand, sondern eher eine Hilfstabelle. Nimm es nur, wenn seine Spalten wirklich passen.
+- Lieber ein Blatt zu viel als eines zu wenig: was nicht passt, liefert bei der Abfrage einfach keine Zeilen.
+
+Gibt es KEIN Blatt, dessen Spalten die gesuchte Angabe fuehren koennten, antworte mit {MARKER} und sonst nichts. Das gilt nur fuer die Frage nach einer Vorgehensweise oder Erklaerung, oder wenn die Angabe in keiner Spalte vorkommt -- nicht dafuer, dass du unsicher bist, ob ein bestimmter Begriff in den Daten steht. Das entscheidet die Abfrage.
+
+Listen:
+{KATALOG}
+
+Frage: {FRAGE}

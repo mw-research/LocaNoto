@@ -233,26 +233,41 @@ def _listen_abfragen(anfrage, modell, verlauf_text):
         return [], None
 
     try:
-        datei, blatt, sql = tabellen.formuliere(
-            chat_client, modell, anfrage.frage,
-            tabellen.als_text(auswahl), verlauf_text)
+        # Mehrere Blaetter statt eines: dieselbe Frage gilt bei einem
+        # gewachsenen Listenordner oft mehreren zugleich. Die Schnittstelle
+        # nimmt denselben Weg wie die Oberflaeche -- zwei Auffassungen
+        # davon, wie eine Listenfrage beantwortet wird, waeren eine zu
+        # viel.
+        ergebnisse = tabellen.abfragen(
+            chat_client, modell, anfrage.frage, auswahl, verlauf_text)
     except Exception as e:
         return [], {"grund": f"Abfrage nicht erzeugt: {e}"}
-    if not sql:
+    if not ergebnisse:
         return [], {"grund": "Keine der Listen passt zu dieser Frage."}
 
-    try:
-        spalten, zeilen = tabellen.fuehre_aus(datei, blatt, sql)
-    except ValueError as e:
-        return [], {"grund": str(e), "abfrage": sql}
-    except Exception as e:
-        return [], {"grund": f"Liste nicht lesbar: {e}", "abfrage": sql}
-
-    ergebnis = sqlpruefung.als_tabelle(spalten, zeilen)
-    quelle = datei + (f"#{blatt}" if blatt else "")
-    return ([("liste_abfrage", f"{quelle}\n{sql}"),
-             ("liste_ergebnis", ergebnis)],
-            {"blatt": quelle, "abfrage": sql, "zeilen": len(zeilen)})
+    bloecke, auskunft = [], []
+    for t in ergebnisse:
+        quelle = t["datei"] + (f"#{t['blatt']}" if t["blatt"] else "")
+        eintrag = {"blatt": quelle, "abfrage": t["sql"],
+                   "zeilen": len(t["zeilen"])}
+        if t["grund"]:
+            eintrag["grund"] = t["grund"]
+            auskunft.append(eintrag)
+            continue
+        auskunft.append(eintrag)
+        if not t["zeilen"]:
+            # Eine leere Tabelle gehoert nicht in den Kontext: sie liest
+            # sich fuer das Modell wie ein Beleg dafuer, dass es das
+            # Gesuchte nicht gibt. Gemeldet wird sie trotzdem.
+            continue
+        bloecke += [("liste_abfrage",
+                     quelle + chr(10) + t["sql"]),
+                    ("liste_ergebnis",
+                     sqlpruefung.als_tabelle(t["spalten"], t["zeilen"]))]
+    if not bloecke:
+        return [], {"blaetter": auskunft,
+                    "grund": "Keine der Listen lieferte eine Zeile."}
+    return bloecke, {"blaetter": auskunft}
 
 
 def _suchen(anfrage, kennung):

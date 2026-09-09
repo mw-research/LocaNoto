@@ -6,6 +6,7 @@ Antworte in genau zwei Zeilen:
 
 BLATT: datei.xlsx#Blattname
 SQL: SELECT ...
+{MEHRERE}
 
 Die Abfrage laeuft gegen SQLite. Die Tabelle heisst immer `daten`, unabhaengig davon, welches Blatt du gewaehlt hast. Verwende die Feldnamen aus der linken Spalte des Katalogs -- die eckigen Klammern daneben zeigen nur, wie die Spalte in der Datei ueberschrieben ist.
 
