@@ -110,6 +110,28 @@ pruef("von Hand eingetragene Mitglieder wirken nicht",
       and not raeume.darf_lesen("markus", _pa))
 pruef("anna selbst kommt hinein", raeume.darf_lesen("anna", _pa))
 
+# Lesen und Schreiben sind zweierlei. Vorher gab schreibbar() schlicht die
+# lesbaren Raeume zurueck -- damit durfte JEDER in den allgemeinen Raum
+# hochladen, den gemeinsamen Bestand, auf den sich alle verlassen.
+_pa = raeume.privat_kennung("anna")
+pruef("anna darf NICHT in den allgemeinen Raum schreiben",
+      raeume.ALLGEMEIN not in raeume.schreibbar("anna"))
+pruef("markus als Verwalter schon",
+      raeume.ALLGEMEIN in raeume.schreibbar("markus", True))
+pruef("anna darf in ihren eigenen", _pa in raeume.schreibbar("anna"))
+pruef("anna darf in einkauf -- sie ist Mitglied",
+      "einkauf" in raeume.schreibbar("anna"))
+pruef("markus darf in einkauf, obwohl kein Mitglied (Verwalter)",
+      "einkauf" in raeume.schreibbar("markus", True))
+pruef("markus darf NICHT in annas persoenlichen Raum -- auch als Verwalter",
+      _pa not in raeume.schreibbar("markus", True))
+pruef("und lesen darf er ihn auch nicht",
+      not raeume.darf_lesen("markus", _pa))
+pruef("darf_schreiben stimmt mit schreibbar ueberein",
+      raeume.darf_schreiben("anna", "einkauf")
+      and not raeume.darf_schreiben("anna", raeume.ALLGEMEIN))
+
+
 print("=== 3. Bestand fuellen (echte Sammlungen, Zufallsvektoren) ===")
 random.seed(4); DIM = 32
 def vek(): return [random.random() for _ in range(DIM)]

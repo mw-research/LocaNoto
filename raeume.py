@@ -322,14 +322,48 @@ def lesbar(benutzer):
     return sorted(erlaubt)
 
 
-def schreibbar(benutzer):
+def schreibbar(benutzer, ist_verwalter=False):
     """Raeume, in die dieser Nutzer ablegen darf.
 
-    Vorlaeufig gleich den lesbaren. Getrennt gehalten, weil die
-    Unterscheidung kommt, sobald ownCloud die Rechte liefert -- dort ist
-    Lesen und Schreiben zweierlei.
+    Lesen und Schreiben sind zweierlei, und bis hierher waren sie es
+    nicht: die Funktion gab die lesbaren Raeume zurueck. Damit durfte
+    JEDER Nutzer in den allgemeinen Raum hochladen -- er ist fuer alle
+    lesbar. Der gemeinsame Bestand ist aber das, worauf sich alle
+    verlassen; wer dort ablegen darf, bestimmt, was die Anlage als
+    gesichertes Wissen ausgibt.
+
+        allgemein   nur Verwalter. Der gemeinsame Bestand wird gepflegt,
+                    nicht befuellt.
+        ein Raum    seine Mitglieder. Ein Verwalter darf ebenfalls -- er
+                    richtet den Raum ein und muss ihn fuellen koennen.
+        persoenlich nur der Besitzer. Auch kein Verwalter: er darf den
+                    Raum als Ganzes loeschen (siehe darf_verwalten), aber
+                    nichts hineinlegen. Ein Dokument, das jemand nicht
+                    selbst abgelegt hat, in seinem persoenlichen Raum zu
+                    finden, waere das Gegenteil dessen, wofuer er da ist.
     """
-    return lesbar(benutzer)
+    eigener = privat_kennung(benutzer)
+    aus = set()
+    for kennung in lesbar(benutzer):
+        if ist_privat(kennung):
+            if kennung == eigener:
+                aus.add(kennung)
+        elif kennung == ALLGEMEIN:
+            if ist_verwalter:
+                aus.add(kennung)
+        else:
+            aus.add(kennung)
+    aus.add(eigener)
+    if ist_verwalter:
+        # Ein Verwalter kann in jeden benannten Raum ablegen, auch ohne
+        # dort Mitglied zu sein -- persoenliche Raeume bleiben aussen vor.
+        aus.update(k for k in liste() if not ist_privat(k))
+        aus.add(ALLGEMEIN)
+    return sorted(aus)
+
+
+def darf_schreiben(benutzer, kennung, ist_verwalter=False):
+    return kennung in schreibbar(benutzer, ist_verwalter)
 
 
 def darf_lesen(benutzer, kennung):
