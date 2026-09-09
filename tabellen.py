@@ -31,6 +31,7 @@ das Sprachmodell formuliert ein SELECT darauf. Geprueft wird es mit
 derselben Kette wie eine Abfrage an den SQL-Server (sqlpruefung.py). Es wird
 kein erzeugter Code ausgefuehrt.
 """
+import collections
 import json
 import os
 import re
@@ -139,6 +140,11 @@ BLAETTER_MAX = paths.env_int("TABELLEN_BLAETTER", 3)
 # nur Wartezeit.
 ROUTEN_AB = paths.env_int("TABELLEN_ROUTEN_AB", 6)
 
+# Wie viele Blaetter hoechstens Zeilen beisteuern duerfen -- die
+# gewaehlten und die, auf die dieselbe Abfrage zusaetzlich passt.
+# Eine Antwort aus zwanzig Blaettern ist keine Antwort mehr.
+WEITERE_BLAETTER = paths.env_int("TABELLEN_TREFFER_BLAETTER", 8)
+
 MAX_ZEILEN = paths.env_int("TABELLEN_MAX_ZEILEN", 200)
 
 # Von Hand gesetzte Kopfzeilen. Die Erkennung liegt meistens richtig --
@@ -151,7 +157,13 @@ KOPF_SUCHEN = paths.env_int("TABELLEN_KOPF_SUCHEN", 15)
 
 MARKER_KEINE_ABFRAGE = "KEINE_ABFRAGE"
 
-_zwischenspeicher = {}
+# Wie viele Blaetter im Arbeitsspeicher bleiben. Frueher war es
+# genau eines, und jede Frage an ein anderes Blatt las wieder von
+# der Platte -- bei 28 Blaettern kostete das 58 Sekunden je Runde.
+SPEICHER_BLAETTER = paths.env_int("TABELLEN_SPEICHER_BLAETTER", 60)
+
+# Geordnet, damit der aelteste Eintrag zuerst herausfaellt.
+_zwischenspeicher = collections.OrderedDict()
 
 
 # --- SPALTENNAMEN ---
@@ -646,43 +658,88 @@ def _unicode_funktionen(con):
 def _lade(datei, blatt):
     """Ein Blatt als SQLite-Verbindung im Arbeitsspeicher.
 
-    Zwischengespeichert ueber Aenderungsdatum und Groesse: solange die Datei
-    unveraendert ist, wird sie nicht erneut gelesen. Wird sie ersetzt --
-    ein neuer Export --, faellt der Eintrag weg und die naechste Frage sieht
-    die neuen Zeilen.
-    """
-    import pandas as pd
+    Zwischengespeichert ueber Aenderungsdatum und Groesse. Das ist die
+    Zusage, auf der das ganze Verfahren beruht: die Listen werden von den
+    Fachabteilungen auf einem Netzlaufwerk gepflegt, und wer dort Zeilen
+    ergaenzt und speichert, soll sie in der naechsten Frage sehen -- ohne
+    Einlesen, ohne Knopf. Aendert sich die Datei, aendert sich der
+    Schluessel, und der alte Eintrag gilt nicht mehr.
 
+    ZWEI AENDERUNGEN, beide aus derselben Messung:
+
+        ein Blatt kalt           0,81 s
+        dasselbe warm            0,00 s
+        alle 28 nacheinander    58    s
+
+    Erstens wurde bisher genau EIN Blatt gehalten -- _zwischenspeicher
+    wurde vor jedem Eintrag geleert. Die naechste Frage an ein anderes
+    Blatt las wieder von der Platte, und bei 28 Blaettern kostete jede
+    Runde von vorn. Jetzt bleiben bis zu SPEICHER_BLAETTER stehen, die
+    aeltesten fallen zuerst heraus.
+
+    Zweitens wurde je Blatt die GANZE Arbeitsmappe geparst und danach ein
+    Blatt daraus behalten. Die 28 Blaetter liegen aber in sieben Dateien;
+    eine davon fuehrt zwoelf. Wer nacheinander alle zwoelf fragte, parste
+    dieselbe Mappe zwoelfmal. Jetzt kommen beim ersten Zugriff auf eine
+    Mappe ALLE ihre Blaetter in den Speicher -- geparst wird sie ohnehin.
+
+    Nichts davon haelt eine Zeile laenger, als die Datei unveraendert ist.
+    """
     voll = os.path.join(pfad(), datei)
     if not os.path.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
-    kennung = (voll, blatt, os.path.getmtime(voll), os.path.getsize(voll))
-    if kennung in _zwischenspeicher:
-        return _zwischenspeicher[kennung]
+    stand = (voll, os.path.getmtime(voll), os.path.getsize(voll))
+    kennung = stand + (blatt,)
+    con = _zwischenspeicher.get(kennung)
+    if con is not None:
+        _zwischenspeicher.move_to_end(kennung)
+        return con
 
-    rahmen = None
-    for name, r, _ in _blaetter(voll):
-        if name == blatt or not blatt:
-            rahmen = r
-            break
-    if rahmen is None:
+    gefunden = None
+    for name, rahmen, _kopf in _blaetter(voll):
+        con = _als_tabelle(rahmen)
+        _merke(stand + (name,), con)
+        if name == blatt or (not blatt and gefunden is None):
+            gefunden = con
+        # Ohne Blattangabe meint der Aufrufer das erste. Die uebrigen
+        # kommen trotzdem in den Speicher: sie sind schon geparst.
+    if gefunden is None:
         raise ValueError(f"Blatt nicht gefunden: {blatt}")
+    return gefunden
 
-    vergeben = set()
-    namen = []
+
+def _als_tabelle(rahmen):
+    """Ein Rahmen als SQLite-Verbindung mit der Tabelle `daten`."""
+    vergeben, namen = set(), []
     for spalte in rahmen.columns:
         s = sicherer_name(spalte, vergeben)
         vergeben.add(s)
         namen.append(s)
     rahmen = rahmen.copy()
     rahmen.columns = namen
-
     con = sqlite3.connect(":memory:", check_same_thread=False)
     rahmen.to_sql("daten", con, index=False)
     _unicode_funktionen(con)
-    _zwischenspeicher.clear()          # nur das zuletzt benutzte Blatt halten
-    _zwischenspeicher[kennung] = con
     return con
+
+
+def _merke(kennung, con):
+    """Legt eine Verbindung ab und wirft die aeltesten heraus.
+
+    Die Grenze ist eine Zahl von Blaettern und keine Speichergroesse:
+    letztere liesse sich nur schaetzen, und eine falsche Schaetzung waere
+    entweder ein voller Arbeitsspeicher oder ein Zwischenspeicher, der
+    nichts behaelt. Ein Blatt mit 2.000 Zeilen und 14 Spalten liegt bei
+    wenigen Megabyte.
+    """
+    _zwischenspeicher[kennung] = con
+    _zwischenspeicher.move_to_end(kennung)
+    while len(_zwischenspeicher) > SPEICHER_BLAETTER:
+        _alt, alte_con = _zwischenspeicher.popitem(last=False)
+        try:
+            alte_con.close()
+        except Exception:
+            pass
 
 
 def fuehre_aus(datei, blatt, sql, max_zeilen=None):
@@ -833,25 +890,49 @@ def waehle_blaetter(client, modell, frage, eintraege, hoechstens=None,
     return gewaehlt
 
 
+def _schema_fehler(e):
+    """Passt die Abfrage nicht zu diesem Blatt? Dann kein Fehler, sondern
+    schlicht das falsche Blatt."""
+    t = str(e).lower()
+    return ("no such column" in t or "no such table" in t
+            or "has no column" in t)
+
+
 def abfragen(client, modell, frage, eintraege, verlauf="", hoechstens=None,
              max_zeilen=None, zeitlimit=60):
     """Eine Frage gegen die passenden Blaetter. Liste von Ergebnissen.
 
     Der ganze Ablauf an einer Stelle, damit Oberflaeche und Schnittstelle
     nicht zwei Auffassungen davon entwickeln, wie eine Listenfrage
-    beantwortet wird:
+    beantwortet wird.
 
         1. Bei wenigen Blaettern gar nicht routen -- der volle Katalog
            passt, und ein zweiter Modellaufruf waere nur Wartezeit.
-        2. Sonst mit dem Kurzkatalog waehlen, dann die vollen Angaben
-           NUR der gewaehlten Blaetter in den zweiten Prompt geben.
-        3. Jede Abfrage ausfuehren, Fehler je Blatt festhalten statt den
-           ganzen Lauf abzubrechen: ein unlesbares Blatt soll die
-           Ergebnisse der anderen nicht kosten.
+        2. Sonst mit dem Kurzkatalog waehlen, dann die vollen Angaben NUR
+           der gewaehlten Blaetter in den zweiten Prompt geben.
+        3. Die fertige Abfrage auf ALLE Blaetter anwenden, deren Spalten
+           dazu passen -- nicht nur auf die gewaehlten.
 
-    Rueckgabe: [{datei, blatt, sql, spalten, zeilen, grund}]. grund ist
-    gesetzt, wenn dieses eine Blatt nicht geklappt hat. Eine leere Liste
-    heisst, dass keine Liste zur Frage passt.
+    Schritt 3 ist der wichtige, und er kam aus einer Fehlanzeige: die
+    Frage nach Saegeblaettern lieferte nichts, obwohl 18 Zeilen in sechs
+    Blaettern standen. Das Modell hatte ein Blatt gewaehlt, in dem keines
+    lag -- und es konnte nicht anders. Alle 28 Blaetter fuehren dieselben
+    Spalten: bezeichnung, menge, lagerort. Welches Blatt ein Saegeblatt
+    fuehrt, steht im INHALT, und den sieht der Katalog nicht. Eine Wahl
+    nach Kopfzeilen ist dort kein schwaches Verfahren, sondern gar keines.
+
+    Die Abfrage einfach auf alle anzuwenden beantwortet das, ohne es
+    raten zu muessen. Bezahlbar ist es, seit die Blaetter im
+    Arbeitsspeicher bleiben: gemessen 0,03 s fuer 28 Blaetter, wenn sie
+    warm sind, und 8,9 s beim ersten Mal.
+
+    Blaetter, deren Spalten nicht passen, fallen dabei still heraus --
+    "no such column" ist hier keine Stoerung, sondern die Antwort "dieses
+    Blatt fuehrt das nicht".
+
+    Rueckgabe: [{datei, blatt, sql, spalten, zeilen, grund, gewaehlt}].
+    grund ist gesetzt, wenn dieses eine Blatt nicht ging. Eine leere
+    Liste heisst, dass keine Liste zur Frage passt.
     """
     hoechstens = hoechstens or BLAETTER_MAX
     if not eintraege:
@@ -874,21 +955,49 @@ def abfragen(client, modell, frage, eintraege, verlauf="", hoechstens=None,
 
     paare = formuliere_viele(client, modell, frage, auswahl, verlauf,
                              hoechstens, zeitlimit)
-    aus = []
+    if not paare:
+        return []
+
+    aus, erledigt = [], set()
     for datei, blatt, sql in paare:
-        if _passendes(auswahl, datei, blatt) is None:
+        e = _passendes(auswahl, datei, blatt)
+        if e is None:
             # Ein Blatt, das nicht zur Auswahl gehoert. Das Modell hat den
             # Namen erfunden oder verstuemmelt gelesen -- nicht ausfuehren.
             aus.append({"datei": datei, "blatt": blatt, "sql": sql,
-                        "spalten": [], "zeilen": [],
+                        "spalten": [], "zeilen": [], "gewaehlt": True,
                         "grund": "Dieses Blatt steht nicht im Katalog."})
             continue
-        try:
-            spalten, zeilen = fuehre_aus(datei, blatt, sql, max_zeilen)
-            aus.append({"datei": datei, "blatt": blatt, "sql": sql,
-                        "spalten": spalten, "zeilen": zeilen, "grund": ""})
-        except Exception as e:
-            aus.append({"datei": datei, "blatt": blatt, "sql": sql,
-                        "spalten": [], "zeilen": [],
-                        "grund": f"{type(e).__name__}: {e}"})
+        erledigt.add((e["datei"], e.get("blatt") or ""))
+        aus.append(_ausfuehren(e, sql, max_zeilen, gewaehlt=True))
+
+    # Dieselbe Abfrage auf die uebrigen Blaetter. Nur die mit Zeilen
+    # kommen dazu: ein leeres Ergebnis aus einem Blatt, das niemand
+    # gewaehlt hat, ist keine Auskunft, sondern Rauschen.
+    for e in eintraege:
+        if (e["datei"], e.get("blatt") or "") in erledigt:
+            continue
+        if len([x for x in aus if x["zeilen"]]) >= WEITERE_BLAETTER:
+            break
+        for _datei, _blatt, sql in paare[:1]:
+            t = _ausfuehren(e, sql, max_zeilen, gewaehlt=False)
+            if t["zeilen"]:
+                aus.append(t)
     return aus
+
+
+def _ausfuehren(eintrag, sql, max_zeilen, gewaehlt):
+    """Eine Abfrage gegen ein Blatt. Immer ein Ergebnis, nie eine Ausnahme."""
+    datei, blatt = eintrag["datei"], eintrag.get("blatt") or ""
+    fertig = {"datei": datei, "blatt": blatt, "sql": sql,
+              "spalten": [], "zeilen": [], "grund": "", "gewaehlt": gewaehlt}
+    try:
+        fertig["spalten"], fertig["zeilen"] = fuehre_aus(
+            datei, blatt, sql, max_zeilen)
+    except Exception as e:
+        if _schema_fehler(e) and not gewaehlt:
+            # Das Blatt fuehrt diese Spalten nicht. Kein Fehler, sondern
+            # die Auskunft, dass es nicht gemeint war.
+            return fertig
+        fertig["grund"] = f"{type(e).__name__}: {e}"
+    return fertig
