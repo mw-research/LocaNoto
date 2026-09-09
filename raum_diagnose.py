@@ -9,6 +9,11 @@ Raumrechte -> Sammlung -> Metadaten -> Stichwortindex -> Filter.
 Gibt Struktur aus, keine Dokumentinhalte.
 """
 import sys
+import warnings
+
+# openpyxl meldet zu jeder Arbeitsmappe mit Druckbereich
+# eine Warnung -- hier nur Rauschen vor dem Ergebnis.
+warnings.filterwarnings("ignore")
 
 import keyword_index
 import paths

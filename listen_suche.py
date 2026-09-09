@@ -14,6 +14,11 @@ import collections
 import re
 import sys
 import unicodedata
+import warnings
+
+# openpyxl meldet zu jeder Arbeitsmappe mit Druckbereich eine Warnung.
+# Bei 28 Blaettern sind das mehr Zeilen als Ergebnis.
+warnings.filterwarnings("ignore")
 
 import paths
 import tabellen
@@ -45,8 +50,11 @@ print()
 
 eintraege = tabellen.lies_katalog().get("eintraege") or []
 gesamt = 0
-for e in eintraege:
+print(f"{len(eintraege)} Blaetter -- jedes wird aus der Datei gelesen, "
+      f"das dauert.")
+for nr, e in enumerate(eintraege, 1):
     kennung = e["datei"] + (f"#{e['blatt']}" if e["blatt"] else "")
+    print(f"  [{nr}/{len(eintraege)}] {kennung}", flush=True)
     try:
         con = tabellen._lade(e["datei"], e.get("blatt"))
     except Exception as ex:
@@ -71,10 +79,9 @@ for e in eintraege:
                     schreibweisen[w] += 1
         if treffer:
             gesamt += treffer
-            print(f"  {kennung}")
-            print(f"     Spalte '{s}': {treffer} Zeilen")
+            print(f"     >>> Spalte '{s}': {treffer} Zeilen")
             for w, n in schreibweisen.most_common(6):
-                print(f"        {n:>5}x  {w}")
+                print(f"           {n:>5}x  {w}")
 
 print()
 if not gesamt:
