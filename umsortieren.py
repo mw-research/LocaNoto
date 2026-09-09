@@ -132,8 +132,12 @@ def main():
     gelesen = 0
 
     while gelesen < gesamt:
-        batch = alt.get(include=["documents", "metadatas", "embeddings"],
-                        limit=STAPEL, offset=gelesen)
+        # store.hole: Chroma kann den Vektorleser einer Sammlung nicht
+        # aufbauen, solange das Segment noch nicht abgelegt ist. Hier
+        # waere das ein Abbruch mitten in der Umsortierung.
+        batch = store.hole(alt, paths.COLLECTION_NAME,
+                           include=["documents", "metadatas", "embeddings"],
+                           limit=STAPEL, offset=gelesen)
         ids = batch.get("ids") or []
         if not ids:
             break

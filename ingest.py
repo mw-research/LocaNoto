@@ -102,21 +102,35 @@ def fremde_dateien(eigener_raum):
 
 
 def fremde_ordner(wurzel, eigener_raum):
-    """Verzeichnisse, die einem anderen Raum als Zwischenspeicher dienen.
+    """Verzeichnisse, die einem anderen Raum gehoeren.
 
-    owncloud.ablage() legt je Raum einen Unterordner unter data/dokumente
-    an. Laeuft der Ingest ohne INGEST_ORDNER ueber alles, gehoeren die
-    Ordner der ANDEREN Raeume nicht dazu -- abgeglichen werden sie von
-    abgleich.py, das Raum und Ordner passend setzt.
+    Je Raum liegt ein Unterordner unter data/dokumente -- angelegt von
+    owncloud.ablage() beim Abgleich und von der Oberflaeche beim Upload.
+    Laeuft der Ingest ohne INGEST_ORDNER ueber alles, gehoeren die Ordner
+    der ANDEREN Raeume nicht dazu; eingelesen werden sie mit passendem
+    INGEST_RAUM, beim Abgleich durch abgleich.py.
+
+    Ausgangspunkt ist die Raumliste und nicht mehr allein die
+    ownCloud-Zuordnung. Ein Raum ohne ownCloud-Ordner hat trotzdem einen
+    Ablageordner, sobald jemand etwas hineinlaedt -- und der lag vorher
+    offen: der allgemeine Ingest ging hinein und vektorisierte die
+    Dokumente eines fremden Raums nach raum_allgemein.
     """
     aus = set()
+    for raum in raeume.liste():
+        if raum == eigener_raum:
+            continue
+        aus.add(os.path.normpath(paths.raum_ordner(raum)))
     try:
+        # Auch Zuordnungen zu Raeumen, die es in der Verwaltung nicht mehr
+        # gibt: ihr Ordner steht noch da und gehoert weiterhin nicht
+        # hierher. Nicht ueber ablage() -- die legt den Ordner an, und
+        # Anlegen ist nicht die Aufgabe einer Abfrage.
         import owncloud
         for raum in owncloud.zuordnung():
             if raum == eigener_raum:
                 continue
-            aus.add(os.path.normpath(
-                os.path.join(paths.DOCS_DIR, paths.sicherer_teil(raum))))
+            aus.add(os.path.normpath(paths.raum_ordner(raum)))
     except Exception:
         pass
     return aus

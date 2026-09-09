@@ -12,7 +12,7 @@ Rueckmeldungen und der Abzug samt Einspielen.
 
     docker compose run --rm locanoto_bot python selbsttest.py
 """
-import os, random, shutil, sys, tempfile, types
+import json, os, random, shutil, sys, tempfile, types
 
 # --- ISOLATION ERZWINGEN ---
 #
@@ -88,6 +88,28 @@ pruef("markus sieht einkauf NICHT", "einkauf" not in raeume.lesbar("markus"))
 pruef("beide sehen allgemein",
       raeume.ALLGEMEIN in raeume.lesbar("markus") and raeume.ALLGEMEIN in raeume.lesbar("anna"))
 
+# Ein persoenlicher Raum hat genau einen Leser. Vier Wege machten daraus
+# einen geteilten -- ohne dass die Besitzerin es erfuhr.
+_pa = raeume.privat_kennung("anna")
+pruef("Raum mit Vorsilbe 'privat_' wird abgewiesen",
+      not raeume.anlegen("privat_bob", "Privat Bob", "", ["markus"])[0])
+pruef("und ist danach nicht angelegt", "privat_bob" not in raeume.liste())
+pruef("Mitglieder eines persoenlichen Raums lassen sich nicht setzen",
+      not raeume.mitglieder_setzen(_pa, ["markus", "anna"])[0])
+pruef("auch nicht 'alle'", not raeume.fuer_alle_oeffnen(_pa)[0])
+pruef("und keine Gruppe", not raeume.gruppe_setzen(_pa, "Einkauf")[0])
+pruef("markus sieht annas Raum weiterhin NICHT",
+      _pa not in raeume.lesbar("markus"))
+# Der Riegel, der auch ohne die vier haelt: eine von Hand eingetragene
+# Mitgliedschaft wirkt nicht.
+_daten = raeume._lade()
+_daten["raeume"].setdefault(_pa, {})["mitglieder"] = ["anna", "markus", "*"]
+raeume._speichere(_daten)
+pruef("von Hand eingetragene Mitglieder wirken nicht",
+      _pa not in raeume.lesbar("markus")
+      and not raeume.darf_lesen("markus", _pa))
+pruef("anna selbst kommt hinein", raeume.darf_lesen("anna", _pa))
+
 print("=== 3. Bestand fuellen (echte Sammlungen, Zufallsvektoren) ===")
 random.seed(4); DIM = 32
 def vek(): return [random.random() for _ in range(DIM)]
@@ -157,6 +179,129 @@ for raum in list(BESTAND):
     store.loesche(raeume.sammlung(raum))
 z = sicherung.hole_zurueck(b["name"])
 pruef("Einspielen ohne Modell", sum(z["raeume"].values()) == 3, z["raeume"])
+
+print("=== 7. Ablage: gleicher Dateiname in zwei Raeumen ===")
+# Der Fund, der das ausloeste: jeder Upload ging nach data/dokumente,
+# gleich in welchen Raum seine Abschnitte gingen, und finde_dokument
+# suchte allein nach dem Dateinamen. Zwei Raeume durften dieselbe
+# 'Angebot.pdf' haben -- und die Quellenansicht zeigte zu einem Treffer
+# im eigenen Raum die Seite aus dem Dokument eines anderen.
+os.makedirs(paths.DOCS_DIR, exist_ok=True)
+_wurzel_datei = os.path.join(paths.DOCS_DIR, "Angebot.pdf")
+open(_wurzel_datei, "wb").write(b"AUS DEM WURZELBEREICH")
+_ek_ordner = paths.raum_ordner("einkauf")
+os.makedirs(_ek_ordner, exist_ok=True)
+_ek_datei = os.path.join(_ek_ordner, "Angebot.pdf")
+open(_ek_datei, "wb").write(b"AUS DEM EINKAUF")
+
+_fremd = lambda eigen: [paths.raum_ordner(k) for k in raeume.liste()
+                        if k != eigen]
+_gefunden = paths.finde_dokument(
+    "Angebot.pdf", bevorzugt=paths.raum_ordner("einkauf"),
+    ausser=_fremd("einkauf"))
+pruef("einkauf findet SEINE Datei",
+      _gefunden and open(_gefunden, "rb").read() == b"AUS DEM EINKAUF")
+_gefunden = paths.finde_dokument(
+    "Angebot.pdf",
+    bevorzugt=paths.raum_ordner(raeume.privat_kennung("anna")),
+    ausser=_fremd(raeume.privat_kennung("anna")))
+pruef("anna bekommt NICHT die Datei des Einkaufs",
+      _gefunden and open(_gefunden, "rb").read() == b"AUS DEM WURZELBEREICH")
+
+# Der scharfe Fall: die Datei liegt NUR im Ordner des Einkaufs. Vorher
+# fand os.walk sie fuer jeden, der nach dem Namen fragte.
+open(os.path.join(_ek_ordner, "Preisliste.pdf"), "wb").write(b"NUR EINKAUF")
+pruef("Datei allein im fremden Raumordner ist unerreichbar",
+      paths.finde_dokument(
+          "Preisliste.pdf",
+          bevorzugt=paths.raum_ordner(raeume.privat_kennung("anna")),
+          ausser=_fremd(raeume.privat_kennung("anna"))) is None)
+pruef("und ohne die Sperre waere sie es nicht",
+      paths.finde_dokument("Preisliste.pdf") is not None)
+
+pruef("freier Name statt Ueberschreiben",
+      os.path.basename(paths.freier_name(paths.DOCS_DIR, "Angebot.pdf"))
+      == "Angebot (2).pdf")
+for _boese in ("../../etc/passwd", "..\\..\\config\\schluessel.key"):
+    _s = paths.sicherer_dateiname(_boese)
+    pruef(f"Pfadangabe entschaerft: {_boese}",
+          ".." not in _s and "/" not in _s and "\\" not in _s, _s)
+pruef("Umlaute im Dateinamen bleiben",
+      paths.sicherer_dateiname("Übersicht Kabel.pdf")
+      == "Übersicht Kabel.pdf")
+
+print("=== 8. Rueckmeldungen ohne fremde Dateinamen ===")
+# Das Protokoll ist eine Verwalterliste -- angezeigt und im Klartext
+# herunterladbar. Die Dateinamen aus persoenlichen Raeumen standen darin.
+_q = pipeline.quellen([
+    {"text": "geheim", "meta": {"file_name": "Kuendigung.pdf", "page": 3,
+                                "raum": raeume.privat_kennung("anna")}},
+    {"text": "offen", "meta": {"file_name": "Handbuch.pdf", "page": 7,
+                               "raum": raeume.ALLGEMEIN}}])
+pruef("Quellen fuehren den Raum", all("raum" in e for e in _q))
+feedback.notiere("daumen_runter", "anna", "Frage zur Kuendigung", quellen=_q)
+_klar = feedback.als_text().decode("utf-8")
+pruef("privater Dateiname nicht im Protokoll",
+      "Kuendigung.pdf" not in _klar)
+pruef("Kennung des persoenlichen Raums nicht im Protokoll",
+      raeume.privat_kennung("anna") not in _klar)
+pruef("gemeinsamer Dateiname bleibt", "Handbuch.pdf" in _klar)
+pruef("und nichts davon liegt im Klartext auf der Platte",
+      b"Kuendigung" not in open(feedback.DATEI, "rb").read())
+
+sicherung.BEHALTEN = 2
+print("=== 9. Ein unvollstaendiger Abzug sieht nicht wie ein guter aus ===")
+# Der Fund, der das ausloeste: Chroma legt das Vektorsegment einer
+# Sammlung verzoegert ab und kann den Leser dann nicht aufbauen
+# ("Nothing found on disk"). In zwei von vierzig Laeufen dieses Tests
+# kostete das einen ganzen Raum -- der Abzug wurde geschrieben, sah von
+# aussen brauchbar aus und hatte den allgemeinen Raum nicht.
+_echt_lesen = sicherung._lies_raum
+
+
+def _immer_kaputt(kennung, sml, gesamt, fortschritt=None, versuche=4):
+    if kennung == raeume.ALLGEMEIN:
+        raise RuntimeError("Error creating hnsw segment reader: "
+                           "Nothing found on disk")
+    return _echt_lesen(kennung, sml, gesamt, fortschritt, versuche)
+
+
+def _einmal_kaputt(kennung, sml, gesamt, fortschritt=None, versuche=4):
+    """Scheitert beim ERSTEN Zugriff je Raum -- genau wie Chroma es tut."""
+    _zaehler = {"n": 0}
+
+    def wackelig(*a, **k):
+        _zaehler["n"] += 1
+        if _zaehler["n"] == 1:
+            raise RuntimeError("Error creating hnsw segment reader: "
+                               "Nothing found on disk")
+        return sml.get(*a, **k)
+    ersatz = type("S", (), {"get": staticmethod(wackelig),
+                            "count": staticmethod(lambda: gesamt)})()
+    return _echt_lesen(kennung, ersatz, gesamt, fortschritt, versuche)
+
+
+sicherung._lies_raum = _einmal_kaputt
+_nach = sicherung.sichere()
+sicherung._lies_raum = _echt_lesen
+pruef("einmaliger Lesefehler kostet keinen Raum",
+      not _nach["fehler"] and len(_nach["raeume"]) == 3,
+      f"{sorted(_nach['raeume'])} {str(_nach['fehler'])[:60]}")
+
+sicherung._lies_raum = _immer_kaputt
+_schlecht = sicherung.sichere()
+sicherung._lies_raum = _echt_lesen
+pruef("dauerhafter Lesefehler wird als unvollstaendig vermerkt",
+      _schlecht["vollstaendig"] is False)
+pruef("und der Vermerk steht IM Abzug",
+      json.load(open(os.path.join(sicherung.ORDNER, _schlecht["name"],
+                                  "stand.json"),
+                     encoding="utf-8")).get("vollstaendig") is False)
+pruef("Einspielen sagt es vorher",
+      sicherung.hole_zurueck(_schlecht["name"]).get("unvollstaendig"))
+pruef("ein vollstaendiger Abzug bleibt beim Aufraeumen stehen",
+      [n for n, _p, _g, s in sicherung.liste()
+       if s.get("vollstaendig") and not s.get("fehler")])
 
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
