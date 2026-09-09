@@ -7,6 +7,11 @@ darf weitergegeben werden.
     docker compose exec -T locanoto_bot python /app/listen_diagnose.py "Deine Frage"
 """
 import sys
+import warnings
+
+# openpyxl meldet zu jeder Arbeitsmappe mit Druckbereich
+# eine Warnung -- hier nur Rauschen vor dem Ergebnis.
+warnings.filterwarnings("ignore")
 
 import llm
 import paths
