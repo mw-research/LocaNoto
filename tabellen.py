@@ -127,6 +127,18 @@ BEISPIELE_BIS = paths.env_int("TABELLEN_BEISPIELE_BIS", 25)
 # wuerde sonst den Platz fuellen, der fuer die Dokumente gebraucht wird.
 KATALOG_MAX_CHARS = paths.env_int("TABELLEN_KATALOG_MAX_CHARS", 12_000)
 
+# Wie viele Blaetter eine Frage hoechstens abfragt. Eine Frage wie "welche
+# Saegeblaetter gibt es" gilt bei einem gewachsenen Ordner mehreren
+# Blaettern zugleich -- ein Jahrgang je Blatt, ein Standort je Datei. Ein
+# einziges Blatt zu waehlen beantwortet sie halb.
+BLAETTER_MAX = paths.env_int("TABELLEN_BLAETTER", 3)
+
+# Ab wie vielen Blaettern in zwei Schritten gearbeitet wird: erst waehlen,
+# dann abfragen. Darunter bleibt es beim einen Aufruf -- bei fuenf
+# Blaettern passt der volle Katalog bequem, und ein zweiter Aufruf waere
+# nur Wartezeit.
+ROUTEN_AB = paths.env_int("TABELLEN_ROUTEN_AB", 6)
+
 MAX_ZEILEN = paths.env_int("TABELLEN_MAX_ZEILEN", 200)
 
 # Von Hand gesetzte Kopfzeilen. Die Erkennung liegt meistens richtig --
@@ -500,6 +512,63 @@ def als_text(eintraege):
     return text
 
 
+def als_kurztext(eintraege):
+    """Der Katalog nur mit Kopfzeilen -- fuer die Wahl des Blattes.
+
+    Zum Routen braucht es die Header und sonst nichts. Die Beispielwerte
+    sind fuer das Formulieren des WHERE da, nicht fuer die Frage "welches
+    Blatt". Sie machen aber den Grossteil des Katalogs aus: gemessen an 26
+    Blaettern mit je 20 Spalten sind es 44.500 Zeichen mit Werten und
+    7.165 ohne. Das entscheidet darueber, ob ein gewachsener Listenordner
+    ueberhaupt noch in einen Prompt passt.
+    """
+    zeilen = []
+    for e in eintraege:
+        kennung = e["datei"] + (f"#{e['blatt']}" if e["blatt"] else "")
+        zeilen.append(f'BLATT {kennung}  ({e["zeilen"]} Zeilen)')
+        zeilen.append("  " + ", ".join(s["feld"] for s in e["spalten"]))
+    return chr(10).join(zeilen)
+
+
+def zerlege_viele(antwort, hoechstens=None):
+    """Alle BLATT/SQL-Paare einer Antwort. [(datei, blatt, sql)].
+
+    Getrennt wird an den BLATT-Zeilen. zerlege() nimmt nur das erste Paar
+    -- fuer den Fall, dass ein Modell mehr liefert als gefragt, waere das
+    ein stiller Verlust.
+    """
+    stellen = [m.start() for m in re.finditer(r"^\s*BLATT:", antwort,
+                                              re.M | re.I)]
+    aus = []
+    for i, start in enumerate(stellen):
+        ende = stellen[i + 1] if i + 1 < len(stellen) else len(antwort)
+        datei, blatt, sql = zerlege(antwort[start:ende])
+        if datei and sql:
+            aus.append((datei, blatt, sql))
+    if hoechstens:
+        aus = aus[:hoechstens]
+    return aus
+
+
+def _passendes(eintraege, datei, blatt):
+    """Der Katalogeintrag zu einer Blattangabe des Modells. None, wenn
+    es sie nicht gibt.
+
+    Ein erfundener oder verstuemmelter Name darf nicht bis zum Laden
+    durchkommen -- dort waere er ein Dateifehler statt einer klaren
+    Auskunft, dass das Modell danebengegriffen hat.
+    """
+    for e in eintraege:
+        if e["datei"] == datei and (e.get("blatt") or "") == (blatt or ""):
+            return e
+    # Ohne Blattangabe: das erste Blatt dieser Datei.
+    if not blatt:
+        for e in eintraege:
+            if e["datei"] == datei:
+                return e
+    return None
+
+
 # --- DATEN LADEN UND ABFRAGEN ---
 
 def _lade(datei, blatt):
@@ -560,21 +629,61 @@ def fuehre_aus(datei, blatt, sql, max_zeilen=None):
     return spalten, cur.fetchmany(max_zeilen)
 
 
+MEHRERE_HINWEIS = (
+    "Passt die Frage zu MEHREREN der unten stehenden Blaetter -- etwa weil "
+    "sie ohne Jahr oder ohne Standort gestellt ist und mehrere Blaetter "
+    "denselben Inhalt fuer verschiedene Jahre oder Orte fuehren --, gib "
+    "fuer jedes ein eigenes Paar aus: BLATT-Zeile, dann SQL-Zeile, "
+    "hoechstens {N} Paare und nichts dazwischen. Jede Abfrage laeuft "
+    "gegen ihr eigenes Blatt, dieselbe Frage auf zwei Jahrgaenge ergibt "
+    "also zwei Paare mit derselben Struktur. Passt nur eines, gib nur "
+    "eines aus.")
+
+
+def _sql_prompt(frage, katalogtext, verlauf, hoechstens):
+    with open(paths.resolve_prompt("tabellen_prompt.txt"),
+              "r", encoding="utf-8") as f:
+        vorlage = f.read()
+    mehrere = (MEHRERE_HINWEIS.replace("{N}", str(hoechstens))
+               if hoechstens and hoechstens > 1 else "")
+    return (vorlage
+            .replace("{MEHRERE}", mehrere)
+            .replace("{KATALOG}", katalogtext)
+            .replace("{HISTORY}", verlauf)
+            .replace("{FRAGE}", frage)
+            .replace("{MARKER}", MARKER_KEINE_ABFRAGE))
+
+
+def formuliere_viele(client, modell, frage, eintraege, verlauf="",
+                     hoechstens=None, zeitlimit=60):
+    """Blatt und Abfrage fuer MEHRERE Blaetter. [(datei, blatt, sql)].
+
+    Der zweite von zwei Schritten. Der Katalog enthaelt hier nur noch die
+    vorher gewaehlten Blaetter -- dafuer mit allen Spalten und
+    Beispielwerten, die das Formulieren des WHERE braucht.
+
+    Leere Liste heisst: das Modell sieht keine beantwortbare Frage.
+    """
+    hoechstens = hoechstens or BLAETTER_MAX
+    prompt = _sql_prompt(frage, als_text(eintraege), verlauf, hoechstens)
+    roh = (client.chat.completions.create(
+        model=modell,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        timeout=zeitlimit,
+    ).choices[0].message.content or "")
+    if MARKER_KEINE_ABFRAGE in roh.upper():
+        return []
+    return zerlege_viele(roh, hoechstens)
+
+
 def formuliere(client, modell, frage, katalogtext, verlauf="", zeitlimit=60):
     """Laesst das Modell Blatt und Abfrage waehlen.
 
     Rueckgabe: (datei, blatt, sql) oder (None, None, "") wenn die Frage sich
     nicht aus den Listen beantworten laesst.
     """
-    with open(paths.resolve_prompt("tabellen_prompt.txt"),
-              "r", encoding="utf-8") as f:
-        vorlage = f.read()
-
-    prompt = (vorlage
-              .replace("{KATALOG}", katalogtext)
-              .replace("{HISTORY}", verlauf)
-              .replace("{FRAGE}", frage)
-              .replace("{MARKER}", MARKER_KEINE_ABFRAGE))
+    prompt = _sql_prompt(frage, katalogtext, verlauf, hoechstens=1)
 
     roh = (client.chat.completions.create(
         model=modell,
@@ -603,3 +712,110 @@ def zerlege(antwort):
     if not datei or not sql:
         return None, None, ""
     return datei, blatt, sql
+
+
+def waehle_blaetter(client, modell, frage, eintraege, hoechstens=None,
+                    zeitlimit=45):
+    """Welche Blaetter kommen fuer diese Frage in Frage? Liste von Eintraegen.
+
+    Der erste von zwei Schritten. Gefragt wird mit dem Kurzkatalog --
+    Kopfzeilen und sonst nichts. Das ist nicht nur billiger, es ist auch
+    die bessere Frage: welches Blatt gemeint ist, entscheiden die
+    Spaltennamen, nicht die Beispielwerte.
+
+    Leere Liste heisst: kein Blatt passt. Das ist etwas anderes als ein
+    Fehlschlag -- bei einem Fehler wird auf ALLE Blaetter zurueckgefallen,
+    damit ein hakender Modellserver nicht wie "keine Liste passt"
+    aussieht.
+    """
+    hoechstens = hoechstens or BLAETTER_MAX
+    with open(paths.resolve_prompt("tabellen_wahl_prompt.txt"),
+              "r", encoding="utf-8") as f:
+        vorlage = f.read()
+    prompt = (vorlage
+              .replace("{KATALOG}", als_kurztext(eintraege))
+              .replace("{HOECHSTENS}", str(hoechstens))
+              .replace("{MARKER}", MARKER_KEINE_ABFRAGE)
+              .replace("{FRAGE}", frage))
+
+    roh = (client.chat.completions.create(
+        model=modell,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        timeout=zeitlimit,
+    ).choices[0].message.content or "")
+
+    if MARKER_KEINE_ABFRAGE in roh.upper():
+        return []
+
+    gewaehlt = []
+    for m in re.finditer(r"^\s*BLATT:\s*(.+)$", roh, re.M | re.I):
+        kennung = m.group(1).strip().strip("`")
+        datei, _, blatt = kennung.partition("#")
+        e = _passendes(eintraege, datei.strip(), blatt.strip())
+        if e is not None and e not in gewaehlt:
+            gewaehlt.append(e)
+        if len(gewaehlt) >= hoechstens:
+            break
+    return gewaehlt
+
+
+def abfragen(client, modell, frage, eintraege, verlauf="", hoechstens=None,
+             max_zeilen=None, zeitlimit=60):
+    """Eine Frage gegen die passenden Blaetter. Liste von Ergebnissen.
+
+    Der ganze Ablauf an einer Stelle, damit Oberflaeche und Schnittstelle
+    nicht zwei Auffassungen davon entwickeln, wie eine Listenfrage
+    beantwortet wird:
+
+        1. Bei wenigen Blaettern gar nicht routen -- der volle Katalog
+           passt, und ein zweiter Modellaufruf waere nur Wartezeit.
+        2. Sonst mit dem Kurzkatalog waehlen, dann die vollen Angaben
+           NUR der gewaehlten Blaetter in den zweiten Prompt geben.
+        3. Jede Abfrage ausfuehren, Fehler je Blatt festhalten statt den
+           ganzen Lauf abzubrechen: ein unlesbares Blatt soll die
+           Ergebnisse der anderen nicht kosten.
+
+    Rueckgabe: [{datei, blatt, sql, spalten, zeilen, grund}]. grund ist
+    gesetzt, wenn dieses eine Blatt nicht geklappt hat. Eine leere Liste
+    heisst, dass keine Liste zur Frage passt.
+    """
+    hoechstens = hoechstens or BLAETTER_MAX
+    if not eintraege:
+        return []
+
+    if len(eintraege) < ROUTEN_AB:
+        auswahl = list(eintraege)
+    else:
+        try:
+            auswahl = waehle_blaetter(client, modell, frage, eintraege,
+                                      hoechstens, zeitlimit)
+        except Exception:
+            # Der Modellserver hat nicht geantwortet. Mit allen Blaettern
+            # weiterzumachen ist teurer, aber ehrlicher als so zu tun, als
+            # passe keine Liste.
+            auswahl = list(eintraege)
+        else:
+            if not auswahl:
+                return []
+
+    paare = formuliere_viele(client, modell, frage, auswahl, verlauf,
+                             hoechstens, zeitlimit)
+    aus = []
+    for datei, blatt, sql in paare:
+        if _passendes(auswahl, datei, blatt) is None:
+            # Ein Blatt, das nicht zur Auswahl gehoert. Das Modell hat den
+            # Namen erfunden oder verstuemmelt gelesen -- nicht ausfuehren.
+            aus.append({"datei": datei, "blatt": blatt, "sql": sql,
+                        "spalten": [], "zeilen": [],
+                        "grund": "Dieses Blatt steht nicht im Katalog."})
+            continue
+        try:
+            spalten, zeilen = fuehre_aus(datei, blatt, sql, max_zeilen)
+            aus.append({"datei": datei, "blatt": blatt, "sql": sql,
+                        "spalten": spalten, "zeilen": zeilen, "grund": ""})
+        except Exception as e:
+            aus.append({"datei": datei, "blatt": blatt, "sql": sql,
+                        "spalten": [], "zeilen": [],
+                        "grund": f"{type(e).__name__}: {e}"})
+    return aus

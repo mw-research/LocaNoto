@@ -2722,47 +2722,62 @@ if _bestand > 0:
                 # Erst entscheiden, WO die Antwort stehen koennte, dann dort
                 # gezielt nachsehen -- dasselbe Vorgehen wie bei einer
                 # Datenbank. Ausgefuehrt wird kein erzeugter Code, sondern
-                # eine gepruefte SELECT-Anweisung gegen das eine gewaehlte
-                # Blatt.
+                # je Blatt eine gepruefte SELECT-Anweisung.
                 if tabellen_aktiv and _eintraege:
                     auswahl = [e for e in _eintraege
                                if (tabellen_gross or not e.get("gross"))
                                and tabellen.im_bereich(e, tabellen_bereiche)]
                     if auswahl:
+                        # Mehrere Blaetter statt eines. Eine Frage wie
+                        # "welche Saegeblaetter gibt es" gilt bei einem
+                        # gewachsenen Listenordner mehreren Blaettern
+                        # zugleich -- ein Jahrgang je Blatt, ein Standort
+                        # je Datei. Ein einziges zu waehlen beantwortet
+                        # sie halb, und man sieht es der Antwort nicht an.
+                        _erg, _grund = [], ""
                         with st.spinner("Suche in den Listen ..."):
-                            t_datei = t_blatt = t_ergebnis = ""
-                            t_sql = t_grund = ""
                             try:
-                                t_datei, t_blatt, t_sql = tabellen.formuliere(
+                                _erg = tabellen.abfragen(
                                     chat_client, chat_model, user_query,
-                                    tabellen.als_text(auswahl), verlauf)
-                                if not t_sql:
-                                    t_grund = ("Keine der Listen passt zu "
-                                               "dieser Frage.")
+                                    auswahl, verlauf)
+                                if not _erg:
+                                    _grund = ("Keine der Listen passt zu "
+                                              "dieser Frage.")
                             except Exception as e:
-                                t_grund = f"Abfrage nicht erzeugt: {e}"
+                                _grund = f"Abfrage nicht erzeugt: {e}"
 
-                            if t_sql:
-                                try:
-                                    sp, ze = tabellen.fuehre_aus(
-                                        t_datei, t_blatt, t_sql)
-                                    t_ergebnis = sqlpruefung.als_tabelle(sp, ze)
-                                except ValueError as e:
-                                    t_grund = str(e)
-                                except Exception as e:
-                                    t_grund = f"Liste nicht lesbar: {e}"
-
-                        if t_ergebnis:
-                            quelle = t_datei + (f"#{t_blatt}" if t_blatt else "")
+                        _mit = 0
+                        for _t in _erg:
+                            quelle = _t["datei"] + (f"#{_t['blatt']}"
+                                                    if _t["blatt"] else "")
+                            if _t["grund"]:
+                                st.caption("\U0001f4ca *" + quelle + ": "
+                                           + _t["grund"] + "*")
+                                continue
+                            if not _t["zeilen"]:
+                                # Kein Treffer ist eine Auskunft, aber
+                                # keine, die in den Kontext gehoert: eine
+                                # leere Tabelle im Prompt liest sich fuer
+                                # das Modell wie ein Beleg fuer "gibt es
+                                # nicht".
+                                st.caption("\U0001f4ca *" + quelle
+                                           + ": keine passende Zeile.*")
+                                continue
+                            _mit += 1
+                            _tab = sqlpruefung.als_tabelle(_t["spalten"],
+                                                           _t["zeilen"])
                             bloecke += [
-                                ("liste_abfrage", f"{quelle}\n{t_sql}"),
-                                ("liste_ergebnis", t_ergebnis)]
-                            with st.expander(f"\U0001f4ca Liste: {quelle}"):
-                                st.code(t_sql, language="sql")
-                                st.markdown(t_ergebnis)
-                        elif t_grund:
-                            st.caption(f"\U0001f4ca *Listen nicht verwendet: "
-                                       f"{t_grund}*")
+                                ("liste_abfrage",
+                                 quelle + chr(10) + _t["sql"]),
+                                ("liste_ergebnis", _tab)]
+                            with st.expander(
+                                    f"\U0001f4ca Liste: {quelle} "
+                                    f"({len(_t['zeilen'])} Zeilen)"):
+                                st.code(_t["sql"], language="sql")
+                                st.markdown(_tab)
+                        if not _mit and _grund:
+                            st.caption("\U0001f4ca *Listen nicht verwendet: "
+                                       + _grund + "*")
 
                 # --- 3. KONTEXT FÜR DAS LLM ---
                 dynamic_context = pipeline.kontext(treffer, bild_texte,
