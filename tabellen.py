@@ -571,6 +571,78 @@ def _passendes(eintraege, datei, blatt):
 
 # --- DATEN LADEN UND ABFRAGEN ---
 
+_LIKE_MUSTER = {}
+
+
+def _like_regex(muster, escape=None):
+    """SQLite-LIKE-Muster als regulaerer Ausdruck. Zwischengespeichert.
+
+    % steht fuer beliebig viel, _ fuer genau ein Zeichen. Alles andere
+    wird woertlich genommen -- deshalb re.escape auf jedes Zeichen, das
+    keine Platzhalterbedeutung hat.
+    """
+    schluessel = (muster, escape)
+    fertig = _LIKE_MUSTER.get(schluessel)
+    if fertig is not None:
+        return fertig
+    teile, i, n = [], 0, len(muster)
+    while i < n:
+        z = muster[i]
+        if escape and z == escape and i + 1 < n:
+            teile.append(re.escape(muster[i + 1]))
+            i += 2
+            continue
+        if z == "%":
+            teile.append(".*")
+        elif z == "_":
+            teile.append(".")
+        else:
+            teile.append(re.escape(z))
+        i += 1
+    fertig = re.compile("".join(teile) + r"\Z",
+                        re.DOTALL | re.IGNORECASE | re.UNICODE)
+    if len(_LIKE_MUSTER) > 200:
+        _LIKE_MUSTER.clear()
+    _LIKE_MUSTER[schluessel] = fertig
+    return fertig
+
+
+def _like(muster, wert, escape=None):
+    """LIKE, das auch Umlaute faltet. SQLite ruft like(muster, wert)."""
+    if muster is None or wert is None:
+        return None
+    return 1 if _like_regex(str(muster), escape).match(str(wert)) else 0
+
+
+def _unicode_funktionen(con):
+    """Ersetzt LIKE, lower und upper durch unicode-faehige Fassungen.
+
+    SQLite faltet Gross- und Kleinschreibung von Haus aus NUR fuer ASCII.
+    In einer deutschen Bestandsliste ist das kein Randfall, sondern der
+    Normalfall:
+
+        'SAEGEBLATT' LIKE '%saegeblatt%'   trifft
+        'SAEGEBLATT' mit Umlaut geschrieben, klein gesucht -- trifft NICHT
+
+    Eine Inventurliste fuehrt ihre Bezeichnungen oft durchgaengig in
+    Grossbuchstaben. Das Modell schreibt die Suche klein, weil der Prompt
+    es so verlangt, und bekommt null Zeilen. Von aussen sieht das aus wie
+    "gibt es nicht" -- die schlechteste Art, falsch zu antworten.
+
+    Die eigene Fassung kostet die LIKE-Optimierung von SQLite. Hier ist
+    das ohne Belang: die Blaetter liegen als Tabelle im Arbeitsspeicher,
+    ohne Index, und werden ohnehin durchlaufen.
+    """
+    con.create_function("like", 2, _like, deterministic=True)
+    con.create_function("like", 3, _like, deterministic=True)
+    con.create_function("lower", 1,
+                        lambda s: None if s is None else str(s).lower(),
+                        deterministic=True)
+    con.create_function("upper", 1,
+                        lambda s: None if s is None else str(s).upper(),
+                        deterministic=True)
+
+
 def _lade(datei, blatt):
     """Ein Blatt als SQLite-Verbindung im Arbeitsspeicher.
 
@@ -607,6 +679,7 @@ def _lade(datei, blatt):
 
     con = sqlite3.connect(":memory:", check_same_thread=False)
     rahmen.to_sql("daten", con, index=False)
+    _unicode_funktionen(con)
     _zwischenspeicher.clear()          # nur das zuletzt benutzte Blatt halten
     _zwischenspeicher[kennung] = con
     return con
