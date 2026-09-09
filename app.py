@@ -654,6 +654,12 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     wer sie sehen kann. sachgebiet bestimmt den Unterordner und die
     Metadaten, dieselbe Zuordnung, die der Ingest aus der Ordnerstruktur
     ableitet. Ohne Angabe landet die Datei direkt in data/dokumente/.
+
+    Rueckgabe: (geschriebene Abschnitte, Hinweis). 0 heisst, dass nichts
+    gespeichert wurde -- der Hinweis sagt warum. Die Oberflaeche muss das
+    auswerten: vorher meldete sie in jedem Fall "hinzugefuegt", und ein
+    Scan ohne Textebene lag danach auf der Platte, aber in keiner
+    Sammlung.
     """
     sachgebiet = (sachgebiet or "(Basis)").strip() or "(Basis)"
     # Die Ablage entscheidet sich hier und nicht in der Oberflaeche: ein
@@ -717,8 +723,7 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
                               else "private",
                     "owner": st.session_state["username"], "type": "text"})
                 ids.append(f"{dateiname}_p{nummer}_c{i}")
-        _speichern_chunks(chunks, metadatas, ids, raum)
-        return
+        return _speichern_chunks(chunks, metadatas, ids, raum)
 
     doc = pymupdf.open(pdf_path)
     
@@ -769,7 +774,7 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
                 })
                 ids.append(f"{dateiname}_p{page_num+1}_text_{i}")
                 
-    _speichern_chunks(chunks, metadatas, ids, raum)
+    return _speichern_chunks(chunks, metadatas, ids, raum)
 
 
 def _speichern_chunks(chunks, metadatas, ids, raum):
@@ -781,14 +786,27 @@ def _speichern_chunks(chunks, metadatas, ids, raum):
     irgendwann nachgezogen wird und die andere nicht.
     """
     if not chunks:
-        return
+        # Kein einziger Abschnitt. Bei einem PDF heisst das fast immer:
+        # gescannt, ohne Textebene. Frueher endete die Funktion hier
+        # stillschweigend, und die Oberflaeche meldete trotzdem
+        # "hinzugefuegt" -- die Datei lag danach auf der Platte, in
+        # keiner Sammlung und in keiner Indexzeile. Auffallen konnte das
+        # erst, wenn jemand danach suchte und nichts fand.
+        return 0, ("Kein Text gefunden. Bei einem PDF heisst das meist: "
+                   "es ist ein Scan ohne Textebene. Ein solches Dokument "
+                   "muss durch eine Texterkennung, bevor es durchsuchbar "
+                   "wird -- oder ueber ingest_images.py als Abbildung "
+                   "beschrieben werden.")
     # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
     # HTTP-Anfrage an den Modellserver.
     embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
 
     keep = [i for i, v in enumerate(embeddings) if v is not None]
     if not keep:
-        return
+        grund = getattr(embed_batch, "letzter_fehler", None)
+        return 0, ("Kein Abschnitt liess sich vektorisieren -- der "
+                   "Modellserver hat nichts geliefert."
+                   + (f" ({type(grund).__name__}: {grund})" if grund else ""))
 
     # store.schreibe statt add: ein grosses Dokument kann in einem Aufruf
     # die Groessengrenze des Chroma-Servers ueberschreiten -- gegen eine
@@ -805,6 +823,10 @@ def _speichern_chunks(chunks, metadatas, ids, raum):
     keyword_index.add_chunks(
         ((ids[i], chunks[i], metadatas[i]) for i in keep))
     refresh_document_index()
+    fehlend = len(chunks) - len(keep)
+    return len(keep), (f"{fehlend} von {len(chunks)} Abschnitten liessen "
+                       f"sich nicht vektorisieren und fehlen."
+                       if fehlend else "")
 
 # --- LISTEN FÜR DIE UI ---
 # Gecacht, weil dieser Block auf Modulebene liegt und damit bei JEDEM
@@ -1275,12 +1297,27 @@ with st.sidebar:
         if st.button("Hochladen & Vektorisieren", disabled=not sachgebiet):
             with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
                 raeume.sichere_anlage_privat(st.session_state["username"])
-                process_uploaded_pdf(uploaded_file, ziel_raum, sachgebiet)
-            st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' hinzugefügt!")
+                _n, _hinweis = process_uploaded_pdf(
+                    uploaded_file, ziel_raum, sachgebiet)
             refresh_document_index()
-            st.session_state["pdf_upload_nr"] = _pdf_nr + 1
-            time.sleep(1)
-            st.rerun()
+            if _n:
+                st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' "
+                           f"hinzugefügt — {_n} Abschnitte durchsuchbar.")
+                if _hinweis:
+                    st.warning(_hinweis)
+                st.session_state["pdf_upload_nr"] = _pdf_nr + 1
+                time.sleep(1)
+                st.rerun()
+            else:
+                # Kein Erfolg melden und NICHT neu laden: die Datei liegt
+                # jetzt auf der Platte, ist aber in keiner Sammlung. Wer
+                # hier ein gruenes "hinzugefuegt" sieht, sucht spaeter
+                # vergeblich und haelt es fuer einen Fehler der Suche.
+                st.error(f"'{uploaded_file.name}' wurde NICHT durchsuchbar.")
+                st.warning(_hinweis or "Kein Abschnitt gespeichert.")
+                st.caption("Die Datei liegt in der Ablage, aber kein "
+                           "Abschnitt davon steht in der Suche. Behebe die "
+                           "Ursache und lade sie erneut hoch.")
 
     # --- LANGE LAEUFE ---
     #
