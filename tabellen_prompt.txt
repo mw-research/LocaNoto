@@ -15,7 +15,8 @@ Regeln:
 - Grenze auf das ein, wonach gefragt wurde. Eine Abfrage ohne WHERE liefert die halbe Liste und beantwortet nichts.
 - Halte das Ergebnis klein. Zielt die Frage auf eine Menge oder einen Ueberblick ("wie viele", "gesamt", "je Lagerort"), verdichte mit COUNT, SUM oder GROUP BY statt Zeilen aufzulisten.
 - Alle Werte sind als Text gespeichert. Fuer Rechnungen und Vergleiche mit Zahlen wandle sie um, etwa CAST(menge AS REAL).
-- Suche nach Text unabhaengig von Gross- und Kleinschreibung, etwa mit LIKE.
+- Suche nach Text unabhaengig von Gross- und Kleinschreibung, etwa mit LIKE. Das gilt auch fuer Umlaute: 'saegeblatt' mit ae als ä geschrieben findet auch die Schreibweise in Grossbuchstaben.
+- Suche nach dem WORTSTAMM, nicht nach dem Wort aus der Frage. In einer Bestandsliste steht die Einzahl und oft eine Zusammensetzung: wer nach 'Saegeblaetter' fragt, findet nichts, wer nach 'saege' sucht, findet 'SAEGEBLATT HM 250' und 'Handsaege'. Nimm den kuerzesten Teil, der noch eindeutig ist.
 
 WELCHES BLATT, WENN MEHRERE PASSEN
 
