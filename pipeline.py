@@ -174,7 +174,7 @@ def sonden(client, modell, frage, verlauf="", bild_texte=(), preset=None):
     return liste, hinweis
 
 
-def _where(dateien=None, ordner=None):
+def _where(dateien=None):
     """Auswahlfilter fuer die Vektorsuche -- ohne Rechte.
 
     Die Rechte stehen nicht mehr in diesem Filter. Sie liegen darin, WELCHE
@@ -186,22 +186,25 @@ def _where(dateien=None, ordner=None):
     bedingungen = []
     if dateien:
         bedingungen.append({"file_name": {"$in": list(dateien)}})
-    if ordner:
-        bedingungen.append({"folder": {"$in": list(ordner)}})
     if not bedingungen:
         return None
     return {"$and": bedingungen} if len(bedingungen) > 1 else bedingungen[0]
 
 
-def sammlungen(benutzer, nur=None):
+def sammlungen(benutzer, nur=None, notzugang=()):
     """Die Sammlungen, die dieser Nutzer fragen darf: [(raum, sammlung)].
 
     nur schraenkt zusaetzlich ein -- fuer die Auswahl in der Oberflaeche.
     Raeume ausserhalb der Berechtigung werden dabei still verworfen und
     nicht als Fehler gemeldet: eine Auswahl kommt vom Client, und ein
     Client darf sich nicht mehr nehmen, als ihm zusteht.
+
+    notzugang sind fremde persoenliche Raeume mit bestaetigtem Notzugang
+    (siehe notzugang.py). Sie werden durchgereicht und nicht hier
+    nachgeschlagen: wer den Parameter vergisst, bekommt keinen Zugang
+    statt versehentlich einen.
     """
-    erlaubt = raeume.lesbar(benutzer)
+    erlaubt = raeume.lesbar(benutzer, notzugang)
     if nur:
         gewaehlt = set(nur)
         erlaubt = [r for r in erlaubt if r in gewaehlt]
@@ -247,7 +250,7 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_):
 
 
 def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
-          benutzer, top_k, dateien=None, ordner=None, bewerter=None,
+          benutzer, top_k, dateien=None, bewerter=None,
           raeume_liste=None):
     """Hybride Suche und Rangfolge.
 
@@ -302,7 +305,7 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     # A. VEKTORSUCHE -- je Raum eine Abfrage, danach zusammengefuehrt
     for i, liste_roh in enumerate(_vektortreffer(
             paare_sammlungen, [v for _, v in paare], breit,
-            _where(dateien, ordner))):
+            _where(dateien))):
         probe = paare[i][0]
         liste = [{"text": t, "meta": m, "probe": probe}
                  for _d, t, m in liste_roh]
@@ -318,7 +321,6 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
         gefunden = keyword_index.search(
             probe, benutzer, limit=breit,
             file_names=list(dateien) if dateien else None,
-            folders=list(ordner) if ordner else None,
             raeume=erlaubte_raeume)
         liste = [{"text": h["text"], "meta": h["meta"], "probe": probe}
                  for h in gefunden]
@@ -427,7 +429,7 @@ def quellen(treffer):
             for (raum, datei, seite), texte in gesammelt.items()]
 
 
-def dokumente(benutzer, nur=None):
+def dokumente(benutzer, nur=None, notzugang=()):
     """Welche Dokumente dieser Nutzer sehen darf, je Raum.
 
     Dieselbe Quelle wie die Suche: durchgegangen werden genau die Raeume
@@ -435,11 +437,17 @@ def dokumente(benutzer, nur=None):
     Oberflaeche und Schnittstelle nicht zwei Auffassungen davon entwickeln,
     was sichtbar ist.
 
-    Rueckgabe: (nach_raum, sachgebiete). nach_raum ist
-    {raum: sortierte Dateiliste}, sachgebiete die Vereinigung aller Ordner.
+    Rueckgabe: {raum: sortierte Dateiliste}.
+
+    Frueher kam ein zweiter Wert dazu, die Sachgebiete. Die gibt es nicht
+    mehr: ein Sachgebiet war ein Unterordner, der die Suche einschraenkte,
+    ohne ein Recht zu sein -- ein zweiter Filter, der aussah wie eine
+    Rechteeinschraenkung und keine war. Der Raum leistet dasselbe und
+    bindet es an eine Berechtigung.
     """
-    nach_raum, ordner = {}, set()
-    for raum, sml in sammlungen(benutzer, nur=nur):
+    nach_raum = {}
+    for raum, sml in sammlungen(benutzer, nur=nur,
+                                notzugang=notzugang):
         dateien = set()
         try:
             daten = sml.get(include=["metadatas"])
@@ -450,7 +458,5 @@ def dokumente(benutzer, nur=None):
                 continue
             if m.get("file_name"):
                 dateien.add(m["file_name"])
-            if m.get("folder"):
-                ordner.add(m["folder"])
         nach_raum[raum] = sorted(dateien)
-    return nach_raum, sorted(ordner)
+    return nach_raum

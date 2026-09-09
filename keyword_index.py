@@ -273,7 +273,7 @@ def build_match_query(text):
     return " OR ".join(parts)
 
 
-def search(query_text, username, limit=5, file_names=None, folders=None,
+def search(query_text, username, limit=5, file_names=None,
            con=None, raeume=None):
     """BM25-gerankte Keyword-Suche mit Rechtefilter.
 
@@ -310,9 +310,6 @@ def search(query_text, username, limit=5, file_names=None, folders=None,
         if file_names:
             sql.append("AND file_name IN (%s)" % ",".join("?" * len(file_names)))
             args.extend(file_names)
-        if folders:
-            sql.append("AND folder IN (%s)" % ",".join("?" * len(folders)))
-            args.extend(folders)
 
         # bm25() liefert negative Werte, kleiner ist besser.
         sql.append("ORDER BY score LIMIT ?")

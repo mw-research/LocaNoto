@@ -9,7 +9,7 @@ umstellt, macht es entweder selten oder falsch.
 Eine Voreinstellung buendelt deshalb, was zusammengehoert:
 
     config/presets/<name>/
-        preset.json        Bezeichnung, Chat-Modell, TOP_K, Sachgebiete
+        preset.json        Bezeichnung, Chat-Modell, TOP_K
         system_prompt.txt  optional
         search_prompt.txt  optional
         sql_prompt.txt     optional
@@ -48,7 +48,6 @@ FELDER = {
     "beschreibung": "",
     "chat_modell": "",
     "top_k": 0,
-    "sachgebiete": [],
     # Welche Unterordner des Listenordners diese Voreinstellung benutzt.
     # Ein Pfad steht hier bewusst nicht: der Wurzelordner ist Sache der
     # Installation (TABELLEN_PFAD), sonst koennte eine Voreinstellung auf

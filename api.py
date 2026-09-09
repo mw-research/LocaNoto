@@ -109,8 +109,6 @@ class Frage(BaseModel):
                        description="0 = Vorgabe aus TOP_K")
     dateien: list[str] | None = Field(
         default=None, description="nur in diesen Dokumenten suchen")
-    sachgebiete: list[str] | None = Field(
-        default=None, description="nur in diesen Unterordnern suchen")
     raeume: list[str] | None = Field(
         default=None,
         description="nur in diesen Raeumen suchen. Ohne Angabe alle, die "
@@ -130,7 +128,7 @@ class Frage(BaseModel):
                     "Antwort, um die es ging")
     preset: str | None = Field(
         default=None,
-        description="Voreinstellung: Chat-Modell, Trefferzahl, Sachgebiete, "
+        description="Voreinstellung: Chat-Modell, Trefferzahl, "
                     "Listenbereiche und eigene Prompts. Namen siehe "
                     "/voreinstellungen. Einzeln uebergebene Werte gehen vor.")
     listen: bool = Field(
@@ -158,7 +156,7 @@ def gesundheit():
 def status(kennung: str = Depends(benutzer)):
     """Was diese Installation gerade benutzt."""
     paare = pipeline.sammlungen(kennung)
-    nach_raum, sachgebiete = pipeline.dokumente(kennung)
+    nach_raum = pipeline.dokumente(kennung)
     return {
         "benutzer": kennung,
         "abschnitte": sum(sml.count() for _r, sml in paare),
@@ -166,7 +164,6 @@ def status(kennung: str = Depends(benutzer)):
                        "abschnitte": sml.count(),
                        "dokumente": len(nach_raum.get(r, []))}
                    for r, sml in paare},
-        "sachgebiete": sachgebiete,
         "ablage": store.beschreibung(),
         "rangfolge": (_bewerter.beschreibung()
                       if hasattr(_bewerter, "beschreibung") else BEWERTER_INFO),
@@ -192,11 +189,10 @@ def _listenstand():
 @app.get("/dokumente")
 def dokumente(kennung: str = Depends(benutzer)):
     """Welche Dokumente diese Kennung sehen darf -- nach Raum."""
-    nach_raum, sachgebiete = pipeline.dokumente(kennung)
+    nach_raum = pipeline.dokumente(kennung)
     return {"raeume": {r: {"bezeichnung": raeume.bezeichnung(r),
                            "dateien": d}
-                       for r, d in sorted(nach_raum.items())},
-            "sachgebiete": sachgebiete}
+                       for r, d in sorted(nach_raum.items())}}
 
 
 @app.get("/raeume")
@@ -283,7 +279,6 @@ def _suchen(anfrage, kennung):
     p = presets.lese(anfrage.preset)
     modell = p["chat_modell"] or CHAT_MODELL
     top_k = anfrage.top_k or p["top_k"] or STANDARD_TOP_K
-    gebiete = anfrage.sachgebiete or p["sachgebiete"] or None
     if not anfrage.listen_bereiche:
         anfrage.listen_bereiche = p["listen_bereiche"]
 
@@ -296,7 +291,7 @@ def _suchen(anfrage, kennung):
         treffer, zahlen = pipeline.suche(
             pipeline.sammlungen(kennung, nur=anfrage.raeume),
             embed_client, EMBED_MODELL, sonden, kennung,
-            top_k, dateien=anfrage.dateien, ordner=gebiete,
+            top_k, dateien=anfrage.dateien,
             bewerter=_bewerter)
     except ValueError as e:
         # Der Embedding-Endpunkt antwortet nicht. 503, weil es an einem

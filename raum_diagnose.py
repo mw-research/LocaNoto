@@ -65,10 +65,9 @@ print()
 print("=" * 66)
 print("3. WAS LIEGT DRIN?")
 print("=" * 66)
-nach_raum, ordner = pipeline.dokumente(wer)
+nach_raum = pipeline.dokumente(wer)
 for r, dateien in sorted(nach_raum.items()):
     print(f"  {r:<28} {len(dateien)} Dateien")
-print(f"  Sachgebiete insgesamt: {sorted(ordner)}")
 
 treffer_raum = None
 if gesucht:
@@ -125,24 +124,3 @@ if gesucht:
         print("         Stichwortsuche nicht.")
 
 print()
-print("=" * 66)
-print("5. FILTER DER OBERFLAECHE")
-print("=" * 66)
-print("  Der Sachgebietsfilter wird aus dem aktiven Preset VORBELEGT.")
-try:
-    import presets
-    for name in presets.namen():
-        w = presets.lese(name) or {}
-        g = w.get("sachgebiete") or []
-        if g:
-            fehlend = [x for x in g if x not in ordner]
-            print(f"     Preset '{name}': Sachgebiete {g}"
-                  + (f"   >>> davon unbekannt: {fehlend}" if fehlend else ""))
-        else:
-            print(f"     Preset '{name}': kein Sachgebietsfilter")
-except Exception as e:
-    print(f"     Presets nicht lesbar: {e}")
-print()
-print("  Ist bei einem Preset ein Sachgebiet vorbelegt, das ein neu")
-print("  hochgeladenes Dokument NICHT hat, wird dieses Dokument")
-print("  stillschweigend aus der Suche gefiltert.")
