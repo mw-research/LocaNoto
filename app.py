@@ -2772,7 +2772,9 @@ if _bestand > 0:
                                 ("liste_ergebnis", _tab)]
                             with st.expander(
                                     f"\U0001f4ca Liste: {quelle} "
-                                    f"({len(_t['zeilen'])} Zeilen)"):
+                                    f"({len(_t['zeilen'])} Zeilen)"
+                                    + ("" if _t.get("gewaehlt")
+                                       else " — zusätzlich gefunden")):
                                 st.code(_t["sql"], language="sql")
                                 st.markdown(_tab)
                         if not _mit and _grund:
