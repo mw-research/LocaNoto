@@ -325,6 +325,45 @@ pruef("ein vollstaendiger Abzug bleibt beim Aufraeumen stehen",
       [n for n, _p, _g, s in sicherung.liste()
        if s.get("vollstaendig") and not s.get("fehler")])
 
+print("=== 10. Notzugang: zwei Personen, sonst nichts ===")
+# Ein persoenlicher Raum ist zu -- auch fuer Verwalter. Der Weg hinein
+# fuehrt ueber zwei Personen mit VERSCHIEDENEN Rollen: koennten Verwalter
+# einander bestaetigen, genehmigte sich die IT den Blick selbst.
+import notzugang
+pruef("zweite Rolle vergeben",
+      benutzer.anlege("chef", "chefpasswort", "notzugang", von="markus")[0])
+pruef("und sie macht niemanden zum Verwalter", not benutzer.ist_admin("chef"))
+_pa = raeume.privat_kennung("anna")
+pruef("Notzugang ist einsatzbereit", notzugang.moeglich())
+pruef("Antrag auf einen Fachraum wird abgewiesen",
+      not notzugang.beantrage("einkauf", "markus", "Ich brauche das dort")[0])
+pruef("Antrag auf einen persoenlichen Raum angenommen",
+      notzugang.beantrage(_pa, "markus",
+                          "anna ausgeschieden, Angebot gebraucht")[0])
+pruef("ein Antrag allein oeffnet nichts",
+      notzugang.raeume_fuer("markus") == [])
+pruef("der Antragsteller kann sich nicht selbst bestaetigen",
+      not notzugang.bestaetige(_pa, "markus", "markus")[0])
+pruef("ein gewoehnlicher Nutzer auch nicht",
+      not notzugang.bestaetige(_pa, "markus", "anna")[0])
+pruef("die Rolle 'notzugang' bestaetigt",
+      notzugang.bestaetige(_pa, "markus", "chef")[0])
+_nz = notzugang.raeume_fuer("markus")
+pruef("danach steht der Zugang offen", _nz == [_pa])
+pruef("markus liest annas Raum -- mit weitergereichtem Notzugang",
+      _pa in raeume.lesbar("markus", _nz))
+pruef("OHNE Weitergabe bleibt er zu", _pa not in raeume.lesbar("markus"))
+pruef("beide Namen stehen im Protokoll",
+      any(e.get("aktion") == "notzugang_bestaetigt" and e.get("von") == "chef"
+          and "markus" in str(e.get("hinweis"))
+          for e in benutzer.protokoll(50)))
+_roh = json.load(open(notzugang.DATEI, encoding="utf-8"))
+_roh["inhalt"]["zugaenge"][0]["von"] = "anna"
+json.dump(_roh, open(notzugang.DATEI, "w", encoding="utf-8"))
+pruef("eine von Hand veraenderte Datei gilt nicht",
+      notzugang.raeume_fuer("anna") == []
+      and notzugang.raeume_fuer("markus") == [])
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)

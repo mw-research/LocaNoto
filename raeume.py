@@ -310,19 +310,28 @@ def _darf(eintrag, benutzer, kennung=None):
     return False
 
 
-def lesbar(benutzer):
+def lesbar(benutzer, notzugang=()):
     """Die Raeume, die dieser Nutzer lesen darf -- Kennungen, sortiert.
 
     Der persoenliche Raum ist immer dabei, auch bevor er angelegt wurde:
     sonst waere der erste eigene Upload nicht wiederfindbar, weil der Raum
     zwar Abschnitte hat, aber noch nicht in der Datei steht.
+
+    notzugang sind fremde persoenliche Raeume, fuer die ein bestaetigter
+    Notzugang vorliegt (siehe notzugang.py). Sie werden AUSDRUECKLICH
+    uebergeben und nicht hier nachgeschlagen -- dieses Modul soll die
+    Rechte auflosen, ohne zu wissen, dass es einen Ausnahmeweg gibt. Der
+    praktische Grund ist wichtiger: wer den Parameter vergisst, bekommt
+    KEINEN Notzugang statt versehentlich einen. Die sichere Richtung ist
+    die, die nichts oeffnet.
     """
     erlaubt = {k for k, v in liste().items() if _darf(v, benutzer, k)}
     erlaubt.add(privat_kennung(benutzer))
+    erlaubt.update(k for k in notzugang if ist_privat(k))
     return sorted(erlaubt)
 
 
-def schreibbar(benutzer, ist_verwalter=False):
+def schreibbar(benutzer, ist_verwalter=False, notzugang=()):
     """Raeume, in die dieser Nutzer ablegen darf.
 
     Lesen und Schreiben sind zweierlei, und bis hierher waren sie es
@@ -344,9 +353,13 @@ def schreibbar(benutzer, ist_verwalter=False):
     """
     eigener = privat_kennung(benutzer)
     aus = set()
-    for kennung in lesbar(benutzer):
+    for kennung in lesbar(benutzer, notzugang):
         if ist_privat(kennung):
-            if kennung == eigener:
+            # Der eigene Raum, und ein fremder nur mit bestaetigtem
+            # Notzugang. Der ist zum Aufraeumen da -- Dokumente sichten,
+            # in einen Fachraum verschieben, den Rest loeschen --, und
+            # dafuer genuegt Lesen nicht.
+            if kennung == eigener or kennung in notzugang:
                 aus.add(kennung)
         elif kennung == ALLGEMEIN:
             if ist_verwalter:
@@ -362,12 +375,12 @@ def schreibbar(benutzer, ist_verwalter=False):
     return sorted(aus)
 
 
-def darf_schreiben(benutzer, kennung, ist_verwalter=False):
-    return kennung in schreibbar(benutzer, ist_verwalter)
+def darf_schreiben(benutzer, kennung, ist_verwalter=False, notzugang=()):
+    return kennung in schreibbar(benutzer, ist_verwalter, notzugang)
 
 
-def darf_lesen(benutzer, kennung):
-    return kennung in lesbar(benutzer)
+def darf_lesen(benutzer, kennung, notzugang=()):
+    return kennung in lesbar(benutzer, notzugang)
 
 
 def darf_verwalten(benutzer, kennung, ist_verwalter=False):
