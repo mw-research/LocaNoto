@@ -24,6 +24,7 @@ import raeume
 import owncloud
 import sicherung
 import benutzer
+import notzugang
 import chats
 import geheim
 import hintergrund
@@ -325,9 +326,23 @@ def raum_sammlung(kennung, anlegen=True):
     return store.sammlung(raeume.sammlung(kennung), anlegen=anlegen)
 
 
+def mein_notzugang():
+    """Fremde persoenliche Raeume, in die dieser Nutzer gerade darf.
+
+    Ein Notzugang muss von zwei Personen getragen sein und gilt 24
+    Stunden -- siehe notzugang.py. Hier wird er EINMAL geholt und von da
+    an weitergereicht, damit es genau eine Stelle gibt, an der die
+    Ausnahme entsteht.
+    """
+    if not st.session_state.get("username"):
+        return []
+    return _notzugang_raeume(st.session_state["username"])
+
+
 def meine_sammlungen(nur=None):
     """[(raum, sammlung)] fuer den angemeldeten Nutzer."""
-    return pipeline.sammlungen(st.session_state["username"], nur=nur)
+    return pipeline.sammlungen(st.session_state["username"], nur=nur,
+                               notzugang=mein_notzugang())
 
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
@@ -646,14 +661,16 @@ def fremde_raeume(current_user):
     return sorted(aus)
 
 
-def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
+def process_uploaded_pdf(uploaded_file, raum):
     """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
     vektorisiert beides.
 
     raum bestimmt, in welche Sammlung die Abschnitte gehen -- und damit,
-    wer sie sehen kann. sachgebiet bestimmt den Unterordner und die
-    Metadaten, dieselbe Zuordnung, die der Ingest aus der Ordnerstruktur
-    ableitet. Ohne Angabe landet die Datei direkt in data/dokumente/.
+    wer sie sehen kann -- und das ist die einzige Einteilung, die es
+    noch gibt. Sachgebiete sind entfallen: ein Sachgebiet war ein
+    Unterordner, der die Suche einschraenkte, ohne ein Recht zu sein. Zwei
+    Filter, von denen der eine aussieht wie der andere und keine Grenze
+    zieht, sind einer zu viel.
 
     Rueckgabe: (geschriebene Abschnitte, Hinweis). 0 heisst, dass nichts
     gespeichert wurde -- der Hinweis sagt warum. Die Oberflaeche muss das
@@ -661,7 +678,6 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     Scan ohne Textebene lag danach auf der Platte, aber in keiner
     Sammlung.
     """
-    sachgebiet = (sachgebiet or "(Basis)").strip() or "(Basis)"
     # Die Ablage entscheidet sich hier und nicht in der Oberflaeche: ein
     # Raum, in den dieser Nutzer nicht schreiben darf, wird durch den
     # eigenen ersetzt statt abgewiesen. Das ist die Stelle, an der das
@@ -672,13 +688,12 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
     #
-    # In den Ordner des RAUMS und darin in den des Sachgebiets. Der Raum
-    # ist neu und der Grund ist ein Datenverlust: bis hierher ging jeder
-    # Upload nach data/dokumente/<sachgebiet>/<name>, gleich in welchen
-    # Raum seine Abschnitte gingen. Lud jemand eine 'Angebot.pdf' hoch,
-    # die es in einem anderen Raum schon gab, wurde die dortige Datei
-    # ueberschrieben -- ohne Warnung, und die Abschnitte des anderen
-    # Raums zeigten danach auf einen fremden Inhalt.
+    # In den Ordner des RAUMS. Der Grund ist ein Datenverlust: bis
+    # hierher ging jeder Upload nach data/dokumente/<name>, gleich in
+    # welchen Raum seine Abschnitte gingen. Lud jemand eine 'Angebot.pdf'
+    # hoch, die es in einem anderen Raum schon gab, wurde die dortige
+    # Datei ueberschrieben -- ohne Warnung, und die Abschnitte des
+    # anderen Raums zeigten danach auf einen fremden Inhalt.
     #
     # Der allgemeine Raum behaelt den Wurzelbereich: dort liegt der
     # bestehende Bestand, und ein Ingest ueber data/dokumente soll ihn
@@ -686,9 +701,6 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     dateiname = paths.sicherer_dateiname(uploaded_file.name)
     ziel_ordner = (DOCS_DIR if raum == raeume.ALLGEMEIN
                    else paths.raum_ordner(raum))
-    if sachgebiet != "(Basis)":
-        ziel_ordner = os.path.join(ziel_ordner,
-                                   paths.sicherer_teil(sachgebiet))
     os.makedirs(ziel_ordner, exist_ok=True)
 
     # Im Wurzelbereich kann trotzdem noch etwas im Weg liegen -- eine
@@ -720,7 +732,7 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
                 chunks.append(chunk)
                 metadatas.append({
                     "file_name": dateiname, "page": nummer,
-                    "folder": sachgebiet, "raum": raum,
+                    "raum": raum,
                     "access": "shared" if raum == raeume.ALLGEMEIN
                               else "private",
                     "owner": st.session_state["username"], "type": "text"})
@@ -747,7 +759,6 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
                 metadatas.append({
                     "file_name": dateiname,
                     "page": page_num + 1,
-                    "folder": sachgebiet,
                     "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "table"
@@ -769,7 +780,6 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
                 metadatas.append({
                     "file_name": dateiname,
                     "page": page_num + 1,
-                    "folder": sachgebiet,
                     "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "text"
@@ -841,8 +851,8 @@ def _speichern_chunks(chunks, metadatas, ids, raum):
 # Die ttl faengt zusaetzlich Aenderungen ab, die ein ANDERER Nutzer
 # vorgenommen hat -- dessen Cache-Leerung erreicht diese Sitzung nicht.
 @st.cache_data(ttl=60, show_spinner=False)
-def load_document_index(username):
-    return pipeline.dokumente(username)
+def load_document_index(username, notzugang_=()):
+    return pipeline.dokumente(username, notzugang=list(notzugang_))
 
 
 def refresh_document_index():
@@ -884,7 +894,20 @@ def _leeren():
     _zahl_abschnitte.clear()
     _fremdes.clear()
     _verwaltungsstand.clear()
+    _notzugang_raeume.clear()
     store.vergiss()
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _notzugang_raeume(name):
+    """Die freigegebenen Raeume -- kurz zwischengespeichert.
+
+    15 Sekunden, wie die eigenen Zahlen: die Datei wird sonst bei jedem
+    Klick gelesen und ihre Signatur geprueft. Kurz genug, dass ein
+    geschlossener Zugang sofort zu ist -- und wer ihn schliesst, leert
+    ohnehin.
+    """
+    return notzugang.raeume_fuer(name)
 
 
 @st.cache_data(ttl=5, show_spinner=False)
@@ -933,8 +956,8 @@ def _owncloud_stand():
     return owncloud.pruefe()
 
 
-dateien_je_raum, all_folders = load_document_index(
-    st.session_state["username"])
+dateien_je_raum = load_document_index(
+    st.session_state["username"], tuple(mein_notzugang()))
 meine_raeume = sorted(dateien_je_raum)
 all_available_files = sorted({d for liste in dateien_je_raum.values()
                               for d in liste})
@@ -1028,17 +1051,6 @@ with st.sidebar:
         help="Leer lassen, um alle Räume zu durchsuchen, die du sehen "
              "darfst."
     ) if len(raum_optionen) > 1 else []
-    # Grenzt die Suche auf die Dokumente eines Unterordners ein. Steht vor
-    # dem Dokumentenfilter, weil die Auswahl bei vielen Dateien schneller
-    # geht als das Zusammensuchen einzelner Dokumente.
-    selected_folders = st.multiselect(
-        "Sachgebiet:",
-        options=all_folders,
-        default=[g for g in _p["sachgebiete"] if g in all_folders],
-        key=f"gebiete_{aktives_preset}",
-        help="Leer lassen, um alle Sachgebiete zu durchsuchen."
-    ) if all_folders else []
-
     selected_docs = st.multiselect(
         "Suche beschränken auf:", 
         options=all_available_files,
@@ -1253,27 +1265,6 @@ with st.sidebar:
         help="PDF, Word, Markdown oder Text. Wird vektorisiert und "
              "durchsuchbar.")
     if uploaded_file:
-        # --- SACHGEBIET ---
-        #
-        # Die Zuordnung entsteht sonst allein aus der Ordnerstruktur, die
-        # beim Ingest gilt. Ein Upload landete deshalb immer in "(Basis)"
-        # und war ueber den Sachgebietsfilter nicht zu erreichen.
-        _wahl = st.selectbox(
-            "Sachgebiet",
-            ["(Basis)"] + [g for g in all_folders if g != "(Basis)"]
-            + ["+ neues anlegen"],
-            help="Bestimmt, in welchem Unterordner die Datei liegt und unter "
-                 "welchem Sachgebiet sie gefunden wird.")
-        if _wahl == "+ neues anlegen":
-            _neu = st.text_input("Name des neuen Sachgebiets").strip()
-            # Ein Ordnername, nicht ein beliebiger Pfad: alles andere waere
-            # eine Einladung, mit ../ aus dem Datenverzeichnis zu geraten.
-            sachgebiet = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]", "", _neu).strip()
-            if _neu and not sachgebiet:
-                st.warning("Der Name enthaelt nur unzulaessige Zeichen.")
-        else:
-            sachgebiet = _wahl
-
         # --- RAUM ---
         #
         # Der Raum entscheidet, wer das Dokument sehen kann. Vorgabe ist
@@ -1297,15 +1288,15 @@ with st.sidebar:
             st.caption("Sichtbar für alle." if "*" in _m
                        else f"Sichtbar für {len(_m)} Mitglieder.")
 
-        if st.button("Hochladen & Vektorisieren", disabled=not sachgebiet):
+        if st.button("Hochladen & Vektorisieren"):
             with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
                 raeume.sichere_anlage_privat(st.session_state["username"])
-                _n, _hinweis = process_uploaded_pdf(
-                    uploaded_file, ziel_raum, sachgebiet)
+                _n, _hinweis = process_uploaded_pdf(uploaded_file, ziel_raum)
             refresh_document_index()
             if _n:
-                st.success(f"'{uploaded_file.name}' zu '{sachgebiet}' "
-                           f"hinzugefügt — {_n} Abschnitte durchsuchbar.")
+                st.success(f"'{uploaded_file.name}' in "
+                           f"'{raeume.bezeichnung(ziel_raum)}' — "
+                           f"{_n} Abschnitte durchsuchbar.")
                 if _hinweis:
                     st.warning(_hinweis)
                 st.session_state["pdf_upload_nr"] = _pdf_nr + 1
@@ -1638,8 +1629,11 @@ with st.sidebar:
 
             if _wahl == "(neu anlegen)":
                 _name = st.text_input("Kennung", key="benutzer_neu_name")
-                _rolle = st.selectbox("Rolle", list(benutzer.ROLLEN),
-                                      key="benutzer_neu_rolle")
+                _rolle = st.selectbox(
+                    "Rolle", list(benutzer.ROLLEN),
+                    index=list(benutzer.ROLLEN).index("nutzer"),
+                    key="benutzer_neu_rolle",
+                    help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
                 _pw1 = st.text_input(
                     f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
                     type="password", key="benutzer_neu_pw1")
@@ -1661,11 +1655,16 @@ with st.sidebar:
                 _e = benutzer.eintrag(_wahl) or {}
                 st.caption(f"Angelegt: {_e.get('angelegt', 'unbekannt')} "
                            f"· von: {_e.get('von', 'unbekannt')}")
+                # Der Rueckfall geht ueber den NAMEN und nicht ueber eine
+                # Zahl: als "notzugang" dazukam, waere aus dem frueheren
+                # Index 1 ("nutzer") still die neue Rolle geworden.
                 _neue_rolle = st.selectbox(
                     "Rolle", list(benutzer.ROLLEN),
                     index=(list(benutzer.ROLLEN).index(_e.get("rolle"))
-                           if _e.get("rolle") in benutzer.ROLLEN else 1),
-                    key=f"benutzer_rolle_{_wahl}")
+                           if _e.get("rolle") in benutzer.ROLLEN
+                           else list(benutzer.ROLLEN).index("nutzer")),
+                    key=f"benutzer_rolle_{_wahl}",
+                    help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
                 if _neue_rolle != _e.get("rolle"):
                     if st.button("Rolle übernehmen", use_container_width=True,
                                  key=f"benutzer_rs_{_wahl}"):
@@ -1779,6 +1778,130 @@ with st.sidebar:
                 "Dateizugriff auf `config/` hat, kann entschlüsseln. Das "
                 "schützt gegen eine abgeflossene Sicherung oder ein "
                 "kopiertes Volume, nicht gegen Serverzugang.")
+
+    # --- NOTZUGANG ---
+    #
+    # Sichtbar fuer Verwalter UND fuer Traeger der Rolle, aber mit
+    # verschiedenen Knoepfen: der eine beantragt, der andere bestaetigt.
+    # Offene Zugaenge sieht jeder von beiden -- eine Kontrolle, von der nur
+    # der weiss, der sie hat, kontrolliert nichts.
+    _kann_bestaetigen = benutzer.hat_rolle(
+        st.session_state["username"], "notzugang")
+    if is_admin() or _kann_bestaetigen:
+        _antraege = notzugang.antraege()
+        _offen = notzugang.offene()
+        _marke = ""
+        if _kann_bestaetigen and _antraege:
+            _marke = f" — {len(_antraege)} zu bestätigen"
+        elif _offen:
+            _marke = f" — {len(_offen)} offen"
+        with st.expander("🔓 Notzugang" + _marke):
+            st.caption(
+                "Ein persönlicher Raum ist auch für Verwalter zu. Ist "
+                "sein Besitzer nicht mehr erreichbar, führt der Weg "
+                "hinein über **zwei Personen**: ein Verwalter beantragt, "
+                "ein Träger der Rolle *notzugang* bestätigt. Danach gilt "
+                f"er {notzugang.STUNDEN} Stunden. Beide Namen stehen im "
+                "Protokoll.")
+            st.caption(f"Stand: {notzugang.beschreibung()}")
+
+            # --- offene Zugaenge, fuer beide Seiten sichtbar ---
+            if _offen:
+                st.markdown("**Gerade offen**")
+                for _z in _offen:
+                    _rest = max(0, (_z["bis"] - int(time.time())) // 60)
+                    st.warning(
+                        f"`{_z['raum']}` — {_z['von']}, bestätigt von "
+                        f"{_z['durch']}, noch {_rest // 60} h {_rest % 60} min"
+                        + (f"\n\n„{_z['grund']}\"" if _z.get("grund") else ""))
+                    if st.button("Jetzt schließen",
+                                 key=f"nzs_{_z['raum']}_{_z['von']}",
+                                 use_container_width=True):
+                        _ok, _m = notzugang.schliesse(
+                            _z["raum"], _z["von"],
+                            durch=st.session_state["username"])
+                        (st.success if _ok else st.error)(_m)
+                        _leeren()
+                        time.sleep(1)
+                        st.rerun()
+
+            # --- bestaetigen ---
+            if _kann_bestaetigen:
+                st.markdown("---")
+                st.markdown("**Anträge**")
+                if not _antraege:
+                    st.caption("Keine offenen Anträge.")
+                for _a in _antraege:
+                    st.info(f"**{_a['von']}** möchte in `{_a['raum']}`"
+                            + (f"\n\n„{_a['grund']}\"" if _a.get("grund")
+                               else ""))
+                    _s1, _s2 = st.columns(2)
+                    with _s1:
+                        if st.button("Bestätigen",
+                                     key=f"nzb_{_a['raum']}_{_a['von']}",
+                                     use_container_width=True):
+                            _ok, _m = notzugang.bestaetige(
+                                _a["raum"], _a["von"],
+                                st.session_state["username"])
+                            (st.success if _ok else st.error)(_m)
+                            _leeren()
+                            time.sleep(1)
+                            st.rerun()
+                    with _s2:
+                        if st.button("Ablehnen",
+                                     key=f"nza_{_a['raum']}_{_a['von']}",
+                                     use_container_width=True):
+                            _ok, _m = notzugang.lehne_ab(
+                                _a["raum"], _a["von"],
+                                st.session_state["username"])
+                            (st.info if _ok else st.error)(_m)
+                            _leeren()
+                            time.sleep(1)
+                            st.rerun()
+
+            # --- beantragen ---
+            if is_admin():
+                st.markdown("---")
+                st.markdown("**Zugang beantragen**")
+                if not notzugang.moeglich():
+                    st.error(
+                        "Niemand trägt die Rolle *notzugang*. Ohne eine "
+                        "zweite Person lässt sich kein Notzugang "
+                        "bestätigen — das ist der Sinn der Sache. Vergib "
+                        "die Rolle unter *Benutzer verwalten*, und zwar "
+                        "an jemanden, der KEIN Verwalter ist.")
+                else:
+                    _fremde_privat = sorted(
+                        k for k in raeume.liste() if raeume.ist_privat(k)
+                        and k != raeume.privat_kennung(
+                            st.session_state["username"]))
+                    if not _fremde_privat:
+                        st.caption("Es gibt keine fremden persönlichen "
+                                   "Räume.")
+                    else:
+                        _ziel = st.selectbox("Raum", _fremde_privat,
+                                             key="nz_ziel")
+                        _grund = st.text_area(
+                            "Grund", key="nz_grund",
+                            help="Steht im Protokoll und ist das, was die "
+                                 "zweite Person beurteilt.")
+                        if st.button("Notzugang beantragen",
+                                     use_container_width=True):
+                            _ok, _m = notzugang.beantrage(
+                                _ziel, st.session_state["username"], _grund)
+                            (st.success if _ok else st.error)(_m)
+                            if _ok:
+                                _leeren()
+                                time.sleep(1)
+                                st.rerun()
+
+            st.caption(
+                "**Die ehrliche Grenze:** das ist eine Kontrolle in der "
+                "Anwendung. Wer Serverzugang hat, liest die Sammlung eines "
+                "persönlichen Raums, ohne diese Freigabe zu beachten — die "
+                "Abschnitte liegen dort im Klartext, weil sie durchsuchbar "
+                "sein müssen. Der Notzugang schützt gegen den Verwalter, "
+                "der im Alltag klickt, nicht gegen den, der sich einloggt.")
 
     # --- RAEUME VERWALTEN ---
     #
@@ -2368,11 +2491,6 @@ with st.sidebar:
                                 max_value=30, value=int(werte["top_k"] or 0),
                                 key=f"pk_{bearbeiten}",
                                 help="0 = Vorgabe aus TOP_K.")
-            gebiete = st.multiselect(
-                "Sachgebiete", options=all_folders,
-                default=[g for g in werte["sachgebiete"] if g in all_folders],
-                key=f"pg_{bearbeiten}") if all_folders else []
-
             bereiche = st.multiselect(
                 "Listenbereiche", options=tabellen.bereiche(_eintraege),
                 default=[b for b in werte["listen_bereiche"]
@@ -2389,7 +2507,6 @@ with st.sidebar:
                     ok, meldung = presets.speichern(bez, {
                         "bezeichnung": bez, "beschreibung": beschr,
                         "chat_modell": modell, "top_k": int(k),
-                        "sachgebiete": gebiete,
                         "listen_bereiche": bereiche})
                     if ok:
                         st.success(f"Gespeichert als `{meldung}`.")
@@ -2696,7 +2813,6 @@ if _bestand > 0:
                             embed_client, embed_model,
                             search_queries, st.session_state["username"], top_k,
                             dateien=selected_docs or None,
-                            ordner=selected_folders or None,
                             bewerter=reranker)
                     except ValueError as e:
                         st.error(str(e))
