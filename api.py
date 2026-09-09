@@ -30,6 +30,7 @@ import auth
 import llm
 import pipeline
 import raeume
+import geheim
 import feedback
 import presets
 import tabellen
@@ -38,6 +39,15 @@ import ranking
 import store
 
 paths.bootstrap()
+
+# Ohne lesbaren Schluessel gar nicht erst starten: die Schnittstelle
+# schreibt Rueckmeldungen, und die wuerden im Klartext neben den
+# verschluesselten landen. Ein Lesefehler ist behebbar, ein
+# ueberschriebener Bestand nicht.
+_schl_zustand, _schl_meldung = geheim.zustand()
+if _schl_zustand == "unlesbar":
+    raise SystemExit("Installationsschluessel nicht lesbar: "
+                     + _schl_meldung)
 
 app = FastAPI(
     title="LocaNoto",
