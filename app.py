@@ -664,8 +664,10 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     sachgebiet = (sachgebiet or "(Basis)").strip() or "(Basis)"
     # Die Ablage entscheidet sich hier und nicht in der Oberflaeche: ein
     # Raum, in den dieser Nutzer nicht schreiben darf, wird durch den
-    # eigenen ersetzt statt abgewiesen.
-    if raum not in raeume.schreibbar(st.session_state["username"]):
+    # eigenen ersetzt statt abgewiesen. Das ist die Stelle, an der das
+    # Recht wirklich haengt -- die Oberflaeche bietet nur an.
+    if raum not in raeume.schreibbar(st.session_state["username"],
+                                     is_admin()):
         raum = raeume.sichere_anlage_privat(st.session_state["username"])
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
@@ -1279,8 +1281,9 @@ with st.sidebar:
         # Raum bleibt Admins vorbehalten -- passend dazu, dass auch nur sie
         # daraus loeschen koennen.
         _mein = raeume.privat_kennung(st.session_state["username"])
-        _ziele = [r for r in raeume.schreibbar(st.session_state["username"])
-                  if r != raeume.ALLGEMEIN or is_admin()]
+        # schreibbar() haelt die Regel selbst: der allgemeine Raum nur
+        # fuer Verwalter, ein persoenlicher nur fuer seinen Besitzer.
+        _ziele = raeume.schreibbar(st.session_state["username"], is_admin())
         if _mein not in _ziele:
             _ziele.insert(0, _mein)
         ziel_raum = st.selectbox(
@@ -1380,10 +1383,9 @@ with st.sidebar:
             for f in _dateien:
                 st.caption(f"📄 {f}")
 
-            # Verwalten darf, wer den Raum schreiben darf; den allgemeinen
-            # Raum nur ein Admin.
-            _darf = (_r in raeume.schreibbar(st.session_state["username"])
-                     and (_r != raeume.ALLGEMEIN or is_admin()))
+            # Verwalten darf, wer den Raum schreiben darf.
+            _darf = raeume.darf_schreiben(st.session_state["username"], _r,
+                                          is_admin())
             if not _darf:
                 st.caption("Nur lesen.")
                 continue
@@ -1394,8 +1396,7 @@ with st.sidebar:
             _spalte1, _spalte2 = st.columns(2)
             with _spalte1:
                 _andere = [x for x in raeume.schreibbar(
-                    st.session_state["username"])
-                    if x != _r and (x != raeume.ALLGEMEIN or is_admin())]
+                    st.session_state["username"], is_admin()) if x != _r]
                 _nach = st.selectbox("verschieben nach:",
                                      ["-"] + _andere,
                                      format_func=lambda x: (
