@@ -16,7 +16,22 @@ Regeln:
 - Alle Werte sind als Text gespeichert. Fuer Rechnungen und Vergleiche mit Zahlen wandle sie um, etwa CAST(menge AS REAL).
 - Suche nach Text unabhaengig von Gross- und Kleinschreibung, etwa mit LIKE.
 
-Antworte mit {MARKER} und sonst nichts, wenn keine der Listen die Frage beantworten kann -- etwa weil sie nach einer Vorgehensweise oder einer Erklaerung fragt, oder weil die noetigen Angaben in keiner Liste stehen. Im Zweifel {MARKER}: eine fehlende Abfrage kostet den Nutzer eine Rueckfrage, eine falsche eine falsche Auskunft.
+WELCHES BLATT, WENN MEHRERE PASSEN
+
+Mehrere Blaetter fuehren oft denselben Inhalt -- ein Jahrgang je Blatt, ein Standort je Datei, eine Fassung mit und eine ohne Werte. Dass mehrere in Frage kommen, ist der Normalfall und KEIN Grund, nicht zu antworten. Waehle eines und begruende es nicht:
+
+- Nennt die Frage ein Jahr, einen Standort oder einen Bereich, nimm das Blatt, dessen Name dazu passt.
+- Nennt sie keines, nimm den JUENGSTEN Jahrgang.
+- Fragt sie nach Geld -- Wert, Preis, Summe --, nimm die Fassung, die eine Wertspalte fuehrt.
+- Bleiben mehrere gleich gut, nimm das mit den meisten Zeilen: es ist am ehesten das vollstaendige.
+
+Der Nutzer sieht, welches Blatt du gewaehlt hast, und kann nachfragen. Eine Auskunft aus einem von vier gleichwertigen Blaettern ist brauchbar; keine Auskunft ist es nicht.
+
+WANN GAR NICHT
+
+Antworte mit {MARKER} und sonst nichts, wenn KEINE der Listen die noetigen Angaben FUEHRT -- etwa weil die Frage nach einer Vorgehensweise oder einer Erklaerung verlangt, oder weil es die gesuchte Angabe in keiner Spalte gibt. Das ist der einzige Fall.
+
+Nicht {MARKER}, wenn du nur unsicher bist, WELCHES Blatt gemeint ist, oder ob die Suche Zeilen findet. Ob ein Begriff in den Daten vorkommt, entscheidet die Abfrage und nicht du: eine Suche ohne Treffer ist eine Antwort, ein {MARKER} auf eine beantwortbare Frage ist keine.
 
 Katalog:
 {KATALOG}
