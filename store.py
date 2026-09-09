@@ -16,6 +16,7 @@ Ohne CHROMA_HOST bleibt es bei der Dateiablage -- richtig, solange nur ein
 Prozess zugreift, und die Voreinstellung fuer eine Einzelinstallation.
 """
 import os
+import time
 
 import chromadb
 
@@ -115,6 +116,91 @@ def vergiss(name=None):
         _sammlungen.clear()
     else:
         _sammlungen.pop(name, None)
+
+
+def _segment_fehlt(fehler):
+    t = str(fehler).lower()
+    return "nothing found on disk" in t or "segment reader" in t
+
+
+def hole(sml, name=None, versuche=3, **kw):
+    """sml.get(**kw) -- mit Wiederholung gegen einen Chroma-Fehlschlag.
+
+    Der Fehlschlag, um den es geht:
+
+        Error creating hnsw segment reader: Nothing found on disk
+
+    Chroma legt das Vektorsegment einer Sammlung verzoegert ab. Wird eine
+    kleine Sammlung gelesen, bevor das geschehen ist, findet der Leser die
+    Datei nicht. Gemessen an 40 Laeufen des Selbsttests: zwei Fehlschlaege
+    -- und jeder kostete einen ganzen Raum.
+
+    Wiederholen allein genuegt nicht: der Leser merkt sich den Zustand,
+    und derselbe Client scheitert wieder, auch nach einer Pause. Deshalb
+    dazwischen neu verbinden. Bringt das nichts (Serverbetrieb), wird
+    nicht sinnlos wiederholt, sondern der Fehler weitergegeben -- dort
+    entscheidet der Server, wann er ablegt.
+
+    name ist der Sammlungsname. Ohne ihn wird nach dem Neuverbinden das
+    alte Handle weiterbenutzt; das geht meist, aber mit Namen ist es
+    sauber.
+    """
+    letzter = None
+    for versuch in range(max(1, versuche)):
+        try:
+            return sml.get(**kw)
+        except Exception as e:
+            letzter = e
+            if not _segment_fehlt(e):
+                raise
+            time.sleep(0.2 * (versuch + 1))
+            if not neu_verbinden():
+                raise
+            if name:
+                frisch = sammlung(name, anlegen=False)
+                if frisch is not None:
+                    sml = frisch
+    raise letzter
+
+
+def neu_verbinden():
+    """Verwirft den Client samt aller Handles. True, wenn das etwas bringt.
+
+    Gebraucht fuer einen einzigen Fehlschlag, der sich anders nicht
+    beheben laesst:
+
+        Error creating hnsw segment reader: Nothing found on disk
+
+    Bei der Dateiablage legt Chroma das Vektorsegment einer Sammlung
+    verzoegert ab. Wird eine kleine Sammlung gelesen, bevor das geschehen
+    ist, findet der Leser die Datei nicht -- und er merkt sich diesen
+    Zustand: eine Wiederholung mit demselben Client scheitert genauso,
+    auch nach einer Pause. Erst ein neuer Client liest den Bestand aus
+    dem Journal und baut das Segment auf.
+
+    Nur bei der Dateiablage. Im Serverbetrieb entscheidet der Server, wann
+    er ablegt; einen neuen HTTP-Client aufzubauen aendert daran nichts,
+    und ein Wiederverbinden mitten in einem Ablauf waere dort nur ein
+    weiterer Weg, etwas kaputtzumachen.
+    """
+    global _client
+    if im_server_betrieb():
+        return False
+    _sammlungen.clear()
+    _client = None
+    try:
+        # Der offizielle Weg. Chroma merkt sich das System je Pfad -- ein
+        # zweiter PersistentClient auf denselben Ordner bekaeme genau das
+        # alte zurueck, und ein von Hand gestopptes System bleibt im
+        # Zwischenspeicher liegen: der naechste Client scheitert dann mit
+        # "Could not connect to tenant". Nur das Leeren des
+        # Zwischenspeichers baut wirklich neu auf.
+        from chromadb.api.shared_system_client import SharedSystemClient
+        SharedSystemClient.clear_system_cache()
+    except Exception:
+        return False
+    client()
+    return True
 
 
 def sammlung(name, anlegen=True):

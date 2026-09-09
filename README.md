@@ -184,6 +184,8 @@ kann.
 | „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
 | Journalmodus nicht `wal` | `data/` liegt auf einer Dateifreigabe. Siehe [Speicherorte](#-speicherorte). |
 | Suche findet nichts nach einem Update | Abschnitte noch in der alten Sammlung: `python umsortieren.py --pruefen` |
+| Abzug heißt „UNVOLLSTÄNDIG" | Ein Raum ließ sich beim Sichern nicht lesen. Neu sichern; der letzte vollständige wird nicht weggeräumt. [Details](#die-vektordatenbank-sichern) |
+| Quellenansicht zeigt keine Seite | Die Datei liegt im Ordner eines anderen Raums — beim Verschieben war am Ziel eine gleichnamige. Meldung nennt es. |
 | „Benutzerdatei außerhalb der Anwendung geändert" | Signatur passt nicht. Bestehende Nutzer arbeiten weiter, neue Einträge sind gesperrt. |
 | Rechte-/Modellprobleme unklar | Seitenleiste → *Konfiguration* zeigt fehlende und abweichende Einträge (nur Namen, keine Werte). |
 
@@ -652,7 +654,18 @@ Aufbewahrung als die Daten, die er lesbar macht.
 
 Ein Abzug neben den Daten teilt ihr Schicksal. `SICHERUNG_PFAD` legt ihn auf
 ein eigenes Laufwerk; `SICHERUNG_BEHALTEN` (Vorgabe 7) räumt die ältesten
-auf.
+auf — **außer dem neuesten vollständigen**, der bleibt immer stehen.
+
+**Wenn ein Raum sich nicht lesen ließ**, steht das im Abzug, in der Liste
+und in der Seitenleiste als `UNVOLLSTÄNDIG`; beim Einspielen wird es
+vorher gesagt, nicht hinterher. Ein Abzug, dem ein Raum fehlt, ist von
+außen nicht von einem vollständigen zu unterscheiden — die Dateien der
+anderen Räume liegen ja da. Der Auslöser ist eine Eigenheit von ChromaDB:
+es legt das Vektorsegment einer Sammlung verzögert ab und kann den Leser
+so lange nicht aufbauen (`Nothing found on disk`). Dagegen wird
+wiederholt, und zwar mit neuem Client — derselbe scheitert wieder, auch
+nach einer Pause. Gemessen: vorher 2 Fehlschläge in 40 Läufen, danach 0
+in 50.
 
 ---
 
@@ -896,8 +909,22 @@ Ausgeschaltet bleibt es die Voreinstellung, weil ein Verwalter beim
 Aufräumen sonst blind arbeitet — das ist eine Entscheidung des Betreibers,
 keine technische.
 
-Mitglieder lassen sich einem persönlichen Raum nicht hinzufügen. Das wäre
-eine Hintertür, und im strengen Betrieb widerspräche sie dem Zweck.
+**Ein persönlicher Raum hat genau einen Leser, und der steht in seiner
+Kennung.** Mitgliederliste und ownCloud-Gruppe werden dort nicht gelesen —
+nicht einmal, wenn etwas darin steht. Vier Wege machten aus einem
+persönlichen Raum sonst einen geteilten, ohne dass der Besitzer es erfuhr:
+
+* einen Raum `privat_bob` von Hand anlegen (existierte `bob` noch nicht,
+  bekam er beim Anlegen seines Zugangs gar keinen eigenen mehr),
+* Mitglieder eintragen,
+* eine ownCloud-Gruppe zuordnen,
+* auf „für alle sichtbar" stellen.
+
+Die ersten drei weist die Anwendung ab und sagt warum. Der vierte Riegel
+ist der, der auch dann noch hält, wenn ein fünfter Weg dazukommt: die
+Rechteprüfung leitet den Besitzer aus der Kennung ab und sieht die Liste
+gar nicht an. Soll etwas aus einem persönlichen Raum geteilt werden,
+**verschiebt es der Besitzer** — unter *Meine Dokumente*.
 
 ### Der allgemeine Raum muss nicht allen offenstehen
 
@@ -909,9 +936,13 @@ der zugeordneten ownCloud-Gruppe.
 ### Die ehrliche Grenze
 
 Wer Dateizugriff auf `config/` hat, kann sich in jede Mitgliederliste
-eintragen. `PRIVAT_STRENG` regelt, was die **Anwendung** herausgibt, nicht
-was das Dateisystem hergibt. Die Grenze bleibt, wer an den Server kommt, und
-eine verschlüsselte Platte — siehe [Verschlüsselung](#-verschlüsselung).
+eintragen — **außer in die eines persönlichen Raums**, denn die wird dort
+nicht gelesen. Er kann sich stattdessen umbenennen oder einen Zugang
+anlegen; die Benutzerdatei ist signiert und die Anwendung sagt es, aber
+sie kann es nicht verhindern. `PRIVAT_STRENG` regelt, was die
+**Anwendung** herausgibt, nicht was das Dateisystem hergibt. Die Grenze
+bleibt, wer an den Server kommt, und eine verschlüsselte Platte — siehe
+[Verschlüsselung](#-verschlüsselung).
 
 ## 🔐 Rechte
 | Raum | sichtbar für | hochladen und löschen darf |
@@ -1111,6 +1142,38 @@ findet — bliebe sie im Wurzelverzeichnis, wäre sie danach wieder `(Basis)`.
 
 Sie sind optional: liegen alle Dateien direkt in `data/dokumente/`, gibt es
 nur `(Basis)` und der Filter wird nicht eingeblendet.
+
+### Räume kommen davor
+
+Jeder Raum außer dem allgemeinen hat einen eigenen Ordner, und das
+Sachgebiet ist der Unterordner darin:
+
+```
+data/dokumente/
+    Technik/                   -> allgemein, Sachgebiet "Technik"
+    handbuch.pdf               -> allgemein, "(Basis)"
+    einkauf/
+        Rahmenverträge/        -> Raum "einkauf", Sachgebiet "Rahmenverträge"
+    privat_anna/
+        notiz.pdf              -> Raum "privat_anna", "(Basis)"
+```
+
+Der Ordner ist nicht Kosmetik. Zwei Räume dürfen dieselbe `Angebot.pdf`
+führen, und ohne getrennte Ordner überschriebe der zweite Upload die Datei
+des ersten — ohne Meldung, und die Abschnitte des ersten Raums zeigten
+danach auf einen fremden Inhalt. Dieselben Ordner legt auch der
+ownCloud-Abgleich an, damit ein Dokument denselben Ort hat, egal wie es
+hereinkam.
+
+Der allgemeine Raum behält den Wurzelbereich — dort liegt der Bestand aus
+der Zeit vor den Räumen, und ein Ingest über `data/dokumente` soll ihn
+weiter als `(Basis)` sehen. **Bestehende Dateien werden nicht verschoben:**
+sie bleiben liegen und bleiben auffindbar. Wird ein Dokument in einen
+anderen Raum verschoben, geht die Datei mit.
+
+Ein Ingest über `data/dokumente` überspringt die Ordner der anderen Räume
+und sagt, wie viele. Eingelesen werden sie mit `INGEST_RAUM` — oder von
+`abgleich.py`, das beides passend setzt.
 
 ## 🧠 Rangfolge der Treffer
 Nach der Suche werden die Ranglisten aller Sonden und beider Suchwege
@@ -1461,6 +1524,20 @@ Festgehalten werden Frage, Suchsonden, Trefferzahlen sowie Datei und Seite
 der verwendeten Quellen — nicht die Abschnitte selbst. Die stehen im Bestand
 und würden das Protokoll unbrauchbar groß machen. Fragen über die
 HTTP-Schnittstelle zählen mit.
+
+**Nicht aus persönlichen Räumen.** Kam ein Treffer aus einem persönlichen
+Raum, steht dort `(persoenlicher Raum)` statt des Dateinamens, und die
+Raumkennung fällt weg — in ihr steckt der Name des Nutzers. Das Protokoll
+ist eine Verwalterliste: es wird angezeigt und im Klartext
+heruntergeladen. Weggelassen wird beim **Schreiben**, nicht beim Anzeigen
+— ein Filter in der Anzeige wäre eine Zusage, die die Datei nicht hält.
+Für den Zweck der Liste — welche Begriffe im Bestand fehlen — trägt der
+Dateiname eines fremden Privatdokuments nichts bei.
+
+Die Frage selbst wird im Wortlaut festgehalten, mit Kennung. Das ist der
+Sinn der Liste, aber es heißt auch: wer sie liest, liest mit, was
+Mitarbeiter gefragt haben. Deshalb liegt sie verschlüsselt und ist nur für
+Verwalter zu sehen.
 
 Die vollständige Liste lässt sich mit **Protokoll herunterladen** aus der
 Seitenleiste holen — auswerten heißt in der Regel sortieren und zählen, und

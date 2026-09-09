@@ -406,18 +406,25 @@ def antwort(client, modell, system, nachrichten, verlauf_anzahl=20):
 
 
 def quellen(treffer):
-    """Fasst die Treffer nach Datei und Seite zusammen.
+    """Fasst die Treffer nach Raum, Datei und Seite zusammen.
 
     Mehrere Abschnitte derselben Seite werden zu einem Eintrag -- sonst
     stuende dieselbe Fundstelle mehrfach unter der Antwort.
+
+    Der Raum gehoert in den Schluessel und nicht nur ins Ergebnis. Zwei
+    Raeume duerfen dieselbe 'Angebot.pdf' fuehren; ohne ihn waeren ihre
+    Abschnitte zu einer Fundstelle verschmolzen, und die Quellenansicht
+    haette zu ihr eine der beiden Dateien gezeigt -- welche, entschied die
+    Reihenfolge auf der Platte.
     """
     gesammelt = {}
     for eintrag in treffer:
         meta = eintrag["meta"]
-        schluessel = (meta.get("file_name", "?"), meta.get("page", "?"))
+        schluessel = (meta.get("raum") or "", meta.get("file_name", "?"),
+                      meta.get("page", "?"))
         gesammelt.setdefault(schluessel, []).append(eintrag["text"])
-    return [{"file": datei, "page": seite, "texts": texte}
-            for (datei, seite), texte in gesammelt.items()]
+    return [{"file": datei, "page": seite, "raum": raum, "texts": texte}
+            for (raum, datei, seite), texte in gesammelt.items()]
 
 
 def dokumente(benutzer, nur=None):

@@ -419,7 +419,13 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
     quelle = raum_sammlung(von_raum, anlegen=False)
     if quelle is None:
         return False, "Der Ausgangsraum hat keine Daten."
-    daten = quelle.get(where={"file_name": filename},
+    # store.hole und nicht quelle.get: Chroma kann das Vektorsegment einer
+    # Sammlung noch nicht abgelegt haben und den Leser dann nicht aufbauen.
+    # Ohne die Wiederholung schluege das Verschieben mit einem Rueckverfolg
+    # in der Oberflaeche fehl -- und der Nutzer wuesste nur, dass es nicht
+    # ging.
+    daten = store.hole(quelle, raeume.sammlung(von_raum),
+                       where={"file_name": filename},
                        include=["documents", "metadatas", "embeddings"])
     ids = daten.get("ids") or []
     if not ids:
@@ -447,16 +453,113 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
     keyword_index.add_chunks(
         zip(ids, daten.get("documents") or [], metas))
     refresh_document_index()
-    return True, f"Nach '{raeume.bezeichnung(nach_raum)}' verschoben."
+
+    # Die Datei geht mit. Seit jeder Raum seinen eigenen Ablageordner hat,
+    # waeren die Abschnitte sonst im neuen Raum und die Datei im alten --
+    # und der alte ist fuer den neuen gesperrt. Die Quellenansicht zeigte
+    # dann keine Seite mehr, ohne zu sagen warum. Umgekehrt bliebe ein
+    # freigegebenes Dokument koerperlich im persoenlichen Ordner liegen.
+    nachsatz = _verschiebe_datei(filename, von_raum, nach_raum)
+    return True, (f"Nach '{raeume.bezeichnung(nach_raum)}' verschoben."
+                  + nachsatz)
 
 
-def remove_pdf_if_orphaned(filename):
+def _verschiebe_datei(filename, von_raum, nach_raum):
+    """Bringt die Datei in den Ordner des Zielraums. Rueckgabe: Nachsatz.
+
+    Ist am Ziel schon eine Datei dieses Namens, bleibt sie liegen und die
+    Datei wird NICHT verschoben: umbenennen ginge nicht, weil der
+    Dateiname in den Metadaten jedes Abschnitts steht und dort der
+    Schluessel ist. Lieber eine fehlende Seitenansicht als ein Bestand,
+    in dem Abschnitt und Datei auseinanderlaufen -- und gesagt wird es.
+    """
+    quelle = dokument_pfad(filename, von_raum)
+    if not quelle or not os.path.exists(quelle):
+        return ""
+
+    def basis(raum):
+        return (DOCS_DIR if raum == raeume.ALLGEMEIN
+                else paths.raum_ordner(raum))
+
+    try:
+        rel = os.path.relpath(os.path.dirname(quelle), basis(von_raum))
+    except ValueError:
+        rel = "."
+    # Ein Dokument aus der Zeit vor den Raeumen liegt im Wurzelbereich und
+    # damit ausserhalb des Ordners seines Raums. Dann kein Unterordner.
+    if rel.startswith("..") or rel in (".", ""):
+        rel = ""
+    ziel_ordner = os.path.join(basis(nach_raum), rel) if rel \
+        else basis(nach_raum)
+    ziel = os.path.join(ziel_ordner, os.path.basename(quelle))
+    if os.path.normpath(ziel) == os.path.normpath(quelle):
+        return ""
+    if os.path.exists(ziel):
+        return (" Die Datei blieb liegen: am Ziel gibt es bereits eine "
+                "gleichen Namens. Die Originalseite laesst sich dort "
+                "nicht anzeigen.")
+    try:
+        os.makedirs(ziel_ordner, exist_ok=True)
+        os.replace(quelle, ziel)
+    except OSError as e:
+        return f" Die Datei liess sich nicht mitnehmen ({e})."
+    return ""
+
+
+def _gehoert_anderem_raum(filename, raum):
+    """Fuehrt ein ANDERER Raum bereits ein Dokument dieses Namens?
+
+    Gefragt vor dem Ueberschreiben im gemeinsamen Wurzelbereich. Bei einer
+    Sammlung, die nicht antwortet, lautet die Antwort ja: dann wird
+    ausgewichen statt ueberschrieben. Ein ueberfluessiges 'Angebot (2).pdf'
+    ist ein Schoenheitsfehler, ein ueberschriebenes Dokument nicht.
+    """
+    for k, sml in _alle_raum_sammlungen():
+        if k == raum:
+            continue
+        try:
+            if sml.get(where={"file_name": filename}, include=[])["ids"]:
+                return True
+        except Exception:
+            return True
+    return False
+
+
+def fremde_ordner(eigener_raum):
+    """Die Ablageordner ALLER anderen Raeume.
+
+    Dorthin darf keine Suche nach einem Dateinamen greifen. Zwei Raeume
+    duerfen dieselbe 'Angebot.pdf' fuehren, und welche davon gemeint ist,
+    entscheidet der Raum -- nicht die Reihenfolge, in der os.walk sie
+    findet.
+    """
+    return [paths.raum_ordner(k) for k in raeume.liste()
+            if k != eigener_raum]
+
+
+def dokument_pfad(filename, raum):
+    """Der Pfad zu einem Dokument AUS SICHT eines Raums.
+
+    Erst im eigenen Ordner, dann im gemeinsamen Wurzelbereich -- dort
+    liegen die Dateien aus der Zeit vor den Raeumen. Die Ordner der
+    anderen Raeume bleiben aussen vor.
+    """
+    return paths.finde_dokument(filename, bevorzugt=paths.raum_ordner(raum),
+                                ausser=fremde_ordner(raum)) or ""
+
+
+def remove_pdf_if_orphaned(filename, raum=None):
     """Loescht die Datei von der Platte -- aber nur, wenn kein Abschnitt
     mehr auf sie zeigt.
 
     Alle Raeume teilen sich DOCS_DIR. Wird die Datei bedingungslos
     entfernt, verliert ein gleichnamiges Dokument in einem anderen Raum
     seine Quellenansicht.
+
+    raum sagt, WESSEN Datei gemeint ist. Ohne ihn wurde nur
+    DOCS_DIR/<name> geloescht -- alles in einem Sachgebiets- oder
+    Raumordner blieb liegen, und der Bestand wuchs mit Dateien, auf die
+    kein Abschnitt mehr zeigte.
     """
     for _raum, sml in _alle_raum_sammlungen():
         try:
@@ -466,8 +569,9 @@ def remove_pdf_if_orphaned(filename):
             # Lieber die Datei behalten als sie einem Raum wegnehmen,
             # dessen Sammlung gerade nicht antwortet.
             return False
-    file_path = os.path.join(DOCS_DIR, filename)
-    if os.path.exists(file_path):
+    file_path = (dokument_pfad(filename, raum) if raum
+                 else os.path.join(DOCS_DIR, filename))
+    if file_path and os.path.exists(file_path):
         os.remove(file_path)
     return True
 
@@ -484,7 +588,7 @@ def loesche_dokument(filename, raum):
         return False, "Der Raum hat keine Daten."
     sml.delete(where={"file_name": filename})
     keyword_index.delete_document(filename, raum=raum)
-    remove_pdf_if_orphaned(filename)
+    remove_pdf_if_orphaned(filename, raum)
     refresh_document_index()
     return True, f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
 
@@ -559,16 +663,41 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
         raum = raeume.sichere_anlage_privat(st.session_state["username"])
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
-    # In den Unterordner des Sachgebiets, damit ein spaeterer
-    # vollstaendiger Ingest dieselbe Zuordnung findet. Blieb die Datei im
-    # Wurzelverzeichnis, waere sie danach wieder "(Basis)".
-    ziel_ordner = (DOCS_DIR if sachgebiet == "(Basis)"
-                   else os.path.join(DOCS_DIR, sachgebiet))
+    #
+    # In den Ordner des RAUMS und darin in den des Sachgebiets. Der Raum
+    # ist neu und der Grund ist ein Datenverlust: bis hierher ging jeder
+    # Upload nach data/dokumente/<sachgebiet>/<name>, gleich in welchen
+    # Raum seine Abschnitte gingen. Lud jemand eine 'Angebot.pdf' hoch,
+    # die es in einem anderen Raum schon gab, wurde die dortige Datei
+    # ueberschrieben -- ohne Warnung, und die Abschnitte des anderen
+    # Raums zeigten danach auf einen fremden Inhalt.
+    #
+    # Der allgemeine Raum behaelt den Wurzelbereich: dort liegt der
+    # bestehende Bestand, und ein Ingest ueber data/dokumente soll ihn
+    # weiter als "(Basis)" und nicht als Sachgebiet "allgemein" sehen.
+    dateiname = paths.sicherer_dateiname(uploaded_file.name)
+    ziel_ordner = (DOCS_DIR if raum == raeume.ALLGEMEIN
+                   else paths.raum_ordner(raum))
+    if sachgebiet != "(Basis)":
+        ziel_ordner = os.path.join(ziel_ordner,
+                                   paths.sicherer_teil(sachgebiet))
     os.makedirs(ziel_ordner, exist_ok=True)
-    pdf_path = os.path.join(ziel_ordner, uploaded_file.name)
+
+    # Im Wurzelbereich kann trotzdem noch etwas im Weg liegen -- eine
+    # Datei aus der Zeit vor den Raeumen, die einem anderen Raum gehoert.
+    # Dann ausweichen statt ueberschreiben. Der Hinweis nennt keinen Raum:
+    # dass eine Datei dieses Namens existiert, ist schon genug Auskunft.
+    pdf_path = os.path.join(ziel_ordner, dateiname)
+    if os.path.exists(pdf_path) and _gehoert_anderem_raum(dateiname, raum):
+        pdf_path = paths.freier_name(ziel_ordner, dateiname)
+        dateiname = os.path.basename(pdf_path)
+        st.warning(f"Eine Datei dieses Namens liegt bereits in der Ablage "
+                   f"und gehoert nicht zu diesem Raum. Gespeichert als "
+                   f"'{dateiname}'.")
+
     with open(pdf_path, "wb") as f:
         f.write(uploaded_file.getvalue())
-        
+
     chunks = []
     metadatas = []
     ids = []
@@ -577,17 +706,17 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
     #
     # Ohne Seiten und ohne Tabellenflaechen; ein Abschnitt tritt an die
     # Stelle einer Seite. Siehe lesen.py.
-    if lesen.unterstuetzt(uploaded_file.name):
+    if lesen.unterstuetzt(dateiname):
         for nummer, _titel, text in lesen.abschnitte(pdf_path):
             for i, chunk in enumerate(text_splitter.split_text(text)):
                 chunks.append(chunk)
                 metadatas.append({
-                    "file_name": uploaded_file.name, "page": nummer,
+                    "file_name": dateiname, "page": nummer,
                     "folder": sachgebiet, "raum": raum,
                     "access": "shared" if raum == raeume.ALLGEMEIN
                               else "private",
                     "owner": st.session_state["username"], "type": "text"})
-                ids.append(f"{uploaded_file.name}_p{nummer}_c{i}")
+                ids.append(f"{dateiname}_p{nummer}_c{i}")
         _speichern_chunks(chunks, metadatas, ids, raum)
         return
 
@@ -606,17 +735,17 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
         tables = page.find_tables()
         for i, table in enumerate(tables):
             for suffix, chunk_text in build_table_chunks(
-                    page, table, uploaded_file.name, page_num + 1, i):
+                    page, table, dateiname, page_num + 1, i):
                 chunks.append(chunk_text)
                 metadatas.append({
-                    "file_name": uploaded_file.name,
+                    "file_name": dateiname,
                     "page": page_num + 1,
                     "folder": sachgebiet,
                     "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "table"
                 })
-                ids.append(f"{uploaded_file.name}_{suffix}")
+                ids.append(f"{dateiname}_{suffix}")
 
             # Die Fläche der Tabelle für den normalen Text-Extraktor schwärzen
             page.add_redact_annot(table.bbox)
@@ -631,14 +760,14 @@ def process_uploaded_pdf(uploaded_file, raum, sachgebiet="(Basis)"):
             for i, split in enumerate(splits):
                 chunks.append(split)
                 metadatas.append({
-                    "file_name": uploaded_file.name,
+                    "file_name": dateiname,
                     "page": page_num + 1,
                     "folder": sachgebiet,
                     "raum": raum,
                     "owner": st.session_state["username"],
                     "type": "text"
                 })
-                ids.append(f"{uploaded_file.name}_p{page_num+1}_text_{i}")
+                ids.append(f"{dateiname}_p{page_num+1}_text_{i}")
                 
     _speichern_chunks(chunks, metadatas, ids, raum)
 
@@ -715,6 +844,16 @@ def refresh_document_index():
 #   eigene Zahlen  15 s   -- Anzeige, nach einem Upload ohnehin geleert
 #   Verwaltung     30 s   -- Verzeichnisse, Abzuege, Rueckmeldungen
 #   ownCloud       60 s   -- eine Anfrage ueber das Netz
+
+def _unvollstaendig(stand):
+    """Fehlte diesem Abzug beim Sichern ein Raum?
+
+    Aeltere Abzuege haben die Angabe 'vollstaendig' nicht -- ihr Fehlen
+    heisst nicht "unvollstaendig", sondern "damals nicht vermerkt". Also
+    zaehlt hier nur ein ausdruecklich vermerkter Fehlschlag.
+    """
+    return bool(stand.get("fehler")) or stand.get("vollstaendig") is False
+
 
 def _leeren():
     """Nach jeder Aenderung an Dokumenten oder Raeumen aufrufen."""
@@ -1989,7 +2128,15 @@ with st.sidebar:
                     f"{_n:<22} {_gr / 1e6:9.1f} MB  "
                     f"{_st.get('abschnitte', '?'):>8} Abschnitte  "
                     f"{len(_st.get('raeume') or {})} Räume"
+                    + ("   UNVOLLSTÄNDIG" if _unvollstaendig(_st) else "")
                     for _n, _p, _gr, _st in _abzuege), language="text")
+                if any(_unvollstaendig(_st) for _n, _p, _gr, _st in _abzuege):
+                    st.warning(
+                        "Bei einem Abzug ließen sich nicht alle Räume "
+                        "lesen. Er ist von außen nicht von einem "
+                        "vollständigen zu unterscheiden — deshalb steht es "
+                        "hier. Ein neuer Abzug behebt es; der letzte "
+                        "vollständige wird nicht weggeräumt.")
 
             _laeuft = hintergrund.laeuft("sicherung")
             if _laeuft:
@@ -2019,6 +2166,15 @@ with st.sidebar:
                 st.caption(
                     f"{_st.get('abschnitte', '?')} Abschnitte in "
                     + ", ".join(sorted((_st.get('raeume') or {}))))
+                if _unvollstaendig(_st):
+                    _fehlten = ", ".join(
+                        _f.get("raum", "?") for _f in (_st.get("fehler") or [])
+                    ) or "unbekannt"
+                    st.error(
+                        f"Dieser Abzug ist unvollständig — beim Sichern "
+                        f"ließen sich diese Räume nicht lesen: {_fehlten}. "
+                        f"Eingespielt wird nur, was er hat. Gibt es einen "
+                        f"neueren vollständigen, nimm den.")
                 _sicher = st.checkbox(
                     "Vorhandene Abschnitte dürfen überschrieben werden",
                     key="sich_ok")
@@ -2394,8 +2550,11 @@ if _bestand > 0:
                         
                         # Nicht join(DOCS_DIR, name): mit Sachgebieten und
                         # erst recht mit aus ownCloud geholten Ordnern liegt
-                        # kaum ein Dokument noch direkt dort.
-                        pdf_path = paths.finde_dokument(file_n) or ""
+                        # kaum ein Dokument noch direkt dort. Und nicht
+                        # allein nach dem Namen: der Raum entscheidet,
+                        # welche 'Angebot.pdf' gemeint ist.
+                        pdf_path = dokument_pfad(
+                            file_n, source.get("raum") or raeume.ALLGEMEIN)
                         # Nur bei PDFs: bei Word oder Markdown ist "Seite"
                         # eine Abschnittsnummer, und pymupdf kann die Datei
                         # ohnehin nicht oeffnen.

@@ -347,7 +347,10 @@ def _quellen(treffer, mit_texten):
     quellen = pipeline.quellen(treffer)
     if mit_texten:
         return quellen
-    return [{"file": q["file"], "page": q["page"],
+    # raum bleibt auch ohne Texte dabei: er sagt, welche gleichnamige
+    # Datei gemeint ist, und er entscheidet, ob ein Dateiname spaeter ins
+    # Rueckmeldungsprotokoll darf (siehe feedback._quelle).
+    return [{"file": q["file"], "page": q["page"], "raum": q.get("raum"),
              "abschnitte": len(q["texts"])} for q in quellen]
 
 

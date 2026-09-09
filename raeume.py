@@ -283,6 +283,25 @@ def _darf(eintrag, benutzer, kennung=None):
     ein Verwalter, den die Firma nicht in der Abteilungsgruppe fuehrt, soll
     sich nicht selbst aussperren, indem er eine Gruppe eintraegt.
     """
+    # Ein persoenlicher Raum hat genau einen Leser, und der steht in der
+    # Kennung. Die Mitgliederliste und die Gruppe werden hier NICHT
+    # gelesen -- und zwar bewusst nicht nur, weil kein Weg sie dort
+    # eintragen soll, sondern weil dann kein Weg mehr genuegt:
+    #
+    #   * anlegen("privat_bob", mitglieder=[...]) legte einen Raum an, der
+    #     aussah wie der persoenliche von bob. Existierte bob noch nicht,
+    #     bekam er beim Anlegen seines Zugangs keinen eigenen mehr -- und
+    #     was er fuer privat hielt, lasen die eingetragenen Mitglieder.
+    #   * mitglieder_setzen("privat_anna", [...]), gruppe_setzen() und
+    #     fuer_alle_oeffnen() machten aus einem bestehenden persoenlichen
+    #     Raum einen geteilten. Ohne dass die Besitzerin es erfuhr.
+    #   * eine von Hand bearbeitete raeume.json taete dasselbe.
+    #
+    # Die drei Wege sind zusaetzlich verschlossen (siehe anlegen,
+    # mitglieder_setzen, gruppe_setzen). Diese Pruefung ist die, die auch
+    # dann noch haelt, wenn ein vierter dazukommt.
+    if kennung and ist_privat(kennung):
+        return sichere_kennung(benutzer) == kennung[len(PRIVAT):]
     mitglieder = eintrag.get("mitglieder") or []
     if "*" in mitglieder or benutzer in mitglieder:
         return True
@@ -354,6 +373,14 @@ def anlegen(kennung, bezeichnung_, beschreibung="", mitglieder=None):
     kennung = sichere_kennung(kennung)
     if len(kennung) < 3:
         return False, "Kennung zu kurz (mindestens drei Zeichen)."
+    if ist_privat(kennung):
+        # Persoenliche Raeume entstehen nur ueber sichere_anlage_privat --
+        # mit dem Zugang ihres Besitzers und mit ihm als einzigem
+        # Mitglied. Von Hand angelegt saehe der Raum genauso aus, haette
+        # aber die Mitglieder, die der Anlegende eintraegt.
+        return False, (f"'{PRIVAT}' ist den persoenlichen Raeumen "
+                       f"vorbehalten. Sie entstehen mit dem Zugang ihres "
+                       f"Besitzers, nicht von Hand.")
     if kennung in _lade()["raeume"] or kennung == ALLGEMEIN:
         return False, "Diesen Raum gibt es schon."
     daten = _lade()
@@ -407,6 +434,11 @@ def mitglieder_setzen(kennung, mitglieder):
     daten = _lade()
     if not _materialisiere(daten, kennung):
         return False, "Unbekannter Raum."
+    if ist_privat(kennung):
+        return False, ("Ein persoenlicher Raum hat genau einen Leser -- "
+                       "seinen Besitzer. Daran laesst sich nichts "
+                       "eintragen. Soll etwas daraus geteilt werden, "
+                       "verschiebt es der Besitzer in einen anderen Raum.")
     daten["raeume"][kennung]["mitglieder"] = sorted(set(mitglieder or []))
     _speichere(daten)
     if kennung == ALLGEMEIN and "*" not in (mitglieder or []):
@@ -437,6 +469,9 @@ def gruppe_setzen(kennung, gruppe):
     daten = _lade()
     if not _materialisiere(daten, kennung):
         return False, "Unbekannter Raum."
+    if ist_privat(kennung):
+        return False, ("Ein persoenlicher Raum bekommt keine Gruppe -- "
+                       "sonst lesen ihn alle ihre Mitglieder.")
     gruppe = str(gruppe or "").strip()
     if gruppe:
         daten["raeume"][kennung]["gruppe"] = gruppe

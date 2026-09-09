@@ -103,8 +103,8 @@ CHROMA_DIR = os.path.join(INDEX_DIR, "chroma_db")
 # TABELLEN_PFAD zeigt den Ordner woanders hin. Gedacht fuer den Fall, dass
 # die Listen in einem Netzlaufwerk der Firma liegen und dort von den
 # Fachabteilungen gepflegt werden: dann wird dieses Verzeichnis in den
-# Container eingehaengt, und niemand muss Dateien zweimal ablegen. Ein
-# Nur-Lese-Mount genuegt -- die Anwendung schreibt dort nicht hinein.
+# Container eingehaengt, und niemand muss Dateien zweimal ablegen. Eine
+# Nur-Lese-Einhaengung genuegt -- die Anwendung schreibt dort nicht hinein.
 TABELLEN_DIR = os.getenv("TABELLEN_PFAD", "").strip() or os.path.join(
     DATA_DIR, "tabellen")
 
@@ -167,7 +167,59 @@ def sicherer_teil(name):
     return t[:120] or "unbenannt"
 
 
-def finde_dokument(dateiname):
+def sicherer_dateiname(name):
+    """Ein hochgeladener Dateiname, gefahrlos, aber noch lesbar.
+
+    Nicht sicherer_teil(): der ist fuer Raumkennungen gedacht und macht
+    aus 'Handbuch Übersicht.pdf' ein 'Handbuch__bersicht.pdf'. Ein
+    Dateiname wird angezeigt, in Metadaten gefuehrt und wiedererkannt --
+    Umlaute gehoeren dazu.
+
+    Weg muss nur, was ein Pfad daraus machen wuerde: Verzeichnisanteile,
+    Trennzeichen, Steuerzeichen und die beiden Sondernamen. Der Browser
+    schickt zwar ueblicherweise nur den Basisnamen, aber "ueblicherweise"
+    ist bei einem Wert, der zu einem Pfad wird, kein Verlass.
+    """
+    roh = str(name or "").replace("\\", "/")
+    roh = roh.split("/")[-1]
+    roh = "".join(z for z in roh if ord(z) >= 32 and z not in '<>:"|?*')
+    roh = roh.strip().strip(".")
+    return roh[:180] or "unbenannt"
+
+
+def raum_ordner(raum):
+    """Der eigene Ablageordner eines Raums unter data/dokumente.
+
+    Dieselbe Zuordnung, die owncloud.ablage() beim Holen verwendet -- damit
+    ein Dokument denselben Ort hat, ob es hochgeladen oder abgeglichen
+    wurde. Der Ordner sagt, zu welchem Raum eine Datei gehoert; ohne ihn
+    sagt es nur der Dateiname, und Dateinamen wiederholen sich.
+    """
+    return os.path.join(DOCS_DIR, sicherer_teil(raum))
+
+
+def freier_name(ordner, dateiname):
+    """Ein Pfad in diesem Ordner, der noch keine Datei ueberschreibt.
+
+    'Angebot.pdf' -> 'Angebot (2).pdf' -> 'Angebot (3).pdf'. Gebraucht im
+    gemeinsamen Wurzelbereich, in dem noch Dateien aus der Zeit vor den
+    Raeumen liegen: dort kann ein Upload auf den Namen eines Dokuments
+    treffen, das einem anderen Raum gehoert. Ihn zu ueberschreiben waere
+    ein stiller Verlust -- die Abschnitte des anderen Raums zeigten
+    danach auf einen fremden Inhalt.
+    """
+    ziel = os.path.join(ordner, dateiname)
+    if not os.path.exists(ziel):
+        return ziel
+    stamm, endung = os.path.splitext(dateiname)
+    for n in range(2, 1000):
+        ziel = os.path.join(ordner, f"{stamm} ({n}){endung}")
+        if not os.path.exists(ziel):
+            return ziel
+    return os.path.join(ordner, f"{stamm} ({os.getpid()}){endung}")
+
+
+def finde_dokument(dateiname, bevorzugt=None, ausser=()):
     """Der Pfad zu einem Dokument, egal in welchem Unterordner es liegt.
 
     Die Metadaten halten nur den Dateinamen, nicht den Pfad. Solange alles
@@ -175,14 +227,40 @@ def finde_dokument(dateiname):
     erst recht mit aus ownCloud geholten Ordnern liegt fast nichts mehr
     dort. Ohne diese Suche zeigt die Quellenansicht dann keine Seite an,
     ohne zu sagen warum.
+
+    bevorzugt und ausser sind der Grund, warum die Suche nicht mehr nur
+    nach dem Namen geht. Sie tat es, und das war ein Leck: zwei Raeume
+    duerfen dieselbe 'Angebot.pdf' haben, os.walk fand irgendeine davon,
+    und die Quellenansicht zeigte zu einem Treffer im eigenen Raum die
+    Seite aus dem Dokument eines anderen. Niemandem faellt das auf -- der
+    Dateiname stimmt ja.
+
+        bevorzugt   zuerst hier suchen: der Ordner des eigenen Raums.
+        ausser      hier nie suchen: die Ordner der anderen Raeume.
     """
     name = os.path.basename(str(dateiname or ""))
     if not name:
         return None
+
+    if bevorzugt and os.path.isdir(bevorzugt):
+        direkt = os.path.join(bevorzugt, name)
+        if os.path.exists(direkt):
+            return direkt
+        for wurzel, _unter, dateien in os.walk(bevorzugt):
+            if name in dateien:
+                return os.path.join(wurzel, name)
+
+    gesperrt = {os.path.normpath(p) for p in ausser if p}
     direkt = os.path.join(DOCS_DIR, name)
     if os.path.exists(direkt):
         return direkt
-    for wurzel, _unter, dateien in os.walk(DOCS_DIR):
+    for wurzel, unter, dateien in os.walk(DOCS_DIR):
+        # Die gesperrten Ordner aus der Liste nehmen, statt den Treffer
+        # hinterher zu verwerfen: os.walk steigt sonst hinein, und ein
+        # Unterordner eines fremden Raums waere weiter erreichbar.
+        unter[:] = [u for u in unter
+                    if os.path.normpath(os.path.join(wurzel, u))
+                    not in gesperrt]
         if name in dateien:
             return os.path.join(wurzel, name)
     return None

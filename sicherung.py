@@ -138,6 +138,57 @@ def liste():
     return aus
 
 
+def _lies_raum(kennung, sml, gesamt, fortschritt=None, versuche=4):
+    """(zeilen, vektoren) eines Raums. Wirft, wenn es nicht zu holen ist.
+
+    Mit Wiederholung, und der Grund ist ein Fehlschlag, der beim Bauen
+    dieses Moduls in etwa einem von zwanzig Laeufen auftrat:
+
+        Error creating hnsw segment reader: Nothing found on disk
+
+    Chroma legt seine Vektorsegmente verzoegert ab. Wird eine Sammlung
+    gelesen, kurz nachdem in sie geschrieben wurde, kann der Leser das
+    Segment noch nicht finden -- und er merkt sich das. Die Wiederholung
+    steckt in store.hole(), samt Neuverbinden; ohne das scheitert der
+    zweite Versuch genauso.
+
+    Vorher kostete das den ganzen Raum: der Fehler landete in der
+    Fehlerliste, der Abzug wurde trotzdem geschrieben und sah brauchbar
+    aus -- ohne den allgemeinen Raum, den groessten von allen. Auffallen
+    wuerde das erst beim Zurueckholen.
+    """
+    name = _sammlungsname(kennung)
+    zeilen, vektoren, gelesen = [], [], 0
+    while gelesen < gesamt:
+        # store.hole und nicht sml.get: die Wiederholung samt
+        # Neuverbinden steckt dort, weil derselbe Fehlschlag auch das
+        # Verschieben und die Umsortierung trifft.
+        b = store.hole(sml, name, versuche=versuche,
+                       include=["documents", "metadatas", "embeddings"],
+                       limit=STAPEL, offset=gelesen)
+        ids = b.get("ids") or []
+        if not ids:
+            break
+        embs = b.get("embeddings")
+        if embs is None or len(embs) != len(ids):
+            raise ValueError(
+                "Die Sammlung gibt keine Vektoren heraus -- ohne "
+                "sie waere der Abzug nur Text.")
+        docs = b.get("documents") or []
+        metas = b.get("metadatas") or []
+        for i, kid in enumerate(ids):
+            zeilen.append(json.dumps(
+                {"id": kid,
+                 "text": docs[i] if i < len(docs) else "",
+                 "meta": metas[i] if i < len(metas) else {}},
+                ensure_ascii=False))
+        vektoren.extend(embs)
+        gelesen += len(ids)
+        if fortschritt:
+            fortschritt(kennung, gelesen, gesamt)
+    return zeilen, vektoren
+
+
 def sichere(fortschritt=None):
     """Schreibt einen vollstaendigen Abzug. Rueckgabe: Bericht als dict.
 
@@ -146,6 +197,16 @@ def sichere(fortschritt=None):
     sonst erst auf, wenn man ihn braucht.
     """
     name = time.strftime("%Y-%m-%d_%H-%M-%S")
+    # Zwei Abzuege in derselben Sekunde traten sich sonst gegenseitig weg:
+    # der Name traegt nur Sekunden, und unten wird das Ziel vor dem
+    # Umbenennen geleert. Passiert, wenn ein Zeitplan und ein Klick auf
+    # "Jetzt sichern" zusammenfallen -- und dann kann der unvollstaendige
+    # den vollstaendigen ueberschreiben.
+    if os.path.isdir(os.path.join(ORDNER, name)):
+        for n in range(2, 100):
+            if not os.path.isdir(os.path.join(ORDNER, f"{name}_{n}")):
+                name = f"{name}_{n}"
+                break
     ziel = os.path.join(ORDNER, name)
     vorlaeufig = ziel + ".teil"
     shutil.rmtree(vorlaeufig, ignore_errors=True)
@@ -165,34 +226,12 @@ def sichere(fortschritt=None):
         if not gesamt:
             continue
 
-        vektoren, zeilen, gelesen = [], [], 0
         try:
-            while gelesen < gesamt:
-                b = sml.get(include=["documents", "metadatas", "embeddings"],
-                            limit=STAPEL, offset=gelesen)
-                ids = b.get("ids") or []
-                if not ids:
-                    break
-                embs = b.get("embeddings")
-                if embs is None or len(embs) != len(ids):
-                    raise ValueError(
-                        "Die Sammlung gibt keine Vektoren heraus -- ohne "
-                        "sie waere der Abzug nur Text.")
-                docs = b.get("documents") or []
-                metas = b.get("metadatas") or []
-                for i, kid in enumerate(ids):
-                    zeilen.append(json.dumps(
-                        {"id": kid,
-                         "text": docs[i] if i < len(docs) else "",
-                         "meta": metas[i] if i < len(metas) else {}},
-                        ensure_ascii=False))
-                vektoren.extend(embs)
-                gelesen += len(ids)
-                if fortschritt:
-                    fortschritt(kennung, gelesen, gesamt)
+            zeilen, vektoren = _lies_raum(kennung, sml, gesamt, fortschritt)
         except Exception as e:
             bericht["fehler"].append({"raum": kennung, "grund": str(e)})
             continue
+        gelesen = len(zeilen)
 
         sichere_kennung = paths.sicherer_teil(kennung)
         # float32 und nicht float64: die Vektoren kommen aus einem Modell,
@@ -212,6 +251,12 @@ def sichere(fortschritt=None):
 
     bericht["dauer"] = round(time.time() - t0, 1)
     bericht["beendet"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    # Ausdruecklich vermerkt, und zwar IM Abzug. Ein Abzug, dem ein Raum
+    # fehlt, ist von einem vollstaendigen von aussen nicht zu
+    # unterscheiden -- die Dateien der anderen Raeume liegen ja da. Ohne
+    # diese Angabe faellt es erst beim Zurueckholen auf, und dann ist es
+    # der falsche Zeitpunkt.
+    bericht["vollstaendig"] = not bericht["fehler"]
 
     with open(os.path.join(vorlaeufig, "stand.json"), "w",
               encoding="utf-8") as f:
@@ -240,12 +285,26 @@ def sichere(fortschritt=None):
 
 
 def _aufraeumen():
-    """Loescht die aeltesten Abzuege ueber BEHALTEN hinaus."""
+    """Loescht die aeltesten Abzuege ueber BEHALTEN hinaus.
+
+    Der neueste VOLLSTAENDIGE bleibt immer stehen, auch wenn er aus der
+    Zahl herausfaellt. Sonst genuegten BEHALTEN Laeufe mit einem
+    Lesefehler, um den letzten brauchbaren Abzug wegzuraeumen -- und die
+    Aufbewahrung waere zu dem Zeitpunkt am duennsten, an dem sie am
+    meisten gebraucht wird.
+    """
     if BEHALTEN <= 0:
         return 0
     vorhanden = liste()
+    bewahrt = None
+    for name, _p, _gr, stand in vorhanden:
+        if stand.get("vollstaendig") and not stand.get("fehler"):
+            bewahrt = name
+            break
     weg = 0
     for name, pfad, _gr, _stand in vorhanden[BEHALTEN:]:
+        if name == bewahrt:
+            continue
         shutil.rmtree(pfad, ignore_errors=True)
         weg += 1
     return weg
@@ -272,6 +331,19 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None):
                 "raeume": {}}
 
     bericht = {"name": name, "raeume": {}, "fehler": []}
+    # Zuerst gesagt, nicht nebenbei: wer einen Abzug einspielt, tut es in
+    # einer Lage, in der er den Bestand nicht mehr hat. Dass diesem Abzug
+    # ein Raum fehlt, muss er vorher wissen und nicht hinterher merken.
+    if stand.get("vollstaendig") is False or stand.get("fehler"):
+        fehlten = [f.get("raum") for f in (stand.get("fehler") or [])
+                   if f.get("raum")]
+        bericht["unvollstaendig"] = fehlten or True
+        bericht["fehler"].append(
+            {"raum": ", ".join(fehlten) or "unbekannt",
+             "grund": ("Dieser Abzug wurde als unvollstaendig vermerkt: "
+                       "beim Sichern liessen sich diese Raeume nicht "
+                       "lesen. Was hier eingespielt wird, ist alles, was "
+                       "der Abzug hat.")})
     for kennung, angabe in (stand.get("raeume") or {}).items():
         if nur_raum and kennung != nur_raum:
             continue
@@ -332,11 +404,14 @@ def main():
         if not vorhanden:
             print(f"Keine Abzuege in {ORDNER}.")
             return 0
-        print(f"{'NAME':22} {'GROESSE':>10}  ABSCHNITTE  RAEUME")
+        print(f"{'NAME':22} {'GROESSE':>10}  ABSCHNITTE  RAEUME  ZUSTAND")
         for name, _p, gr, stand in vorhanden:
+            zustand = ("unvollstaendig"
+                       if stand.get("vollstaendig") is False
+                       or stand.get("fehler") else "vollstaendig")
             print(f"{name:22} {gr / 1e6:9.1f} MB  "
                   f"{stand.get('abschnitte', '?'):>10}  "
-                  f"{len(stand.get('raeume') or {})}")
+                  f"{len(stand.get('raeume') or {}):>6}  {zustand}")
         return 0
 
     if befehl == "zurueck":

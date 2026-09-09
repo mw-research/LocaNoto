@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 
 import geheim
 import paths
+import raeume
 
 DATEI = os.path.join(paths.DATA_DIR, "feedback.jsonl")
 
@@ -50,6 +51,28 @@ ARTEN = ("leer", "daumen_hoch", "daumen_runter")
 # Obergrenze fuer die Anzeige. Die Datei selbst waechst weiter -- sie ist
 # das Protokoll, die Anzeige nur der Blick darauf.
 ANZEIGE_GRENZE = paths.env_int("FEEDBACK_ANZEIGE", 50)
+
+
+PERSOENLICH = "(persoenlicher Raum)"
+
+
+def _quelle(q):
+    """Ein Quelleneintrag fuer das Protokoll -- ohne fremde Dateinamen.
+
+    Weggelassen wird beim Schreiben und nicht erst beim Anzeigen. Ein
+    Filter in der Anzeige waere eine Zusage, die die Datei nicht haelt:
+    heruntergeladen, gesichert oder von Hand gelesen stuende der Name
+    trotzdem da.
+    """
+    raum = str(q.get("raum") or "")
+    if raum.startswith(raeume.PRIVAT):
+        # Auch die Kennung nicht: in ihr steht der Name des Nutzers, dem
+        # der Raum gehoert. "privat" sagt, was fuer die Auswertung zaehlt
+        # -- der Treffer kam nicht aus dem gemeinsamen Bestand.
+        return {"file": PERSOENLICH, "page": q.get("page"),
+                "raum": "privat"}
+    return {"file": q.get("file"), "page": q.get("page"),
+            "raum": raum or None}
 
 
 def notiere(art, benutzer, frage, sonden=(), zahlen=None, quellen=(),
@@ -72,8 +95,16 @@ def notiere(art, benutzer, frage, sonden=(), zahlen=None, quellen=(),
         "zahlen": zahlen or {},
         # Nur Datei und Seite, nicht die Abschnitte selbst: die stehen im
         # Bestand und wuerden das Protokoll unbrauchbar gross machen.
-        "quellen": [{"file": q.get("file"), "page": q.get("page")}
-                    for q in list(quellen)[:20]],
+        #
+        # Und bei einem persoenlichen Raum nicht einmal die Datei. Das
+        # Protokoll ist eine Verwalterliste: es wird auf dem Bildschirm
+        # gezeigt und im Klartext heruntergeladen. Die Dateinamen aus
+        # persoenlichen Raeumen standen darin -- also genau die Auskunft,
+        # die der Grundsatz "jeder weiss nur, was er wissen muss"
+        # ausschliesst, und die die Raumtrennung sonst ueberall verhindert.
+        # Fuer den Zweck der Liste -- welche Begriffe im Bestand fehlen --
+        # traegt der Dateiname eines fremden Privatdokuments nichts bei.
+        "quellen": [_quelle(q) for q in list(quellen)[:20]],
         "herkunft": herkunft,
     }
     try:
