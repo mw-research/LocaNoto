@@ -89,6 +89,33 @@ def schluessel():
     if _schluessel is not None:
         return _schluessel
 
+    # Ein Docker- oder Kubernetes-Secret liegt als DATEI unter
+    # /run/secrets -- in tmpfs, also im Arbeitsspeicher und auf keiner
+    # Platte. Das ist die dichteste Form: ein kopiertes Volume, ein
+    # Snapshot, eine ausgebaute Platte enthalten ihn dann nicht. Der
+    # Wert direkt in der Umgebung steht dagegen in der .env und damit
+    # sehr wohl auf einer Platte -- meist derselben.
+    #
+    # Die Endung _DATEI ist die uebliche Form fuer genau diesen Zweck;
+    # wer Secrets kennt, sucht danach.
+    aus_datei = os.getenv("LOCANOTO_SCHLUESSEL_DATEI", "").strip()
+    if aus_datei:
+        try:
+            with open(aus_datei, "rb") as f:
+                inhalt = f.read().strip()
+        except OSError as e:
+            _grund = (f"LOCANOTO_SCHLUESSEL_DATEI zeigt auf {aus_datei}, "
+                      f"das nicht lesbar ist ({e}). Ist das Secret "
+                      f"eingehaengt?")
+            return None
+        try:
+            roh = base64.urlsafe_b64decode(
+                inhalt + b"=" * (-len(inhalt) % 4))
+        except Exception:
+            roh = inhalt
+        _schluessel = roh if len(roh) == 32 else hashlib.sha256(roh).digest()
+        return _schluessel
+
     aus_umgebung = os.getenv("LOCANOTO_SCHLUESSEL", "").strip()
     if aus_umgebung:
         try:
@@ -280,6 +307,9 @@ def beschreibung():
         except Exception:
             return "aus (Paket cryptography fehlt)"
         return "AUS -- " + (_grund or "kein Schluessel schreibbar")
+    if os.getenv("LOCANOTO_SCHLUESSEL_DATEI", "").strip():
+        return "an (Schluessel aus einem Secret -- auf keiner Platte)"
     if os.getenv("LOCANOTO_SCHLUESSEL", "").strip():
-        return "an (Schluessel aus der Umgebung)"
+        return ("an (Schluessel aus der Umgebung -- steht damit meist in "
+                "der .env und liegt doch auf einer Platte)")
     return f"an (Schluessel in {os.path.basename(SCHLUESSEL_DATEI)})"

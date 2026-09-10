@@ -12,15 +12,23 @@ sichtbar sein, statt in einer README zu stehen, die niemand oeffnet.
 import os
 
 import budget
+import datentraeger
 import paths
 import raumschluessel
 
 
 def _schluesselherkunft():
+    if os.getenv("LOCANOTO_SCHLUESSEL_DATEI", "").strip():
+        return True, ("Aus einem Secret. Das liegt unter /run/secrets in "
+                      "tmpfs -- im Arbeitsspeicher, auf keiner Platte. "
+                      "Die dichteste Form: ein kopiertes Volume, ein "
+                      "Snapshot, eine ausgebaute Platte enthalten ihn "
+                      "nicht.")
     if os.getenv("LOCANOTO_SCHLUESSEL", "").strip():
-        return True, ("Aus der Umgebung -- er liegt auf KEINER Platte. Das "
-                      "ist die dichteste Form: ein kopiertes Volume "
-                      "enthaelt ihn nicht.")
+        return False, ("Aus der Umgebung. Das sieht dichter aus, als es "
+                       "ist: der Wert steht meist in der .env und damit "
+                       "auf einer Platte -- oft derselben. Dichter waere "
+                       "LOCANOTO_SCHLUESSEL_DATEI mit einem Secret.")
     import geheim
     if not raumschluessel.verfuegbar():
         return False, ("Keine Verschluesselung. Der Bestand liegt im "
@@ -56,6 +64,23 @@ def _index_getrennt():
         "sich dort in Sekunden neu auf (18.600 Abschnitte je Sekunde).")
 
 
+def _traeger(name, pfad):
+    """Liegt dieses Verzeichnis auf einem verschluesselten Datentraeger?
+
+    Der erste Punkt der Liste, weil er die Grundlage ist: was die
+    Anwendung selbst verschluesselt, ist die zweite Schicht darueber.
+    Die Originaldokumente, die Vektoren und der Stichwortindex lassen
+    sich nicht verdecken -- sie muessen lesbar sein, damit gearbeitet
+    werden kann. Ist die Platte offen, liest sie, wer sie ausbaut.
+
+    "unklar" gilt hier als NICHT erfuellt. Eine Zusicherung, die auf
+    Nichtwissen beruht, ist schlechter als keine: nach ihr richtet sich
+    jemand.
+    """
+    zustand, meldung = datentraeger.lage(pfad)
+    return zustand == "ja", f"{name}: {meldung}"
+
+
 def _vektoren():
     return False, (
         "Die Vektoren sind NICHT verschluesselt und koennen es nicht sein "
@@ -76,6 +101,8 @@ def _laufender_server():
 def lage():
     """[(name, ok, text)] -- der ganze Stand, ohne Beschoenigung."""
     zeilen = []
+    zeilen.append(("Datentraeger verschluesselt",)
+                  + _traeger("Daten", paths.DATA_DIR))
     an = raumschluessel.verfuegbar()
     zeilen.append((
         "Abschnitte verschluesselt", an,
