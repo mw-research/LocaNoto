@@ -1,0 +1,165 @@
+# --- VARIANTE: ES GIBT NUR EINE FREIGABE, KEINEN BLOCKSPEICHER ---
+#
+# 90-variante-freigabe.yaml loest den Fall "Dokumente auf der Freigabe,
+# Datenbanken auf einem kleinen Blockvolume". Das setzt voraus, dass es
+# eine Blockklasse GIBT. Auf manchen Clustern gibt es keine -- dort
+# endet jede StorageClass auf -nfs-csi, und die Anleitung laeuft ins
+# Leere.
+#
+# Woran man es erkennt:
+#
+#   kubectl -n NAMENSRAUM get pvc
+#   NAME              STATUS   STORAGECLASS
+#   locanoto-daten    Bound    zfs-generic-nfs-csi     <- eine Freigabe
+#
+# Warum das nicht egal ist: die beiden SQLite-Bestaende, chroma_db und
+# keyword_index.sqlite3, brauchen im WAL-Betrieb gemeinsamen Speicher im
+# selben Dateisystem. Ueber eine Freigabe gibt es den nicht, und die
+# Dateisperren sind unzuverlaessig. Das Ergebnis ist kein Fehler,
+# sondern ein beschaedigter Bestand -- und man sieht es erst, wenn man
+# ihn braucht.
+#
+# DIE AUFTEILUNG HIER
+#
+#   Freigabe (PVC)   Dokumente, Chats, Rueckmeldungen, ABZUEGE.
+#                    Gewoehnliche Dateien; damit hat NFS kein Problem.
+#   emptyDir         chroma_db und der Stichwortindex. Knotenplatte,
+#                    also ein echtes Dateisystem -- SQLite laeuft
+#                    einwandfrei.
+#
+# emptyDir ist fluechtig: es geht mit dem Pod. Deshalb die zwei
+# Ergaenzungen unten, und beide sind noetig, nicht nur eine:
+#
+#   beim BEENDEN    preStop zieht einen Abzug auf die Freigabe
+#   beim STARTEN    ein initContainer spielt den neuesten wieder ein
+#
+# WAS DAS NICHT AUFFAENGT: einen harten Knotenausfall. Dann laeuft
+# preStop nicht, und verloren ist alles seit dem letzten Abzug. Wer das
+# nicht hinnehmen will, braucht einen regelmaessigen Abzug -- als
+# CronJob wie in 40-zeitplan.yaml, der dafuer allerdings ein
+# ServiceAccount mit exec-Recht braucht. In einer Sandbox ohne solche
+# Rechte bleibt: von Hand, vor allem was zaehlt.
+#
+#   kubectl -n NAMENSRAUM exec deploy/locanoto -- python sicherung.py
+#
+# ANZUWENDEN statt des Deployments aus 95-ein-namensraum.yaml. PVCs,
+# Secret und ConfigMap von dort bleiben, mit einer Aenderung:
+#
+#   kubectl -n NAMENSRAUM patch configmap locanoto-konfiguration \
+#     --type merge -p '{"data":{"LOCANOTO_INDEX":"/var/lib/locanoto"}}'
+#
+# LOCANOTO_INDEX und nicht LOCANOTO_STICHWORTINDEX: hier sollen BEIDE
+# Datenbanken von der Freigabe herunter, nicht nur der Stichwortindex.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: locanoto
+  template:
+    metadata:
+      labels:
+        app: locanoto
+    spec:
+      # Zeit fuers Aufraeumen. Ein Abzug von 20.000 Abschnitten dauert
+      # gemessen wenige Sekunden; 120 sind grosszuegig und kosten
+      # nichts, solange preStop frueher fertig ist. Zu knapp bemessen
+      # wird der Abzug mitten im Schreiben abgeschnitten -- und ein
+      # halber Abzug ist schlimmer als keiner, weil er wie einer
+      # aussieht.
+      terminationGracePeriodSeconds: 120
+      initContainers:
+        - name: wiederanlauf
+          image: ghcr.io/mw-research/locanoto:schlank
+          command:
+            - python
+            - sicherung.py
+            - zurueck
+            - --neuester
+          envFrom:
+            - configMapRef:
+                name: locanoto-konfiguration
+            - secretRef:
+                name: locanoto-geheim
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+            - name: konfig
+              mountPath: /app/config
+            - name: index
+              mountPath: /var/lib/locanoto
+      containers:
+        - name: app
+          image: ghcr.io/mw-research/locanoto:schlank
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: locanoto-konfiguration
+            - secretRef:
+                name: locanoto-geheim
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  # Scheitert der Abzug, soll das Beenden trotzdem
+                  # durchgehen: ein Pod, der sich nicht beenden laesst,
+                  # wird nach der Frist hart getoetet, und dann ist auch
+                  # der Abzug weg. Die Meldung landet im Protokoll.
+                  - "python sicherung.py || echo 'Abzug beim Beenden fehlgeschlagen'"
+          ports:
+            - containerPort: 8501
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          startupProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            periodSeconds: 15
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+            - name: konfig
+              mountPath: /app/config
+            - name: index
+              mountPath: /var/lib/locanoto
+      volumes:
+        - name: daten
+          persistentVolumeClaim:
+            claimName: locanoto-daten
+        - name: konfig
+          persistentVolumeClaim:
+            claimName: locanoto-konfig
+        # Die Knotenplatte. Ein echtes Dateisystem -- genau das, was
+        # SQLite braucht und was die Freigabe nicht liefert.
+        - name: index
+          emptyDir:
+            sizeLimit: 20Gi
