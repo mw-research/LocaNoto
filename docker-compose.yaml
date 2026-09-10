@@ -118,6 +118,7 @@ x-umgebung: &umgebung
   - LOCANOTO_DATEN=/app/data
   - LOCANOTO_KONFIG=/app/config
   - LOCANOTO_INDEX=${LOCANOTO_INDEX:-/app/data}
+  - LOCANOTO_STICHWORTINDEX=${LOCANOTO_STICHWORTINDEX:-}
   # Dokumente aus ownCloud oder Nextcloud. Bei aktiver
   # Zwei-Faktor-Anmeldung ein App-Passwort, nicht das Anmeldepasswort.
   - OWNCLOUD_URL=${OWNCLOUD_URL:-}

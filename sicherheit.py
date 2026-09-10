@@ -50,18 +50,23 @@ def _index_getrennt():
     er neben der verschluesselten Sammlung, und die Verschluesselung ist
     Theater: wer das Volume kopiert, liest den Text aus dem Index.
     """
-    getrennt = (os.path.abspath(paths.INDEX_DIR)
-                != os.path.abspath(paths.DATA_DIR))
+    import keyword_index
+    wo = keyword_index.STICHWORT_DIR
+    getrennt = (os.path.abspath(wo) != os.path.abspath(paths.DATA_DIR)
+                and not os.path.abspath(wo).startswith(
+                    os.path.abspath(paths.DATA_DIR) + os.sep))
     if getrennt:
-        return True, (f"Stichwortindex unter {paths.INDEX_DIR} -- getrennt "
-                      f"von den Daten. Richtig so: er traegt den Text im "
+        return True, (f"Stichwortindex unter {wo} -- getrennt von den "
+                      f"Daten. Richtig so: er traegt den Text im "
                       f"Klartext, weil FTS5 nicht anders kann.")
     return False, (
         "Der Stichwortindex liegt IM Datenverzeichnis und traegt den Text "
         "im Klartext. Damit ist die Verschluesselung der Sammlung ohne "
         "Wirkung: wer das Volume kopiert, liest den Index. Setze "
-        "LOCANOTO_INDEX auf einen containerlokalen Pfad -- der Index baut "
-        "sich dort in Sekunden neu auf (18.600 Abschnitte je Sekunde).")
+        "LOCANOTO_STICHWORTINDEX auf einen containerlokalen Pfad -- nur "
+        "diese Datei wandert dann, die Vektordatenbank bleibt liegen. "
+        "Der Index baut sich in Sekunden neu auf (18.600 Abschnitte je "
+        "Sekunde).")
 
 
 def _traeger(name, pfad):
