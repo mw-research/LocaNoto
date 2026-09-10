@@ -89,14 +89,44 @@ def stand(benutzer=None):
         return sum(e[3] for e in passend), len({e[2] for e in passend})
 
 
-def zaehle(benutzer, raum, anzahl):
+def zaehle(benutzer, raum, anzahl, wartung=False):
     """Bucht eine Entnahme. Wirft Ueberzogen, wenn die Schwelle reisst.
 
     Gezaehlt wird JE NUTZER und nicht insgesamt: sonst brechen zwanzig
     fleissige Kollegen gemeinsam eine Schwelle, die fuer einen gedacht
     war, und die Anwendung steht mitten am Vormittag.
     """
-    if not AKTIV or anzahl <= 0:
+    if anzahl <= 0:
+        return
+
+    # WARTUNG zaehlt nicht mit, wird aber festgehalten.
+    #
+    # Die Schwelle trennt "jemand arbeitet" von "jemand raeumt ab". Der
+    # Neuaufbau des Stichwortindex ist keins von beidem: er liest den
+    # ganzen Bestand, weil das seine Aufgabe ist, und er traegt nichts
+    # nach draussen -- der Klartext geht in eine Datei auf derselben
+    # Maschine, die ohnehin gleich alles enthaelt.
+    #
+    # Zaehlte er mit, waere die Folge nicht mehr Sicherheit, sondern
+    # eine Anwendung, die bei jedem Bestand ueber 4.000 Abschnitten
+    # nicht mehr startet -- und zwar genau dann, wenn der Index fehlt:
+    # nach einem Umzug, nach dem Einspielen eines Abzugs, bei einer
+    # frischen Installation. Eine Schwelle, die den Normalbetrieb
+    # unmoeglich macht, wird abgeschaltet, und dann schuetzt sie nichts
+    # mehr.
+    #
+    # Sie faellt trotzdem nicht unter den Tisch: das Protokoll bekommt
+    # den Eintrag mit der vollen Zahl. Wer spaeter nachliest, sieht
+    # "20.608 Abschnitte aufgeschlossen, Grund: Indexaufbau" und kann
+    # pruefen, ob zu dieser Zeit ein Start stattfand.
+    if wartung:
+        melde("wartung_klartext", benutzer,
+              {"raum": raum, "abschnitte": int(anzahl),
+               "grund": "Aufbau des Stichwortindex -- nicht auf das "
+                        "Budget angerechnet"})
+        return
+
+    if not AKTIV:
         return
     with _sperre:
         jetzt = _jetzt()

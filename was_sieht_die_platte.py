@@ -66,6 +66,25 @@ zeile("Originaldokumente", anzahl > 0,
       if anzahl else "")
 
 # --- 2. Der Stichwortindex ---
+#
+# Zwei Fragen, nicht eine. "Liegt er hier?" beantwortet die Frage nach
+# der Platte. "Gibt es ihn ueberhaupt?" beantwortet sie nicht -- und ein
+# fehlender Index sieht von hier aus genauso aus wie ein gut
+# weggeraeumter. Genau dieser Fall tritt nach dem Umzug ein: die Datei
+# ist am alten Ort geloescht, am neuen aber erst nach rebuild_index.py
+# da. Dazwischen sucht die Anwendung nur ueber Vektoren, und niemand
+# merkt es, weil trotzdem Treffer kommen.
+def _abschnitte(pfad):
+    """Wie viele Abschnitte stehen in diesem Index? None = nicht lesbar."""
+    try:
+        con = sqlite3.connect("file:" + pfad + "?mode=ro", uri=True)
+        n = con.execute("SELECT count(*) FROM chunks").fetchone()[0]
+        con.close()
+        return n
+    except Exception:
+        return None
+
+
 gefunden = glob.glob(os.path.join(WURZEL, "**", "keyword_index.sqlite3"),
                      recursive=True)
 if gefunden:
@@ -81,13 +100,43 @@ if gefunden:
         print(f"      (Index nicht lesbar: {e})")
     zeile("Stichwortindex (FTS5)", True,
           f"{n} Abschnitte im KLARTEXT, erster rund {beispiel} Zeichen. "
-          f"Er liegt hier, weil LOCANOTO_INDEX nicht gesetzt ist.",
-          "LOCANOTO_INDEX auf einen containerlokalen Pfad setzen. Der "
-          "Index ist ableitbar und baut sich in Sekunden neu auf.")
+          f"Er liegt hier, weil LOCANOTO_STICHWORTINDEX nicht gesetzt ist.",
+          "LOCANOTO_STICHWORTINDEX auf ein anderes Volume setzen -- NICHT "
+          "LOCANOTO_INDEX, das fuehrt auch die Vektordatenbank mit sich. "
+          "Der Index ist ableitbar und baut sich in Sekunden neu auf.")
 else:
-    zeile("Stichwortindex (FTS5)", False,
-          "Nicht in diesem Verzeichnis -- LOCANOTO_INDEX zeigt woandershin. "
-          "Richtig so: er traegt den Text im Klartext.")
+    # Er ist nicht hier. Wo dann, und steht etwas drin?
+    anderswo = None
+    try:
+        import keyword_index
+        anderswo = keyword_index.DB_PATH
+    except Exception:
+        pass
+    if anderswo and os.path.isfile(anderswo):
+        n = _abschnitte(anderswo)
+        if n:
+            zeile("Stichwortindex (FTS5)", False,
+                  f"Nicht in diesem Verzeichnis, sondern unter "
+                  f"{os.path.dirname(anderswo)} -- {n} Abschnitte. Richtig "
+                  f"so: er traegt den Text im Klartext.")
+        else:
+            zeile("Stichwortindex (FTS5)", False,
+                  "Getrennt abgelegt, aber LEER.",
+                  "Die Stichwortsuche liefert damit nichts, die Anwendung "
+                  "sucht nur ueber Vektoren -- und meldet keinen Fehler. "
+                  "Einmal aufbauen: python rebuild_index.py")
+    elif anderswo:
+        zeile("Stichwortindex (FTS5)", False,
+              f"Weder hier noch unter {os.path.dirname(anderswo)}.",
+              "Es gibt ihn also gar nicht. Die Anwendung sucht nur ueber "
+              "Vektoren und meldet keinen Fehler. "
+              "Einmal aufbauen: python rebuild_index.py")
+    else:
+        zeile("Stichwortindex (FTS5)", False,
+              "Nicht in diesem Verzeichnis -- LOCANOTO_STICHWORTINDEX "
+              "zeigt woandershin. Richtig so: er traegt den Text im "
+              "Klartext.",
+              "Ob dort etwas drinsteht, ist von hier aus nicht zu sehen.")
 
 # --- 3. Die Vektordatenbank ---
 #

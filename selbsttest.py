@@ -78,12 +78,12 @@ def _fremd_scheitert(roh):
         return True
 
 
-def _budget_laeuft(wer, raum, je, wie_oft):
+def _budget_laeuft(wer, raum, je, wie_oft, wartung=False):
     """True, wenn alle Buchungen durchgehen."""
     import budget
     try:
         for i in range(wie_oft):
-            budget.zaehle(wer, raum or f"raum{i}", je)
+            budget.zaehle(wer, raum or f"raum{i}", je, wartung=wartung)
         return True
     except budget.Ueberzogen:
         return False
@@ -419,6 +419,27 @@ pruef("normales Arbeiten laeuft", _budget_laeuft("fleissig", "einkauf", 12, 3))
 budget._ereignisse.clear()
 pruef("ein Massenabzug bricht ab",
       not _budget_laeuft("dieb", None, 5, 10))
+budget._ereignisse.clear()
+
+# Der Indexaufbau liest den GANZEN Bestand -- das ist seine Aufgabe. Bis
+# hierher rechnete er auf dasselbe Budget und riss jede Schwelle: die
+# Anwendung startete bei jedem Bestand ueber der Schwelle nicht mehr,
+# sobald der Index fehlte. Beide Richtungen werden geprueft, denn eine
+# Ausnahme, die auch fuer den Dieb gilt, ist keine.
+pruef("der Indexaufbau laeuft trotz Schwelle durch",
+      _budget_laeuft("aufbau", None, 5000, 8, wartung=True))
+budget._ereignisse.clear()
+pruef("und schuetzt den Dieb nicht mit",
+      not _budget_laeuft("dieb", None, 5, 10))
+budget._ereignisse.clear()
+# Er verschwindet auch nicht: das Protokoll bekommt ihn.
+_gemeldet = []
+_alt_melde = budget.melde
+budget.melde = lambda art, wer, angaben=None: _gemeldet.append((art, wer))
+budget.zaehle("aufbau", "einkauf", 20608, wartung=True)
+budget.melde = _alt_melde
+pruef("und steht trotzdem im Protokoll",
+      _gemeldet == [("wartung_klartext", "aufbau")])
 budget._ereignisse.clear()
 
 # Die Lage sagt auch, was sie NICHT leistet.
