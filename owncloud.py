@@ -756,34 +756,65 @@ def freigabe_entfernen(kennung):
 
 
 def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
-    """Bringt die Freigaben eines Ordners auf genau diese Menge.
+    """Bringt die Freigaben eines Ordners auf genau diesen Stand.
 
-    Setzen und nicht ergaenzen: wer aus einem Raum ausscheidet, verliert
-    damit auch den Ordner. Ein Mitglied zu entfernen und die Freigabe
-    stehen zu lassen waere die haeufigste Art, eine Rechteaenderung
-    wirkungslos zu machen -- die Suche fragt den Raum nicht mehr, die
-    Dateien liegen aber weiter im ownCloud des Ausgeschiedenen.
+    personen ist eine Liste (dann gilt rechte fuer alle) ODER eine
+    Zuordnung {kennung: rechte}. Zwei Stufen im selben Ordner sind kein
+    Sonderfall: im allgemeinen Raum lesen alle und schreiben nur
+    Verwalter -- dieselbe Regel wie in raeume.schreibbar().
+
+    SETZEN und nicht ergaenzen, und zwar in drei Richtungen:
+
+      * wer nicht mehr dazugehoert, verliert die Freigabe. Ein Mitglied
+        zu entfernen und die Freigabe stehen zu lassen waere die
+        haeufigste Art, eine Rechteaenderung wirkungslos zu machen: die
+        Suche fragt den Raum nicht mehr, die Dateien laegen aber weiter
+        im ownCloud des Ausgeschiedenen.
+      * wer dazukommt, bekommt sie.
+      * wessen RECHTE sich geaendert haben, bekommt die neuen. Das war
+        zuerst vergessen -- ein zum Nutzer zurueckgestufter Verwalter
+        behielt sein Schreibrecht, und jeder Lauf legte obendrein eine
+        zweite Freigabe an.
 
     Rueckgabe: (hinzugefuegt, entfernt).
     """
-    soll_n = {str(p).strip().lower() for p in personen if str(p).strip()}
-    soll_g = {str(g).strip() for g in gruppen_ if str(g).strip()}
+    if isinstance(personen, dict):
+        soll_n = {str(k).strip().lower(): int(v)
+                  for k, v in personen.items() if str(k).strip()}
+    else:
+        soll_n = {str(p).strip().lower(): int(rechte)
+                  for p in personen if str(p).strip()}
+    soll_g = {str(g).strip(): int(rechte) for g in gruppen_ if str(g).strip()}
+
     ist = freigaben(pfad)
     dazu, weg = 0, 0
+    hat_n, hat_g = {}, {}
     for f in ist:
-        vorhanden = (f["an"].lower() in soll_n if f["art"] == 0
-                     else f["an"] in soll_g)
-        if not vorhanden and f["art"] in (0, 1):
+        if f["art"] == 0:
+            soll = soll_n.get(f["an"].lower())
+        elif f["art"] == 1:
+            soll = soll_g.get(f["an"])
+        else:
+            continue
+        # Weg, wenn nicht mehr vorgesehen ODER mit anderen Rechten. Ein
+        # Entfernen und Neuanlegen ist hier richtiger als ein Aendern:
+        # die OCS-Fassungen unterscheiden sich darin, und ein Fehlgriff
+        # liesse das alte Recht stehen.
+        if soll is None or soll != f["rechte"]:
             freigabe_entfernen(f["id"])
             weg += 1
-    hat_n = {f["an"].lower() for f in ist if f["art"] == 0}
-    hat_g = {f["an"] for f in ist if f["art"] == 1}
-    for p in sorted(soll_n - hat_n):
-        freigeben(pfad, p, "nutzer", rechte)
-        dazu += 1
-    for g in sorted(soll_g - hat_g):
-        freigeben(pfad, g, "gruppe", rechte)
-        dazu += 1
+            continue
+        (hat_n if f["art"] == 0 else hat_g)[
+            f["an"].lower() if f["art"] == 0 else f["an"]] = f["rechte"]
+
+    for k, r in sorted(soll_n.items()):
+        if k not in hat_n:
+            freigeben(pfad, k, "nutzer", r)
+            dazu += 1
+    for g, r in sorted(soll_g.items()):
+        if g not in hat_g:
+            freigeben(pfad, g, "gruppe", r)
+            dazu += 1
     return dazu, weg
 
 
@@ -873,19 +904,20 @@ def richte_raum_ein(raum, rechte=None):
         gruppen_ = []
         wie = LESEN_SCHREIBEN
     elif raum == raeume.ALLGEMEIN:
-        # Fuer alle lesbar, aber schreiben duerfen nur Verwalter -- dieselbe
-        # Regel wie in raeume.schreibbar(). Waere der Ordner fuer alle
-        # beschreibbar, liefe die Regel der Anwendung ins Leere, sobald
-        # jemand die Datei ueber ownCloud hineinlegt.
-        alle = [n for n in benutzer.namen()]
-        personen = alle
+        # Fuer alle lesbar, aber schreiben duerfen nur Verwalter --
+        # dieselbe Regel wie in raeume.schreibbar(). Waere der Ordner fuer
+        # alle beschreibbar, liefe die Regel der Anwendung ins Leere,
+        # sobald jemand die Datei ueber ownCloud hineinlegt.
+        #
+        # Beides in EINER Zuordnung und nicht als zweiter Aufruf: eine
+        # Extraschleife legte bei jedem Lauf eine weitere Freigabe an,
+        # weil sie nicht nachsah, ob es sie schon gibt.
+        verwalter = set(benutzer.admins())
+        personen = {n: (LESEN_SCHREIBEN if n in verwalter
+                        else (rechte if rechte is not None else NUR_LESEN))
+                    for n in benutzer.namen()}
         gruppen_ = []
         wie = rechte if rechte is not None else NUR_LESEN
-        for a in benutzer.admins():
-            try:
-                freigeben(pfad, a, "nutzer", LESEN_SCHREIBEN)
-            except Exception:
-                pass
     else:
         personen = list(eintrag.get("mitglieder") or [])
         if "*" in personen:

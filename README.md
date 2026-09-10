@@ -23,6 +23,91 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 
 ---
 
+## 🚀 Von null auf lauffähig
+
+Wer die Anwendung frisch bekommt, braucht drei Befehle. ownCloud ist
+mitgeliefert — als eigener Dienst hinter einem Profil, nicht im selben
+Abbild.
+
+```bash
+cp .env.example .env
+```
+
+Vier Werte reichen für den ersten Start:
+
+```ini
+OPENAI_BASE_URL=http://192.168.1.10:4000
+OPENAI_API_KEY=dein-schlüssel
+CHAT_MODEL=qwen3.8:27b
+EMBEDDING_MODEL=qwen3-embedding:8b
+
+# Für das mitgelieferte ownCloud:
+OWNCLOUD_URL=http://owncloud:8080
+OWNCLOUD_USER=admin
+OWNCLOUD_PASSWORT=EIN-STARKES-PASSWORT
+OWNCLOUD_ADMIN_USER=admin
+OWNCLOUD_ADMIN_PASSWORT=EIN-STARKES-PASSWORT
+OWNCLOUD_DB_PASSWORT=EIN-ANDERES-PASSWORT
+```
+
+```bash
+docker compose --profile owncloud up -d
+docker compose exec locanoto_bot python einrichten.py
+```
+
+Das war es. `einrichten.py` wartet, bis ownCloud sich selbst eingerichtet
+hat — beim allerersten Start dauert das ein paar Minuten —, erzeugt den
+Installationsschlüssel, legt den ersten Verwalter **in beiden Systemen**
+an, baut den Ordnerbaum samt Freigaben und zeigt zum Schluss die
+Sicherheitslage mit dem, was noch offen ist.
+
+**Wiederholbar.** Was schon steht, bleibt: ein vorhandener Schlüssel wird
+nie ersetzt, ein vorhandener Zugang nicht überschrieben, Freigaben werden
+gesetzt statt ergänzt. Ein abgebrochener Lauf lässt sich einfach neu
+starten.
+
+### Ohne das mitgelieferte ownCloud
+
+Wer eines im Haus hat, lässt das Profil weg und trägt dessen Adresse ein
+— an allem anderen ändert sich nichts:
+
+```bash
+docker compose up -d
+docker compose exec locanoto_bot python einrichten.py
+```
+
+Und wer ganz ohne arbeitet:
+
+```bash
+docker compose exec locanoto_bot python einrichten.py --ohne-owncloud
+```
+
+Dann liegt derselbe Baum lokal unter `data/dokumente/` — gleiche Namen,
+gleiche Aufteilung, nur ohne Freigaben. **Der Rückfall ist kein
+Sonderfall**, sondern derselbe Aufbau ohne ownCloud.
+
+### Warum ownCloud nicht im selben Abbild liegt
+
+Zwei Programme in einem Container heißt zwei Prozesse um PID 1,
+gemeinsame Protokolle, und ein Update von LocaNoto risse ownCloud mit.
+Es ist trotzdem **dieselbe Installation**: ein `compose`, ein Netz, ein
+Befehl. Das Profil sorgt dafür, dass die drei Dienste (ownCloud,
+MariaDB, Redis) nur mit `--profile owncloud` starten — wer sie nicht
+will, merkt nichts von ihnen.
+
+### Das Erste, was danach zu tun ist
+
+```bash
+docker compose exec -T locanoto_bot cat /app/config/schluessel.key > ~/locanoto-schluessel.key && chmod 600 ~/locanoto-schluessel.key
+```
+
+**Ohne diesen Schlüssel sind alle Chatverläufe und der verschlüsselte
+Bestand endgültig unlesbar** — ohne eine einzige Fehlermeldung, denn die
+Dateien liegen ja noch da. `einrichten.py` sagt es beim ersten Lauf, und
+es ist der einzige Schritt, den niemand nachholen kann.
+
+---
+
 ## ⚡ In Kürze
 
 Alles, was für einen laufenden Stand nötig ist — auf einem Bildschirm.
