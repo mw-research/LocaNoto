@@ -220,8 +220,14 @@ pruef("Abzug alle Raeume", len(b["raeume"]) == 3, sorted(b["raeume"]))
 pruef("Abzug ohne Fehler", not b["fehler"], b["fehler"])
 for raum in list(BESTAND):
     store.loesche(raeume.sammlung(raum))
+# Die Wache fuer den Wiederanlauf ohne Menschen davor: leer heisst
+# leer, und im Zweifel gilt der Bestand als vorhanden. Ein nicht
+# eingespielter Abzug ist ein Ausfall; ein faelschlich eingespielter
+# ueberschreibt die Arbeit des vorherigen Starts.
+pruef("nach dem Loeschen gilt der Bestand als leer", sicherung._leer_genug())
 z = sicherung.hole_zurueck(b["name"])
 pruef("Einspielen ohne Modell", sum(z["raeume"].values()) == 3, z["raeume"])
+pruef("danach nicht mehr", not sicherung._leer_genug())
 
 print("=== 7. Ablage: gleicher Dateiname in zwei Raeumen ===")
 # Der Fund, der das ausloeste: jeder Upload ging nach data/dokumente,

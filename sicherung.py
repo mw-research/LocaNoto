@@ -380,6 +380,28 @@ def entferne(name, trotzdem=False):
     return True, f"'{name}' entfernt."
 
 
+def _leer_genug():
+    """Ist noch nichts in den Sammlungen? Bei Zweifel: nein.
+
+    Der Wiederanlauf soll einen leeren Bestand fuellen und niemals einen
+    vorhandenen ueberschreiben. Laesst sich das nicht feststellen --
+    Chroma antwortet nicht, eine Sammlung fehlt --, gilt der Bestand als
+    vorhanden. Ein nicht eingespielter Abzug ist ein Ausfall; ein
+    faelschlich eingespielter ist ein Datenverlust.
+    """
+    try:
+        import store
+        for name in store.namen():
+            if not name.startswith("raum_"):
+                continue
+            sml = store.sammlung(name, anlegen=False)
+            if sml is not None and sml.count() > 0:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def hole_zurueck(name, nur_raum=None, fortschritt=None):
     """Spielt einen Abzug in die Sammlungen zurueck.
 
@@ -514,11 +536,35 @@ def main():
         return 1 if fehler else 0
 
     if befehl == "zurueck":
-        if len(sys.argv) < 3:
+        name = None
+        if "--neuester" in sys.argv:
+            # Fuer einen Start ohne Menschen davor: ein Pod, dessen
+            # Datenbank auf fluechtigem Speicher liegt, muss sich beim
+            # Hochkommen selbst wiederherstellen. Er kann dabei keinen
+            # Namen kennen.
+            vollstaendige = [n for n, _p, _g, s in liste()
+                             if s.get("vollstaendig") and not s.get("fehler")]
+            if not vollstaendige:
+                print("Kein vollstaendiger Abzug vorhanden.")
+                # KEIN Fehler: beim allerersten Start gibt es keinen, und
+                # das ist der Normalfall. Ein Fehlschlag hier liesse den
+                # Pod in einer Schleife haengen, ohne dass etwas kaputt
+                # waere.
+                return 0
+            name = vollstaendige[0]
+            if not _leer_genug() and "--trotzdem" not in sys.argv:
+                print(f"Es liegen schon Abschnitte in den Sammlungen. "
+                      f"'{name}' wird NICHT eingespielt -- sonst"
+                      f" ueberschriebe ein Start die Arbeit des "
+                      f"vorherigen. Mit --trotzdem erzwingen.")
+                return 0
+            print(f"Spiele den neuesten Abzug ein: {name}")
+        elif len(sys.argv) < 3:
             print("Name des Abzugs angeben. 'liste' zeigt sie.")
+            print("  python sicherung.py zurueck --neuester")
             return 1
         bericht = hole_zurueck(
-            sys.argv[2],
+            name or sys.argv[2],
             fortschritt=lambda r, n, g: print(f"   {r}: {n}/{g}", end="\r"))
         print(" " * 50, end="\r")
         for raum, n in sorted(bericht["raeume"].items()):
