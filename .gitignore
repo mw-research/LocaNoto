@@ -46,6 +46,20 @@ config/owncloud.json.neu
 docker-compose.override.yaml
 docker-compose.override.yml
 
+# Ausgefuellte Kubernetes-Manifeste. Die Vorlagen im Repo tragen
+# Platzhalter; was ein bestimmter Cluster braucht -- Namensraum,
+# Adresse, Ingress-Klasse und deren Annotationen, Namen von
+# Zertifikaten -- ist Infrastruktur des Betreibers und gehoert nicht in
+# ein oeffentliches Repository. Konvention: *.lokal.yaml.
+#
+# Der Anlass ist echt: einmal ist genau das hier hineingeraten, weil
+# eine Vorlage mit den Werten einer laufenden Umgebung ausgefuellt und
+# dann eingecheckt wurde.
+k8s/*.lokal.yaml
+k8s/*.lokal.yml
+*.lokal.yaml
+*.lokal.yml
+
 # Sicherungen des Bestands
 *.tar
 *.tar.gz
