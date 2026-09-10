@@ -40,6 +40,10 @@ import sqlite3
 import paths
 import sqlpruefung
 
+# Der Raum, dem eine Liste ohne eigene Angabe gehoert -- so hiess
+# frueher der eine Ordner, in dem alles lag.
+_ALLGEMEIN = "allgemein"
+
 # Wo der Ordner liegt, steht an drei Stellen -- in dieser Reihenfolge:
 #
 #   1. config/tabellen_pfad.txt   in der Oberflaeche eingetragen
@@ -343,33 +347,46 @@ def _spaltenangaben(rahmen):
     return angaben
 
 
-def baue_katalog():
-    """Liest den Ordner neu ein und legt den Katalog an.
+def quellen():
+    """[(raum, ordner)] -- woher gelesen wird.
 
-    Rueckgabe: (katalog, fehler). fehler ist eine Liste aus (datei, grund) --
-    eine unlesbare Datei soll den Katalog nicht verhindern, aber auch nicht
-    stillschweigend fehlen.
+    Ohne hinterlegte Quellen bleibt es beim einen Ordner von frueher,
+    zugeordnet zum allgemeinen Raum. Eine bestehende Installation
+    verhaelt sich damit unveraendert, bis jemand Quellen eintraegt --
+    eine Umstellung, die am ersten Tag alle Listen verschwinden liesse,
+    wuerde zurueckgedreht und nicht verstanden.
     """
-    ordner = pfad()
     try:
-        os.makedirs(ordner, exist_ok=True)
-    except OSError:
-        pass
-    eintraege, fehler = [], []
-    if not os.path.isdir(ordner):
-        fehler.append((ordner, "Ordner nicht erreichbar"))
+        import listenquellen
+        eigene = listenquellen.aufgeloest()
+    except Exception:
+        eigene = []
+    if eigene:
+        return eigene
+    return [(_ALLGEMEIN, pfad())]
 
-    gesehen = 0
+
+def _lies_ordner(ordner, raum, uebrig):
+    """Ein Ordner in Katalogeintraege. (eintraege, fehler, gelesen)."""
+    eintraege, fehler, gesehen = [], [], 0
+    if not os.path.isdir(ordner):
+        # Kein Fehlschlag des Ganzen: ein nicht eingehaengtes
+        # Heimlaufwerk ist der Normalfall, nicht die Ausnahme. Nur
+        # feste Quellen werden gemeldet -- bei einem Muster je Nutzer
+        # stuenden sonst zwanzig Zeilen "nicht erreichbar" da.
+        return [], ([(ordner, "Ordner nicht erreichbar")]
+                    if not raum.startswith("privat_") else []), 0
+
     for wurzel, _, dateien in os.walk(ordner):
         for name in sorted(dateien):
             if not name.lower().endswith(ENDUNGEN) or name.startswith("~$"):
                 continue
             gesehen += 1
-            if gesehen > MAX_DATEIEN:
+            if gesehen > uebrig:
                 fehler.append((ordner, f"Mehr als {MAX_DATEIEN} Dateien -- "
                                        f"abgebrochen. Zeigt der Pfad auf das "
                                        f"richtige Verzeichnis?"))
-                break
+                return eintraege, fehler, gesehen
             datei_pfad = os.path.join(wurzel, name)
             rel = os.path.relpath(datei_pfad, ordner).replace("\\", "/")
             try:
@@ -377,6 +394,8 @@ def baue_katalog():
                     eintraege.append({
                         "datei": rel,
                         "blatt": blatt,
+                        "raum": raum,
+                        "wurzel": ordner,
                         "kopfzeile": kopf,
                         "zeilen": int(len(rahmen)),
                         "gross": len(rahmen) >= GROSS_AB,
@@ -386,10 +405,36 @@ def baue_katalog():
                     })
             except Exception as e:
                 fehler.append((rel, f"{type(e).__name__}: {e}"))
-        if gesehen > MAX_DATEIEN:
+    return eintraege, fehler, gesehen
+
+
+def baue_katalog():
+    """Liest alle Quellen neu ein und legt den Katalog an.
+
+    Rueckgabe: (katalog, fehler). fehler ist eine Liste aus (datei, grund) --
+    eine unlesbare Datei soll den Katalog nicht verhindern, aber auch nicht
+    stillschweigend fehlen.
+
+    Je Eintrag steht der RAUM dabei. Er entscheidet spaeter, wer die
+    Liste ueberhaupt zu sehen bekommt -- mit derselben Funktion, die
+    ueber die Dokumente entscheidet. Ein zweites Berechtigungssystem
+    daneben waere das erste, das jemand vergisst mitzupflegen.
+    """
+    eintraege, fehler = [], []
+    gesamt = 0
+    for raum, ordner in quellen():
+        teil, fehl, gesehen = _lies_ordner(ordner, raum,
+                                           MAX_DATEIEN - gesamt)
+        eintraege.extend(teil)
+        fehler.extend(fehl)
+        gesamt += gesehen
+        if gesamt >= MAX_DATEIEN:
             break
 
-    katalog = {"eintraege": eintraege, "fehler": fehler}
+    # Verdeckt abgelegt, im Arbeitsspeicher offen zurueckgegeben: der
+    # Aufrufer hat gerade selbst eingelesen und weiss ohnehin alles.
+    katalog = {"eintraege": [_verdecke(e) for e in eintraege],
+               "fehler": fehler}
     try:
         os.makedirs(os.path.dirname(KATALOG), exist_ok=True)
         vorlaeufig = KATALOG + ".neu"
@@ -398,7 +443,7 @@ def baue_katalog():
         os.replace(vorlaeufig, KATALOG)
     except OSError:
         pass
-    return katalog, fehler
+    return {"eintraege": eintraege, "fehler": fehler}, fehler
 
 
 def lies_katalog():
@@ -472,6 +517,92 @@ def lege_ab(daten, name, bereich=""):
         return False, f"Konnte nicht gespeichert werden: {e}"
     _zwischenspeicher.clear()
     return True, os.path.relpath(ziel, wurzel).replace(os.sep, "/")
+
+
+# --- DER KATALOG SELBST ---
+#
+# Der Katalog haelt keine Zeilen, aber er haelt genug: Dateinamen,
+# Blattnamen, Spaltennamen und -- bei Spalten mit wenigen verschiedenen
+# Werten -- deren LISTE. Das ist der Teil, der die Routenwahl traegt
+# ("Status: frei, gesperrt, ausgebucht"), und derselbe Teil, der aus
+# einer Lieferantenliste die Lieferanten preisgibt.
+#
+# Bis hierher lag er offen in einer JSON-Datei. Solange es einen Ordner
+# fuer alle gab, war das folgerichtig -- alle durften alles sehen. Mit
+# Raeumen ist es das nicht mehr: der Katalog fuehrt dann die Blattnamen
+# des Heimlaufwerks jedes Kollegen. Und er liegt seit der Trennung
+# ausgerechnet neben dem Stichwortindex, also NICHT auf dem
+# verschluesselten Datentraeger.
+#
+# Verdeckt wird deshalb alles, was etwas verraet, mit dem Schluessel des
+# Raums. Offen bleiben nur Zahlen: Raum, Zeilenzahl, Groesse,
+# Aenderungsdatum. Damit laesst sich der Katalog weiter pruefen und
+# aufraeumen, ohne ihn aufzuschliessen.
+_VERDECKT = ("datei", "blatt", "wurzel", "spalten", "kopfzeile")
+
+
+def _verdecke(eintrag):
+    """Ein Katalogeintrag fuer die Ablage."""
+    raum = eintrag.get("raum") or _ALLGEMEIN
+    try:
+        import raumschluessel
+        if not raumschluessel.verfuegbar():
+            return eintrag
+        inhalt = json.dumps({k: eintrag.get(k) for k in _VERDECKT},
+                            ensure_ascii=False)
+        offen = {k: v for k, v in eintrag.items() if k not in _VERDECKT}
+        offen["geheim"] = raumschluessel.verschluessele_text(raum, inhalt)
+        return offen
+    except Exception:
+        # Ohne Schluessel bleibt es beim Klartext. Ein Katalog, der sich
+        # nicht schreiben laesst, waere schlechter: dann gibt es gar
+        # keine Listensuche mehr, und der Grund stuende nirgends.
+        return eintrag
+
+
+def _schliesse_auf(eintrag):
+    """Ein Katalogeintrag zum Benutzen. None, wenn er nicht aufgeht."""
+    if "geheim" not in eintrag:
+        return eintrag
+    raum = eintrag.get("raum") or _ALLGEMEIN
+    try:
+        import raumschluessel
+        inhalt = json.loads(
+            raumschluessel.entschluessele_text(raum, eintrag["geheim"]))
+    except Exception:
+        # Der Schluessel dieses Raums fehlt oder passt nicht. Den
+        # Eintrag weglassen und nicht halb anzeigen: eine Zeile
+        # "(nicht lesbar), 8.412 Zeilen" ist keine Auskunft, sondern
+        # eine ueber die Existenz.
+        return None
+    offen = {k: v for k, v in eintrag.items() if k != "geheim"}
+    offen.update(inhalt)
+    return offen
+
+
+def sichtbar(eintraege, benutzer, notzugang=()):
+    """Nur die Listen, die dieser Mensch lesen darf.
+
+    Dieselbe Pruefung wie bei den Dokumenten: raeume.lesbar(). Ein
+    Eintrag OHNE Raum stammt aus einem Katalog von vor der Umstellung
+    und gehoert dem allgemeinen Raum -- er verschwindet also nicht
+    stillschweigend, sondern wird behandelt wie das, was er war.
+    """
+    import raeume
+    erlaubt = set(raeume.lesbar(benutzer, notzugang=notzugang))
+    aus = []
+    for e in eintraege:
+        if (e.get("raum") or _ALLGEMEIN) not in erlaubt:
+            continue
+        offen = _schliesse_auf(e)
+        if offen is not None:
+            aus.append(offen)
+    return aus
+
+
+def raeume_von(eintraege):
+    """Die Raeume, aus denen Listen im Katalog stehen."""
+    return sorted({e.get("raum") or _ALLGEMEIN for e in eintraege})
 
 
 def bereiche(eintraege):
@@ -655,7 +786,7 @@ def _unicode_funktionen(con):
                         deterministic=True)
 
 
-def _lade(datei, blatt):
+def _lade(datei, blatt, wurzel=None):
     """Ein Blatt als SQLite-Verbindung im Arbeitsspeicher.
 
     Zwischengespeichert ueber Aenderungsdatum und Groesse. Das ist die
@@ -685,7 +816,14 @@ def _lade(datei, blatt):
 
     Nichts davon haelt eine Zeile laenger, als die Datei unveraendert ist.
     """
-    voll = os.path.join(pfad(), datei)
+    # Die Wurzel kommt aus dem Katalogeintrag, nicht mehr aus dem einen
+    # Ordner: seit jede Quelle zu einem Raum gehoert, liegen zwei
+    # Dateien gleichen Namens in verschiedenen Raeumen -- und "inventur.xlsx"
+    # allein sagt nicht mehr, welche gemeint ist.
+    wurzel_ = os.path.realpath(wurzel or pfad())
+    voll = os.path.realpath(os.path.join(wurzel_, datei))
+    if not (voll == wurzel_ or voll.startswith(wurzel_ + os.sep)):
+        raise ValueError("Die Datei liegt ausserhalb ihrer Quelle.")
     if not os.path.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
     stand = (voll, os.path.getmtime(voll), os.path.getsize(voll))
@@ -742,7 +880,7 @@ def _merke(kennung, con):
             pass
 
 
-def fuehre_aus(datei, blatt, sql, max_zeilen=None):
+def fuehre_aus(datei, blatt, sql, max_zeilen=None, wurzel=None):
     """Fuehrt eine gepruefte Abfrage gegen ein Blatt aus.
 
     Rueckgabe: (spalten, zeilen). Loest ValueError aus, wenn die Pruefung
@@ -753,7 +891,7 @@ def fuehre_aus(datei, blatt, sql, max_zeilen=None):
         raise ValueError(f"Abfrage abgelehnt: {grund}")
 
     max_zeilen = max_zeilen or MAX_ZEILEN
-    con = _lade(datei, blatt)
+    con = _lade(datei, blatt, wurzel)
     cur = con.execute(sqlpruefung.begrenze_zeilen(sql, max_zeilen, "sqlite"))
     spalten = [d[0] for d in (cur.description or [])]
     return spalten, cur.fetchmany(max_zeilen)
@@ -993,7 +1131,7 @@ def _ausfuehren(eintrag, sql, max_zeilen, gewaehlt):
               "spalten": [], "zeilen": [], "grund": "", "gewaehlt": gewaehlt}
     try:
         fertig["spalten"], fertig["zeilen"] = fuehre_aus(
-            datei, blatt, sql, max_zeilen)
+            datei, blatt, sql, max_zeilen, eintrag.get("wurzel"))
     except Exception as e:
         if _schema_fehler(e) and not gewaehlt:
             # Das Blatt fuehrt diese Spalten nicht. Kein Fehler, sondern

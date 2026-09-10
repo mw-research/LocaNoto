@@ -169,14 +169,19 @@ def status(kennung: str = Depends(benutzer)):
                       if hasattr(_bewerter, "beschreibung") else BEWERTER_INFO),
         "modelle": {"chat": CHAT_MODELL, "embedding": EMBED_MODELL},
         "voreinstellungen": presets.namen(),
-        "listen": _listenstand(),
+        "listen": _listenstand(kennung),
     }
 
 
-def _listenstand():
-    """Was der Listenkatalog hergibt -- oder warum nicht."""
+def _listenstand(kennung=""):
+    """Was der Listenkatalog fuer DIESEN Anrufer hergibt.
+
+    Auch die blosse Zahl gehoert gefiltert. "412 Blaetter" gegenueber
+    "6 Blaetter" ist bereits eine Auskunft darueber, was es sonst noch
+    gibt.
+    """
     katalog = tabellen.lies_katalog()
-    eintraege = katalog.get("eintraege", [])
+    eintraege = tabellen.sichtbar(katalog.get("eintraege", []), kennung)
     return {
         "blaetter": len(eintraege),
         "gross": sum(1 for e in eintraege if e.get("gross")),
@@ -213,7 +218,7 @@ def raeume_liste(kennung: str = Depends(benutzer)):
                        for r in erlaubt]}
 
 
-def _listen_abfragen(anfrage, modell, verlauf_text):
+def _listen_abfragen(anfrage, modell, verlauf_text, kennung):
     """Fragt die Tabellendateien ab. Rueckgabe: (bloecke, auskunft).
 
     Scheitert etwas, bleibt es bei den Dokumenten. Eine Liste, die nicht
@@ -222,7 +227,11 @@ def _listen_abfragen(anfrage, modell, verlauf_text):
     if not anfrage.listen:
         return [], None
     katalog = tabellen.lies_katalog()
-    auswahl = [e for e in katalog.get("eintraege", [])
+    # Gefiltert wie die Sammlungen: raeume.lesbar entscheidet, nicht der
+    # Bereich. Ein Bereich ist ein Unterordner und war nie eine
+    # Berechtigung.
+    auswahl = [e for e in tabellen.sichtbar(katalog.get("eintraege", []),
+                                            kennung)
                if (anfrage.listen_gross or not e.get("gross"))
                and tabellen.im_bereich(e, anfrage.listen_bereiche or [])]
     if not auswahl:
@@ -298,7 +307,8 @@ def _suchen(anfrage, kennung):
         # nachgelagerten Dienst liegt und ein spaeterer Versuch klappen kann.
         raise HTTPException(status_code=503, detail=str(e))
 
-    bloecke, listen_auskunft = _listen_abfragen(anfrage, modell, verlauf_text)
+    bloecke, listen_auskunft = _listen_abfragen(anfrage, modell,
+                                                verlauf_text, kennung)
 
     if not treffer and not bloecke:
         # Auch ueber die Schnittstelle gestellte Fragen gehoeren in die
