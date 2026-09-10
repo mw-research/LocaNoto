@@ -127,6 +127,7 @@ x-umgebung: &umgebung
   # Holen der Dateien nicht. Deshalb getrennt setzbar.
   - OWNCLOUD_ADMIN_USER=${OWNCLOUD_ADMIN_USER:-}
   - OWNCLOUD_ADMIN_PASSWORT=${OWNCLOUD_ADMIN_PASSWORT:-}
+  - OWNCLOUD_WURZEL=${OWNCLOUD_WURZEL:-}
   - OWNCLOUD_GRUPPEN_HOECHSTALTER=${OWNCLOUD_GRUPPEN_HOECHSTALTER:-}
   - INGEST_ORDNER=${INGEST_ORDNER:-}
   # Abzug der Vektordatenbank -- der einzige nicht ableitbare
@@ -136,6 +137,8 @@ x-umgebung: &umgebung
   # Strenger Betrieb: auch ein Verwalter erfaehrt nichts ueber
   # fremde persoenliche Raeume, nicht einmal Dateinamen.
   - PRIVAT_STRENG=${PRIVAT_STRENG:-}
+  - NOTZUGANG_STUNDEN=${NOTZUGANG_STUNDEN:-}
+  - NOTZUGANG_ANTRAG_TAGE=${NOTZUGANG_ANTRAG_TAGE:-}
 
 services:
   locanoto_bot:
