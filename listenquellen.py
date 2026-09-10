@@ -182,6 +182,10 @@ def speichere(quellen):
                            f"und jeder saehe die Listen aller.")
         sauber.append({"raum": raum, "pfad": p})
 
+    fehler = _ueberlappung(sauber)
+    if fehler:
+        return False, fehler
+
     daten = {"quellen": sauber}
     if geheim.verfuegbar():
         daten["signatur"] = geheim.signiere(geheim.kanonisch(sauber))
@@ -197,6 +201,60 @@ def speichere(quellen):
 
 
 # --- AUFLOESEN ---
+
+def _feste_wurzel(p):
+    """Der Teil eines Pfades vor dem Platzhalter.
+
+    Fuer ein Muster ist das der Ordner, unter dem ALLE persoenlichen
+    Ordner liegen -- also der Bereich, den dieses eine Muster belegt.
+    """
+    kopf = (p or "").split(PLATZHALTER, 1)[0]
+    kopf = kopf.rstrip("/").rstrip("\\")
+    try:
+        return os.path.realpath(kopf) if kopf else ""
+    except OSError:
+        return kopf
+
+
+def _enthaelt(oben, unten):
+    return bool(oben) and (unten == oben or unten.startswith(oben + os.sep))
+
+
+def _ueberlappung(quellen):
+    """Liegt eine Quelle in einer anderen? Meldung, sonst "".
+
+    Der Fall, um den es geht, ist nicht ausgedacht: wer
+
+        allgemein = /mnt/heim
+        @privat   = /mnt/heim/{benutzer}/Listen
+
+    eintraegt, hat die persoenlichen Ordner ALLER in den allgemeinen
+    Raum gelegt -- jeder sieht dann jede persoenliche Liste, und die
+    zweite Zeile daneben sieht so aus, als sei alles geregelt.
+
+    Das faellt nicht auf: es gibt keine Fehlermeldung, die Listen
+    erscheinen, und dass sie bei den Falschen erscheinen, sieht nur
+    der, dem sie gehoeren -- und der sieht sie ja auch bei sich.
+
+    Auch bei GLEICHEM Raum abgelehnt. Dann waere es kein
+    Berechtigungsfehler, aber jede Datei stuende zweimal im Katalog,
+    und das Modell bekaeme dieselbe Liste doppelt zur Auswahl.
+    """
+    for i, a in enumerate(quellen):
+        for b in quellen[i + 1:]:
+            oben, unten = _feste_wurzel(a["pfad"]), _feste_wurzel(b["pfad"])
+            if _enthaelt(oben, unten) or _enthaelt(unten, oben):
+                if a["raum"] == b["raum"]:
+                    return (f"'{a['pfad']}' und '{b['pfad']}' liegen "
+                            f"ineinander. Jede Datei stuende zweimal im "
+                            f"Katalog -- der aeussere Ordner genuegt.")
+                return (f"'{b['pfad']}' liegt in '{a['pfad']}'. Damit "
+                        f"laesen die Dateien des inneren Ordners AUCH "
+                        f"unter '{a['raum']}' -- die Trennung waere "
+                        f"aufgehoben, ohne dass es auffiele. Die Ordner "
+                        f"muessen nebeneinanderliegen.")
+    return ""
+
 
 def aufgeloest(benutzer=None):
     """[(raum, pfad)] mit aufgeloestem Platzhalter.

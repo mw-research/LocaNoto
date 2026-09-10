@@ -552,6 +552,24 @@ pruef("Quellen mit Muster gespeichert", listenquellen.speichere([
 pruef("ein Muster ohne Platzhalter wird abgewiesen",
       not listenquellen.speichere(
           [{"raum": "@privat", "pfad": os.path.join(_netz, "heim")}])[0])
+# Der Fall, der still schiefgeht: der allgemeine Ordner liegt UEBER
+# den persoenlichen. Dann liest ihn der allgemeine Raum mit, und jeder
+# sieht die persoenlichen Listen aller -- waehrend die Zeile darunter
+# aussieht, als sei alles geregelt.
+pruef("eine Quelle, die eine andere enthaelt, wird abgewiesen",
+      not listenquellen.speichere([
+          {"raum": "allgemein", "pfad": os.path.join(_netz, "heim")},
+          {"raum": "@privat",
+           "pfad": os.path.join(_netz, "heim", "{benutzer}",
+                                "Listen")}])[0])
+pruef("nebeneinanderliegende Ordner gehen weiter",
+      listenquellen.speichere([
+          {"raum": "allgemein", "pfad": os.path.join(_netz, "allgemein")},
+          {"raum": "einkauf",
+           "pfad": os.path.join(_netz, "abteilung", "einkauf")},
+          {"raum": "@privat",
+           "pfad": os.path.join(_netz, "heim", "{benutzer}",
+                                "Listen")}])[0])
 pruef("eine Quelle in den Anwendungsdaten wird abgewiesen",
       not listenquellen.pruefe_pfad(os.path.join(paths.DATA_DIR, "x"))[0])
 pruef("und ein Nutzername kann nicht aus dem Muster ausbrechen",
