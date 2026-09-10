@@ -9,7 +9,33 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# --- CPU-VARIANTE ---
+#
+# requirements.txt pinnt torch samt fuenfzehn nvidia-Paketen und triton.
+# Das ist richtig, solange der Reranker auf einer GPU laeuft -- und es
+# sind mehrere Gigabyte, die auf einem Rechner ohne GPU nichts tun.
+#
+# NUR_CPU=1 holt torch aus dem CPU-Index von PyTorch und laesst die
+# CUDA-Pakete weg. Gedacht fuer Umgebungen, in denen das Abbild ueber
+# das Netz gezogen wird und ein Platzkontingent gilt: eine Sandbox, ein
+# Cluster, ein Laptop.
+#
+# Gefiltert statt in einer zweiten Datei gepflegt: zwei
+# Abhaengigkeitslisten laufen auseinander, und man merkt es an der
+# Stelle, an der man es am wenigsten brauchen kann.
+ARG NUR_CPU=0
+RUN if [ "${NUR_CPU}" = "1" ]; then \
+      grep -vE '^(nvidia-|triton==|torch==|torchvision==)' requirements.txt \
+          > /tmp/req-cpu.txt && \
+      pip install --no-cache-dir \
+          --index-url https://download.pytorch.org/whl/cpu \
+          "$(grep -E '^torch==' requirements.txt)" \
+          "$(grep -E '^torchvision==' requirements.txt)" && \
+      pip install --no-cache-dir -r /tmp/req-cpu.txt ; \
+    else \
+      pip install --no-cache-dir -r requirements.txt ; \
+    fi
 
 # --- RERANKER-MODELL IN DAS IMAGE BACKEN ---
 #
