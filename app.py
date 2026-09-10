@@ -10,6 +10,7 @@ import paths
 import sicherheit
 import store
 import keyword_index
+import listenquellen
 import llm
 import envcheck
 from embedding import embed_batch
@@ -1131,7 +1132,13 @@ with st.sidebar:
     tabellen_gross = False
     tabellen_bereiche = []
     _katalog = tabellen.lies_katalog()
-    _eintraege = _katalog.get("eintraege", [])
+    # GEFILTERT, und zwar hier und nicht erst bei der Abfrage: an dieser
+    # Liste haengen die Anzeige, die Bereichsauswahl und die Abfrage.
+    # Wird nur die Abfrage gefiltert, verraet die Anzeige daneben
+    # weiterhin, welche Listen es gibt -- und Dateinamen wie
+    # "Kuendigungen_2026.xlsx" sind fuer sich schon die Auskunft.
+    _eintraege = tabellen.sichtbar(_katalog.get("eintraege", []),
+                                   st.session_state.get("username", ""))
 
     if _eintraege or tabellen.vorhanden() or is_admin():
         st.markdown("---")
@@ -1229,11 +1236,77 @@ with st.sidebar:
         # Katalog neu anlegen. Noetig nur, wenn Dateien dazukommen oder sich
         # Spalten aendern -- neue Zeilen wirken ohne Zutun.
         if is_admin():
-            # Der Ordner laesst sich hier eintragen, statt Dateien
-            # hineinzukopieren: was die Fachabteilung ohnehin pflegt, soll
-            # niemand ein zweites Mal ablegen. Erreichbar ist nur, was in
-            # den Container eingehaengt ist -- und gelesen werden
-            # ausschliesslich Tabellendateien.
+            # --- QUELLEN JE RAUM ---
+            #
+            # Eine Zeile je Quelle: "raum = pfad". Ein Textfeld und kein
+            # Formular je Zeile, weil Verwalter das einmal einrichten und
+            # danach jahrelang nicht anfassen -- und weil sich so das
+            # Ganze auf einen Blick lesen laesst, statt sich durch
+            # aufgeklappte Zeilen zu arbeiten.
+            with st.expander("Listenquellen je Raum", expanded=False):
+                st.caption(
+                    "Eine Zeile je Quelle: **raum = pfad**. Der Raum "
+                    "entscheidet, wer die Listen sieht -- dieselbe "
+                    "Berechtigung wie bei den Dokumenten. "
+                    f"`{listenquellen.MUSTER_RAUM}` steht fuer den "
+                    "persoenlichen Raum JEDES Nutzers; der Pfad braucht "
+                    f"dann `{listenquellen.PLATZHALTER}`, das durch den "
+                    "jeweiligen Anmeldenamen ersetzt wird.")
+                _vorlage = "\n".join(
+                    f"{q['raum']} = {q['pfad']}"
+                    for q in listenquellen.liste())
+                _eingabe = st.text_area(
+                    "Quellen", value=_vorlage, height=140,
+                    placeholder="allgemein = /mnt/listen/allgemein\n"
+                                "einkauf = /srv/abteilung/einkauf\n"
+                                + listenquellen.MUSTER_RAUM
+                                + " = /mnt/heim/"
+                                + listenquellen.PLATZHALTER + "/Listen",
+                    key="listenquellen_text")
+                st.caption(
+                    "Das persoenliche Laufwerk ist gegenueber Kollegen "
+                    "am Dateiserver privat, gegenueber dieser Anwendung "
+                    "nicht: sie liest es mit ihrem Dienstkonto. Die "
+                    "Trennung zwischen den Nutzern macht ab hier "
+                    "LocaNoto -- derselbe Grad an Zusicherung wie beim "
+                    "persoenlichen Raum.")
+                if st.button("Quellen speichern und einlesen",
+                             use_container_width=True,
+                             key="listenquellen_speichern"):
+                    _neu = []
+                    for _z in (_eingabe or "").splitlines():
+                        _z = _z.strip()
+                        if not _z or _z.startswith("#"):
+                            continue
+                        _r, _t, _p = _z.partition("=")
+                        if not _t:
+                            st.error(f"'{_z}' hat kein '=' -- erwartet "
+                                     f"wird 'raum = pfad'.")
+                            _neu = None
+                            break
+                        _neu.append({"raum": _r.strip(),
+                                     "pfad": _p.strip()})
+                    if _neu is not None:
+                        ok, meldung = listenquellen.speichere(_neu)
+                        if not ok:
+                            st.error(meldung)
+                        else:
+                            with st.spinner("Lese Listen ein ..."):
+                                _k, _f = tabellen.baue_katalog()
+                            st.success(f"{meldung} "
+                                       f"{len(_k['eintraege'])} Blaetter.")
+                            time.sleep(1)
+                            st.rerun()
+                if listenquellen.WURZELN:
+                    st.caption("Erlaubte Wurzeln (LISTEN_WURZELN): "
+                               + ", ".join(f"`{w}`"
+                                           for w in listenquellen.WURZELN))
+
+            # Der eine Ordner von frueher. Er gilt weiter, solange oben
+            # keine Quelle steht -- dann als Quelle des allgemeinen
+            # Raums. Eine Umstellung, die am ersten Tag alle Listen
+            # verschwinden liesse, wuerde zurueckgedreht statt
+            # verstanden.
             _pfad = st.text_input(
                 "Ordner", value=tabellen.pfad(),
                 help="Vollstaendiger Pfad, wie er im Container gilt -- etwa "

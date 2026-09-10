@@ -12,7 +12,7 @@ Rueckmeldungen und der Abzug samt Einspielen.
 
     docker compose run --rm locanoto_bot python selbsttest.py
 """
-import json, os, random, shutil, sys, tempfile, types
+import io, json, os, random, shutil, sys, tempfile, types
 
 # --- ISOLATION ERZWINGEN ---
 #
@@ -520,6 +520,86 @@ pruef("verschoben laesst sich der Name im ZIELraum oeffnen",
 pruef("und unveraendert uebernommen waere er unlesbar",
       store.metadaten_klartext("vertrieb", _alt)[0]["file_name"]
       == "(nicht lesbar)")
+
+print("=== 13. Listen gehoeren Raeumen ===")
+# Listen werden nicht hochgeladen, sie liegen dort, wo die Abteilung
+# sie pflegt. Damit stellt sich dieselbe Frage wie bei den Dokumenten,
+# nur an anderen Pfaden: wer sieht welche.
+_netz = os.path.join(tmp, "netz")
+for _unter, _inhalt in (
+        ("allgemein", "Teil;Menge\n91061401;7\n"),
+        ("abteilung/einkauf", "Lieferant;Preis\nMueller;12\n"),
+        ("heim/markus/Listen", "Vorgang;Betrag\nGehalt;1\n"),
+        ("heim/anna/Listen", "Notiz;Wert\nPrivat;2\n")):
+    _o = os.path.join(_netz, _unter)
+    os.makedirs(_o, exist_ok=True)
+    with open(os.path.join(_o, "liste.csv"), "w", encoding="utf-8") as _f:
+        _f.write(_inhalt)
+
+os.environ["LISTEN_WURZELN"] = _netz
+import tabellen, listenquellen
+tabellen.KATALOG = os.path.join(paths.DATA_DIR, "listenkatalog.json")
+listenquellen.QUELLEN = os.path.join(paths.CONFIG_DIR, "listenquellen.json")
+listenquellen.WURZELN = [_netz]
+
+pruef("Quellen mit Muster gespeichert", listenquellen.speichere([
+    {"raum": "allgemein", "pfad": os.path.join(_netz, "allgemein")},
+    {"raum": "einkauf", "pfad": os.path.join(_netz, "abteilung", "einkauf")},
+    {"raum": "@privat",
+     "pfad": os.path.join(_netz, "heim", "{benutzer}", "Listen")}])[0])
+# Ein Muster ohne Platzhalter zeigte fuer JEDEN auf denselben Ordner --
+# und damit saehe jeder die Listen aller.
+pruef("ein Muster ohne Platzhalter wird abgewiesen",
+      not listenquellen.speichere(
+          [{"raum": "@privat", "pfad": os.path.join(_netz, "heim")}])[0])
+pruef("eine Quelle in den Anwendungsdaten wird abgewiesen",
+      not listenquellen.pruefe_pfad(os.path.join(paths.DATA_DIR, "x"))[0])
+pruef("und ein Nutzername kann nicht aus dem Muster ausbrechen",
+      listenquellen._dateiname("../../etc") == "etc")
+
+_kat, _fehl = tabellen.baue_katalog()
+_alle = _kat["eintraege"]
+pruef("vier Blaetter aus vier Quellen", len(_alle) == 4, len(_alle))
+_sm = tabellen.sichtbar(_alle, "markus")
+_sa = tabellen.sichtbar(_alle, "anna")
+pruef("markus sieht allgemein und seinen eigenen Ordner",
+      {e["raum"] for e in _sm} == {"allgemein",
+                                   raeume.privat_kennung("markus")},
+      {e["raum"] for e in _sm})
+pruef("anna zusaetzlich den Einkauf, in dem sie Mitglied ist",
+      {e["raum"] for e in _sa} == {"allgemein", "einkauf",
+                                   raeume.privat_kennung("anna")},
+      {e["raum"] for e in _sa})
+pruef("und der Verwalter sieht den Einkauf trotzdem nicht",
+      benutzer.ist_admin("markus")
+      and not any(e["raum"] == "einkauf" for e in _sm))
+
+# Gleicher Dateiname in zwei Heimlaufwerken -- frueher gab es einen
+# Ordner, und "liste.csv" war eindeutig. Jetzt entscheidet die Wurzel
+# des Eintrags, welche Datei gemeint ist.
+def _zeilen_von(eintraege, raum):
+    e = [x for x in eintraege if x["raum"] == raum][0]
+    return tabellen.fuehre_aus(e["datei"], e.get("blatt") or "",
+                               "SELECT * FROM daten",
+                               wurzel=e["wurzel"])[1]
+
+pruef("gleichnamige Dateien liefern verschiedene Zeilen",
+      "Gehalt" in str(_zeilen_von(_sm, raeume.privat_kennung("markus")))
+      and "Privat" in str(_zeilen_von(_sa, raeume.privat_kennung("anna"))))
+
+# Der Katalog liegt neben dem Stichwortindex, also NICHT auf dem
+# verschluesselten Datentraeger. Was er ueber fremde Listen preisgibt,
+# gibt er dort preis.
+_roh = tabellen.lies_katalog()["eintraege"]
+_text = io.open(tabellen.KATALOG, encoding="utf-8").read()
+pruef("die Katalogdatei nennt weder Datei- noch Spaltennamen",
+      not any(w in _text for w in ("liste.csv", "Gehalt", "Vorgang",
+                                   "Listen", "Lieferant")))
+pruef("den Raum nennt sie -- ohne ihn liesse sich nicht filtern",
+      all(e.get("raum") for e in _roh))
+pruef("aufgeschlossen steht wieder alles da",
+      all(e.get("datei") and e.get("wurzel")
+          for e in tabellen.sichtbar(_roh, "markus")))
 
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
