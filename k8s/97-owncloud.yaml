@@ -1,0 +1,271 @@
+# --- OWNCLOUD IM SELBEN NAMENSRAUM ---
+#
+# Das Gegenstueck zu "docker compose --profile owncloud up -d": ownCloud,
+# MariaDB und Redis als drei Dienste neben LocaNoto. Zusammen mit
+# 95/96 und danach einrichten.py OHNE --ohne-owncloud -- dann laeuft die
+# vollstaendige Einrichtungsroutine: warten, Schluessel, erster Verwalter
+# in BEIDEN Systemen, Ordnerbaum samt Freigaben.
+#
+# DER PUNKT, AN DEM ES SONST STILL SCHIEFGEHT
+#
+# MariaDB gehoert so wenig auf eine Dateifreigabe wie SQLite, und aus
+# demselben Grund: InnoDB verlaesst sich auf Dateisperren, die NFS nicht
+# zuverlaessig liefert. Die Folge ist kein Fehler beim Start, sondern
+# eine Datenbank, die irgendwann nicht mehr aufgeht.
+#
+# Das Verzeichnis liegt deshalb auf einem emptyDir -- Knotenplatte, ein
+# echtes Dateisystem. Und weil eine ephemere Datenbank zu persistenten
+# Dateien nicht passt (Dateien ohne Eintraege sind fuer ownCloud nicht
+# vorhanden), liegen die ownCloud-Dateien GENAUSO ephemer daneben.
+#
+# BEIDES IST ALSO WEG, sobald der Pod geht. Das ist fuer eine Erprobung
+# richtig -- man will die Einrichtungsroutine pruefen, nicht einen
+# Bestand fuehren. Fuer den Betrieb gehoert MariaDB auf Blockspeicher
+# und /mnt/data auf den persistenten Speicher; dann werden aus den
+# emptyDir-Eintraegen unten zwei PVCs.
+#
+# ANZUPASSEN: der Namensraum und die drei Passwoerter.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: owncloud-geheim
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud
+stringData:
+  # Dasselbe Passwort fuer Verwalter und Datenbank waere bequem und
+  # falsch: das eine steht in der Oberflaeche zur Anmeldung, das andere
+  # in der Umgebung dreier Container.
+  OWNCLOUD_ADMIN_PASSWORT: BITTE-EINTRAGEN
+  OWNCLOUD_DB_PASSWORT: BITTE-ANDERES-EINTRAGEN
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owncloud-db
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud-db
+spec:
+  selector:
+    app: owncloud-db
+  ports:
+    - port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owncloud-db
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: owncloud-db
+  template:
+    metadata:
+      labels:
+        app: owncloud-db
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.11
+          args: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
+          env:
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: owncloud-geheim
+                  key: OWNCLOUD_DB_PASSWORT
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: owncloud-geheim
+                  key: OWNCLOUD_DB_PASSWORT
+            - name: MARIADB_USER
+              value: owncloud
+            - name: MARIADB_DATABASE
+              value: owncloud
+          ports:
+            - containerPort: 3306
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: db
+              mountPath: /var/lib/mysql
+      volumes:
+        # Knotenplatte, kein NFS -- siehe Kopf der Datei.
+        - name: db
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owncloud-redis
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud-redis
+spec:
+  selector:
+    app: owncloud-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owncloud-redis
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: owncloud-redis
+  template:
+    metadata:
+      labels:
+        app: owncloud-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owncloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud
+spec:
+  selector:
+    app: owncloud
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owncloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: owncloud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: owncloud
+  template:
+    metadata:
+      labels:
+        app: owncloud
+    spec:
+      containers:
+        - name: owncloud
+          image: owncloud/server:10.15
+          env:
+            - name: OWNCLOUD_DOMAIN
+              value: BITTE-EINTRAGEN
+            # Der Dienstname MUSS hier stehen: LocaNoto ruft ownCloud
+            # unter http://owncloud:8080 auf, und ownCloud weist jede
+            # Anfrage an einen unbekannten Namen ab -- mit einer Seite,
+            # die wie ein Konfigurationsfehler bei LocaNoto aussieht.
+            - name: OWNCLOUD_TRUSTED_DOMAINS
+              value: "owncloud,localhost,127.0.0.1,BITTE-EINTRAGEN"
+            - name: OWNCLOUD_DB_TYPE
+              value: mysql
+            - name: OWNCLOUD_DB_NAME
+              value: owncloud
+            - name: OWNCLOUD_DB_USERNAME
+              value: owncloud
+            - name: OWNCLOUD_DB_HOST
+              value: owncloud-db
+            - name: OWNCLOUD_MYSQL_UTF8MB4
+              value: "true"
+            - name: OWNCLOUD_REDIS_ENABLED
+              value: "true"
+            - name: OWNCLOUD_REDIS_HOST
+              value: owncloud-redis
+            - name: OWNCLOUD_ADMIN_USERNAME
+              value: admin
+            - name: OWNCLOUD_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: owncloud-geheim
+                  key: OWNCLOUD_DB_PASSWORT
+            - name: OWNCLOUD_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: owncloud-geheim
+                  key: OWNCLOUD_ADMIN_PASSWORT
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          # Der erste Start richtet die Installation ein und dauert
+          # Minuten. Ein zu enges Fenster toetet ihn mittendrin -- und
+          # eine halb eingerichtete ownCloud-Datenbank kommt beim
+          # naechsten Versuch nicht weiter, sondern bleibt kaputt.
+          startupProbe:
+            httpGet:
+              path: /status.php
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /status.php
+              port: 8080
+            periodSeconds: 20
+          volumeMounts:
+            - name: daten
+              mountPath: /mnt/data
+      volumes:
+        # Ephemer, passend zur ephemeren Datenbank. Dateien ohne
+        # Datenbankeintrag sind fuer ownCloud nicht vorhanden -- das
+        # eine persistent und das andere nicht zu machen, ergibt einen
+        # Zustand, den niemand erwartet.
+        - name: daten
+          emptyDir: {}
