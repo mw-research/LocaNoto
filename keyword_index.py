@@ -365,7 +365,15 @@ def rebuild_from_raeume(paare, batch_size=5000, progress=None):
                 ids = batch.get("ids") or []
                 if not ids:
                     break
-                dokumente = batch.get("documents") or []
+                # Aufschliessen: der Stichwortindex braucht Klartext,
+                # er ist ableitbar und liegt containerlokal. Genau
+                # deshalb darf LOCANOTO_INDEX nicht auf das Datenvolume
+                # zeigen -- sonst laege der Klartext neben dem
+                # Verschluesselten und das Ganze waere Theater.
+                import store as _s
+                dokumente = _s.klartext(kennung,
+                                        batch.get("documents") or [],
+                                        benutzer="aufbau")
                 metas = batch.get("metadatas") or []
                 zeilen = []
                 for i, kennung_chunk in enumerate(ids):

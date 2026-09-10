@@ -251,6 +251,79 @@ def _zu_gross(fehler):
     return "too large" in t or "413" in t or "request entity" in t
 
 
+# --- ABSCHNITTE VERSCHLUESSELT ABLEGEN ---
+#
+# Hier und nirgends sonst, weil schreibe() die einzige Schreibstelle ist.
+# Was durch sie geht, liegt verschluesselt; was daran vorbeigeht, faellt
+# beim Lesen auf -- der Rueckweg nimmt unverschluesselte Abschnitte an,
+# aber die Oberflaeche zaehlt sie.
+
+VORSILBE_RAUM = "raum_"
+
+
+def raum_von(sammlung):
+    """Die Raumkennung zu einer Sammlung. Leer, wenn es keine ist.
+
+    Der Raum ist der Schluesselbund: jeder hat seinen eigenen, und er ist
+    mit dem Namen beglaubigt. Deshalb muss hier stehen, zu welchem Raum
+    ein Abschnitt gehoert -- der Aufrufer soll es nicht mitgeben muessen
+    und dabei falsch liegen koennen.
+    """
+    name = getattr(sammlung, "name", "") or ""
+    return name[len(VORSILBE_RAUM):] if name.startswith(VORSILBE_RAUM) else ""
+
+
+def _verschluesselt(raum, dokumente):
+    """Dokumente fuer die Ablage. Schon Verschluesseltes bleibt, wie es ist.
+
+    Das "bleibt, wie es ist" ist nicht Bequemlichkeit, sondern noetig:
+    beim Einspielen einer Sicherung kommt der Geheimtext aus dem Abzug
+    zurueck. Ihn erneut zu verschluesseln waere eine zweite Schicht, die
+    beim Lesen nur die erste abnimmt -- und dann stuende Kauderwelsch in
+    der Antwort.
+    """
+    if not raum or not dokumente:
+        return dokumente
+    import raumschluessel
+    if not raumschluessel.verfuegbar():
+        return dokumente
+    return [d if raumschluessel.ist_verschluesselt(d)
+            else raumschluessel.verschluessele_text(raum, d)
+            for d in dokumente]
+
+
+def klartext(sammlung_oder_raum, dokumente, benutzer="?"):
+    """Dokumente zurueck im Klartext. Alte, lesbare bleiben unveraendert.
+
+    benutzer geht in das Entnahmebudget: gezaehlt wird, wer wie viel aus
+    wie vielen Raeumen holt. Eine Frage sind ein Dutzend Abschnitte aus
+    ein bis drei Raeumen; wer den Bestand ausleert, faellt damit auf.
+    """
+    raum = (sammlung_oder_raum if isinstance(sammlung_oder_raum, str)
+            else raum_von(sammlung_oder_raum))
+    if not raum or not dokumente:
+        return dokumente
+    import raumschluessel
+    zu_zaehlen = sum(1 for d in dokumente
+                     if raumschluessel.ist_verschluesselt(d))
+    if zu_zaehlen:
+        import budget
+        budget.zaehle(benutzer, raum, zu_zaehlen)
+    return [raumschluessel.entschluessele_text(raum, d) for d in dokumente]
+
+
+def umschluesseln(von_raum, nach_raum, dokumente, benutzer="?"):
+    """Abschnitte von einem Raum in einen anderen umschluesseln.
+
+    Gebraucht beim Verschieben und beim Umsortieren. Ohne das truege der
+    Geheimtext weiter die Beglaubigung des alten Raums und liesse sich im
+    neuen nicht mehr oeffnen -- ein Dokument, das nach dem Verschieben
+    unlesbar ist, und niemand saehe warum.
+    """
+    return _verschluesselt(nach_raum,
+                           klartext(von_raum, dokumente, benutzer))
+
+
 def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
              stapel=None, ersetzen=True, fortschritt=None):
     """Schreibt Abschnitte in Stapeln. Anzahl der geschriebenen.
@@ -262,6 +335,9 @@ def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
     n = len(ids)
     if not n:
         return 0
+    # Verschluesseln VOR dem Aufteilen: sonst traegt jeder Stapel die
+    # Entscheidung erneut, und einer davon vergisst sie irgendwann.
+    documents = _verschluesselt(raum_von(sammlung), documents)
     stapel = max(1, stapel or SCHREIBSTAPEL)
     geschrieben = 0
     a = 0

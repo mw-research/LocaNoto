@@ -7,6 +7,7 @@ from datetime import datetime
 import re
 
 import paths
+import sicherheit
 import store
 import keyword_index
 import llm
@@ -480,13 +481,22 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
         metas.append(meta)
 
     ziel = raum_sammlung(nach_raum)
-    store.schreibe(ziel, ids, documents=daten.get("documents") or [],
+    # Umschluesseln: der Geheimtext ist mit dem Raum beglaubigt, in dem
+    # er lag. Unveraendert uebernommen liesse er sich im neuen Raum nie
+    # wieder oeffnen -- ein Dokument, das nach dem Verschieben stumm
+    # unlesbar ist, und niemand saehe warum.
+    _docs = store.umschluesseln(von_raum, nach_raum,
+                                daten.get("documents") or [],
+                                st.session_state.get("username", "?"))
+    store.schreibe(ziel, ids, documents=_docs,
                    metadatas=metas, embeddings=vektoren)
     quelle.delete(ids=ids)
 
     keyword_index.delete_document(filename, raum=von_raum)
     keyword_index.add_chunks(
-        zip(ids, daten.get("documents") or [], metas))
+        zip(ids, store.klartext(von_raum, daten.get("documents") or [],
+                                st.session_state.get("username", "?")),
+            metas))
     refresh_document_index()
 
     # Die Datei geht mit. Seit jeder Raum seinen eigenen Ablageordner hat,
@@ -2465,6 +2475,28 @@ with st.sidebar:
                 "Minuten. Der Schlüssel geht **nicht** mit in den Abzug — "
                 "er gehört in eine andere Aufbewahrung als die Daten, die "
                 "er lesbar macht.")
+
+    # --- SICHERHEITSLAGE ---
+    #
+    # Verschluesselung, die man nicht nachsehen kann, ist eine
+    # Behauptung. Hier steht, was tatsaechlich gilt -- einschliesslich
+    # dessen, was sie NICHT leistet. Ein offener Punkt heisst nicht
+    # "kaputt", sondern "hier ist die Zusage schwaecher, als sie
+    # aussieht".
+    if is_admin():
+        _lage = sicherheit.lage()
+        _offen = [n for n, _ok, _t in _lage if not _ok]
+        with st.expander(f"\U0001f512 Sicherheitslage "
+                         f"({len(_lage) - len(_offen)}/{len(_lage)})"):
+            for _name, _ok, _text in _lage:
+                st.markdown(("✅ " if _ok else "⚠️ ") + f"**{_name}**")
+                st.caption(_text)
+            st.caption(
+                "Die letzten drei Punkte lassen sich nicht schließen, "
+                "sondern nur eingrenzen: Vektoren müssen vergleichbar "
+                "bleiben, und wer den laufenden Prozess hat, hat den "
+                "Klartext. Dagegen hilft ein verschlüsselter Datenträger "
+                "und wenige Menschen mit Serverzugang.")
 
     # --- SPEICHERORTE ---
     #
