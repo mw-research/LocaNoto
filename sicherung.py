@@ -264,9 +264,24 @@ def sichere(fortschritt=None):
 
     # Die Raumverwaltung mit sichern: ein Abzug ohne sie liesse die
     # Abschnitte wiederherstellen, aber niemand wuesste mehr, wer sie
-    # sehen darf. Der Schluessel geht NICHT mit -- er gehoert in eine
-    # andere Aufbewahrung als die Daten, die er lesbar macht.
-    for datei in ("raeume.json", "owncloud.json"):
+    # sehen darf.
+    #
+    # raumschluessel.json GEHOERT DAZU, und das ist keine Aufweichung der
+    # Trennung. Darin stehen die Raumschluessel -- verpackt mit dem
+    # Installationsschluessel, also ohne ihn wertlos. Der Abzug bleibt
+    # damit genauso unlesbar wie zuvor.
+    #
+    # Ohne sie waere er dagegen ENDGUELTIG unlesbar: die Raumschluessel
+    # sind Zufall, sie lassen sich aus nichts wiederherstellen. Wer nur
+    # schluessel.key sichert und diese Datei verliert, hat einen Abzug,
+    # den auch der richtige Installationsschluessel nicht mehr oeffnet.
+    # Das war eine Verlustmoeglichkeit, die beim Bauen der
+    # Raumschluessel uebersehen wurde.
+    #
+    # Der Installationsschluessel selbst geht weiterhin NICHT mit -- er
+    # gehoert in eine andere Aufbewahrung als die Daten, die er lesbar
+    # macht.
+    for datei in ("raeume.json", "owncloud.json", "raumschluessel.json"):
         quelle = os.path.join(paths.CONFIG_DIR, datei)
         if os.path.exists(quelle):
             shutil.copy(quelle, os.path.join(vorlaeufig, datei))
