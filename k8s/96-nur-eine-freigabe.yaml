@@ -108,6 +108,13 @@ spec:
       initContainers:
         - name: wiederanlauf
           image: ghcr.io/mw-research/locanoto:schlank
+          # Ohne das holt der Knoten das Abbild NIE wieder: bei einem
+          # Namen ohne :latest ist die Vorgabe IfNotPresent, und
+          # ":schlank" zeigt bei jedem Bau woandershin. Der Knoten
+          # behaelt seine alte Fassung -- im Protokoll steht dann
+          # "already present on machine", und man sucht den Fehler im
+          # Programm, waehrend die Behebung laengst gebaut ist.
+          imagePullPolicy: Always
           command:
             - python
             - sicherung.py
