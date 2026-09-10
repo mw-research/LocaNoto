@@ -295,9 +295,98 @@ services:
 # Vektordatenbank muesste allerdings neu eingelesen werden -- wer sie
 # ebenfalls persistent haben will, gibt dem Volume einen Treiber auf
 # Blockspeicher, nicht auf ein Netzlaufwerk.
+  # --- OWNCLOUD, MITGELIEFERT ---
+  #
+  # Ein eigener Dienst und NICHT im selben Abbild. Zwei Programme in einem
+  # Container heisst zwei Prozesse um PID 1, gemeinsame Protokolle, und
+  # ein Update von LocaNoto risse ownCloud mit. Es ist trotzdem dieselbe
+  # Installation: ein compose, ein Netz, ein Befehl.
+  #
+  #   docker compose --profile owncloud up -d
+  #   docker compose exec -T locanoto_bot python einrichten.py
+  #
+  # Das Profil heisst, dass diese Dienste NUR mit --profile starten. Wer
+  # ein vorhandenes ownCloud im Haus hat, laesst es weg und traegt in die
+  # .env dessen Adresse ein -- daran aendert sich nichts.
+  owncloud:
+    profiles: ["owncloud"]
+    image: owncloud/server:10.15
+    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud
+    restart: unless-stopped
+    ports:
+      - "${OWNCLOUD_PORT:-8080}:8080"
+    depends_on:
+      owncloud_db:
+        condition: service_healthy
+      owncloud_redis:
+        condition: service_healthy
+    environment:
+      # Die Adresse, unter der ownCloud sich selbst sieht. Stimmt sie
+      # nicht, laufen Anmeldung und Freigaben in Weiterleitungen, die ins
+      # Leere zeigen -- der haeufigste Fehlgriff beim ersten Aufsetzen.
+      - OWNCLOUD_DOMAIN=${OWNCLOUD_DOMAIN:-localhost:8080}
+      - OWNCLOUD_TRUSTED_DOMAINS=${OWNCLOUD_TRUSTED_DOMAINS:-localhost,127.0.0.1,owncloud}
+      - OWNCLOUD_DB_TYPE=mysql
+      - OWNCLOUD_DB_NAME=owncloud
+      - OWNCLOUD_DB_USERNAME=owncloud
+      - OWNCLOUD_DB_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
+      - OWNCLOUD_DB_HOST=owncloud_db
+      - OWNCLOUD_ADMIN_USERNAME=${OWNCLOUD_ADMIN_USER:-admin}
+      - OWNCLOUD_ADMIN_PASSWORD=${OWNCLOUD_ADMIN_PASSWORT:?OWNCLOUD_ADMIN_PASSWORT muss gesetzt sein}
+      - OWNCLOUD_MYSQL_UTF8MB4=true
+      - OWNCLOUD_REDIS_ENABLED=true
+      - OWNCLOUD_REDIS_HOST=owncloud_redis
+    healthcheck:
+      test: ["CMD", "/usr/bin/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+      # Auf den persistenten Speicher, wie alles andere auch. Hier liegen
+      # die Dateien der Nutzer -- LocaNoto verschluesselt sie nicht und
+      # kann es nicht: ownCloud muss sie ausliefern. Der Datentraeger
+      # gehoert also verschluesselt, siehe README.
+      - ${OWNCLOUD_PFAD:-./data/owncloud}:/mnt/data
+
+  owncloud_db:
+    profiles: ["owncloud"]
+    image: mariadb:10.11
+    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud_db
+    restart: unless-stopped
+    command: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
+    environment:
+      - MARIADB_ROOT_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
+      - MARIADB_USER=owncloud
+      - MARIADB_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
+      - MARIADB_DATABASE=owncloud
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - owncloud_db:/var/lib/mysql
+
+  owncloud_redis:
+    profiles: ["owncloud"]
+    image: redis:7-alpine
+    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud_redis
+    restart: unless-stopped
+    command: ["--databases", "1"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - owncloud_redis:/data
+
+
 volumes:
   locanoto_index:
 
+  owncloud_db:
+  owncloud_redis:
 # --- DER INSTALLATIONSSCHLUESSEL ALS SECRET ---
 #
 # LOCANOTO_SCHLUESSEL in der .env sieht dichter aus, als es ist: die .env

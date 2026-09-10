@@ -43,6 +43,11 @@ EIGEN = {
     "CHROMA_ANONYMIZED_TELEMETRY", "STREAMLIT_BROWSER_GATHER_USAGE_STATS",
     "LOCANOTO_DATEN", "LOCANOTO_KONFIG", "LOCANOTO_INDEX",
     "INGEST_ORDNER", "INGEST_RAUM", "LOCANOTO_SCHLUESSEL",
+    # Absichtlich NICHT durchgereicht: das waere ein Verwalterpasswort in
+    # der .env, also in einer Datei auf der Platte. Fuer eine
+    # unbeaufsichtigte Einrichtung gehoeren sie an den einzelnen Aufruf:
+    #   docker compose exec -e LOCANOTO_ERSTER_VERWALTER=markus     #       -e LOCANOTO_ERSTES_PASSWORT=... locanoto_bot python einrichten.py
+    "LOCANOTO_ERSTER_VERWALTER", "LOCANOTO_ERSTES_PASSWORT",
 }
 
 fehlt_compose = sorted(k for k in gelesen
