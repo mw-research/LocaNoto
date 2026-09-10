@@ -100,8 +100,9 @@ eingetragener Zugang nicht mehr anmelden.
 docker compose exec locanoto_bot python ingest.py
 ```
 
-Dateien vorher nach `data/dokumente/` legen; Unterordner werden zu
-Sachgebieten. Für Abbildungen zusätzlich `python ingest_images.py`.
+Dateien vorher nach `data/dokumente/` legen — für einen bestimmten
+Raum in dessen Unterordner. Für Abbildungen zusätzlich
+`python ingest_images.py`.
 
 ### 6. Prüfen
 
@@ -307,8 +308,8 @@ beisammen.
 
 ### 7. Dokumente einlesen
 
-Dateien nach `data/dokumente/` legen, Unterordner werden zu
-[Sachgebieten](#-sachgebiete). Dann:
+Dateien nach `data/dokumente/` legen — [ein Raum, ein
+Ordner](#-wo-die-dateien-liegen). Dann:
 
 ```bash
 docker compose exec locanoto_bot python ingest.py
@@ -397,26 +398,68 @@ eine Wiederaufnahme nach einem Neustart des Containers. Das wäre ein
 Arbeiter neben der Anwendung — etwas anderes als ein Knopf.
 
 ## ☁️ Dokumente aus ownCloud
-Ein Ordner in ownCloud oder Nextcloud wird auf einen [Raum](#-räume)
-abgebildet. Damit liegen die Dokumente dort, wo sie ohnehin gepflegt
-werden, und die Rechte auf dem Ordner sind die von ownCloud — die
-Mitgliedschaft des Raums entscheidet dann, wer die daraus gebauten
-Abschnitte sieht.
+**LocaNoto steht vorn, ownCloud liegt dahinter.** Wer hier einen Zugang
+anlegt, bekommt ihn dort auch; wer hier einen Raum anlegt, bekommt dort
+einen Ordner samt Freigabe. Niemand muss in ownCloud etwas einrichten,
+und niemand muss dort etwas von Räumen wissen.
+
+Der Baum gehört dem **Dienstkonto** und wird nach außen geteilt:
 
 ```
-ownCloud /Abteilungen/Einkauf/Handbücher
-    → Raum "einkauf" → Sammlung raum_einkauf
-       Unterordner darin werden zu Sachgebieten
+/LocaNoto/allgemein/          für alle lesbar, Verwalter schreiben
+/LocaNoto/raeume/einkauf/     für die Mitglieder des Raums
+/LocaNoto/privat/anna/        nur für anna
 ```
+
+Die Richtung ist Absicht und keine Bequemlichkeit. Ein Ordner im
+**eigenen** Bereich des Nutzers wäre für LocaNoto unsichtbar: WebDAV
+kennt nur den Bereich des angemeldeten Kontos, und weder ownCloud noch
+Nextcloud lassen einen Verwalter fremde Dateien darüber lesen. Ein
+persönlicher Raum, den die Anwendung nicht durchsuchen kann, wäre aber
+kein Raum, sondern ein Ordner.
+
+Derselbe Baum steht ohne ownCloud unter `data/dokumente/` — gleiche
+Namen, gleiche Aufteilung. **Der Rückfall ist kein Sonderfall**, sondern
+derselbe Aufbau ohne Freigaben. Die Mitgliederliste im Raum entscheidet
+in beiden Fällen; eine ownCloud-Gruppe kommt nur hinzu, sie ersetzt
+nichts.
+
+### Was das Dienstkonto können muss
 
 Einzurichten in der `.env`: `OWNCLOUD_URL` (die **Wurzel** der
 Installation, nicht der WebDAV-Pfad), `OWNCLOUD_USER`,
 `OWNCLOUD_PASSWORT`. Bei aktiver Zwei-Faktor-Anmeldung braucht es ein
-**App-Passwort**, nicht das Anmeldepasswort. Ein Lesezugriff genügt — die
-Anwendung schreibt nie nach ownCloud zurück.
+**App-Passwort**, nicht das Anmeldepasswort.
 
-Die Zuordnung Ordner → Raum pflegt ein Verwalter in der Seitenleiste unter
-**ownCloud**; sie liegt in `config/owncloud.json`.
+| Was | Welches Recht |
+|---|---|
+| Dateien holen und abgleichen | Lesezugriff genügt |
+| Konten anlegen, Ordner erzeugen, freigeben | `OWNCLOUD_ADMIN_USER` braucht **Verwalterrechte** |
+
+Das ist viel Macht in einem Dienstkonto, und das gehört gesagt: wer sie
+nicht geben will, richtet Konten und Ordner in ownCloud von Hand ein und
+trägt hier nur die Zuordnung ein. Das Holen läuft dann unverändert.
+
+`OWNCLOUD_WURZEL` verschiebt den Baum, Vorgabe `LocaNoto`.
+
+### Ein bestehender Bestand bleibt, wo er ist
+
+Eine Zuordnung von Hand geht dem Standardbaum vor — für Unterlagen, die
+seit Jahren unter `/Abteilungen/Einkauf/Handbücher` gepflegt werden. Sie
+steht in `config/owncloud.json` und lässt sich in der Seitenleiste unter
+**ownCloud** setzen. Ohne Eintrag gilt der Standardbaum, und dann muss
+für einen neuen Raum niemand mehr etwas eintragen.
+
+**Ablage einrichten** in derselben Seitenleiste holt nach, was beim
+Anlegen nicht ging — weil ownCloud gerade nicht erreichbar war, oder weil
+die Installation älter ist als diese Anbindung. Der Ablauf ist
+wiederholbar: vorhandene Ordner bleiben, Freigaben werden auf den
+Soll-Stand **gesetzt**, nicht ergänzt. Das ist der Unterschied, an dem es
+sonst scheitert: wer aus einem Raum ausscheidet, verliert damit auch den
+Ordner. Eine Mitgliedschaft zu entfernen und die Freigabe stehen zu
+lassen wäre die häufigste Art, eine Rechteänderung wirkungslos zu machen
+— die Suche fragt den Raum nicht mehr, die Dateien lägen aber weiter im
+ownCloud des Ausgeschiedenen.
 
 ### Prüfen, dann abgleichen
 
@@ -933,6 +976,69 @@ verwalten* → **Auf eine Mitgliederliste umstellen** bekommt auch der
 allgemeine Raum eine Liste. Danach sieht ihn nur, wer darin steht — oder in
 der zugeordneten ownCloud-Gruppe.
 
+### Notzugang: wenn jemand nicht mehr erreichbar ist
+
+Ein persönlicher Raum ist zu — auch für Verwalter. Das ist richtig,
+solange der Nutzer erreichbar ist, und genau dann falsch, wenn er es
+nicht mehr ist. Jemand scheidet aus, fällt länger aus, und in seiner
+Ablage liegt das eine Angebot, das die Firma braucht.
+
+Der Weg hinein ist absichtlich unbequem:
+
+1. Ein **Verwalter beantragt** den Zugang zu genau einem Raum, mit Grund.
+2. Ein Träger der Rolle **`notzugang` bestätigt** ihn — mit seiner
+   eigenen Anmeldung.
+3. Danach gilt er **24 Stunden** und erlischt von selbst.
+
+**Zwei Rollen und nicht zwei Verwalter**, und das ist der Kern: könnten
+Verwalter einander bestätigen, wäre es eine Formalie — die IT genehmigte
+sich den Blick in fremde Ablagen selbst. Die Rolle `notzugang` darf sonst
+nichts und gehört deshalb woandershin: Geschäftsführung, Personalrat, wer
+auch immer im Haus dafür steht. Beide Namen stehen im signierten
+Protokoll.
+
+Keine geteilte Losung: ein Geheimnis identifiziert niemanden, lässt sich
+weitergeben und ist, wenn es verloren geht, genau dann weg, wenn es
+gebraucht wird. Eine Rolle lässt sich entziehen.
+
+Was **nicht** geht — und geprüft ist, dass es nicht geht:
+
+| | |
+|---|---|
+| Antrag auf einen Fachraum | dort kommt ein Verwalter ohnehin hinein |
+| Antrag auf den eigenen Raum | |
+| Antrag von einem Nichtverwalter | |
+| sich selbst bestätigen | |
+| ein **zweiter Verwalter** bestätigt | sonst genehmigt sich die IT den Blick selbst |
+| ein gewöhnlicher Nutzer bestätigt | |
+| einen Antrag ohne Bestätigung nutzen | |
+| einen Zugang nach Ablauf nutzen | |
+| den Zugang eines anderen Verwalters mitbenutzen | |
+| von Hand in `config/notzugang.json` eintragen | die Datei ist signiert; eine veränderte gilt als leer |
+
+Für `notzugang` greift der Umstiegsnachlass `ADMIN_USERS` **nicht** —
+eine Umgebungsvariable lässt sich am Container setzen, und dann
+bestätigte sich der Verwalter doch wieder selbst.
+
+`NOTZUGANG_STUNDEN` ändert die Geltungsdauer, `NOTZUGANG_ANTRAG_TAGE`,
+wie lange ein unbestätigter Antrag stehen bleibt.
+
+**Gibt es niemanden mit der Rolle, gibt es keinen Notzugang.** Die
+Oberfläche sagt das, bevor jemand einen Antrag stellt, den niemand
+bestätigen kann. Ein persönlicher Raum bleibt dann ausschließlich
+löschbar, nicht lesbar.
+
+#### Die ehrliche Grenze dabei
+
+Das ist eine Kontrolle **in der Anwendung**. Wer den Server hat, liest
+die Sammlung eines persönlichen Raums, ohne diese Datei zu beachten — die
+Abschnitte liegen dort im Klartext, weil sie durchsuchbar sein müssen.
+Der Notzugang schützt gegen den Verwalter, der im Alltag klickt, nicht
+gegen den, der sich einloggt. Dagegen hilft nur, wer überhaupt
+Serverzugang hat, und eine verschlüsselte Platte.
+
+---
+
 ### Die ehrliche Grenze
 
 Wer Dateizugriff auf `config/` hat, kann sich in jede Mitgliederliste
@@ -1120,60 +1226,54 @@ haben keine eingebetteten Bilder und werden übersprungen.
 
 Die Vorschau der Originalseite unter einer Quelle gibt es nur bei PDFs.
 
-## 🗂️ Sachgebiete
-Unterordner in `data/dokumente/` werden als Sachgebiet übernommen und stehen
-in der Seitenleiste als Filter zur Verfügung:
+## 🗂️ Wo die Dateien liegen
+
+Ein Raum, ein Ordner. Das ist die ganze Einteilung.
 
 ```
 data/dokumente/
-    Sachgebiet-A/      -> Sachgebiet "Sachgebiet-A"
-    Sachgebiet-B/      -> Sachgebiet "Sachgebiet-B"
-    dokument.pdf       -> Sachgebiet "(Basis)"
-```
-
-Sachgebiete dienen dazu, die Suche auf einen Teil des Bestands einzugrenzen.
-Ist eines ausgewählt, berücksichtigen Vektor- und Keyword-Suche nur die
-Dokumente daraus.
-
-**Beim Hochladen** wird das Sachgebiet mit ausgewählt; über **+ neues
-anlegen** entsteht dabei ein neues. Die Datei landet im zugehörigen
-Unterordner, damit ein späterer vollständiger Ingest dieselbe Zuordnung
-findet — bliebe sie im Wurzelverzeichnis, wäre sie danach wieder `(Basis)`.
-
-Sie sind optional: liegen alle Dateien direkt in `data/dokumente/`, gibt es
-nur `(Basis)` und der Filter wird nicht eingeblendet.
-
-### Räume kommen davor
-
-Jeder Raum außer dem allgemeinen hat einen eigenen Ordner, und das
-Sachgebiet ist der Unterordner darin:
-
-```
-data/dokumente/
-    Technik/                   -> allgemein, Sachgebiet "Technik"
-    handbuch.pdf               -> allgemein, "(Basis)"
+    handbuch.pdf               -> allgemein
     einkauf/
-        Rahmenverträge/        -> Raum "einkauf", Sachgebiet "Rahmenverträge"
+        rahmenvertrag.pdf      -> Raum "einkauf"
     privat_anna/
-        notiz.pdf              -> Raum "privat_anna", "(Basis)"
+        notiz.pdf              -> Raum "privat_anna"
 ```
 
 Der Ordner ist nicht Kosmetik. Zwei Räume dürfen dieselbe `Angebot.pdf`
 führen, und ohne getrennte Ordner überschriebe der zweite Upload die Datei
 des ersten — ohne Meldung, und die Abschnitte des ersten Raums zeigten
-danach auf einen fremden Inhalt. Dieselben Ordner legt auch der
+danach auf einen fremden Inhalt. Dieselben Ordner legt der
 ownCloud-Abgleich an, damit ein Dokument denselben Ort hat, egal wie es
 hereinkam.
 
 Der allgemeine Raum behält den Wurzelbereich — dort liegt der Bestand aus
-der Zeit vor den Räumen, und ein Ingest über `data/dokumente` soll ihn
-weiter als `(Basis)` sehen. **Bestehende Dateien werden nicht verschoben:**
+der Zeit vor den Räumen. **Bestehende Dateien werden nicht verschoben:**
 sie bleiben liegen und bleiben auffindbar. Wird ein Dokument in einen
 anderen Raum verschoben, geht die Datei mit.
 
 Ein Ingest über `data/dokumente` überspringt die Ordner der anderen Räume
 und sagt, wie viele. Eingelesen werden sie mit `INGEST_RAUM` — oder von
 `abgleich.py`, das beides passend setzt.
+
+### Sachgebiete gibt es nicht mehr
+
+Bis vor Kurzem war ein Unterordner ein „Sachgebiet", und die Seitenleiste
+bot ihn als Filter an. Das ist entfallen, und zwar nicht zum Aufräumen:
+
+* Ein Sachgebiet **sah aus wie eine Rechteeinschränkung und war keine.**
+  Zwei Filter nebeneinander, von denen nur einer eine Grenze zieht, sind
+  einer zu viel.
+* Der Filter wurde aus der **Voreinstellung vorbelegt**. Wer ein neues
+  Sachgebiet anlegte und dorthin hochlud, fand sein Dokument nicht mehr —
+  es lag außerhalb der vorbelegten Auswahl, und nichts sagte es ihm.
+
+Der Raum leistet dasselbe und bindet es an eine Berechtigung. Wer eine
+Untergliederung braucht, legt einen Raum an; das kostet einen Klick mehr
+und trägt dafür eine Zusage.
+
+Vorhandene `folder`-Angaben in den Metadaten bleiben unangetastet — sie
+zu löschen wäre ein Schreibvorgang über den ganzen Bestand für nichts.
+Sie werden nur nicht mehr ausgewertet.
 
 ## 🧠 Rangfolge der Treffer
 Nach der Suche werden die Ranglisten aller Sonden und beider Suchwege
@@ -1345,7 +1445,7 @@ zu entfernen.
 ### Bereiche
 
 Unterordner des Listenordners werden als **Bereich** übernommen — für Listen
-dasselbe, was Sachgebiete für Dokumente sind:
+dasselbe, was ein Raum für Dokumente ist, nur ohne Rechtewirkung:
 
 ```
 /listen/
@@ -1356,8 +1456,7 @@ dasselbe, was Sachgebiete für Dokumente sind:
 
 In der Seitenleiste lässt sich darauf eingrenzen, und eine Voreinstellung
 kann Bereiche mitbringen: „Einkauf" nimmt dann die Lieferantenlisten,
-„Fertigung" die Auftragslisten — passend zu den Sachgebieten derselben
-Voreinstellung.
+„Fertigung" die Auftragslisten.
 
 Der **Wurzelordner** bleibt in der `.env` (`TABELLEN_PFAD`) und ist bewusst
 nicht in der Oberfläche einstellbar: ein Textfeld, in das jemand
@@ -1440,7 +1539,6 @@ oben in der Seitenleiste als Auswahl:
 |---|---|
 | Chat-Modell | derselbe Endpunkt, anderer Name — `qwen3.8` statt `gemma4` |
 | Relevante Abschnitte | Trefferzahl je Frage |
-| Sachgebiete | worin gesucht wird |
 | Listenbereiche | welche Unterordner des Listenordners abgefragt werden |
 | Prompts und Glossar | optional, eigene Fassungen je Voreinstellung |
 
@@ -1674,7 +1772,7 @@ die Antwort, um die es ging. Mit `"quellen_texte": true` kommen sie mit.
 
 ### Voreinstellungen und Listen
 
-`"preset": "einkauf"` übernimmt Chat-Modell, Trefferzahl, Sachgebiete,
+`"preset": "einkauf"` übernimmt Chat-Modell, Trefferzahl,
 Listenbereiche und die eigenen Prompts dieser Voreinstellung. Einzeln
 übergebene Werte gehen vor — wer zusätzlich `top_k` setzt, meint es so.
 

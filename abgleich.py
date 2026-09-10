@@ -154,7 +154,10 @@ def main():
     if args.nur_gruppen:
         return 1 if fehler_gruppen else 0
 
-    zuordnung = owncloud.zuordnung()
+    # Wirksam heisst: von Hand eingetragen, sonst der
+    # Standardbaum. Damit muss fuer einen neuen Raum niemand
+    # mehr etwas eintragen.
+    zuordnung = owncloud.zuordnung_wirksam()
     if not zuordnung:
         print(f"\nKeine Zuordnung eingerichtet. Erwartet wird "
               f"{owncloud.ZUORDNUNG} mit Eintraegen der Form")

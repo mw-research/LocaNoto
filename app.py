@@ -175,6 +175,26 @@ raeume.sichere_anlage_privat(st.session_state["username"])
 # Signaturen stammt -- eine Umgebungsvariable laesst sich am Container
 # setzen, ohne die Benutzerdatei anzufassen, und war damit ein Weg, sich
 # Verwalterrechte zu geben.
+def _oc_bericht(bericht, was):
+    """Zeigt, was in ownCloud geschehen ist -- und was nicht.
+
+    Nie als Fehlschlag des Ganzen: der Nutzer beziehungsweise der Raum ist
+    in LocaNoto zu diesem Zeitpunkt schon angelegt, und ein nicht
+    erreichbares ownCloud darf das nicht rueckgaengig machen. Was fehlt,
+    steht hier und laesst sich mit "Ablage einrichten" nachholen -- der
+    Ablauf ist wiederholbar.
+    """
+    if not owncloud.eingerichtet():
+        return
+    if bericht.get("schritte"):
+        st.caption("ownCloud: " + " · ".join(bericht["schritte"]))
+    for f in bericht.get("fehler") or []:
+        st.warning("ownCloud: " + f)
+    if bericht.get("fehler"):
+        st.caption(f"{was} ist in LocaNoto angelegt. Die Ablage in ownCloud "
+                   f"laesst sich unter *ownCloud* nachholen.")
+
+
 def is_admin():
     return _ist_verwalter(st.session_state.get("username", ""))
 
@@ -1649,7 +1669,17 @@ with st.sidebar:
                             von=st.session_state["username"])
                         (st.success if ok else st.error)(meldung)
                         if ok:
-                            time.sleep(1)
+                            # ownCloud zieht mit: Konto, persoenlicher
+                            # Ordner, Freigabe nur an ihn, dazu der
+                            # gemeinsame Ordner. Der Nutzer muss dort
+                            # nichts einrichten -- das ist der Sinn von
+                            # "eingebettet".
+                            with st.spinner("Richte die Ablage ein ..."):
+                                _b = owncloud.richte_nutzer_ein(
+                                    _name, _pw1, _name)
+                            _oc_bericht(_b, "Der Zugang")
+                            _leeren()
+                            time.sleep(2 if _b.get("fehler") else 1)
                             st.rerun()
             else:
                 _e = benutzer.eintrag(_wahl) or {}
@@ -1947,8 +1977,11 @@ with st.sidebar:
                                                  _mitglieder)
                     if ok:
                         st.success(f"Raum '{_name}' angelegt.")
+                        with st.spinner("Richte die Ablage ein ..."):
+                            _b = owncloud.richte_raum_ein(meldung)
+                        _oc_bericht(_b, "Der Raum")
                         refresh_document_index()
-                        time.sleep(1)
+                        time.sleep(2 if _b.get("fehler") else 1)
                         st.rerun()
                     else:
                         st.error(meldung)
@@ -2054,8 +2087,17 @@ with st.sidebar:
                     if _gruppe.strip() != _gruppe_alt:
                         raeume.gruppe_setzen(_bearbeiten, _gruppe)
                     st.success("Gespeichert.")
+                    # Die Freigabe zieht mit -- SETZEN, nicht ergaenzen.
+                    # Ein Mitglied zu entfernen und die Freigabe stehen zu
+                    # lassen waere die haeufigste Art, eine
+                    # Rechteaenderung wirkungslos zu machen: die Suche
+                    # fragt den Raum nicht mehr, die Dateien liegen aber
+                    # weiter im ownCloud des Ausgeschiedenen.
+                    with st.spinner("Ziehe die Freigaben nach ..."):
+                        _b = owncloud.richte_raum_ein(_bearbeiten)
+                    _oc_bericht(_b, "Der Raum")
                     refresh_document_index()
-                    time.sleep(1)
+                    time.sleep(2 if _b.get("fehler") else 1)
                     st.rerun()
 
                 # Entfernen und Loeschen sind zwei Dinge. Das erste nimmt
@@ -2129,19 +2171,31 @@ with st.sidebar:
                     "etwa `https://cloud.firma.de`), `OWNCLOUD_USER` und "
                     "`OWNCLOUD_PASSWORT`. Bei aktiver Zwei-Faktor-Anmeldung "
                     "braucht es ein **App-Passwort**, nicht das "
-                    "Anmeldepasswort. Ein Lesezugriff genügt — die "
-                    "Anwendung schreibt nie nach ownCloud zurück.")
+                    "Anmeldepasswort. Für das reine Holen von Dateien "
+                    "genügt Lesezugriff. Damit LocaNoto die Ablage selbst "
+                    "einrichtet — Konten anlegen, Ordner erzeugen, "
+                    "freigeben —, braucht `OWNCLOUD_ADMIN_USER` in "
+                    "ownCloud **Verwalterrechte**. Das ist viel Macht in "
+                    "einem Dienstkonto; wer sie nicht geben will, richtet "
+                    "Konten und Ordner dort von Hand ein und trägt hier "
+                    "nur die Zuordnung ein.")
             else:
                 _zu = owncloud.zuordnung()
-                for _r, _o in sorted(_zu.items()):
+                _wirksam = owncloud.zuordnung_wirksam()
+                for _r, _o in sorted(_wirksam.items()):
                     _b = owncloud.letzter_bericht(_r)
                     _stand = (f"{_b['dateien']} Dateien, zuletzt "
                               f"{(_b['zuletzt'] or '?')[:16]}"
                               if _b else "noch nicht abgeglichen")
                     st.caption(f"**{raeume.bezeichnung(_r)}** "
-                               f"· `{_o}` · {_stand}")
-                if not _zu:
-                    st.caption("Noch keine Zuordnung.")
+                               f"· `{_o}`"
+                               + ("" if _r in _zu else " *(Standard)*")
+                               + f" · {_stand}")
+                st.caption(
+                    "Ohne eigenen Eintrag gilt der Standardbaum unter "
+                    f"`/{owncloud.WURZEL}/`. Eine Zuordnung von Hand "
+                    "geht vor — für Bestände, die seit Jahren woanders "
+                    "liegen.")
 
                 st.markdown("---")
                 _raum_wahl = st.selectbox(
@@ -2177,6 +2231,54 @@ with st.sidebar:
                         st.success("Entfernt.")
                         time.sleep(1)
                         st.rerun()
+
+            # --- ABLAGE EINRICHTEN ---
+            #
+            # Nachholen, was beim Anlegen nicht ging -- weil ownCloud
+            # gerade nicht erreichbar war, oder weil die Installation
+            # aelter ist als diese Anbindung. Der Ablauf ist wiederholbar:
+            # vorhandene Ordner bleiben, Freigaben werden auf den Soll-
+            # Stand gebracht, nicht ergaenzt.
+            if owncloud.eingerichtet():
+                st.markdown("---")
+                st.markdown("**Ablage einrichten**")
+                st.caption(
+                    f"Legt unter `/{owncloud.WURZEL}/` je Raum einen Ordner "
+                    f"an und teilt ihn mit seinen Mitgliedern — den "
+                    f"gemeinsamen mit allen (nur lesend, schreiben dürfen "
+                    f"Verwalter), einen persönlichen nur mit seinem "
+                    f"Besitzer. Wiederholbar: was schon steht, bleibt.")
+                if st.button("Für alle Räume einrichten",
+                             use_container_width=True):
+                    _gut, _schlecht = 0, []
+                    with st.spinner("Richte ein ..."):
+                        for _r in sorted(raeume.liste()):
+                            _b = owncloud.richte_raum_ein(_r)
+                            if _b.get("fehler"):
+                                _schlecht.append(
+                                    f"{_r}: {_b['fehler'][0]}")
+                            else:
+                                _gut += 1
+                    st.success(f"{_gut} Räume eingerichtet.")
+                    for _f in _schlecht[:10]:
+                        st.warning(_f)
+                    _leeren()
+
+                _wer = st.selectbox(
+                    "Einzelnen Zugang nachziehen",
+                    ["-"] + benutzer.namen(), key="oc_nutzer")
+                if _wer != "-" and st.button(
+                        "Persönliche Ablage einrichten",
+                        use_container_width=True):
+                    with st.spinner("Richte ein ..."):
+                        # Ohne Passwort: das Konto gibt es entweder schon,
+                        # oder es wird beim Anlegen erzeugt. Hier ein
+                        # Passwort zu erfinden waere ein zweites Geheimnis
+                        # fuer denselben Menschen.
+                        _b = owncloud.richte_nutzer_ein(_wer)
+                    _oc_bericht(_b, "Der Zugang")
+                    if not _b.get("fehler"):
+                        st.success(f"Ablage für '{_wer}' steht.")
 
                 # --- PRUEFEN ---
                 #

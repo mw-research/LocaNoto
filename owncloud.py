@@ -592,3 +592,316 @@ def letzter_bericht(raum):
     zeiten = [e.get("geholt") for e in stand.values() if e.get("geholt")]
     return {"dateien": len(stand),
             "zuletzt": max(zeiten) if zeiten else None}
+
+
+# --- OWNCLOUD ALS ABLAGE DAHINTER ---
+#
+# LocaNoto steht vorn, ownCloud liegt dahinter. Wer hier einen Nutzer
+# anlegt, bekommt ihn dort auch; wer hier einen Raum anlegt, bekommt dort
+# einen Ordner samt Freigabe. Niemand muss in ownCloud etwas einrichten,
+# und niemand muss dort etwas von Raeumen wissen.
+#
+# Der Baum gehoert dem DIENSTKONTO und wird nach aussen geteilt:
+#
+#     /LocaNoto/allgemein/          fuer alle lesbar, Verwalter schreiben
+#     /LocaNoto/raeume/<raum>/      fuer die Mitglieder
+#     /LocaNoto/privat/<kennung>/   nur fuer diesen einen Nutzer
+#
+# Die Richtung ist Absicht. Ein Ordner im EIGENEN Bereich des Nutzers waere
+# fuer LocaNoto unsichtbar: WebDAV kennt nur den Bereich des angemeldeten
+# Kontos, und weder ownCloud noch Nextcloud lassen einen Verwalter fremde
+# Dateien darueber lesen. Ein persoenlicher Raum, den die Anwendung nicht
+# durchsuchen kann, waere aber kein Raum, sondern ein Ordner.
+#
+# Derselbe Baum steht ohne ownCloud unter data/dokumente/ -- gleiche
+# Namen, gleiche Aufteilung. Der Rueckfall ist deshalb kein Sonderfall,
+# sondern derselbe Aufbau ohne Freigaben.
+
+# Wurzel des Baums im Bereich des Dienstkontos.
+WURZEL = os.getenv("OWNCLOUD_WURZEL", "").strip().strip("/") or "LocaNoto"
+
+# OCS-Rechte, als Summe von Bits. 1 lesen, 2 aendern, 4 anlegen,
+# 8 loeschen, 16 weiterverteilen.
+NUR_LESEN = 1
+LESEN_SCHREIBEN = 1 + 2 + 4 + 8
+
+
+def _ocs_ruf(methode, pfad, daten=None, app=None):
+    """Ein OCS-Aufruf mit Methode. Gibt ocs.data zurueck.
+
+    app waehlt die Schnittstelle: None ist die Nutzerverwaltung unter
+    /cloud, "files_sharing" die Freigaben. Zwei Pfade, eine Umhuellung --
+    die Fehlerbehandlung soll nicht zweimal dastehen.
+    """
+    if app:
+        url = f"{URL}/ocs/v1.php/apps/{app}/api/v1/{str(pfad).lstrip('/')}"
+    else:
+        url = f"{URL}/ocs/v1.php/cloud/{str(pfad).lstrip('/')}"
+    with requests.Session() as s:
+        s.auth = (ADMIN_BENUTZER, ADMIN_PASSWORT)
+        a = s.request(methode, url, params={"format": "json"},
+                      data=daten or None,
+                      headers={"OCS-APIRequest": "true"}, timeout=TIMEOUT)
+    if a.status_code == 401:
+        raise PermissionError("Anmeldung abgelehnt.")
+    a.raise_for_status()
+    try:
+        umschlag = a.json()["ocs"]
+    except (ValueError, KeyError) as e:
+        raise ValueError("Keine OCS-Antwort -- zeigt die Adresse auf die "
+                         "Wurzel der Installation?") from e
+    meta = umschlag.get("meta") or {}
+    stand = meta.get("statuscode")
+    if stand == 997:
+        raise PermissionError(
+            "Nicht berechtigt. Nutzer anzulegen und Ordner freizugeben "
+            "verlangt in ownCloud ein Konto mit Verwalterrechten -- siehe "
+            "OWNCLOUD_ADMIN_USER.")
+    if stand not in (100, 200):
+        raise ValueError(f"ownCloud antwortete mit Status {stand}"
+                         + (f": {meta.get('message')}"
+                            if meta.get("message") else ""))
+    return umschlag.get("data") or {}
+
+
+# --- PFADE ---
+
+def raum_pfad(raum):
+    """Der ownCloud-Ordner eines Raums im Bereich des Dienstkontos."""
+    import raeume
+    if raum == raeume.ALLGEMEIN:
+        return f"/{WURZEL}/allgemein"
+    if raeume.ist_privat(raum):
+        return f"/{WURZEL}/privat/{raum[len(raeume.PRIVAT):]}"
+    return f"/{WURZEL}/raeume/{paths.sicherer_teil(raum)}"
+
+
+def zuordnung_wirksam():
+    """{raum: ordner} -- von Hand eingetragen, sonst der Standardbaum.
+
+    Die Handzuordnung geht vor: wer seine Abteilungsunterlagen seit Jahren
+    unter /Abteilungen/Einkau/Handbuecher pflegt, soll sie dort lassen
+    koennen. Fuer alle anderen Raeume ergibt sich der Ordner aus dem Namen,
+    und dann muss niemand mehr etwas eintragen -- das ist der Unterschied
+    zwischen "angebunden" und "eingebettet".
+    """
+    import raeume
+    von_hand = zuordnung()
+    aus = dict(von_hand)
+    for k in raeume.liste():
+        aus.setdefault(k, raum_pfad(k))
+    aus.setdefault(raeume.ALLGEMEIN, raum_pfad(raeume.ALLGEMEIN))
+    return aus
+
+
+# --- ORDNER ---
+
+def ordner_anlegen(pfad):
+    """Legt einen Ordner samt Elternordnern an. True, wenn er danach steht.
+
+    MKCOL legt genau eine Ebene an und scheitert, wenn der Elternordner
+    fehlt. Deshalb Stueck fuer Stueck -- und 405 ("gibt es schon") ist
+    kein Fehler, sondern das Ziel.
+    """
+    teile = [t for t in str(pfad).strip("/").split("/") if t]
+    with _sitzung() as s:
+        gebaut = ""
+        for t in teile:
+            gebaut += "/" + t
+            a = s.request("MKCOL", _url(gebaut), timeout=TIMEOUT)
+            if a.status_code in (201, 405):
+                continue
+            if a.status_code in (401, 403):
+                raise PermissionError(
+                    f"Darf {gebaut} nicht anlegen -- Rechte des Kontos "
+                    f"{BENUTZER} pruefen.")
+            a.raise_for_status()
+    return True
+
+
+# --- FREIGABEN ---
+
+def freigaben(pfad):
+    """Die Freigaben eines Ordners: [{id, art, an, rechte}]."""
+    daten = _ocs_ruf("GET", "shares", app="files_sharing")
+    # Die Antwort ist je nach Fassung eine Liste oder ein Umschlag.
+    roh = daten if isinstance(daten, list) else (daten.get("element") or [])
+    if isinstance(roh, dict):
+        roh = [roh]
+    ziel = "/" + str(pfad).strip("/")
+    aus = []
+    for e in roh:
+        if str(e.get("path", "")).rstrip("/") != ziel:
+            continue
+        aus.append({"id": str(e.get("id")),
+                    "art": int(e.get("share_type") or 0),
+                    "an": str(e.get("share_with") or ""),
+                    "rechte": int(e.get("permissions") or 0)})
+    return aus
+
+
+def freigeben(pfad, an, art="nutzer", rechte=NUR_LESEN):
+    """Teilt einen Ordner mit einem Nutzer oder einer Gruppe."""
+    daten = {"path": "/" + str(pfad).strip("/"),
+             "shareType": 0 if art == "nutzer" else 1,
+             "shareWith": an,
+             "permissions": int(rechte)}
+    _ocs_ruf("POST", "shares", daten=daten, app="files_sharing")
+    return True
+
+
+def freigabe_entfernen(kennung):
+    _ocs_ruf("DELETE", f"shares/{kennung}", app="files_sharing")
+    return True
+
+
+def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
+    """Bringt die Freigaben eines Ordners auf genau diese Menge.
+
+    Setzen und nicht ergaenzen: wer aus einem Raum ausscheidet, verliert
+    damit auch den Ordner. Ein Mitglied zu entfernen und die Freigabe
+    stehen zu lassen waere die haeufigste Art, eine Rechteaenderung
+    wirkungslos zu machen -- die Suche fragt den Raum nicht mehr, die
+    Dateien liegen aber weiter im ownCloud des Ausgeschiedenen.
+
+    Rueckgabe: (hinzugefuegt, entfernt).
+    """
+    soll_n = {str(p).strip().lower() for p in personen if str(p).strip()}
+    soll_g = {str(g).strip() for g in gruppen_ if str(g).strip()}
+    ist = freigaben(pfad)
+    dazu, weg = 0, 0
+    for f in ist:
+        vorhanden = (f["an"].lower() in soll_n if f["art"] == 0
+                     else f["an"] in soll_g)
+        if not vorhanden and f["art"] in (0, 1):
+            freigabe_entfernen(f["id"])
+            weg += 1
+    hat_n = {f["an"].lower() for f in ist if f["art"] == 0}
+    hat_g = {f["an"] for f in ist if f["art"] == 1}
+    for p in sorted(soll_n - hat_n):
+        freigeben(pfad, p, "nutzer", rechte)
+        dazu += 1
+    for g in sorted(soll_g - hat_g):
+        freigeben(pfad, g, "gruppe", rechte)
+        dazu += 1
+    return dazu, weg
+
+
+# --- NUTZER ---
+
+def nutzer_vorhanden(kennung):
+    try:
+        _ocs_ruf("GET", f"users/{kennung}")
+        return True
+    except ValueError:
+        return False
+
+
+def nutzer_anlegen(kennung, passwort, anzeigename=""):
+    """Legt einen ownCloud-Nutzer an. True, wenn er danach existiert.
+
+    Ein bereits vorhandener Nutzer ist kein Fehler: LocaNoto wird oft auf
+    ein Haus gesetzt, in dem es die Leute in ownCloud laengst gibt.
+    """
+    if nutzer_vorhanden(kennung):
+        return False, "gab es schon"
+    daten = {"userid": kennung, "password": passwort}
+    if anzeigename:
+        daten["displayName"] = anzeigename
+    _ocs_ruf("POST", "users", daten=daten)
+    return True, "angelegt"
+
+
+# --- DIE ABLAEUFE ---
+
+def richte_nutzer_ein(kennung, passwort="", anzeigename=""):
+    """Nutzer, persoenlicher Ordner, Freigaben. Bericht als dict.
+
+    Scheitert nie lautstark: LocaNoto hat den Nutzer zu diesem Zeitpunkt
+    schon angelegt, und ein nicht erreichbares ownCloud darf das nicht
+    rueckgaengig machen. Was nicht ging, steht im Bericht und laesst sich
+    nachholen -- der Ablauf ist wiederholbar.
+    """
+    bericht = {"kennung": kennung, "schritte": [], "fehler": []}
+    if not eingerichtet():
+        bericht["fehler"].append("ownCloud ist nicht eingerichtet.")
+        return bericht
+    import raeume
+
+    def tu(was, f):
+        try:
+            ergebnis = f()
+            bericht["schritte"].append(
+                f"{was}: {ergebnis if isinstance(ergebnis, str) else 'ok'}")
+        except Exception as e:
+            bericht["fehler"].append(f"{was}: {type(e).__name__}: {e}")
+
+    if passwort:
+        tu("Nutzer", lambda: nutzer_anlegen(kennung, passwort,
+                                            anzeigename)[1])
+    privat = raum_pfad(raeume.privat_kennung(kennung))
+    tu("persoenlicher Ordner", lambda: ordner_anlegen(privat) and "angelegt")
+    tu("Freigabe persoenlich",
+       lambda: "gesetzt (%d dazu, %d weg)" % freigaben_setzen(
+           privat, [kennung], LESEN_SCHREIBEN))
+    allgemein = raum_pfad(raeume.ALLGEMEIN)
+    tu("allgemeiner Ordner",
+       lambda: ordner_anlegen(allgemein) and "angelegt")
+    return bericht
+
+
+def richte_raum_ein(raum, rechte=None):
+    """Ordner und Freigaben eines Raums. Bericht als dict.
+
+    Die Mitglieder kommen aus der Raumverwaltung, nicht aus ownCloud: dort
+    stehen sie nur, WEIL sie hier stehen. Ein persoenlicher Raum bekommt
+    genau einen Leser, und zwar den aus seiner Kennung -- nicht die
+    Mitgliederliste, die es dort ohnehin nicht geben darf.
+    """
+    bericht = {"raum": raum, "schritte": [], "fehler": []}
+    if not eingerichtet():
+        bericht["fehler"].append("ownCloud ist nicht eingerichtet.")
+        return bericht
+    import benutzer
+    import raeume
+
+    pfad = zuordnung().get(raum) or raum_pfad(raum)
+    eintrag = raeume.liste().get(raum) or {}
+
+    if raeume.ist_privat(raum):
+        personen = [raum[len(raeume.PRIVAT):]]
+        gruppen_ = []
+        wie = LESEN_SCHREIBEN
+    elif raum == raeume.ALLGEMEIN:
+        # Fuer alle lesbar, aber schreiben duerfen nur Verwalter -- dieselbe
+        # Regel wie in raeume.schreibbar(). Waere der Ordner fuer alle
+        # beschreibbar, liefe die Regel der Anwendung ins Leere, sobald
+        # jemand die Datei ueber ownCloud hineinlegt.
+        alle = [n for n in benutzer.namen()]
+        personen = alle
+        gruppen_ = []
+        wie = rechte if rechte is not None else NUR_LESEN
+        for a in benutzer.admins():
+            try:
+                freigeben(pfad, a, "nutzer", LESEN_SCHREIBEN)
+            except Exception:
+                pass
+    else:
+        personen = list(eintrag.get("mitglieder") or [])
+        if "*" in personen:
+            personen = list(benutzer.namen())
+        gruppen_ = [eintrag["gruppe"]] if eintrag.get("gruppe") else []
+        wie = rechte if rechte is not None else LESEN_SCHREIBEN
+
+    try:
+        ordner_anlegen(pfad)
+        bericht["schritte"].append(f"Ordner {pfad}")
+    except Exception as e:
+        bericht["fehler"].append(f"Ordner: {type(e).__name__}: {e}")
+        return bericht
+    try:
+        dazu, weg = freigaben_setzen(pfad, personen, wie, gruppen_)
+        bericht["schritte"].append(f"Freigaben: {dazu} dazu, {weg} entfernt")
+    except Exception as e:
+        bericht["fehler"].append(f"Freigaben: {type(e).__name__}: {e}")
+    return bericht

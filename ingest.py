@@ -127,7 +127,7 @@ def fremde_ordner(wurzel, eigener_raum):
         # hierher. Nicht ueber ablage() -- die legt den Ordner an, und
         # Anlegen ist nicht die Aufgabe einer Abfrage.
         import owncloud
-        for raum in owncloud.zuordnung():
+        for raum in owncloud.zuordnung_wirksam():
             if raum == eigener_raum:
                 continue
             aus.add(os.path.normpath(paths.raum_ordner(raum)))
