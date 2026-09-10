@@ -394,9 +394,15 @@ def rebuild_from_raeume(paare, batch_size=5000, progress=None):
                 # zeigen -- sonst laege der Klartext neben dem
                 # Verschluesselten und das Ganze waere Theater.
                 import store as _s
+                # wartung=True: der Aufbau liest den ganzen Bestand,
+                # das ist seine Aufgabe. Auf das Entnahmebudget
+                # angerechnet, koennte die Anwendung mit einem echten
+                # Bestand nicht mehr starten -- der Aufbau laeuft beim
+                # Start und uebersteigt jede sinnvolle Schwelle. Das
+                # Protokoll bekommt ihn trotzdem.
                 dokumente = _s.klartext(kennung,
                                         batch.get("documents") or [],
-                                        benutzer="aufbau")
+                                        benutzer="aufbau", wartung=True)
                 metas = batch.get("metadatas") or []
                 zeilen = []
                 for i, kennung_chunk in enumerate(ids):

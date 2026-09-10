@@ -421,7 +421,22 @@ def _alle_raum_sammlungen():
     return paare
 
 
-init_keyword_index()
+# Der Indexaufbau darf den Start nicht verhindern.
+#
+# Er verbessert die Suche, er ist keine Voraussetzung fuer sie: ohne
+# Stichwortindex antwortet die Anwendung weiter ueber die Vektoren, nur
+# schlechter bei woertlichen Treffern. Bisher beendete jeder Fehler an
+# dieser Stelle -- volle Platte, ein Netzlaufwerk ohne Sperren, eine
+# gerissene Schwelle -- die gesamte Anwendung mit einer Fehlerseite. Der
+# Schaden war jedes Mal um Groessenordnungen groesser als die Ursache.
+try:
+    init_keyword_index()
+except Exception as _index_fehler:
+    st.warning(
+        "Der Stichwortindex konnte nicht aufgebaut werden. Gesucht wird "
+        "vorerst nur ueber die Vektoren -- Antworten kommen, woertliche "
+        "Treffer koennen fehlen. Nachholen mit `python rebuild_index.py`."
+        "\n\nGrund: " + str(_index_fehler)[:400])
 
 # --- RERANKER SETUP ---
 @st.cache_resource(show_spinner="Richte Rangfolge ein ...")

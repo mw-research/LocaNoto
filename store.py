@@ -292,7 +292,7 @@ def _verschluesselt(raum, dokumente):
             for d in dokumente]
 
 
-def klartext(sammlung_oder_raum, dokumente, benutzer="?"):
+def klartext(sammlung_oder_raum, dokumente, benutzer="?", wartung=False):
     """Dokumente zurueck im Klartext. Alte, lesbare bleiben unveraendert.
 
     benutzer geht in das Entnahmebudget: gezaehlt wird, wer wie viel aus
@@ -308,7 +308,7 @@ def klartext(sammlung_oder_raum, dokumente, benutzer="?"):
                      if raumschluessel.ist_verschluesselt(d))
     if zu_zaehlen:
         import budget
-        budget.zaehle(benutzer, raum, zu_zaehlen)
+        budget.zaehle(benutzer, raum, zu_zaehlen, wartung=wartung)
     return [raumschluessel.entschluessele_text(raum, d) for d in dokumente]
 
 
