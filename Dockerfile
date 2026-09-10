@@ -24,17 +24,42 @@ COPY requirements.txt .
 # Gefiltert statt in einer zweiten Datei gepflegt: zwei
 # Abhaengigkeitslisten laufen auseinander, und man merkt es an der
 # Stelle, an der man es am wenigsten brauchen kann.
+# Warum --extra-index-url und nicht nur --index-url: mit --index-url
+# ALLEIN sucht pip auch die Abhaengigkeiten von torch nur noch im
+# PyTorch-Index -- filelock, sympy, networkx, jinja2 -- und die liegen
+# dort nicht vollstaendig. Der Fehler nennt dann ein Paket, das mit
+# torch nichts zu tun hat, und sieht nach einem kaputten
+# requirements.txt aus.
+#
+# Kein Kommentar INNERHALB der RUN-Anweisung: die Fortsetzungszeilen
+# werden zu EINEM Shell-Befehl zusammengezogen, und ob eine
+# eingerueckte Kommentarzeile vorher entfernt wird, haengt am Parser.
+# Darauf zu wetten kostet einen Bau von zwanzig Minuten.
 ARG NUR_CPU=0
-RUN if [ "${NUR_CPU}" = "1" ]; then \
-      grep -vE '^(nvidia-|triton==|torch==|torchvision==)' requirements.txt \
-          > /tmp/req-cpu.txt && \
-      pip install --no-cache-dir \
-          --index-url https://download.pytorch.org/whl/cpu \
-          "$(grep -E '^torch==' requirements.txt)" \
-          "$(grep -E '^torchvision==' requirements.txt)" && \
-      pip install --no-cache-dir -r /tmp/req-cpu.txt ; \
+RUN set -eu; \
+    if [ "${NUR_CPU}" != "1" ]; then \
+      pip install --no-cache-dir -r requirements.txt; \
     else \
-      pip install --no-cache-dir -r requirements.txt ; \
+      TORCH="$(grep -E '^torch==' requirements.txt || true)"; \
+      TVISION="$(grep -E '^torchvision==' requirements.txt || true)"; \
+      echo "CPU-Variante: ${TORCH:-kein torch gepinnt} ${TVISION:-}"; \
+      grep -vE '^(nvidia-|triton==|torch==|torchvision==)' requirements.txt \
+          > /tmp/req-cpu.txt; \
+      if [ -n "$TORCH" ]; then \
+        pip install --no-cache-dir \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple \
+            $TORCH $TVISION \
+        || { \
+          echo "FEHLER: CPU-Raeder fuer $TORCH gibt es unter"; \
+          echo "download.pytorch.org/whl/cpu nicht. Entweder die"; \
+          echo "Fassung in requirements.txt auf eine dort vorhandene"; \
+          echo "aendern -- oder ohne NUR_CPU bauen."; \
+          exit 1; \
+        }; \
+      fi; \
+      pip install --no-cache-dir -r /tmp/req-cpu.txt; \
+      python -c "import torch; print('torch', torch.__version__, 'CUDA:', torch.version.cuda)"; \
     fi
 
 # --- RERANKER-MODELL IN DAS IMAGE BACKEN ---
