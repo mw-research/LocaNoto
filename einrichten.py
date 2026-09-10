@@ -12,11 +12,15 @@ Der Reihe nach:
        Schritt 3 in einen Fehler, der wie ein Konfigurationsproblem
        aussieht und keins ist.
     2. Den Installationsschluessel erzeugen, falls es keinen gibt.
-    3. Den Ordnerbaum in ownCloud anlegen.
-    4. Den ersten Verwalter anlegen -- in LocaNoto und in ownCloud --
-       und seinen persoenlichen Ordner freigeben.
+    3. Den ersten Verwalter anlegen -- in LocaNoto und in ownCloud.
+    4. Den Ordnerbaum in ownCloud anlegen und freigeben.
     5. Die Sicherheitslage zeigen und sagen, was der Betreiber noch tun
        muss.
+
+    Die Reihenfolge von 3 und 4 ist keine Geschmacksfrage: der
+    gemeinsame Ordner wird an ALLE Nutzer freigegeben. Legt man ihn an,
+    bevor es einen gibt, wird er an niemanden freigegeben -- und der
+    Lauf meldet trotzdem Erfolg.
 
 WIEDERHOLBAR. Was schon steht, bleibt: ein vorhandener Schluessel wird
 NIE ersetzt (das machte alles Bisherige unlesbar), ein vorhandener
