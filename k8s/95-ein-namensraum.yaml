@@ -1,0 +1,244 @@
+# LocaNoto in EINEM Namensraum -- alles in einer Datei.
+#
+# Fuer einen Cluster ohne Docker-Daemon: ein fertiges Abbild wird
+# gezogen, nichts wird gebaut. Gegenueber 10/20/30 die abgespeckte
+# Fassung, gedacht fuer einen ersten Durchlauf, eine Erprobung, eine
+# Sandbox:
+#
+#   * EIN Container statt drei. Ohne CHROMA_HOST benutzt die Anwendung
+#     Chroma eingebettet, als Dateiablage auf demselben Volume. Der
+#     Chroma-Dienst aus der Compose-Datei ist fuer mehrere Schreiber da
+#     -- bei einem Pod gibt es die nicht, und ein zweiter Container
+#     kostet nur Kontingent.
+#   * Keine API und kein Zeitplan. Beides nachruestbar, beides fuer den
+#     ersten Durchlauf nicht noetig.
+#
+# ANZUPASSEN, bevor das hier angewendet wird -- ueberall dort, wo
+# BITTE-EINTRAGEN steht:
+#
+#   * der Namensraum
+#   * die Adresse, unter der es erreichbar sein soll
+#   * die Ingress-Klasse und, je nach Cluster, deren Annotationen
+#   * der Modellserver
+#
+# VORHER PRUEFEN -- drei Zeilen, die ueber Gelingen entscheiden:
+#
+#   kubectl get storageclass
+#   kubectl -n NAMENSRAUM get resourcequota,limitrange
+#   kubectl auth can-i create persistentvolumeclaim -n NAMENSRAUM
+#
+# Ohne PVC laeuft LocaNoto zwar an, verliert aber bei jedem Neustart
+# alles -- Bestand, Benutzer und den Installationsschluessel. Das ist
+# fuer einen Blick auf die Oberflaeche in Ordnung und fuer sonst nichts.
+#
+# Und: das Datenvolume traegt zwei SQLite-Bestaende. Es braucht ein
+# echtes Dateisystem (Blockspeicher). Auf NFS/CephFS/SMB beschaedigt
+# SQLite sich im WAL-Betrieb still -- siehe 90-variante-freigabe.yaml.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-daten
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: <aus "kubectl get storageclass"; leer = Vorgabe>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-konfig
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  # Getrennt vom Datenvolume, weil hier der Installationsschluessel
+  # liegt: andere Rechte, andere Aufbewahrung, andere Sicherung. Eine
+  # Sicherung der Dokumente soll ihn nicht mitnehmen.
+  # storageClassName:
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: locanoto-geheim
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+stringData:
+  # Der Schluessel des Modellservers. Diese Datei gehoert damit NICHT
+  # ins Git -- besser aus einer Datei danebenlegen:
+  #   kubectl -n NAMENSRAUM create secret generic locanoto-geheim \
+  #       --from-literal=OPENAI_API_KEY=...
+  OPENAI_API_KEY: "BITTE-EINTRAGEN"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locanoto-konfiguration
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+data:
+  OPENAI_BASE_URL: "http://BITTE-EINTRAGEN:4000"
+  CHAT_MODEL: "qwen3.8:27b"
+  EMBEDDING_MODEL: "qwen3-embedding:8b"
+
+  APP_TOPIC: "Allgemein"
+  COMPANY_NAME: "Musterfirma"
+  ADMIN_USERS: "admin"
+
+  # Wo alles liegt. Beides Einhaengepunkte weiter unten.
+  LOCANOTO_DATEN: "/app/data"
+  LOCANOTO_KONFIG: "/app/config"
+
+  # Der Stichwortindex traegt den Text im KLARTEXT und gehoert deshalb
+  # NICHT auf das Datenvolume. Hier ein emptyDir: er ist ableitbar und
+  # baut sich in Sekunden neu auf.
+  #
+  # NICHT LOCANOTO_INDEX benutzen -- die Variable fuehrt auch die
+  # Vektordatenbank mit sich, und der Bestand waere dann leer.
+  LOCANOTO_STICHWORTINDEX: "/stichwort"
+
+  # Leer = Chroma eingebettet, als Dateiablage unter LOCANOTO_DATEN.
+  CHROMA_HOST: ""
+
+  # Das schlanke Abbild bringt KEIN Reranker-Modell mit. Ohne diese
+  # Zeile versuchte ranking.py die Vorgabe BAAI/bge-reranker-v2-m3 zu
+  # laden, faende sie nicht und fiele zurueck -- das geht gut aus, aber
+  # es kostet bei jedem Start eine Fehlermeldung im Protokoll, die nach
+  # einem kaputten Abbild aussieht.
+  #
+  # Leer heisst: Fusion der Ranglisten ohne Bewerter. Wer einen
+  # Rerank-Endpunkt hat, traegt stattdessen RERANKER_BASE_URL ein.
+  RERANKER_MODEL: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  replicas: 1
+  # RECREATE, nicht RollingUpdate. Ein ReadWriteOnce-Volume laesst sich
+  # nicht an zwei Pods zugleich haengen: beim Rollen wartet der neue Pod
+  # auf ein Volume, das der alte noch haelt, und der alte geht erst,
+  # wenn der neue laeuft. Das steht dann still und sieht nach einem
+  # Speicherproblem aus.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: locanoto
+  template:
+    metadata:
+      labels:
+        app: locanoto
+    spec:
+      containers:
+        - name: app
+          # Die schlanke Variante aus .github/workflows/abbild.yml:
+          # torch ohne CUDA, kein Reranker-Modell im Abbild.
+          image: ghcr.io/mw-research/locanoto:schlank
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: locanoto-konfiguration
+            - secretRef:
+                name: locanoto-geheim
+          ports:
+            - containerPort: 8501
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          # Streamlit braucht beim ersten Start eine Weile: Modelle
+          # laden, Index pruefen. Eine zu fruehe Probe toetet den Pod
+          # und startet ihn neu, wieder und wieder -- ein CrashLoop, der
+          # keiner ist.
+          startupProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            periodSeconds: 15
+          volumeMounts:
+            - name: daten
+              mountPath: /app/data
+            - name: konfig
+              mountPath: /app/config
+            - name: stichwort
+              mountPath: /stichwort
+      volumes:
+        - name: daten
+          persistentVolumeClaim:
+            claimName: locanoto-daten
+        - name: konfig
+          persistentVolumeClaim:
+            claimName: locanoto-konfig
+        - name: stichwort
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  selector:
+    app: locanoto
+  ports:
+    - port: 80
+      targetPort: 8501
+---
+# Der Ingress ist der Teil, der von Cluster zu Cluster verschieden ist:
+# Klasse, Annotationen, Zertifikat. Manche Umgebungen haengen eine
+# eigene Anmeldung davor, andere geben das Zertifikat vor. Was hier
+# steht, ist die einfachste Form -- was dein Cluster braucht, sagt dir
+# der Betreiber oder ein vorhandener Ingress:
+#
+#   kubectl -n NAMENSRAUM get ingress -o yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: locanoto
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: locanoto
+spec:
+  ingressClassName: BITTE-EINTRAGEN
+  rules:
+    - host: BITTE-EINTRAGEN
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: locanoto
+                port:
+                  number: 80
+  # tls:
+  #   - hosts:
+  #       - BITTE-EINTRAGEN
+  #     secretName: BITTE-EINTRAGEN
