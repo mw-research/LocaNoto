@@ -33,7 +33,8 @@ Abbild.
 cp .env.example .env
 ```
 
-Vier Werte reichen für den ersten Start:
+Vier Werte für die Modelle, sechs weitere für das mitgelieferte
+ownCloud:
 
 ```ini
 OPENAI_BASE_URL=http://192.168.1.10:4000
