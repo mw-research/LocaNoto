@@ -377,6 +377,23 @@ def _metadaten_verdeckt(raum, metadatas):
     return aus
 
 
+def metadaten_umschluesseln(von_raum, nach_raum, metadatas):
+    """Dateinamen von einem Raum in den anderen umschluesseln.
+
+    Das Gegenstueck zu umschluesseln() fuer die Metadaten. Ohne das
+    bleibt der Name mit dem ALTEN Raum beglaubigt, waehrend der Abschnitt
+    im neuen liegt -- _metadaten_verdeckt laesst einen bereits
+    verschluesselten Wert stehen und merkt nicht, dass er zum falschen
+    Schluessel gehoert.
+
+    Sichtbar wird das erst spaeter und an einer Stelle, die nichts damit
+    zu tun zu haben scheint: unter der Antwort steht "(nicht lesbar)"
+    statt des Dateinamens, und die Fundstelle ist damit wertlos.
+    """
+    return _metadaten_verdeckt(nach_raum,
+                               metadaten_klartext(von_raum, metadatas))
+
+
 def metadaten_klartext(raum, metadatas, benutzer="?"):
     """Metadaten zurueck mit lesbarem Dateinamen.
 

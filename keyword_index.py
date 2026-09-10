@@ -192,6 +192,31 @@ def count(con=None):
             con.close()
 
 
+def _lesbarer_name(meta):
+    """Der Dateiname im Klartext -- die letzte Gelegenheit dazu.
+
+    Rueckfalllinie, kein Ersatz fuer das Aufschliessen beim Aufrufer.
+    Wer einen verdeckten Namen hier hereinreicht, bekommt kein
+    Fehlerbild, sondern einen Index, der leise nichts mehr findet:
+    Dokumentfilter und Loeschen vergleichen Klarnamen mit Geheimtext.
+    Diese Stelle ist der einzige Punkt, an dem alle vier Schreibwege
+    zusammenlaufen, deshalb steht die Absicherung hier.
+    """
+    name = meta.get("file_name", "") or ""
+    raum = meta.get("raum") or ""
+    if not name or not raum:
+        return name
+    try:
+        import raumschluessel
+        if raumschluessel.ist_verschluesselt(name):
+            return raumschluessel.entschluessele_text(raum, name)
+    except Exception:
+        # Ein Name, der sich nicht oeffnen laesst, gehoert zu einem
+        # anderen Raum. Unveraendert stehen lassen und nicht raten.
+        pass
+    return name
+
+
 def add_chunks(rows, con=None):
     """rows: Iterable von (chunk_id, text, metadata-dict)."""
     own = con is None
@@ -202,7 +227,7 @@ def add_chunks(rows, con=None):
             meta = meta or {}
             payload.append((
                 chunk_id,
-                meta.get("file_name", ""),
+                _lesbarer_name(meta),
                 str(meta.get("page", "")),
                 meta.get("access", "shared"),
                 meta.get("owner", ""),
@@ -403,7 +428,17 @@ def rebuild_from_raeume(paare, batch_size=5000, progress=None):
                 dokumente = _s.klartext(kennung,
                                         batch.get("documents") or [],
                                         benutzer="aufbau", wartung=True)
-                metas = batch.get("metadatas") or []
+                # Auch die NAMEN aufschliessen, nicht nur den Text.
+                # Sonst steht in diesem Index "LNX1:OajTi4..." als
+                # Dateiname -- und das faellt an drei Stellen
+                # auseinander: unter der Antwort als Quellenangabe, beim
+                # Filtern auf einzelne Dokumente (der Filter kommt mit
+                # Klarnamen und trifft nichts) und beim Loeschen (es
+                # bleibt stehen). Der Index traegt den Text ohnehin im
+                # Klartext und liegt containerlokal; ein verdeckter Name
+                # daneben schuetzt nichts und kostet drei Funktionen.
+                metas = _s.metadaten_klartext(kennung,
+                                              batch.get("metadatas") or [])
                 zeilen = []
                 for i, kennung_chunk in enumerate(ids):
                     meta = dict(metas[i] if i < len(metas) else {})

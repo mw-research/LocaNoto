@@ -493,6 +493,34 @@ pruef("Loeschen nimmt nur die eine Datei",
 pruef("die Kennung verraet den Namen nicht",
       "mueller" not in raumschluessel.datei_id(_g).lower())
 
+# Der Stichwortindex muss den KLARNAMEN fuehren. Stand dort der
+# verdeckte, fiel es unter der Antwort als Quellenangabe auf -- und
+# still an zwei weiteren Stellen: der Dokumentfilter kommt mit
+# Klarnamen und traf nichts, das Loeschen liess die Abschnitte stehen.
+_verdeckt = raumschluessel.verschluessele_text("einkauf", _n)
+keyword_index.add_chunks([("namensprobe_1", "Ein Abschnitt zur Probe",
+                           {"file_name": _verdeckt, "raum": "einkauf",
+                            "page": 1})])
+_treffer = keyword_index.search("Probe", "markus", limit=5)
+pruef("der Stichwortindex fuehrt den Namen lesbar",
+      bool(_treffer) and _treffer[0]["meta"].get("file_name") == _n,
+      _treffer[0]["meta"].get("file_name") if _treffer else "nichts")
+pruef("und nicht den verdeckten",
+      not any(raumschluessel.ist_verschluesselt(
+          h["meta"].get("file_name") or "") for h in _treffer))
+
+# Beim Verschieben wandert der Name mit. Er ist mit dem Raum
+# beglaubigt, in dem er lag; _metadaten_verdeckt sieht einen bereits
+# verschluesselten Wert und laesst ihn stehen, ohne zu merken, dass er
+# zum falschen Schluessel gehoert.
+_alt = store._metadaten_verdeckt("einkauf", [{"file_name": _g}])
+_neu = store.metadaten_umschluesseln("einkauf", "vertrieb", _alt)
+pruef("verschoben laesst sich der Name im ZIELraum oeffnen",
+      store.metadaten_klartext("vertrieb", _neu)[0]["file_name"] == _g)
+pruef("und unveraendert uebernommen waere er unlesbar",
+      store.metadaten_klartext("vertrieb", _alt)[0]["file_name"]
+      == "(nicht lesbar)")
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
