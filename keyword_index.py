@@ -31,7 +31,30 @@ import paths
 # Der Neuaufbau aus den Sammlungen kostet gemessen rund 17 Sekunden bei
 # 324.000 Abschnitten -- diese Datei allein waere also ersetzbar. Die
 # Vektordatenbank daneben ist es nicht.
-DB_PATH = os.path.join(paths.INDEX_DIR, "keyword_index.sqlite3")
+# LOCANOTO_STICHWORTINDEX trennt diese Datei von LOCANOTO_INDEX, und der
+# Grund ist ein Zielkonflikt, der sonst unaufloesbar ist:
+#
+#   * Diese Datei traegt den Text im KLARTEXT -- FTS5 kann nicht anders.
+#     Sie gehoert damit NICHT auf das Datenvolume, sonst liegt der
+#     Klartext neben der verschluesselten Sammlung und die ganze
+#     Verschluesselung ist Zierde.
+#   * Die Vektordatenbank daneben ist NICHT ableitbar. Sie vom
+#     Datenvolume zu nehmen heisst, dass ein verlorenes Volume Stunden
+#     GPU-Zeit kostet.
+#
+# Unter einer gemeinsamen Variable muesste man sich fuer eines von
+# beidem entscheiden. Mit zwei Variablen wandert nur diese Datei -- und
+# sie darf wandern: der Neuaufbau aus den Sammlungen kostet gemessen
+# rund 17 Sekunden bei 324.000 Abschnitten.
+#
+# Ohne Angabe bleibt alles, wo es war.
+STICHWORT_DIR = (os.getenv("LOCANOTO_STICHWORTINDEX", "").strip()
+                 or paths.INDEX_DIR)
+try:
+    os.makedirs(STICHWORT_DIR, exist_ok=True)
+except OSError:
+    pass
+DB_PATH = os.path.join(STICHWORT_DIR, "keyword_index.sqlite3")
 
 # Ab dieser Laenge wird ein Suchbegriff als Praefix gesucht. Kuerzere Begriffe
 # ergaeben zu unspezifische Treffer ("der*", "und*").

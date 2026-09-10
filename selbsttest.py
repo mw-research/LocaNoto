@@ -432,12 +432,15 @@ pruef("und den laufenden Server", _lage.get("Laufender Server") is False)
 # der nur in einer Richtung stimmt, ist keiner.
 pruef("liegt der Klartextindex bei den Daten, faellt es auf",
       _lage.get("Klartext getrennt") is False)
-_alt_index = paths.INDEX_DIR
-paths.INDEX_DIR = os.path.join(tmp, "index")
+# Geprueft wird der TATSAECHLICHE Ort der Datei, nicht was LOCANOTO_INDEX
+# sagt: seit der Stichwortindex einen eigenen Pfad hat, sind das zwei
+# verschiedene Dinge, und die Zusicherung haengt an der Datei.
+_alt_sti = keyword_index.STICHWORT_DIR
+keyword_index.STICHWORT_DIR = os.path.join(tmp, "lokal")
 pruef("und getrennt ist der Punkt erfuellt",
       {n: ok for n, ok, _t in sicherheit.lage()}.get("Klartext getrennt")
       is True)
-paths.INDEX_DIR = _alt_index
+keyword_index.STICHWORT_DIR = _alt_sti
 
 print("=== 12. Dateinamen verdeckt ===")
 # Ein Dateiname verraet den Vorgang, ohne dass jemand die Datei oeffnet.
