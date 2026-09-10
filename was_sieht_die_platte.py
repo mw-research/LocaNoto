@@ -12,7 +12,6 @@ auf dem Bildschirm landet, darf weitergegeben werden.
 """
 import glob
 import os
-import re
 import sqlite3
 import sys
 
@@ -91,42 +90,89 @@ else:
           "Richtig so: er traegt den Text im Klartext.")
 
 # --- 3. Die Vektordatenbank ---
+#
+# Gezaehlt wird JE SCHLUESSEL. Der erste Anlauf las einfach alle
+# string_value-Zeilen und ordnete sie nach Laenge zu -- damit zaehlte er
+# bei einem echten Bestand null und meldete daraus "verdeckt". Ein
+# falscher Freispruch ist schlimmer als gar keine Auskunft.
 chroma = glob.glob(os.path.join(WURZEL, "**", "chroma.sqlite3"),
                    recursive=True)
 if chroma:
-    verschluesselt = klar = 0
-    namen = set()
+    con = None
     try:
         con = sqlite3.connect("file:" + chroma[0] + "?mode=ro", uri=True)
-        for (wert,) in con.execute(
-                "SELECT string_value FROM embedding_metadata "
-                "WHERE string_value IS NOT NULL LIMIT 4000"):
-            if not isinstance(wert, str):
-                continue
-            if wert.startswith("LNX1:"):
-                verschluesselt += 1
-            elif len(wert) > 120:
-                klar += 1
-            elif re.search(r"\.(pdf|docx?|xlsx?|md|txt)$", wert, re.I):
-                namen.add(wert)
-        con.close()
     except Exception as e:
         print(f"      (Chroma nicht lesbar: {e})")
-    zeile("Abschnittstexte in Chroma", klar > 0,
-          f"{verschluesselt} verschluesselt, {klar} im Klartext "
-          f"(Stichprobe von 4000 Feldern).",
-          "Der Altbestand ist noch nicht verschluesselt." if klar else "")
-    zeile("Dateinamen in den Metadaten", bool(namen),
-          f"{len(namen)} verschiedene, im Klartext. Ein Name wie "
-          f"'Kuendigung_Mueller_2026.pdf' verraet den Vorgang, ohne dass "
-          f"jemand die Datei oeffnet.",
-          "Noch nicht verschluesselt -- sie dienen als Filter in der "
-          "Suche." if namen else "")
+
+    def zaehle_schluessel(schluessel):
+        """(verschluesselt, klar) fuer einen Metadatenschluessel."""
+        if con is None:
+            return None
+        try:
+            v = con.execute(
+                "SELECT COUNT(*) FROM embedding_metadata WHERE key = ? "
+                "AND string_value LIKE 'LNX1:%'", (schluessel,)).fetchone()[0]
+            g = con.execute(
+                "SELECT COUNT(*) FROM embedding_metadata WHERE key = ? "
+                "AND string_value IS NOT NULL AND string_value != ''",
+                (schluessel,)).fetchone()[0]
+            return v, g - v
+        except Exception:
+            return None
+
+    for schluessel, was in (("chroma:document", "Abschnittstexte in Chroma"),
+                            ("file_name", "Dateinamen in den Metadaten")):
+        stand = zaehle_schluessel(schluessel)
+        if stand is None:
+            zeile(was, True,
+                  "Nicht feststellbar -- die Datenbank gibt diese Angabe "
+                  "hier nicht her.",
+                  "Im Zweifel als lesbar gefuehrt. Eine Zusicherung, die "
+                  "auf Nichtwissen beruht, waere schlechter als keine.")
+            continue
+        verschl, klar = stand
+        if verschl == 0 and klar == 0:
+            zeile(was, True, "Keine Eintraege gefunden.",
+                  "Entweder ist der Bestand leer, oder die Datenbank ist "
+                  "anders aufgebaut als erwartet -- nachsehen.")
+        else:
+            zeile(was, klar > 0,
+                  f"{verschl} verschluesselt, {klar} im Klartext.",
+                  "Nachholen: python nachverschluesseln.py" if klar else "")
+
+    # Chromas EIGENE Volltextkopie. Sie enthaelt denselben Text noch
+    # einmal -- verschluesselt, seit die Abschnitte es sind, aber alles
+    # von davor liegt hier weiter offen. Ein blinder Fleck, solange man
+    # nur embedding_metadata ansieht.
+    if con is not None:
+        try:
+            n = con.execute(
+                "SELECT COUNT(*) FROM embedding_fulltext_search_content "
+                "WHERE c0 IS NOT NULL AND c0 NOT LIKE 'LNX1:%' "
+                "AND length(c0) > 120").fetchone()[0]
+            zeile("Chromas Volltextkopie", n > 0,
+                  f"{n} Abschnitte im Klartext."
+                  if n else "Enthaelt nur Verschluesseltes.",
+                  "Sie entsteht beim Schreiben mit und traegt denselben "
+                  "Text noch einmal." if n else "")
+        except Exception:
+            pass
+        con.close()
+
     zeile("Vektoren", True,
           "Lesbar und nicht verschluesselbar -- sonst gibt es keine "
           "Aehnlichkeitssuche.",
           "Aus ihnen laesst sich mit demselben Modell ein guter Teil des "
           "Textes rekonstruieren.")
+else:
+    # Nicht schweigen. Ein Bestandteil, der nicht auftaucht, wird sonst
+    # fuer "in Ordnung" gehalten -- dabei heisst es nur, dass er
+    # woandershin zeigt und dort ungeprueft liegt.
+    zeile("Vektordatenbank", True,
+          "Nicht in diesem Verzeichnis -- LOCANOTO_INDEX zeigt "
+          "woandershin.",
+          "Dort ungeprueft. Dieses Skript mit dem anderen Pfad noch "
+          "einmal aufrufen.")
 
 # --- 4. Chats und Rueckmeldungen ---
 chats = os.path.join(WURZEL, "chats")
