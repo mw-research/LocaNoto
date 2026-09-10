@@ -67,6 +67,27 @@ def pruef(was, bedingung, zusatz=""):
     ok.append(bool(bedingung))
     print(f"  {'OK  ' if bedingung else 'FEHL'} {was}{'  ' + str(zusatz) if zusatz else ''}")
 
+def _fremd_scheitert(roh):
+    """Oeffnet ein anderer Raumschluessel den Geheimtext? Er darf nicht."""
+    import raumschluessel
+    raumschluessel.schluessel("allgemein")
+    try:
+        raumschluessel.entschluessele_text("allgemein", roh)
+        return False
+    except Exception:
+        return True
+
+
+def _budget_laeuft(wer, raum, je, wie_oft):
+    """True, wenn alle Buchungen durchgehen."""
+    import budget
+    try:
+        for i in range(wie_oft):
+            budget.zaehle(wer, raum or f"raum{i}", je)
+        return True
+    except budget.Ueberzogen:
+        return False
+
 print("=== 1. Benutzer und Rechte ===")
 pruef("erster Benutzer wird Verwalter",
       benutzer.anlege("markus", "startpasswort", "admin", von="einrichtung")[0])
@@ -363,6 +384,60 @@ json.dump(_roh, open(notzugang.DATEI, "w", encoding="utf-8"))
 pruef("eine von Hand veraenderte Datei gilt nicht",
       notzugang.raeume_fuer("anna") == []
       and notzugang.raeume_fuer("markus") == [])
+
+print("=== 11. Verschluesselt im Bestand ===")
+# Der Zweck in einem Satz: wer das Datenvolume kopiert, soll Vektoren
+# bekommen und keinen Satz Text.
+import raumschluessel, budget, sicherheit
+_geheim = "Streng vertrauliche Pruefanweisung fuer Kessel"
+_sml = store.sammlung(raeume.sammlung("einkauf"))
+store.schreibe(_sml, ["krypt1"], documents=[_geheim],
+               metadatas=[{"file_name": "Geheim.pdf", "page": 1,
+                           "raum": "einkauf"}],
+               embeddings=[vek()])
+_roh = _sml.get(ids=["krypt1"], include=["documents"])["documents"][0]
+pruef("Abschnitt liegt verschluesselt in der Sammlung",
+      raumschluessel.ist_verschluesselt(_roh))
+pruef("und traegt keinen Klartext", _geheim not in _roh)
+pruef("aufschliessen ergibt den Text wieder",
+      store.klartext("einkauf", [_roh])[0] == _geheim)
+pruef("ein fremder Raum kann NICHT aufschliessen",
+      _fremd_scheitert(_roh))
+pruef("erneut geschrieben entsteht keine zweite Schicht",
+      store.klartext("einkauf", [store._verschluesselt("einkauf", [_roh])[0]])[0]
+      == _geheim)
+pruef("umschluesseln oeffnet den Zielraum",
+      raumschluessel.entschluessele_text(
+          "allgemein", store.umschluesseln("einkauf", "allgemein", [_roh])[0])
+      == _geheim)
+
+# Das Entnahmebudget: eine Frage sind ein Dutzend Abschnitte aus ein bis
+# drei Raeumen, ein Abzug Zehntausende aus allen.
+budget._ereignisse.clear()
+budget.AKTIV, budget.MAX_ABSCHNITTE, budget.MAX_RAEUME = True, 40, 3
+pruef("normales Arbeiten laeuft", _budget_laeuft("fleissig", "einkauf", 12, 3))
+budget._ereignisse.clear()
+pruef("ein Massenabzug bricht ab",
+      not _budget_laeuft("dieb", None, 5, 10))
+budget._ereignisse.clear()
+
+# Die Lage sagt auch, was sie NICHT leistet.
+_lage = {n: ok for n, ok, _t in sicherheit.lage()}
+pruef("Sicherheitslage nennt die Vektoren als offen",
+      _lage.get("Vektoren") is False)
+pruef("und den laufenden Server", _lage.get("Laufender Server") is False)
+# Der Selbsttest legt Index und Daten absichtlich zusammen -- wie die
+# Vorgabe. Also wird BEIDES geprueft: dass der Fall auffaellt, und dass
+# er verschwindet, sobald LOCANOTO_INDEX woandershin zeigt. Ein Hinweis,
+# der nur in einer Richtung stimmt, ist keiner.
+pruef("liegt der Klartextindex bei den Daten, faellt es auf",
+      _lage.get("Klartext getrennt") is False)
+_alt_index = paths.INDEX_DIR
+paths.INDEX_DIR = os.path.join(tmp, "index")
+pruef("und getrennt ist der Punkt erfuellt",
+      {n: ok for n, ok, _t in sicherheit.lage()}.get("Klartext getrennt")
+      is True)
+paths.INDEX_DIR = _alt_index
 
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")

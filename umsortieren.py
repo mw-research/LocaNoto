@@ -158,6 +158,11 @@ def main():
             haufen.setdefault(k, ([], [], [], []))
             h = haufen[k]
             h[0].append(kennung)
+            # Die alte Sammlung ist kein Raum und traegt Klartext. Beim
+            # Schreiben verschluesselt store.schreibe() mit dem Schluessel
+            # des ZIELraums -- hier muss also nichts geschehen, und das
+            # steht hier, damit niemand es "der Vollstaendigkeit halber"
+            # nachtraegt und doppelt verschluesselt.
             h[1].append(dokumente[i] if i < len(dokumente) else "")
             h[2].append(meta)
             h[3].append(vektoren[i])

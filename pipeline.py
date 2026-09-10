@@ -216,7 +216,8 @@ def sammlungen(benutzer, nur=None, notzugang=()):
     return paare
 
 
-def _vektortreffer(paare_sammlungen, vektoren, breit, filter_):
+def _vektortreffer(paare_sammlungen, vektoren, breit, filter_,
+                   benutzer="?"):
     """Eine Rangliste je Sonde, ueber alle Raeume zusammengefuehrt.
 
     Bewusst NICHT eine Rangliste je Raum: die Fusion gewichtet nach Rang,
@@ -239,7 +240,12 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_):
             # Suche in den anderen nicht mitnehmen.
             continue
         for i in range(len(vektoren)):
-            texte = res["documents"][i]
+            # Aufschliessen, sobald die Treffer feststehen -- und nicht
+            # frueher. Entschluesselt wird damit genau das Dutzend, das
+            # in die Antwort geht, nicht der Raum. Gezaehlt wird es auch
+            # (budget.py): eine Frage sind ein paar Abschnitte aus ein
+            # bis drei Raeumen, ein Abzug sind Zehntausende aus allen.
+            texte = store.klartext(raum, res["documents"][i], benutzer)
             metas = res["metadatas"][i]
             abstaende = res["distances"][i]
             for t, m, d in zip(texte, metas, abstaende):
@@ -305,7 +311,7 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     # A. VEKTORSUCHE -- je Raum eine Abfrage, danach zusammengefuehrt
     for i, liste_roh in enumerate(_vektortreffer(
             paare_sammlungen, [v for _, v in paare], breit,
-            _where(dateien))):
+            _where(dateien), benutzer)):
         probe = paare[i][0]
         liste = [{"text": t, "meta": m, "probe": probe}
                  for _d, t, m in liste_roh]
