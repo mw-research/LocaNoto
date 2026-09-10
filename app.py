@@ -495,6 +495,15 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
         # das hochgeladen" unbeantwortbar machen.
         metas.append(meta)
 
+    # Der DATEINAME wandert mit umgeschluesselt, nicht nur der Text.
+    # Er ist mit dem Raum beglaubigt, in dem er lag; unveraendert
+    # uebernommen laesst er sich im Zielraum nicht mehr oeffnen, und
+    # _metadaten_verdeckt merkt das nicht -- die Funktion sieht einen
+    # verschluesselten Wert und laesst ihn stehen. Auffallen wuerde es
+    # erst Wochen spaeter unter einer Antwort, als "(nicht lesbar)"
+    # anstelle der Quelle.
+    metas = store.metadaten_umschluesseln(von_raum, nach_raum, metas)
+
     ziel = raum_sammlung(nach_raum)
     # Umschluesseln: der Geheimtext ist mit dem Raum beglaubigt, in dem
     # er lag. Unveraendert uebernommen liesse er sich im neuen Raum nie
@@ -508,10 +517,13 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
     quelle.delete(ids=ids)
 
     keyword_index.delete_document(filename, raum=von_raum)
+    # In den Stichwortindex geht beides im Klartext -- Text UND Name.
+    # Mit verdecktem Namen faende der Dokumentfilter die Datei nicht
+    # mehr und ein spaeteres Loeschen liesse ihre Abschnitte stehen.
     keyword_index.add_chunks(
         zip(ids, store.klartext(von_raum, daten.get("documents") or [],
                                 st.session_state.get("username", "?")),
-            metas))
+            store.metadaten_klartext(nach_raum, metas)))
     refresh_document_index()
 
     # Die Datei geht mit. Seit jeder Raum seinen eigenen Ablageordner hat,
