@@ -109,6 +109,7 @@ x-umgebung: &umgebung
   # config/schluessel.key -- hier durchgereicht fuer den Fall, dass er als
   # Secret aus der Umgebung kommen soll.
   - LOCANOTO_SCHLUESSEL=${LOCANOTO_SCHLUESSEL:-}
+  - LOCANOTO_SCHLUESSEL_DATEI=${LOCANOTO_SCHLUESSEL_DATEI:-}
   - SITZUNG_MINUTEN=${SITZUNG_MINUTEN:-}
   # Speicherwurzeln IM Container. Wohin sie vom Host zeigen, steht bei den
   # volumes; hier steht nur, wo die Anwendung sie erwartet. LOCANOTO_INDEX
@@ -296,3 +297,36 @@ services:
 # Blockspeicher, nicht auf ein Netzlaufwerk.
 volumes:
   locanoto_index:
+
+# --- DER INSTALLATIONSSCHLUESSEL ALS SECRET ---
+#
+# LOCANOTO_SCHLUESSEL in der .env sieht dichter aus, als es ist: die .env
+# liegt auf einer Platte, meist derselben wie die Daten. Ein Secret liegt
+# im Container unter /run/secrets -- in tmpfs, also im Arbeitsspeicher.
+# Ein kopiertes Volume, ein Snapshot, eine ausgebaute Platte enthalten
+# ihn dann nicht.
+#
+# So in Betrieb nehmen:
+#
+#   1. Schluessel aus der laufenden Installation sichern:
+#        docker compose exec -T locanoto_bot cat /app/config/schluessel.key \
+#            > ./secrets/schluessel.key
+#      Oder einen neuen erzeugen:
+#        head -c 32 /dev/urandom | base64 > ./secrets/schluessel.key
+#      Rechte eng: chmod 600 ./secrets/schluessel.key
+#
+#   2. In der .env setzen:
+#        LOCANOTO_SCHLUESSEL_DATEI=/run/secrets/locanoto_schluessel
+#
+#   3. Die zwei Bloecke unten einkommentieren und in jedem Dienst
+#      "secrets: [locanoto_schluessel]" ergaenzen.
+#
+#   4. docker compose up -d, dann in der Seitenleiste unter
+#      "Sicherheitslage" nachsehen: dort muss "Aus einem Secret" stehen.
+#
+# Danach gehoert ./secrets/ NICHT ins Git und NICHT in die Sicherung der
+# Daten -- der Sinn ist ja, dass Schluessel und Daten getrennt liegen.
+#
+# secrets:
+#   locanoto_schluessel:
+#     file: ./secrets/schluessel.key

@@ -1050,6 +1050,118 @@ sie kann es nicht verhindern. `PRIVAT_STRENG` regelt, was die
 bleibt, wer an den Server kommt, und eine verschlüsselte Platte — siehe
 [Verschlüsselung](#-verschlüsselung).
 
+## 🔐 Wenn jemand die Platte hat
+
+Die ehrliche Antwort zuerst, und sie lässt sich nachsehen statt glauben:
+
+```bash
+docker compose exec -T locanoto_bot python was_sieht_die_platte.py
+```
+
+Das Skript tut, was ein Finder täte — es geht über das Datenverzeichnis
+**ohne die Anwendung und ohne den Schlüssel** — und sagt je Bestandteil,
+was daraus zu holen ist. Es gibt keine Inhalte aus, nur Kategorien und
+Zahlen.
+
+### Was die Anwendung verdecken kann, und was nicht
+
+| verdeckt | lesbar |
+|---|---|
+| Abschnittstexte in Chroma | die Originaldokumente |
+| Chatverläufe | der Stichwortindex (FTS5) |
+| Rückmeldungen | die Dateinamen in den Metadaten |
+| | die Vektoren |
+
+Die Linie ist keine Nachlässigkeit, sie folgt aus der Aufgabe: **die
+Anwendung kann verdecken, was sie selbst schreibt, und nicht, was sie
+lesen können muss.** Die Originaldokumente liest der Ingest, zeigt die
+Quellenansicht und legt ownCloud dort ab. Der Stichwortindex braucht
+Klartext, weil FTS5 nicht anders kann. Die Vektoren müssen vergleichbar
+bleiben, sonst gibt es keine Ähnlichkeitssuche — und aus ihnen lässt sich
+mit demselben Modell ein guter Teil des Textes rekonstruieren.
+
+**Daraus folgt: ein verschlüsselter Datenträger ist keine Ergänzung,
+sondern die Grundlage.** Alles, was die Anwendung selbst verschlüsselt,
+ist die zweite Schicht darüber — sie hilft gegen die kopierte Sicherung,
+den Snapshot, das weitergegebene Volume und gegen den, der nur die
+Chroma-Dateien mitnimmt.
+
+### 1. Das Volume verschlüsseln
+
+Einmalig, auf dem Server, für die Platte unter `DATEN_PFAD`:
+
+```bash
+sudo cryptsetup luksFormat /dev/sdb
+sudo cryptsetup open /dev/sdb locanoto_daten
+sudo mkfs.ext4 /dev/mapper/locanoto_daten
+sudo mkdir -p /mnt/locanoto && sudo mount /dev/mapper/locanoto_daten /mnt/locanoto
+```
+
+Dauerhaft in `/etc/crypttab` und `/etc/fstab`. Beim Neustart will LUKS
+eine Passphrase — wer unbeaufsichtigt starten muss, hinterlegt eine
+Schlüsseldatei auf der **Systemplatte** (dann schützt es gegen die
+ausgebaute Datenplatte, nicht gegen den ganzen Server) oder bindet ein
+TPM ein.
+
+Danach prüfen — die Anwendung sieht selbst nach, statt dich zu fragen:
+
+```bash
+docker compose exec -T locanoto_bot python -c "import paths, datentraeger; print(datentraeger.lage(paths.DATA_DIR))"
+```
+
+Drei Antworten sind möglich: `ja`, `nein` und **`unklar`**. Die dritte
+wird nie zu `ja` geschönt — im Container ist `/sys` oft nicht lesbar, und
+eine Zusicherung, die auf Nichtwissen beruht, ist schlechter als keine.
+
+### 2. Den Stichwortindex vom Datenvolume nehmen
+
+**Der Punkt, ohne den der Rest wenig bringt.** `LOCANOTO_INDEX` fällt
+ohne Angabe auf `LOCANOTO_DATEN` zurück — dann liegt der Klartext-Index
+neben der verschlüsselten Sammlung.
+
+```ini
+LOCANOTO_INDEX=/var/lib/locanoto/index
+```
+
+Er ist ableitbar und baut sich in Sekunden neu auf (18.600 Abschnitte je
+Sekunde). Auf ein **containerlokales** Verzeichnis, nicht auf eine
+Netzfreigabe: SQLite im WAL-Betrieb braucht gemeinsamen Speicher im
+selben Dateisystem.
+
+### 3. Den Schlüssel von der Platte nehmen
+
+Ein Secret liegt unter `/run/secrets` in tmpfs — im Arbeitsspeicher, auf
+keiner Platte:
+
+```bash
+mkdir -p secrets && docker compose exec -T locanoto_bot cat /app/config/schluessel.key > secrets/schluessel.key && chmod 600 secrets/schluessel.key
+```
+
+```ini
+LOCANOTO_SCHLUESSEL_DATEI=/run/secrets/locanoto_schluessel
+```
+
+Dazu die beiden `secrets:`-Blöcke in der `docker-compose.yaml`
+einkommentieren. `LOCANOTO_SCHLUESSEL` **in der `.env`** ist nicht
+dasselbe: der Wert steht dann in einer Datei auf einer Platte, meist
+derselben wie die Daten. Die Seitenleiste sagt es.
+
+`secrets/` gehört nicht ins Git und nicht in die Datensicherung — der
+Sinn ist, dass Schlüssel und Daten getrennt liegen.
+
+### Was danach noch offen ist
+
+Die Seitenleiste unter **🔒 Sicherheitslage** zählt es auf. Drei Punkte
+lassen sich nicht schließen, nur eingrenzen:
+
+* **Die Vektoren** bleiben lesbar, sonst gibt es keine Suche.
+* **Die Dateinamen** in den Metadaten stehen im Klartext — sie dienen als
+  Filter in Suche, Löschen und Verschieben.
+* **Gegen einen Angreifer auf dem laufenden Server** hilft nichts davon:
+  die Anwendung muss entschlüsseln, um zu antworten. Was bleibt, ist das
+  Zählen — ein Massenabzug bricht ab und wird protokolliert, siehe
+  `BUDGET_ABSCHNITTE` und `PROTOKOLL_ZIEL`.
+
 ## 🔐 Rechte
 | Raum | sichtbar für | hochladen und löschen darf |
 |---|---|---|
