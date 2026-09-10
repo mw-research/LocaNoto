@@ -87,7 +87,8 @@ def fremde_dateien(eigener_raum):
         if sml is None:
             continue
         try:
-            for m in (sml.get(include=["metadatas"]).get("metadatas") or []):
+            roh = sml.get(include=["metadatas"]).get("metadatas") or []
+            for m in store.metadaten_klartext(kennung, roh):
                 if m and m.get("file_name"):
                     fremd.setdefault(m["file_name"], kennung)
         except Exception as e:
@@ -174,7 +175,7 @@ def folder_of(pdf_pfad):
 def existing_chunk_ids(dateiname):
     """IDs, die fuer dieses Dokument bereits in der Datenbank stehen."""
     try:
-        return set(collection.get(where={"file_name": dateiname},
+        return set(collection.get(where=store.datei_filter(dateiname),
                                   include=[])["ids"])
     except Exception:
         return set()

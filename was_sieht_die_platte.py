@@ -156,6 +156,51 @@ if os.path.exists(fb):
           "Alle verschluesselt.",
           "In der Seitenleiste neu verschluesseln." if offen else "")
 
+# --- 4b. Die Abzuege ---
+#
+# Der blinde Fleck, der beim ersten Bau fehlte: ein Abzug enthaelt den
+# Text so, wie er in der Sammlung stand. Vor der Umstellung war das
+# Klartext -- und er liegt unter data/sicherungen, also GENAU DORT, wo
+# ein Kopierer als Erstes hinsieht. Eine verschluesselte Sammlung neben
+# einem Abzug im Klartext ist keine verschluesselte Sammlung.
+sich = os.path.join(WURZEL, "sicherungen")
+if os.path.isdir(sich):
+    klar_abz, verschl_abz, alt = 0, 0, []
+    for name in sorted(os.listdir(sich)):
+        ordner = os.path.join(sich, name)
+        if not os.path.isdir(ordner):
+            continue
+        offen = 0
+        for d in os.listdir(ordner):
+            if not d.endswith(".jsonl"):
+                continue
+            try:
+                with open(os.path.join(ordner, d), encoding="utf-8",
+                          errors="replace") as f:
+                    for i, z in enumerate(f):
+                        if i > 50:
+                            break
+                        if '"text": "LNX1:' in z:
+                            verschl_abz += 1
+                        elif '"text": "' in z:
+                            offen += 1
+            except OSError:
+                pass
+        if offen:
+            klar_abz += offen
+            alt.append(name)
+    if klar_abz:
+        zeile("Abzuege der Vektordatenbank", True,
+              f"{len(alt)} Abzug/Abzuege enthalten Text im KLARTEXT "
+              f"({', '.join(alt[:3])}). Sie stammen von vor der "
+              f"Umstellung.",
+              "Nach dem Nachverschluesseln einen frischen Abzug ziehen "
+              "und die alten loeschen -- sonst liegt der Klartext weiter "
+              "hier.")
+    elif verschl_abz:
+        zeile("Abzuege der Vektordatenbank", False,
+              "Vorhanden und verschluesselt.")
+
 # --- 5. Was NICHT hier liegt ---
 print()
 print("  Nicht in diesem Verzeichnis, und das ist der Sinn:")

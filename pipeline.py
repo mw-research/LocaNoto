@@ -185,7 +185,9 @@ def _where(dateien=None):
     """
     bedingungen = []
     if dateien:
-        bedingungen.append({"file_name": {"$in": list(dateien)}})
+        # Ueber store.datei_filter, damit sowohl verdeckte Namen
+        # (datei_id) als auch die alten Klarnamen getroffen werden.
+        bedingungen.append(store.datei_filter(list(dateien)))
     if not bedingungen:
         return None
     return {"$and": bedingungen} if len(bedingungen) > 1 else bedingungen[0]
@@ -246,7 +248,10 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_,
             # (budget.py): eine Frage sind ein paar Abschnitte aus ein
             # bis drei Raeumen, ein Abzug sind Zehntausende aus allen.
             texte = store.klartext(raum, res["documents"][i], benutzer)
-            metas = res["metadatas"][i]
+            # Auch der Dateiname liegt verdeckt. Ohne das stuende unter
+            # der Antwort "LNX1:OiD8..." statt "Betriebsanweisung.pdf".
+            metas = store.metadaten_klartext(raum, res["metadatas"][i],
+                                             benutzer)
             abstaende = res["distances"][i]
             for t, m, d in zip(texte, metas, abstaende):
                 meta = dict(m or {})
@@ -459,7 +464,8 @@ def dokumente(benutzer, nur=None, notzugang=()):
             daten = sml.get(include=["metadatas"])
         except Exception:
             continue
-        for m in (daten.get("metadatas") or []):
+        for m in store.metadaten_klartext(raum,
+                                          daten.get("metadatas") or []):
             if not m:
                 continue
             if m.get("file_name"):

@@ -165,6 +165,44 @@ def vergiss():
     _schluessel.clear()
 
 
+# --- DATEINAMEN ---
+#
+# Ein Dateiname verraet den Vorgang, ohne dass jemand die Datei oeffnet:
+# "Kuendigung_Mueller_2026.pdf" steht in den Metadaten von Chroma und war
+# bis hierher im Klartext lesbar, auch wenn der Abschnittstext daneben
+# verschluesselt lag.
+#
+# Ihn einfach zu verschluesseln genuegt nicht: der Name ist zugleich der
+# SCHLUESSEL, mit dem die Anwendung filtert -- Doppel erkennen, ein
+# Dokument loeschen, es in einen anderen Raum verschieben, die Suche auf
+# eine Auswahl eingrenzen. Verschluesselt ist er dafuer unbrauchbar, denn
+# AES-GCM liefert bei jedem Aufruf ein anderes Ergebnis.
+#
+# Deshalb ZWEI Angaben:
+#
+#     file_name   der Name, verschluesselt -- zum Anzeigen
+#     datei_id    ein HMAC ueber den Namen -- zum Filtern
+#
+# Der HMAC ist bestimmt: derselbe Name ergibt immer dieselbe Kennung,
+# also funktionieren Gleichheitsfilter unveraendert. Und weil er mit dem
+# Installationsschluessel gebildet wird, kann ihn niemand ohne Schluessel
+# nachrechnen. Wer die Platte hat, sieht nur, DASS zwei Abschnitte zur
+# selben Datei gehoeren -- nicht zu welcher.
+
+def datei_id(name):
+    """Bestimmte Kennung eines Dateinamens. Leer ohne Schluessel.
+
+    Klein geschrieben und ohne Rand: "Angebot.pdf" und "angebot.pdf "
+    sind fuer den Betrieb dieselbe Datei, und ein Filter, der sie
+    unterscheidet, findet die Haelfte nicht.
+    """
+    sauber = str(name or "").strip().lower()
+    if not sauber:
+        return ""
+    roh = geheim.signiere(("datei:" + sauber).encode("utf-8"))
+    return roh[:32]
+
+
 # --- ABSCHNITTE ---
 
 def verschluessele_text(raum, text):

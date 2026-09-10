@@ -28,8 +28,13 @@ selbst, wenn er ueber HTTP zu gross wird.
 Wiederholbar: was schon verschluesselt ist, wird uebergangen. Ein
 abgebrochener Lauf laesst sich einfach neu starten.
 
+Umgeschrieben werden Abschnittstext UND Dateiname. Der Name bekommt
+dabei eine bestimmte Kennung (datei_id) an die Seite, damit Loeschen,
+Verschieben und die Doppelerkennung weiter ueber Gleichheit filtern
+koennen -- verschluesselt allein waere er dafuer unbrauchbar.
+
 WAS ES NICHT TUT: die Vektoren bleiben lesbar (sonst gaebe es keine
-Suche), die Dateinamen in den Metadaten ebenso, und der Stichwortindex
+Suche), und der Stichwortindex
 traegt den Text weiterhin im Klartext -- er ist ableitbar und gehoert
 auf containerlokalen Speicher, siehe LOCANOTO_INDEX. was_sieht_die_platte.py
 sagt nach dem Lauf, wo man steht.
@@ -43,6 +48,14 @@ import store
 # Wie viele Abschnitte je Griff. Mit Vektoren haengt an jedem ein
 # Tausenderfeld; store.schreibe halbiert bei Bedarf nach.
 STAPEL = 500
+
+
+def _name_offen(meta):
+    """Steht der Dateiname noch im Klartext in den Metadaten?"""
+    if not meta:
+        return False
+    name = meta.get("file_name")
+    return bool(name) and not raumschluessel.ist_verschluesselt(name)
 
 
 def _sammlungen():
@@ -86,7 +99,7 @@ def main():
 
         offen = fertig = gelesen = 0
         while gelesen < anzahl:
-            felder = (["documents"] if nur_pruefen
+            felder = (["documents", "metadatas"] if nur_pruefen
                       else ["documents", "metadatas", "embeddings"])
             b = store.hole(sml, store.VORSILBE_RAUM + raum,
                            include=felder, limit=STAPEL, offset=gelesen)
@@ -99,8 +112,12 @@ def main():
 
             # Nur die noch offenen. Ein Stapel, in dem nichts zu tun ist,
             # soll gar nicht erst geschrieben werden.
+            # Offen ist ein Abschnitt, wenn SEIN TEXT oder SEIN
+            # DATEINAME noch im Klartext steht. Beides wandert im selben
+            # Schreibvorgang; store.schreibe erledigt es.
             zu_tun = [i for i, d in enumerate(dokumente)
-                      if d and not raumschluessel.ist_verschluesselt(d)]
+                      if (d and not raumschluessel.ist_verschluesselt(d))
+                      or _name_offen(metas[i] if i < len(metas) else None)]
             fertig += len(ids) - len(zu_tun)
             offen += len(zu_tun)
 
