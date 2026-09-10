@@ -206,19 +206,72 @@ def main():
 
     sagt()
     sagt("=" * 66)
-    sagt(f"Oberflaeche:  http://localhost:{os.getenv('APP_PORT', '8501')}")
+    if _in_kubernetes():
+        # In einem Pod ist "docker compose exec" nicht falsch
+        # geschrieben, sondern schlicht nicht vorhanden. Eine Anleitung,
+        # die mit einem Befehl endet, den es hier nicht gibt, laesst den
+        # Betreiber im Glauben, er habe etwas falsch gemacht.
+        sagt("Oberflaeche:  ueber den Service dieses Pods, oder")
+        sagt(f"              kubectl -n {_namensraum()} port-forward "
+             f"deploy/locanoto "
+             f"{os.getenv('APP_PORT', '8501')}:8501")
+    else:
+        sagt(f"Oberflaeche:  "
+             f"http://localhost:{os.getenv('APP_PORT', '8501')}")
     if oc_da:
         import owncloud
         sagt(f"ownCloud:     {owncloud.URL}")
     sagt()
     sagt("Als naechstes:")
     sagt("  * Den Installationsschluessel wegsichern (siehe oben).")
+    if not _hat_verwalter():
+        # Der haeufigste Ausgang eines Laufs ohne Terminal -- und der
+        # einzige Schritt, ohne den sich niemand anmelden kann. Er
+        # gehoert deshalb nach oben und nicht in eine Nebenbemerkung
+        # weiter oben im Ablauf.
+        sagt("  * ES GIBT NOCH KEINEN ZUGANG. Ohne Terminal kann dieser")
+        sagt("    Lauf nicht nach dem Passwort fragen:")
+        sagt(f"      {_vorspann()} python einrichten.py --ohne-owncloud")
+        sagt("    (mit -it beim exec, sonst wieder uebersprungen)")
     sagt("  * Dokumente nach data/dokumente/ legen und einlesen:")
-    sagt("      docker compose exec locanoto_bot python ingest.py")
+    sagt(f"      {_vorspann()} python ingest.py")
     sagt("  * Den Stand jederzeit nachsehen:")
-    sagt("      docker compose exec -T locanoto_bot python "
-         "was_sieht_die_platte.py")
+    sagt(f"      {_vorspann()} python was_sieht_die_platte.py")
     return 0
+
+
+def _in_kubernetes():
+    """Laeuft das hier in einem Pod?
+
+    KUBERNETES_SERVICE_HOST setzt das Kubelet in jedem Container, ohne
+    Zutun. Zuverlaessiger als das Suchen nach /var/run/secrets, das ein
+    Pod ohne ServiceAccount-Token nicht hat.
+    """
+    return bool(os.getenv("KUBERNETES_SERVICE_HOST", "").strip())
+
+
+def _namensraum():
+    try:
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace",
+                  encoding="utf-8") as f:
+            return f.read().strip() or "NAMENSRAUM"
+    except OSError:
+        return "NAMENSRAUM"
+
+
+def _vorspann():
+    """Der Befehl, mit dem man hier etwas ausfuehrt."""
+    if _in_kubernetes():
+        return f"kubectl -n {_namensraum()} exec -it deploy/locanoto --"
+    return "docker compose exec locanoto_bot"
+
+
+def _hat_verwalter():
+    try:
+        import benutzer
+        return bool(benutzer.namen())
+    except Exception:
+        return True
 
 
 def _umbrechen(text, breite):
