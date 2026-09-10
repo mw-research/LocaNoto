@@ -461,7 +461,7 @@ def verschiebe_dokument(filename, von_raum, nach_raum):
     # in der Oberflaeche fehl -- und der Nutzer wuesste nur, dass es nicht
     # ging.
     daten = store.hole(quelle, raeume.sammlung(von_raum),
-                       where={"file_name": filename},
+                       where=store.datei_filter(filename),
                        include=["documents", "metadatas", "embeddings"])
     ids = daten.get("ids") or []
     if not ids:
@@ -563,7 +563,8 @@ def _gehoert_anderem_raum(filename, raum):
         if k == raum:
             continue
         try:
-            if sml.get(where={"file_name": filename}, include=[])["ids"]:
+            if sml.get(where=store.datei_filter(filename),
+                       include=[])["ids"]:
                 return True
         except Exception:
             return True
@@ -608,7 +609,8 @@ def remove_pdf_if_orphaned(filename, raum=None):
     """
     for _raum, sml in _alle_raum_sammlungen():
         try:
-            if sml.get(where={"file_name": filename}, include=[])["ids"]:
+            if sml.get(where=store.datei_filter(filename),
+                       include=[])["ids"]:
                 return False
         except Exception:
             # Lieber die Datei behalten als sie einem Raum wegnehmen,
@@ -631,7 +633,7 @@ def loesche_dokument(filename, raum):
     sml = raum_sammlung(raum, anlegen=False)
     if sml is None:
         return False, "Der Raum hat keine Daten."
-    sml.delete(where={"file_name": filename})
+    sml.delete(where=store.datei_filter(filename))
     keyword_index.delete_document(filename, raum=raum)
     remove_pdf_if_orphaned(filename, raum)
     refresh_document_index()

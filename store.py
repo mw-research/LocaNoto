@@ -324,6 +324,84 @@ def umschluesseln(von_raum, nach_raum, dokumente, benutzer="?"):
                            klartext(von_raum, dokumente, benutzer))
 
 
+def datei_filter(namen):
+    """Ein Chroma-Filter auf einen oder mehrere Dateinamen.
+
+    Trifft BEIDE Zustaende: Abschnitte mit datei_id (nach der
+    Umstellung) und solche, die noch den Klarnamen tragen. Ein Bestand
+    hat waehrend der Umstellung beides, und ein Filter, der nur eine
+    Haelfte findet, loescht oder verschiebt auch nur eine Haelfte -- das
+    faellt beim Loeschen sofort auf und beim Verschieben erst Wochen
+    spaeter.
+
+    Ohne Schluessel bleibt es beim Klarnamen; dann ist ohnehin nichts
+    verschluesselt.
+    """
+    if isinstance(namen, str):
+        namen = [namen]
+    namen = [n for n in namen if n]
+    if not namen:
+        return None
+    import raumschluessel
+    kennungen = [k for k in (raumschluessel.datei_id(n) for n in namen) if k]
+    nach_namen = ({"file_name": namen[0]} if len(namen) == 1
+                  else {"file_name": {"$in": list(namen)}})
+    if not kennungen:
+        return nach_namen
+    nach_id = ({"datei_id": kennungen[0]} if len(kennungen) == 1
+               else {"datei_id": {"$in": kennungen}})
+    return {"$or": [nach_id, nach_namen]}
+
+
+def _metadaten_verdeckt(raum, metadatas):
+    """Metadaten fuer die Ablage: Name verschluesselt, Kennung dazu.
+
+    Der Klarname faellt weg, nicht nur ergaenzt. Ihn "sicherheitshalber"
+    stehen zu lassen waere genau der Fehler, den die Uebung vermeiden
+    soll -- dann steht er weiter in der Datenbank, und die Kennung
+    daneben ist nur Zierde.
+    """
+    if not raum or not metadatas:
+        return metadatas
+    import raumschluessel
+    if not raumschluessel.verfuegbar():
+        return metadatas
+    aus = []
+    for m in metadatas:
+        m = dict(m or {})
+        name = m.get("file_name")
+        if name and not raumschluessel.ist_verschluesselt(name):
+            m["datei_id"] = raumschluessel.datei_id(name)
+            m["file_name"] = raumschluessel.verschluessele_text(raum, name)
+        aus.append(m)
+    return aus
+
+
+def metadaten_klartext(raum, metadatas, benutzer="?"):
+    """Metadaten zurueck mit lesbarem Dateinamen.
+
+    Ohne das stuende unter der Antwort "LNX1:OiD8..." statt
+    "Betriebsanweisung.pdf", und die Quellenangabe waere wertlos.
+    """
+    if not raum or not metadatas:
+        return metadatas
+    import raumschluessel
+    aus = []
+    for m in metadatas:
+        m = dict(m or {})
+        name = m.get("file_name")
+        if raumschluessel.ist_verschluesselt(name):
+            try:
+                m["file_name"] = raumschluessel.entschluessele_text(raum, name)
+            except Exception:
+                # Ein Name, der sich nicht oeffnen laesst, darf die
+                # Antwort nicht kosten. Die Fundstelle bleibt brauchbar,
+                # die Beschriftung nicht.
+                m["file_name"] = "(nicht lesbar)"
+        aus.append(m)
+    return aus
+
+
 def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
              stapel=None, ersetzen=True, fortschritt=None):
     """Schreibt Abschnitte in Stapeln. Anzahl der geschriebenen.
@@ -337,7 +415,9 @@ def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
         return 0
     # Verschluesseln VOR dem Aufteilen: sonst traegt jeder Stapel die
     # Entscheidung erneut, und einer davon vergisst sie irgendwann.
-    documents = _verschluesselt(raum_von(sammlung), documents)
+    _raum = raum_von(sammlung)
+    documents = _verschluesselt(_raum, documents)
+    metadatas = _metadaten_verdeckt(_raum, metadatas)
     stapel = max(1, stapel or SCHREIBSTAPEL)
     geschrieben = 0
     a = 0

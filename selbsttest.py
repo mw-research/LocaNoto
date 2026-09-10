@@ -439,6 +439,36 @@ pruef("und getrennt ist der Punkt erfuellt",
       is True)
 paths.INDEX_DIR = _alt_index
 
+print("=== 12. Dateinamen verdeckt ===")
+# Ein Dateiname verraet den Vorgang, ohne dass jemand die Datei oeffnet.
+# Verschluesselt allein waere er als Filter unbrauchbar -- deshalb eine
+# bestimmte Kennung daneben.
+_g, _n = "Kuendigung_Mueller_2026.pdf", "Kuendigung_Mueller_2027.pdf"
+_sm = store.sammlung(raeume.sammlung("einkauf"))
+for _d, _anz in ((_g, 3), (_n, 2)):
+    store.schreibe(_sm, [f"{_d}_x{i}" for i in range(_anz)],
+                   documents=[f"Abschnitt {i}" for i in range(_anz)],
+                   metadatas=[{"file_name": _d, "page": i + 1,
+                               "raum": "einkauf"} for i in range(_anz)],
+                   embeddings=[vek() for _ in range(_anz)])
+_roh = _sm.get(where={"datei_id": raumschluessel.datei_id(_g)},
+               include=["metadatas"])
+pruef("verdeckter Name ist ueber die Kennung auffindbar",
+      len(_roh["ids"]) == 3, len(_roh["ids"]))
+pruef("und der Name selbst steht nicht lesbar da",
+      all(raumschluessel.ist_verschluesselt(m["file_name"])
+          for m in _roh["metadatas"]))
+pruef("aufgeschlossen steht er wieder da",
+      {m["file_name"] for m in
+       store.metadaten_klartext("einkauf", _roh["metadatas"])} == {_g})
+pruef("der Filter trifft NICHT den fast gleichen Nachbarn",
+      len(_sm.get(where=store.datei_filter(_g), include=[])["ids"]) == 3)
+_sm.delete(where=store.datei_filter(_g))
+pruef("Loeschen nimmt nur die eine Datei",
+      len(_sm.get(where=store.datei_filter(_n), include=[])["ids"]) == 2)
+pruef("die Kennung verraet den Namen nicht",
+      "mueller" not in raumschluessel.datei_id(_g).lower())
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
