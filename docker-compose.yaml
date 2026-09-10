@@ -332,7 +332,15 @@ services:
       - OWNCLOUD_DB_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
       - OWNCLOUD_DB_HOST=owncloud_db
       - OWNCLOUD_ADMIN_USERNAME=${OWNCLOUD_ADMIN_USER:-admin}
-      - OWNCLOUD_ADMIN_PASSWORD=${OWNCLOUD_ADMIN_PASSWORT:?OWNCLOUD_ADMIN_PASSWORT muss gesetzt sein}
+      # KEIN ${...:?...}: Compose loest die ganze Datei auf, auch ohne
+      # --profile. Eine Pflichtvariable hier legte JEDEN compose-Befehl
+      # lahm -- auch 'up -d' einer Installation, die ownCloud gar nicht
+      # benutzt. Genau das ist beim Einbauen passiert.
+      #
+      # Leer laesst das Einrichten von ownCloud fehlschlagen, und zwar
+      # nur bei dem, der das Profil wirklich startet. Das ist die
+      # richtige Stelle fuer diesen Fehler.
+      - OWNCLOUD_ADMIN_PASSWORD=${OWNCLOUD_ADMIN_PASSWORT:-}
       - OWNCLOUD_MYSQL_UTF8MB4=true
       - OWNCLOUD_REDIS_ENABLED=true
       - OWNCLOUD_REDIS_HOST=owncloud_redis

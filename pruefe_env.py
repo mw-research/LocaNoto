@@ -56,6 +56,20 @@ fehlt_compose = sorted(k for k in gelesen
 fehlt_vorlage = sorted(k for k in gelesen
                        if k not in erklaert and k not in EIGEN)
 
+# Eine Pflichtvariable in der Compose-Datei legt JEDEN compose-Befehl
+# lahm, nicht nur den Dienst, der sie braucht: Compose loest die ganze
+# Datei auf, auch ohne --profile. Genau so wurde einmal eine laufende
+# Installation blockiert, die ownCloud gar nicht benutzt.
+pflicht = re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", compose)
+if pflicht:
+    print(f">>> {len(pflicht)} PFLICHTVARIABLEN in der Compose-Datei:")
+    for k in sorted(set(pflicht)):
+        print(f"      {k}")
+    print("    Sie blockieren jeden compose-Befehl, auch bei nicht")
+    print("    gestartetem Profil. Besser ${NAME:-} und den Fehler dort")
+    print("    entstehen lassen, wo er hingehoert.")
+    print()
+
 print(f"{len(gelesen)} Variablen werden im Code gelesen.")
 if fehlt_compose:
     print(f"\n>>> {len(fehlt_compose)} kommen NICHT im Container an:")
@@ -69,4 +83,4 @@ if fehlt_vorlage:
     for k in fehlt_vorlage:
         print(f"      {k:<32} {', '.join(sorted(gelesen[k]))}")
 
-sys.exit(1 if fehlt_compose else 0)
+sys.exit(1 if (fehlt_compose or pflicht) else 0)
