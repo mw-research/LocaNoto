@@ -50,6 +50,25 @@
 #
 # LOCANOTO_INDEX und nicht LOCANOTO_STICHWORTINDEX: hier sollen BEIDE
 # Datenbanken von der Freigabe herunter, nicht nur der Stichwortindex.
+#
+# Und LOCANOTO_STICHWORTINDEX muss dabei WEG. Aus 95 zeigt sie auf ein
+# eigenes emptyDir, das es hier nicht mehr gibt -- der Stichwortindex
+# landete dann auf der Schreibschicht des Containers und waere bei
+# jedem Neustart weg, ohne dass es auffiele:
+#
+#   kubectl -n NAMENSRAUM patch configmap locanoto-konfiguration \
+#     --type json -p '[{"op":"remove","path":"/data/LOCANOTO_STICHWORTINDEX"}]'
+#
+# WENN DER POD IN Init:CrashLoopBackOff HAENGT: zuerst das Protokoll
+# des initContainers ansehen, nicht das des Pods.
+#
+#   kubectl -n NAMENSRAUM logs deploy/locanoto -c wiederanlauf
+#
+# Der haeufigste Grund ist kein Fehler im Programm, sondern ein Volume,
+# in das der Prozess nicht schreiben darf: viele Freigaben bilden root
+# auf "nobody" ab. Die Anwendung sagt das seit paths.bootstrap()
+# ausdruecklich. Abhilfe ist dann der securityContext unten -- die
+# Kennung erfaehrst du vom Betreiber der Freigabe.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -77,6 +96,15 @@ spec:
       # halber Abzug ist schlimmer als keiner, weil er wie einer
       # aussieht.
       terminationGracePeriodSeconds: 120
+      # Falls die Freigabe root auf "nobody" abbildet: hier die Kennung
+      # eintragen, unter der auf ihr geschrieben werden darf. Ohne das
+      # scheitert schon das Anlegen der Unterordner, und der Pod haengt
+      # in Init:CrashLoopBackOff.
+      #
+      # securityContext:
+      #   runAsUser: 1000
+      #   runAsGroup: 1000
+      #   fsGroup: 1000
       initContainers:
         - name: wiederanlauf
           image: ghcr.io/mw-research/locanoto:schlank

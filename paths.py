@@ -128,11 +128,72 @@ _LEGACY_GLOSSAR = os.path.join(BASE_DIR, "glossar.txt")
 COLLECTION_NAME = "pdf_documents"
 
 
+def _beschreibbar(d):
+    """Laesst sich in diesem Verzeichnis wirklich schreiben?
+
+    makedirs allein genuegt nicht: existiert das Verzeichnis bereits,
+    meldet es Erfolg, auch wenn niemand hineinschreiben darf. Genau so
+    sieht ein eingehaengtes Volume aus, dessen Freigabe die Kennung des
+    Prozesses auf "nobody" abbildet.
+    """
+    probe = os.path.join(d, ".schreibprobe")
+    try:
+        with open(probe, "w") as f:
+            f.write("x")
+        os.remove(probe)
+        return True, ""
+    except OSError as e:
+        return False, str(e)
+
+
 def bootstrap():
-    """Legt die data/- und config/-Struktur an, falls sie fehlt. Idempotent."""
+    """Legt die data/- und config/-Struktur an, falls sie fehlt. Idempotent.
+
+    Schlaegt das fehl, endet es mit einer AUSKUNFT und nicht mit einem
+    Traceback. Der Anlass: in einem Cluster brach ein Container nach
+    einer Sekunde ab, wieder und wieder, und zu sehen war nur
+    "Init:CrashLoopBackOff". Die Ursache -- ein Volume, in das der
+    Prozess nicht schreiben darf -- stand nirgends, obwohl sie hier
+    genau bekannt ist.
+    """
+    schlecht = []
     for d in (DATA_DIR, DOCS_DIR, CHATS_DIR, INDEX_DIR, CHROMA_DIR,
               CONFIG_DIR):
-        os.makedirs(d, exist_ok=True)
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError as e:
+            schlecht.append((d, str(e)))
+            continue
+        ok, grund = _beschreibbar(d)
+        if not ok:
+            schlecht.append((d, grund))
+
+    if schlecht:
+        zeilen = ["", "Diese Verzeichnisse sind nicht beschreibbar:", ""]
+        for d, grund in schlecht:
+            zeilen.append(f"    {d}")
+            zeilen.append(f"        {grund}")
+        try:
+            wer = f"uid={os.getuid()} gid={os.getgid()}"
+        except AttributeError:
+            wer = "unbekannte Kennung"
+        zeilen += [
+            "",
+            f"Der Prozess laeuft als {wer}.",
+            "",
+            "Haeufigster Grund bei einem eingehaengten Volume: die",
+            "Freigabe bildet root auf 'nobody' ab (root_squash). Dann",
+            "gehoert das Verzeichnis jemand anderem, und alles Schreiben",
+            "scheitert -- auch das Anlegen der Unterordner.",
+            "",
+            "Abhilfe, je nach Umgebung:",
+            "  * im Pod securityContext.fsGroup auf die Gruppe der",
+            "    Freigabe setzen, oder runAsUser auf deren Kennung",
+            "  * die Freigabe ohne root_squash exportieren",
+            "  * ein anderes Volume nehmen",
+            "",
+        ]
+        raise SystemExit("\n".join(zeilen))
     try:
         # Der Listenordner kann ausserhalb liegen und nur lesbar eingehaengt
         # sein. Dass er sich nicht anlegen laesst, ist dann kein Fehler.
