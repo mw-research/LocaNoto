@@ -325,6 +325,61 @@ def _aufraeumen():
     return weg
 
 
+def _hat_klartext(pfad):
+    """Enthaelt dieser Abzug Abschnitte im Klartext?
+
+    Nur die ersten Zeilen je Datei -- es geht um "ja oder nein", nicht um
+    eine Zaehlung, und ein Abzug hat leicht hunderttausend Zeilen.
+    """
+    try:
+        for d in os.listdir(pfad):
+            if not d.endswith(".jsonl"):
+                continue
+            with open(os.path.join(pfad, d), encoding="utf-8",
+                      errors="replace") as f:
+                for i, z in enumerate(f):
+                    if i > 50:
+                        break
+                    if '"text": "' in z and '"text": "LNX1:' not in z:
+                        return True
+    except OSError:
+        pass
+    return False
+
+
+def entferne(name, trotzdem=False):
+    """Loescht einen Abzug. (ok, meldung).
+
+    Der NEUESTE VOLLSTAENDIGE bleibt stehen, es sei denn, jemand besteht
+    ausdruecklich darauf. Ein Abzug ist die Antwort auf einen Fehlgriff,
+    und ihn wegzuraeumen, weil gerade aufgeraeumt wird, ist der
+    Fehlgriff, gegen den es keinen zweiten Abzug gibt.
+
+    Geloescht wird IM Container -- die Ordner gehoeren dem Konto, unter
+    dem er laeuft, und auf dem Wirt scheitert ein rm an den Rechten. Das
+    ist kein Randfall: die Abzuege sind das Erste, was jemand wegraeumen
+    will, wenn der Platz knapp wird.
+    """
+    ziel = os.path.join(ORDNER, name)
+    if not os.path.isdir(ziel):
+        return False, f"Kein Abzug namens '{name}'."
+
+    vollstaendige = [n for n, _p, _g, s in liste()
+                     if s.get("vollstaendig") and not s.get("fehler")]
+    if vollstaendige and vollstaendige[0] == name and not trotzdem:
+        return False, (
+            f"'{name}' ist der neueste VOLLSTAENDIGE Abzug. Er bleibt "
+            f"stehen. Erst einen neuen ziehen (python sicherung.py), "
+            f"dann diesen entfernen -- oder mit --trotzdem darauf "
+            f"bestehen.")
+
+    shutil.rmtree(ziel, ignore_errors=True)
+    if os.path.isdir(ziel):
+        return False, (f"'{name}' liess sich nicht entfernen. Rechte des "
+                       f"Kontos pruefen, unter dem der Container laeuft.")
+    return True, f"'{name}' entfernt."
+
+
 def hole_zurueck(name, nur_raum=None, fortschritt=None):
     """Spielt einen Abzug in die Sammlungen zurueck.
 
@@ -412,6 +467,8 @@ def main():
         print("  python sicherung.py               Abzug schreiben")
         print("  python sicherung.py liste         vorhandene Abzuege")
         print("  python sicherung.py zurueck NAME  Abzug einspielen")
+        print("  python sicherung.py entferne NAME  Abzug loeschen")
+        print("  python sicherung.py entferne --klartext")
         return 0
 
     if befehl == "liste":
@@ -428,6 +485,33 @@ def main():
                   f"{stand.get('abschnitte', '?'):>10}  "
                   f"{len(stand.get('raeume') or {}):>6}  {zustand}")
         return 0
+
+    if befehl in ("entferne", "loeschen"):
+        namen = [a for a in sys.argv[2:] if not a.startswith("--")]
+        trotzdem = "--trotzdem" in sys.argv
+        if "--klartext" in sys.argv:
+            # Alle, die noch Text im Klartext fuehren -- der haeufige
+            # Fall nach dem Nachverschluesseln. VOR der Pruefung auf
+            # leere Namen: sonst landet "entferne --klartext" in der
+            # Aufforderung, Namen anzugeben, und die einzige Form, die
+            # man tatsaechlich tippt, ist die, die nicht geht.
+            namen = [n for n, pf, _g, _s in liste() if _hat_klartext(pf)]
+            if not namen:
+                print("Kein Abzug enthaelt Klartext.")
+                return 0
+            print(f"{len(namen)} Abzug/Abzuege mit Klartext: "
+                  f"{', '.join(namen)}")
+        if not namen:
+            print("Namen angeben. 'liste' zeigt sie.")
+            print("  python sicherung.py entferne 2026-09-10_07-56-42")
+            print("  python sicherung.py entferne --klartext")
+            return 1
+        fehler = 0
+        for n in namen:
+            ok, meldung = entferne(n, trotzdem)
+            print(("  " if ok else "  [!] ") + meldung)
+            fehler += 0 if ok else 1
+        return 1 if fehler else 0
 
     if befehl == "zurueck":
         if len(sys.argv) < 3:
