@@ -778,6 +778,27 @@ def process_uploaded_pdf(uploaded_file, raum):
     with open(pdf_path, "wb") as f:
         f.write(uploaded_file.getvalue())
 
+    # UND nach ownCloud, wenn der Raum dort einen Ordner hat.
+    #
+    # Die lokale Kopie bleibt: der Ingest liest sie, die Quellenansicht
+    # zeigt sie, und ein spaeterer Abgleich wuerde sie ohnehin wieder
+    # herunterladen. Sie ist die Arbeitskopie, nicht die Ablage.
+    #
+    # Scheitert das Ablegen, ist der Upload trotzdem nutzbar -- er ist
+    # nur nicht dort, wo der Nutzer ihn erwartet. Das muss er erfahren,
+    # sonst sucht er ihn spaeter in ownCloud und findet nichts.
+    wolke_hinweis = ""
+    try:
+        import owncloud
+        if owncloud.eingerichtet():
+            ok_oc, meldung_oc = owncloud.lege_ab(
+                pdf_path,
+                owncloud.raum_pfad(raum) + "/" + os.path.basename(pdf_path))
+            if not ok_oc:
+                wolke_hinweis = f"Nicht in ownCloud abgelegt: {meldung_oc}"
+    except Exception as e:
+        wolke_hinweis = f"Nicht in ownCloud abgelegt: {e}"
+
     chunks = []
     metadatas = []
     ids = []
@@ -797,7 +818,8 @@ def process_uploaded_pdf(uploaded_file, raum):
                               else "private",
                     "owner": st.session_state["username"], "type": "text"})
                 ids.append(f"{dateiname}_p{nummer}_c{i}")
-        return _speichern_chunks(chunks, metadatas, ids, raum)
+        _n, _h = _speichern_chunks(chunks, metadatas, ids, raum)
+        return _n, " ".join(x for x in (_h, wolke_hinweis) if x)
 
     doc = pymupdf.open(pdf_path)
     
@@ -846,7 +868,8 @@ def process_uploaded_pdf(uploaded_file, raum):
                 })
                 ids.append(f"{dateiname}_p{page_num+1}_text_{i}")
                 
-    return _speichern_chunks(chunks, metadatas, ids, raum)
+    _n, _h = _speichern_chunks(chunks, metadatas, ids, raum)
+    return _n, " ".join(x for x in (_h, wolke_hinweis) if x)
 
 
 def _speichern_chunks(chunks, metadatas, ids, raum):
