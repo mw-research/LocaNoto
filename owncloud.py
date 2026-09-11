@@ -313,6 +313,48 @@ def hole(fern, ziel):
     return geschrieben
 
 
+def lege_ab(quelle, fern, ueberschreiben=False):
+    """Legt eine Datei in ownCloud ab. (ok, meldung).
+
+    Bis hierher schrieb die Anwendung NIE nach ownCloud zurueck -- der
+    Weg ging nur hinein. Das war richtig, solange ownCloud eine fremde
+    Ablage war, die jemand anders pflegt.
+
+    Seit LocaNoto den Ordnerbaum selbst anlegt und freigibt, ist es
+    falsch: der Nutzer bekommt einen Ordner privat/<kennung>/, der leer
+    bleibt, waehrend seine hochgeladenen Dateien woanders liegen. Zwei
+    Ablagen fuer dieselbe Sache, und niemand sieht die zweite.
+
+    Der Zweck der ganzen Anbindung ist, dass alles Gespeicherte auf
+    entkoppeltem Speicher liegt und nicht neben dem Abbild. Ein Upload,
+    der das nicht tut, hebt ihn auf.
+    """
+    if not eingerichtet():
+        return False, "ownCloud ist nicht eingerichtet."
+    ordner_anlegen(os.path.dirname(fern))
+    try:
+        with _sitzung() as s:
+            if not ueberschreiben:
+                # Nicht blind ueberschreiben: derselbe Dateiname kann
+                # dort schon etwas anderes sein, das jemand haendisch
+                # abgelegt hat.
+                a = s.request("PROPFIND", _url(fern), data=_PROPFIND,
+                              headers={"Depth": "0",
+                                       "Content-Type": "application/xml"},
+                              timeout=TIMEOUT)
+                if a.status_code == 207:
+                    return False, (f"'{os.path.basename(fern)}' liegt dort "
+                                   f"schon. Nicht ueberschrieben.")
+            daten = (quelle if isinstance(quelle, (bytes, bytearray))
+                     else open(quelle, "rb").read())
+            a = s.put(_url(fern), data=daten, timeout=TIMEOUT)
+    except requests.RequestException as e:
+        return False, f"Nicht abgelegt: {e}"
+    if a.status_code not in (200, 201, 204):
+        return False, f"Nicht abgelegt, ownCloud antwortete {a.status_code}."
+    return True, f"In ownCloud abgelegt: {fern}"
+
+
 # --- GRUPPEN ---
 #
 # Die Provisioning-Schnittstelle (OCS) statt WebDAV. Sie liefert JSON, wenn
