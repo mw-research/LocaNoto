@@ -437,9 +437,37 @@ def quellen():
         eigene = listenquellen.aufgeloest()
     except Exception:
         eigene = []
-    if eigene:
-        return eigene
-    return [(_ALLGEMEIN, pfad())]
+
+    # DER ALTE ORDNER FAELLT NICHT STILL WEG.
+    #
+    # Frueher galt er nur, solange gar keine Quelle eingetragen war.
+    # Damit verschwand er in dem Augenblick, in dem jemand die ERSTE
+    # Raumquelle setzte -- also beim Einrichten des ersten Fachraums,
+    # und ohne Meldung. Der Betreiber haette einen Raum gewonnen und
+    # den gemeinsamen Bestand verloren, und der Zusammenhang waere
+    # nicht zu erraten gewesen.
+    #
+    # Jetzt gilt er weiter, solange niemand den allgemeinen Raum
+    # ausdruecklich anders belegt. Wer ihn ersetzen will, traegt eine
+    # Quelle fuer 'allgemein' ein -- eine Handlung, keine Nebenwirkung.
+    if not any(r == _ALLGEMEIN for r, _p in eigene) and alter_ordner():
+        eigene = list(eigene) + [(_ALLGEMEIN, pfad())]
+    return eigene or [(_ALLGEMEIN, pfad())]
+
+
+def alter_ordner():
+    """Ist der eine Ordner von frueher ausdruecklich gesetzt?
+
+    Nur dann -- die blosse Vorgabe data/tabellen ist keine Angabe,
+    sondern ihr Fehlen.
+    """
+    try:
+        with open(PFAD_DATEI, "r", encoding="utf-8") as f:
+            if f.read().strip():
+                return True
+    except OSError:
+        pass
+    return bool(os.getenv("TABELLEN_PFAD", "").strip())
 
 
 def _lies_wolke(ordner, raum, uebrig):
