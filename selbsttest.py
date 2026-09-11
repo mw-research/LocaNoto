@@ -983,6 +983,67 @@ pruef("und ein Raum ohne Zugang laeuft weiter ueber die Vorgabe",
                                                    sqldb.SQL_USER)
       == "vorgabe")
 
+print("=== 19. Bilder werden zu Text ===")
+# Zwei Faelle, die verschieden sind und oft verwechselt werden: eine
+# gescannte Seite ohne Textebene findet die Suche GAR NICHT -- nicht
+# wenig, sondern nichts. Eine Abbildung in einem Textdokument findet
+# sie, nur nicht das, was allein im Bild steht.
+import bildtext
+import pymupdf as _pm
+
+_d = _pm.open()
+_s1 = _d.new_page()
+_s1.insert_text((60, 90), "Eine gewoehnliche Textseite mit genuegend "
+                          "Inhalt, um nicht als Scan zu gelten.")
+_s1.insert_text((60, 120), "Noch eine Zeile fuer die Schwelle.")
+_s2 = _d.new_page()
+_s2.insert_text((60, 90), "7")          # nur eine Seitenzahl
+_s3 = _d.new_page()
+_s3.insert_text((60, 90), "Eine Seite mit Text und einem Schaubild "
+                          "darunter, also der zweite Fall.")
+_gross = _pm.Pixmap(_pm.csRGB, _pm.IRect(0, 0, 800, 600))
+_gross.set_rect(_gross.irect, (200, 40, 40))
+_s3.insert_image(_pm.Rect(60, 150, 560, 525), pixmap=_gross)
+
+_scans, _abb = bildtext.zaehle(_d)
+pruef("eine Seite ohne Textebene gilt als Scan", _scans == 1, _scans)
+pruef("und eine grosse Abbildung wird gezaehlt", _abb == 1, _abb)
+
+# Ein Logo ist kein Schaubild. Ohne die Schwelle bekaeme jedes
+# Briefkopfsymbol einen Modellaufruf -- bei zweihundert Seiten
+# zweihundert.
+_d2 = _pm.open()
+_s = _d2.new_page()
+_s.insert_text((60, 90), "Seite mit Text und einem winzigen Symbol "
+                         "daneben, das kein Schaubild ist.")
+_klein = _pm.Pixmap(_pm.csRGB, _pm.IRect(0, 0, 40, 40))
+_klein.set_rect(_klein.irect, (10, 10, 200))
+_s.insert_image(_pm.Rect(500, 60, 540, 100), pixmap=_klein)
+pruef("ein winziges Bild gilt als Logo und faellt weg",
+      bildtext.zaehle(_d2)[1] == 0, bildtext.zaehle(_d2)[1])
+
+# Die Beschreibung selbst, mit einer Attrappe statt eines Sehmodells.
+_gerufen = []
+_attrappe = types.ModuleType("vision")
+_attrappe.beschreibe = lambda daten, frage="": (
+    _gerufen.append(frage[:20]) or f"Beschreibung {len(_gerufen)}")
+sys.modules["vision"] = _attrappe
+_ergebnis = bildtext.beschreibungen(_d, "probe.pdf")
+pruef("beide Faelle ergeben einen Abschnitt", len(_ergebnis) == 2,
+      len(_ergebnis))
+pruef("die Art steht dabei",
+      [a for _s, _t, a in _ergebnis] == ["seite", "abbildung"],
+      [a for _s, _t, a in _ergebnis])
+pruef("und die Seitenzahl stimmt",
+      [s for s, _t, _a in _ergebnis] == [2, 3],
+      [s for s, _t, _a in _ergebnis])
+# Verschiedene Fragen: bei einem Scan ist die Beschreibung der INHALT,
+# bei einer Abbildung eine Ergaenzung. Dieselbe Frage fuer beides
+# waere fuer einen der Faelle die falsche.
+pruef("mit je eigener Frage an das Modell",
+      len(set(_gerufen)) == 2, _gerufen)
+sys.modules.pop("vision", None)
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
