@@ -1019,7 +1019,8 @@ def fremde_raeume(current_user):
     return sorted(aus)
 
 
-def process_uploaded_pdf(uploaded_file, raum, projekt=""):
+def process_uploaded_pdf(uploaded_file, raum, projekt="",
+                         bilder=False):
     """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
     vektorisiert beides.
 
@@ -1174,8 +1175,48 @@ def process_uploaded_pdf(uploaded_file, raum, projekt=""):
                 })
                 ids.append(f"{dateiname}_p{page_num+1}_text_{i}")
                 
+    # --- BILDER ---
+    #
+    # Zwei Faelle, die verschieden sind: eine gescannte Seite ohne
+    # Textebene findet die Suche gar nicht -- nicht wenig, sondern
+    # nichts. Eine Abbildung in einem Textdokument findet sie, nur
+    # nicht das, was allein im Bild steht.
+    #
+    # Beides wird zu einem gewoehnlichen Abschnitt mit type="image".
+    # Die Beschreibung ersetzt das Bild nicht, sie macht es
+    # auffindbar.
+    bild_hinweis = ""
+    if bilder:
+        try:
+            import bildtext
+            _melder = st.empty()
+
+            def _stand(nr, gesamt):
+                _melder.caption(f"Beschreibe Bilder ... Seite {nr}/{gesamt}")
+
+            for _seite, _text, _art in bildtext.beschreibungen(
+                    doc, dateiname, _stand):
+                chunks.append(_text)
+                metadatas.append({
+                    "file_name": dateiname,
+                    "page": _seite,
+                    "raum": raum,
+                    "folder": projekt,
+                    "owner": st.session_state["username"],
+                    # Die Art steht mit drin: bei einer gescannten
+                    # Seite IST die Beschreibung der Inhalt, bei einer
+                    # Abbildung ergaenzt sie den Text daneben. Wer
+                    # spaeter nachsieht, woher eine Auskunft kommt,
+                    # soll den Unterschied sehen.
+                    "type": "image", "bildart": _art,
+                })
+                ids.append(f"{dateiname}_p{_seite}_bild_{len(ids)}")
+            _melder.empty()
+        except Exception as e:
+            bild_hinweis = f"Bilder nicht beschrieben: {e}"
+
     _n, _h = _speichern_chunks(chunks, metadatas, ids, raum)
-    return _n, " ".join(x for x in (_h, wolke_hinweis) if x)
+    return _n, " ".join(x for x in (_h, wolke_hinweis, bild_hinweis) if x)
 
 
 def _speichern_chunks(chunks, metadatas, ids, raum):
@@ -1923,11 +1964,37 @@ with st.sidebar:
                 help="Sortiert im eigenen Raum. Vorhandene: "
                      + (", ".join(_bekannt) if _bekannt else "noch keine"))
 
+        # Ein Schalter und keine Selbstverstaendlichkeit: ein
+        # Modellaufruf je Bild, bei einem 200-Seiten-Scan also
+        # Minuten. Wer das nicht erwartet, haelt die Anwendung fuer
+        # haengengeblieben.
+        _bilder = st.checkbox(
+            "Abbildungen und gescannte Seiten beschreiben",
+            value=False, key="upload_bilder",
+            help="Fuer PDFs ohne Textebene und fuer Schaubilder. "
+                 "Kostet einen Modellaufruf je Bild.")
+        if _bilder and uploaded_file.name.lower().endswith(".pdf"):
+            # Die Schaetzung VOR der Zustimmung. Sie kostet keinen
+            # Modellaufruf -- gezaehlt wird im Dokument.
+            try:
+                import bildtext, pymupdf as _pm
+                with _pm.open(stream=uploaded_file.getvalue(),
+                              filetype="pdf") as _d:
+                    _s, _a = bildtext.zaehle(_d)
+                if _s or _a:
+                    st.caption(
+                        f"\u2192 {_s} gescannte Seite(n), {_a} "
+                        f"Abbildung(en) -- {_s + _a} Modellaufrufe.")
+                else:
+                    st.caption("\u2192 Nichts Bildliches gefunden.")
+            except Exception as _e:
+                st.caption(f"Nicht abschaetzbar: {_e}")
+
         if st.button("Hochladen & Vektorisieren"):
             with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
                 raeume.sichere_anlage_privat(st.session_state["username"])
                 _n, _hinweis = process_uploaded_pdf(
-                    uploaded_file, ziel_raum, _projekt)
+                    uploaded_file, ziel_raum, _projekt, _bilder)
             refresh_document_index()
             if _n:
                 st.success(f"'{uploaded_file.name}' in "
