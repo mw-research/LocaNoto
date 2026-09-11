@@ -1520,8 +1520,17 @@ with st.sidebar:
             "Projekt:", options=sorted(_projekte), default=[],
             help="Nur im eigenen Raum. Leer lassen, um alles zu "
                  "durchsuchen.")
-        for _p in _gewaehlt_p:
-            _projekt_dateien += _projekte[_p]
+        # NICHT _p: das ist zwanzig Zeilen weiter oben die
+        # Voreinstellung (presets.lese) und wird weiter unten als
+        # Wörterbuch gebraucht. Eine Schleifenvariable desselben
+        # Namens macht daraus eine Zeichenkette -- und die Anwendung
+        # bricht mit "string indices must be integers" an einer
+        # Stelle ab, die mit Projekten nichts zu tun hat.
+        #
+        # Aufgefallen ist es erst, als jemand den Filter tatsaechlich
+        # SETZTE: ohne Auswahl laeuft die Schleife nie.
+        for _pj in _gewaehlt_p:
+            _projekt_dateien += _projekte[_pj]
 
     selected_docs = st.multiselect(
         "Suche beschränken auf:", 
@@ -1824,14 +1833,14 @@ with st.sidebar:
                         _z = _z.strip()
                         if not _z or _z.startswith("#"):
                             continue
-                        _r, _t, _p = _z.partition("=")
+                        _r, _t, _pf = _z.partition("=")
                         if not _t:
                             st.error(f"'{_z}' hat kein '=' -- erwartet "
                                      f"wird 'raum = pfad'.")
                             _neu = None
                             break
                         _neu.append({"raum": _r.strip(),
-                                     "pfad": _p.strip()})
+                                     "pfad": _pf.strip()})
                     if _neu is not None:
                         ok, meldung = listenquellen.speichere(_neu)
                         if not ok:
