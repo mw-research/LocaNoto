@@ -24,6 +24,30 @@
 # und /mnt/data auf den persistenten Speicher; dann werden aus den
 # emptyDir-Eintraegen unten zwei PVCs.
 #
+# WEM DER BAUM GEHOERT -- vor dem Aufsetzen zu wissen
+#
+# LocaNoto legt den Ordnerbaum im Bereich seines DIENSTKONTOS an
+# (OWNCLOUD_USER) und gibt die Ordner an die jeweiligen Nutzer frei.
+# Der Eigentuemer ist damit das Dienstkonto, nicht der Nutzer -- und
+# ein Eigentuemer sieht alles, was ihm gehoert, auch privat/<kennung>/.
+#
+# Das laesst sich nicht wegkonfigurieren: das Konto muss jeden Raum
+# lesen koennen, sonst gaebe es nichts einzulesen. Der persoenliche
+# Raum schuetzt gegen andere LocaNoto-Nutzer und gegen andere
+# ownCloud-Nutzer, nicht gegen das Konto, dem die Ablage gehoert.
+#
+# Daraus folgt fuer den Betrieb: OWNCLOUD_USER und OWNCLOUD_ADMIN_USER
+# NICHT auf dasselbe Konto legen, und beim Dienstkonto kein Konto
+# nehmen, mit dem sich ein Mensch anmeldet.
+#
+#   OWNCLOUD_USER=locanoto        Dienstkonto, gehoert niemandem
+#   OWNCLOUD_ADMIN_USER=oc-admin  nur zum Anlegen und Freigeben
+#
+# Ganz zu ist es damit nicht: ein ownCloud-Verwalter kann das Passwort
+# des Dienstkontos zuruecksetzen und sich damit anmelden. Verwalter in
+# ownCloud ist deshalb eine Vertrauensrolle, genau wie der Zugang zum
+# Server.
+#
 # ANZUPASSEN: der Namensraum und die drei Passwoerter.
 #
 # EIN GEAENDERTES PASSWORT REICHT NICHT AUS
