@@ -248,16 +248,35 @@ spec:
           # Minuten. Ein zu enges Fenster toetet ihn mittendrin -- und
           # eine halb eingerichtete ownCloud-Datenbank kommt beim
           # naechsten Versuch nicht weiter, sondern bleibt kaputt.
+          # Der Host-Header MUSS gesetzt werden.
+          #
+          # Kubernetes fragt die Probe mit "Host: <pod-ip>:8080" ab.
+          # ownCloud weist jeden Host ab, der nicht in trusted_domains
+          # steht -- und die Pod-IP kann dort nicht stehen, sie ist bei
+          # jedem Start eine andere. Die Antwort ist dann 400, der Pod
+          # wird nie bereit, und im Log steht eine Zeile, die wie ein
+          # gewoehnlicher Fehlversuch aussieht:
+          #
+          #   "GET /status.php HTTP/1.1" 400
+          #
+          # Mit dem Dienstnamen als Host trifft die Probe denselben
+          # Eintrag, den auch LocaNoto benutzt.
           startupProbe:
             httpGet:
               path: /status.php
               port: 8080
+              httpHeaders:
+                - name: Host
+                  value: owncloud
             periodSeconds: 10
             failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /status.php
               port: 8080
+              httpHeaders:
+                - name: Host
+                  value: owncloud
             periodSeconds: 20
           volumeMounts:
             - name: daten
