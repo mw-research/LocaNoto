@@ -152,20 +152,51 @@ def main():
                 passwort = getpass.getpass("  Passwort: ")
             except (EOFError, OSError):
                 passwort = ""
-        if not name or not passwort:
-            sagt("  Uebersprungen -- ohne Kennung und Passwort geht es "
-                 "nicht. Nachholen: python create_user.py")
-        else:
+        # NACHFRAGEN statt weiterlaufen.
+        #
+        # Bis hierher endete ein zu kurzes Passwort so: die Ablehnung
+        # wurde gemeldet, und der Lauf ging zum naechsten Schritt. Der
+        # baut den Ordnerbaum und gibt ihn an alle Nutzer frei -- von
+        # denen es dann keinen gibt. Das Ergebnis war eine Einrichtung,
+        # die durchgelaufen ist, ohne etwas eingerichtet zu haben, und
+        # ein Baum ohne Freigaben, den man erst in ownCloud bemerkt.
+        #
+        # Ein Tippfehler in einem Passwortfeld ist der wahrscheinlichste
+        # Verlauf ueberhaupt. Er darf keinen unvollstaendigen Zustand
+        # hinterlassen.
+        ok = False
+        versuche = 0
+        while name and passwort and not ok and versuche < 5:
+            versuche += 1
             ok, meldung = benutzer.anlege(name, passwort, "admin",
                                           von="einrichtung")
             sagt(f"  {'+' if ok else '!'} {meldung}")
-            if ok and oc_da:
-                import owncloud
-                b = owncloud.richte_nutzer_ein(name, passwort, name)
-                for s in b["schritte"]:
-                    sagt(f"      {s}")
-                for f in b["fehler"]:
-                    sagt(f"      [!] {f}")
+            if ok or not sys.stdin.isatty():
+                # Ohne Terminal hat ein zweiter Versuch keinen Sinn: es
+                # gibt niemanden, der etwas anderes eingeben koennte.
+                break
+            sagt("    Noch einmal -- oder mit Strg+C abbrechen.")
+            try:
+                eingabe = input(f"  Kennung [{name}]: ").strip()
+                name = eingabe or name
+                passwort = getpass.getpass("  Passwort: ")
+            except (EOFError, OSError, KeyboardInterrupt):
+                sagt()
+                break
+
+        if not ok:
+            sagt("  KEIN ZUGANG ANGELEGT. Ohne ihn kann sich niemand "
+                 "anmelden, und der Ordnerbaum unten wird an niemanden "
+                 "freigegeben.")
+            sagt("  Nachholen -- der Lauf ist wiederholbar:")
+            sagt(f"      {_vorspann()} python einrichten.py")
+        elif oc_da:
+            import owncloud
+            b = owncloud.richte_nutzer_ein(name, passwort, name)
+            for s in b["schritte"]:
+                sagt(f"      {s}")
+            for f in b["fehler"]:
+                sagt(f"      [!] {f}")
 
     # Der Baum ZULETZT, und das ist keine Kosmetik: der
     # allgemeine Ordner wird mit allen Nutzern geteilt, und
