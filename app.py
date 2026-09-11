@@ -1827,29 +1827,24 @@ with st.sidebar:
                                + ", ".join(f"`{w}`"
                                            for w in listenquellen.WURZELN))
 
-            # Der eine Ordner von frueher. Er gilt weiter, solange oben
-            # keine Quelle steht -- dann als Quelle des allgemeinen
-            # Raums. Eine Umstellung, die am ersten Tag alle Listen
-            # verschwinden liesse, wuerde zurueckgedreht statt
-            # verstanden.
-            _pfad = st.text_input(
-                "Ordner", value=tabellen.pfad(),
-                help="Vollstaendiger Pfad, wie er im Container gilt -- etwa "
-                     "/listen. Leer lassen fuer die Vorgabe "
-                     "data/tabellen/.")
-            if _pfad.strip() != tabellen.pfad():
-                if st.button("Ordner verknuepfen und einlesen",
-                             use_container_width=True):
-                    ok, meldung = tabellen.setze_pfad(_pfad)
-                    if not ok:
-                        st.error(meldung)
-                    else:
-                        with st.spinner("Lese Listen ein ..."):
-                            neu, fehler = tabellen.baue_katalog()
-                        st.success(f"{meldung} {len(neu['eintraege'])} "
-                                   f"Blaetter eingelesen.")
-                        time.sleep(1)
-                        st.rerun()
+            # DAS EINGABEFELD FUER DEN EINEN ORDNER IST WEG.
+            #
+            # Es tat dasselbe wie eine Zeile "allgemein = /pfad" oben,
+            # nur an anderer Stelle und ohne Raumangabe. Zwei Wege zu
+            # derselben Einstellung sind einer zu viel: der eine wird
+            # gepflegt, der andere nicht, und welcher gerade gilt,
+            # muss man raten.
+            #
+            # Ein bereits gesetzter Ordner bleibt GUELTIG -- er gilt
+            # weiter als Quelle des allgemeinen Raums, solange dieser
+            # nicht ausdruecklich anders belegt ist (tabellen.quellen).
+            # Hier steht nur, dass es ihn gibt.
+            if tabellen.alter_ordner():
+                st.caption(
+                    f"Aus frueherer Einrichtung gilt zusaetzlich "
+                    f"`allgemein = {tabellen.pfad()}`. Um ihn zu "
+                    f"ersetzen, oben eine Zeile fuer `allgemein` "
+                    f"eintragen.")
 
             # --- HOCHLADEN ---
             #

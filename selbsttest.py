@@ -568,6 +568,30 @@ pruef("eine Quelle, die eine andere enthaelt, wird abgewiesen",
           {"raum": "@privat",
            "pfad": os.path.join(_netz, "heim", "{benutzer}",
                                 "Listen")}])[0])
+# DER ALTE ORDNER DARF NICHT STILL WEGFALLEN.
+#
+# Frueher galt er nur, solange gar keine Quelle eingetragen war --
+# also verschwand er in dem Augenblick, in dem jemand die ERSTE
+# Raumquelle setzte. Beim Einrichten des ersten Fachraums haette der
+# Betreiber einen Raum gewonnen und den gemeinsamen Bestand verloren,
+# ohne Meldung und ohne erratbaren Zusammenhang.
+_altpfad = os.path.join(_netz, "allgemein")
+with io.open(tabellen.PFAD_DATEI, "w", encoding="utf-8") as _f:
+    _f.write(_altpfad)
+listenquellen.speichere([{"raum": "einkauf",
+                          "pfad": os.path.join(_netz, "abteilung",
+                                               "einkauf")}])
+pruef("der alte Ordner gilt weiter, wenn eine Raumquelle dazukommt",
+      ("allgemein", _altpfad) in tabellen.quellen(), tabellen.quellen())
+# Wer ihn ersetzen will, traegt eine Quelle fuer 'allgemein' ein --
+# eine Handlung, keine Nebenwirkung.
+listenquellen.speichere([
+    {"raum": "einkauf", "pfad": os.path.join(_netz, "abteilung", "einkauf")},
+    {"raum": "allgemein", "pfad": os.path.join(_netz, "heim")}])
+pruef("eine ausdrueckliche Quelle fuer allgemein ersetzt ihn",
+      ("allgemein", _altpfad) not in tabellen.quellen(), tabellen.quellen())
+os.remove(tabellen.PFAD_DATEI)
+
 pruef("nebeneinanderliegende Ordner gehen weiter",
       listenquellen.speichere([
           {"raum": "allgemein", "pfad": os.path.join(_netz, "allgemein")},
