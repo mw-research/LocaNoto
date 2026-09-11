@@ -8,3 +8,12 @@ gatherUsageStats = false
 # Kein Datei-Watcher: im Container aendert sich der Code zur Laufzeit nicht,
 # und der Watcher kostet nur CPU.
 fileWatcherType = "none"
+
+[client]
+# Keine Seitennavigation in der Seitenleiste.
+#
+# pages/quelle.py ist keine zweite Ansicht der Anwendung, sondern das
+# Ziel eines Verweises: eine Fundstelle allein, in einem eigenen Tab.
+# In der Navigation stuende sie als gleichrangiger Menuepunkt und
+# fuehrte ohne Ticket nur zu einem Hinweis.
+showSidebarNavigation = false

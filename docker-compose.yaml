@@ -131,6 +131,7 @@ x-umgebung: &umgebung
   - LOCANOTO_SCHLUESSEL_DATEI=${LOCANOTO_SCHLUESSEL_DATEI:-}
   - SITZUNG_MINUTEN=${SITZUNG_MINUTEN:-}
   - SITZUNG_MERKEN_STUNDEN=${SITZUNG_MERKEN_STUNDEN:-}
+  - QUELLE_TICKET_MINUTEN=${QUELLE_TICKET_MINUTEN:-}
   # Speicherwurzeln IM Container. Wohin sie vom Host zeigen, steht bei den
   # volumes; hier steht nur, wo die Anwendung sie erwartet. LOCANOTO_INDEX
   # zeigt bewusst NICHT unter /app/data: dort liegt der persistente
