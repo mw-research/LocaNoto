@@ -25,6 +25,35 @@
 # emptyDir-Eintraegen unten zwei PVCs.
 #
 # ANZUPASSEN: der Namensraum und die drei Passwoerter.
+#
+# EIN GEAENDERTES PASSWORT REICHT NICHT AUS
+#
+# Zwei Dinge, die beide nicht von selbst geschehen:
+#
+#   1. MariaDB uebernimmt MARIADB_PASSWORD nur beim ALLERERSTEN Start,
+#      wenn das Datenverzeichnis leer ist. Danach steht es in der
+#      Datenbank. Wer das Passwort aendert, muss das Deployment
+#      loeschen (mit ihm geht das emptyDir), nicht nur neu anwenden.
+#
+#   2. Kubernetes rollt ein Deployment nur bei einer Aenderung an der
+#      POD-VORLAGE aus. Ein geaendertes Secret ist keine -- und
+#      Umgebungsvariablen daraus werden beim Start eingespritzt. Ein
+#      laufender Pod behaelt die alten Werte auf unbestimmte Zeit.
+#
+# Beides zusammen ergibt ein Bild, das in die Irre fuehrt: ownCloud
+# laeuft, ist erreichbar, meldet installed:true -- und LocaNoto wartet
+# trotzdem ewig, weil es sich mit einem alten Passwort anmeldet.
+#
+# Dagegen hilft eine Pruefsumme ueber die Geheimnisse in der
+# Pod-Vorlage, etwa als Annotation:
+#
+#   template:
+#     metadata:
+#       annotations:
+#         locanoto/geheimnisse: <hash>
+#
+# Dann wird aus der Secret-Aenderung eine Vorlagen-Aenderung, und
+# kubectl apply rollt von selbst neu aus.
 ---
 apiVersion: v1
 kind: Secret
