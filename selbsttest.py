@@ -1007,7 +1007,30 @@ pruef("und ein Raum ohne Zugang laeuft weiter ueber die Vorgabe",
                                                    sqldb.SQL_USER)
       == "vorgabe")
 
-print("=== 19. Bilder werden zu Text ===")
+print("=== 19. Mit Notzugang ist ein Raum nicht mehr fremd ===")
+# Beobachtet im Betrieb: nach einem bestaetigten Notzugang standen
+# annas Dokumente in der gewoehnlichen Verwaltung mit KLARNAMEN -- und
+# gleichzeitig in der Liste "fremde Raeume" mit Kennungen. Zweimal
+# dasselbe, einmal lesbar und einmal nicht, und der Unterschied war
+# nicht zu erklaeren.
+#
+# Der Notzugang IST das Verfahren, mit dem jemand hineindarf. Ist er
+# bestaetigt, gilt er ueberall gleich.
+import notzugang as _nz
+_nz.DATEI = os.path.join(paths.CONFIG_DIR, "notzugang.json")
+_prv = raeume.privat_kennung("anna")
+pruef("ohne Notzugang darf markus den Raum nicht lesen",
+      not raeume.darf_lesen("markus", _prv))
+pruef("und mit einem schon",
+      raeume.darf_lesen("markus", _prv, (_prv,)))
+# Dieselbe Frage, wie sie die Verwaltungsansicht stellt: gilt der Raum
+# noch als fremd?
+pruef("damit faellt er aus der Liste der fremden Raeume",
+      _prv in raeume.lesbar("markus", notzugang=(_prv,))
+      and _prv not in raeume.lesbar("markus"))
+
+print()
+print("=== 20. Bilder werden zu Text ===")
 # Zwei Faelle, die verschieden sind und oft verwechselt werden: eine
 # gescannte Seite ohne Textebene findet die Suche GAR NICHT -- nicht
 # wenig, sondern nichts. Eine Abbildung in einem Textdokument findet
