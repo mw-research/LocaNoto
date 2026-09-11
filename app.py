@@ -733,7 +733,16 @@ def list_foreign_private_documents(current_user):
             data = sml.get(include=["metadatas"])
         except Exception:
             continue
-        for m in data.get("metadatas") or []:
+        # AUFSCHLIESSEN. Ohne das stand hier "LNX1:hcQwhq0WblWU..." --
+        # also weder ein Name noch nichts, sondern das Schlechteste von
+        # beidem: dem Verwalter nuetzt es nichts, und dass ein Eintrag
+        # existiert, verraet es trotzdem.
+        #
+        # Die Entscheidung, OB ein Verwalter den Namen sehen darf,
+        # faellt eine Zeile hoeher in darf_dateien_sehen(). Ist sie
+        # gefallen, gehoert der Name lesbar hin.
+        for m in store.metadaten_klartext(kennung,
+                                          data.get("metadatas") or []):
             if not m:
                 continue
             fname = m.get("file_name", "")
@@ -1662,11 +1671,28 @@ with st.sidebar:
             st.caption("👑 **Admin: Dokumente in fremden Räumen**")
             st.caption("Nur zur Verwaltung – diese Dokumente werden für "
                        "dich nicht durchsucht.")
-            label = st.selectbox(
-                "Fremdes Dokument entfernen:",
-                [f"{raum} / {fname}" for raum, fname in foreign])
+            # ZWEISTUFIG, nach Raum. Eine flache Liste aller Dateien
+            # aller Nutzer ist bei zwanzig Kollegen keine Uebersicht
+            # mehr, sondern eine Wand -- und sie zeigt jedem Verwalter
+            # beim blossen Aufklappen, woran alle anderen arbeiten.
+            # Erst der Raum, dann die Datei: dann sieht man nur, wonach
+            # man gesucht hat.
+            _je_raum = {}
+            for _r, _f in foreign:
+                _je_raum.setdefault(_r, []).append(_f)
+            _wahl_r = st.selectbox(
+                "Raum", sorted(_je_raum),
+                format_func=lambda r: (f"{raeume.bezeichnung(r)} "
+                                       f"({len(_je_raum[r])})"),
+                key="fremd_raum")
+            _name_f = st.selectbox(
+                "Dokument", sorted(_je_raum[_wahl_r]), key="fremd_datei")
+            # Kein Zusammensetzen und Wiederzerlegen einer Beschriftung:
+            # ein Dateiname mit " / " darin zerbrach das vorher, und
+            # zwar still -- geloescht wurde dann etwas anderes oder
+            # nichts.
+            _raum_f = _wahl_r
             if st.button("🗑️ Endgültig löschen", use_container_width=True):
-                _raum_f, _name_f = label.split(" / ", 1)
                 ok, meldung = loesche_dokument(_name_f, _raum_f)
                 (st.success if ok else st.error)(meldung)
                 time.sleep(1)
