@@ -84,6 +84,24 @@ x-umgebung: &umgebung
   - LLM_VERSUCHE=${LLM_VERSUCHE:-}
   - FEEDBACK_ANZEIGE=${FEEDBACK_ANZEIGE:-}
   - TABELLEN_PFAD=${TABELLEN_PFAD:-}
+
+  # Fachdatenbank. Ohne SQL_SERVER bleibt die Funktion vollstaendig aus.
+  # Diese Werte sind die VORGABE -- ein Raum kann ein eigenes Konto
+  # mitbringen (sqlquellen.py), dann gelten dessen Angaben.
+  - SQL_SERVER=${SQL_SERVER:-}
+  - SQL_USER=${SQL_USER:-}
+  - SQL_PASS=${SQL_PASS:-}
+  - SQL_DB=${SQL_DB:-}
+  - SQL_PORT=${SQL_PORT:-}
+  - SQL_TABLES=${SQL_TABLES:-}
+  - SQL_HINWEIS=${SQL_HINWEIS:-}
+  - SQL_MAX_ROWS=${SQL_MAX_ROWS:-}
+  - SQL_TIMEOUT=${SQL_TIMEOUT:-}
+  - SQL_SCHEMA_MAX_CHARS=${SQL_SCHEMA_MAX_CHARS:-}
+  - SQL_DEFAULT_ON=${SQL_DEFAULT_ON:-}
+  - SQL_MODEL=${SQL_MODEL:-}
+  - SQL_BASE_URL=${SQL_BASE_URL:-}
+  - SQL_API_KEY=${SQL_API_KEY:-}
   - LISTEN_WURZELN=${LISTEN_WURZELN:-}
   - TABELLEN_GROSS_AB=${TABELLEN_GROSS_AB:-}
   - TABELLEN_KOPF_SUCHEN=${TABELLEN_KOPF_SUCHEN:-}
