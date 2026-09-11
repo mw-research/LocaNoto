@@ -294,6 +294,28 @@ def dateien(pfad, endungen=None, tiefe=8):
     return sorted(gefunden, key=lambda d: d["rel"])
 
 
+def stand(fern):
+    """(groesse, etag) einer einzelnen Datei, oder None.
+
+    Gebraucht fuer Listen, die in ownCloud liegen: die Zusage lautet,
+    dass ergaenzte Zeilen in der naechsten Frage wirken. Bei einer
+    lokalen Datei kostet das ein stat(); hier ist es ein PROPFIND, und
+    das etag ist die Angabe, an der eine Aenderung haengt.
+
+    dateien() ueber den ganzen Ordner waere der einfachere Weg und der
+    falsche: er kostet einen Rundlauf JE VERZEICHNIS, auch wenn nur
+    eine Datei gefragt ist.
+    """
+    try:
+        with _sitzung() as s:
+            for name, ordner, groesse, etag, _g in _eintraege(s, fern):
+                if not ordner:
+                    return groesse, etag
+    except Exception:
+        return None
+    return None
+
+
 def hole(fern, ziel):
     """Laedt eine Datei herunter. Bytes."""
     os.makedirs(os.path.dirname(ziel), exist_ok=True)

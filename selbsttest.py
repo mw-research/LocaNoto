@@ -658,6 +658,54 @@ pruef("ein leerer Pfad entfernt den Eintrag",
                                ist_verwalter=True)[0]
       and listenquellen.pfad_von("einkauf") == "")
 
+# Eine Quelle IN ownCloud -- fuer Installationen ohne Netzlaufwerke.
+# Alles andere (SharePoint, OneDrive, S3) wird eingehaengt und ist dann
+# ein gewoehnlicher Pfad; nur ownCloud ist ohnehin angebunden.
+import owncloud as _oc
+_ferne = os.path.join(_netz, "wolke")
+os.makedirs(_ferne, exist_ok=True)
+with open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
+    _f.write("Artikel;Preis\nSchraube;0,12\n")
+
+_oc.eingerichtet = lambda: True
+_oc.dateien = lambda pfad, endungen=None, tiefe=8: [
+    {"rel": "preise.csv", "fern": "Listen/preise.csv",
+     "groesse": 30, "etag": _etag[0], "geaendert": ""}]
+_oc.hole = lambda fern, ziel: (
+    os.makedirs(os.path.dirname(ziel), exist_ok=True),
+    open(ziel, "wb").write(
+        open(os.path.join(_ferne, "preise.csv"), "rb").read()))[1]
+_oc.stand = lambda fern: (30, _etag[0])
+_etag = ["eins"]
+tabellen._zwischenspeicher.clear()
+
+pruef("eine ownCloud-Quelle wird angenommen",
+      listenquellen.setze_raum("allgemein", "owncloud:/Listen",
+                               benutzer="markus", ist_verwalter=True)[0])
+_kw, _fw = tabellen.baue_katalog()
+_we = [e for e in _kw["eintraege"] if e["raum"] == "allgemein"]
+pruef("und liefert einen Katalogeintrag", len(_we) == 1, _fw)
+pruef("der seine Herkunft kennt",
+      _we and _we[0]["wurzel"].startswith("owncloud:"),
+      _we[0]["wurzel"] if _we else "")
+_sp, _z = tabellen.fuehre_aus(_we[0]["datei"], _we[0].get("blatt") or "",
+                              "SELECT * FROM daten",
+                              wurzel=_we[0]["wurzel"])
+pruef("und die Zeilen kommen an", "Schraube" in str(_z), _z)
+
+# Die Frischezusage: geaenderte Zeilen wirken in der naechsten Frage,
+# ohne Neueinlesen. Bei einer lokalen Datei haengt das an mtime und
+# Groesse, hier am etag.
+with open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
+    _f.write("Artikel;Preis\nSchraube;0,99\n")
+_etag[0] = "zwei"
+_sp, _z2 = tabellen.fuehre_aus(_we[0]["datei"], _we[0].get("blatt") or "",
+                               "SELECT * FROM daten",
+                               wurzel=_we[0]["wurzel"])
+pruef("ein neues etag holt die Datei neu", "0,99" in str(_z2), _z2)
+listenquellen.setze_raum("allgemein", "", benutzer="markus",
+                         ist_verwalter=True)
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)

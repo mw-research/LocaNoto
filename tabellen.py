@@ -347,6 +347,82 @@ def _spaltenangaben(rahmen):
     return angaben
 
 
+# --- LISTEN, DIE NICHT IM DATEISYSTEM LIEGEN ---
+#
+# Eine Quelle mit dem Vorsatz "owncloud:" meint einen Pfad in der
+# angebundenen Instanz statt einen im Dateisystem. Gedacht fuer
+# Installationen ohne Netzlaufwerke -- wer eines hat, haengt es ein und
+# braucht das hier nicht.
+#
+# WARUM NICHT MEHR ALS DAS: SharePoint, OneDrive, S3 und was sonst noch
+# kommt, gehoeren nicht in diese Anwendung. Sie werden EINGEHAENGT --
+# mit rclone, davfs2 oder dem Mittel der Wahl --, und dann sind es
+# gewoehnliche Pfade. Das ist keine Notloesung, sondern die bessere:
+# rclone erledigt OAuth, Token-Erneuerung und Zwischenspeicherung, und
+# zwar besser, als ich es je nachbauen wuerde.
+#
+# ownCloud ist die eine Ausnahme, weil die Anbindung ohnehin da ist:
+# Anmeldung, WebDAV, Rundlauf. Es waere seltsam, dafuer eine
+# Einhaengung zu verlangen.
+#
+# DIE FRISCHE BLEIBT. Bei einer lokalen Datei haengt der
+# Zwischenspeicher an Aenderungszeit und Groesse; hier am etag, das ein
+# PROPFIND liefert. Wer in ownCloud Zeilen ergaenzt, sieht sie in der
+# naechsten Frage -- um den Preis eines Rundlaufs je Datei.
+WOLKE = "owncloud:"
+
+
+def _wolken_zwischenspeicher():
+    """Wo heruntergeladene Listen liegen. Ableitbar, also beim Index."""
+    p = os.path.join(paths.INDEX_DIR, "listen_wolke")
+    try:
+        os.makedirs(p, exist_ok=True)
+    except OSError:
+        pass
+    return p
+
+
+def _wolke_lokal(fern):
+    """Der lokale Name einer entfernten Datei. Stabil ueber Laeufe."""
+    import hashlib
+    kennung = hashlib.sha256(fern.encode("utf-8")).hexdigest()[:20]
+    return os.path.join(_wolken_zwischenspeicher(),
+                        kennung + os.path.splitext(fern)[1].lower())
+
+
+def _wolke_holen(fern, etag=""):
+    """Holt die Datei, wenn noetig. Lokaler Pfad, oder "" bei Fehlschlag.
+
+    Geholt wird nur bei einem anderen etag. Daneben liegt eine kleine
+    Datei mit dem zuletzt geholten Stand -- ohne sie muesste nach jedem
+    Neustart alles neu geladen werden, obwohl es unveraendert daliegt.
+    """
+    import owncloud
+    lokal = _wolke_lokal(fern)
+    marke = lokal + ".stand"
+    if not etag:
+        angabe = owncloud.stand(fern)
+        etag = (angabe or ("", ""))[1]
+    try:
+        with open(marke, encoding="utf-8") as f:
+            bekannt = f.read().strip()
+    except OSError:
+        bekannt = ""
+    if os.path.isfile(lokal) and etag and bekannt == etag:
+        return lokal
+    try:
+        owncloud.hole(fern, lokal)
+        with open(marke, "w", encoding="utf-8") as f:
+            f.write(etag)
+    except Exception:
+        # Eine nicht erreichbare Instanz darf die uebrigen Listen nicht
+        # kosten. Liegt eine aeltere Fassung da, ist sie besser als
+        # keine -- und dass sie aelter ist, faellt beim naechsten
+        # gelungenen Rundlauf von selbst weg.
+        return lokal if os.path.isfile(lokal) else ""
+    return lokal
+
+
 def quellen():
     """[(raum, ordner)] -- woher gelesen wird.
 
@@ -366,8 +442,51 @@ def quellen():
     return [(_ALLGEMEIN, pfad())]
 
 
+def _lies_wolke(ordner, raum, uebrig):
+    """Eine Quelle in ownCloud einlesen. (eintraege, fehler, gelesen)."""
+    import owncloud
+    fern_wurzel = ordner[len(WOLKE):].strip("/")
+    eintraege, fehler, gesehen = [], [], 0
+    try:
+        gefunden = owncloud.dateien(fern_wurzel, endungen=ENDUNGEN)
+    except Exception as e:
+        return [], [(ordner, f"Nicht erreichbar: {e}")], 0
+
+    for d in gefunden:
+        if os.path.basename(d["rel"]).startswith("~$"):
+            continue
+        gesehen += 1
+        if gesehen > uebrig:
+            fehler.append((ordner, f"Mehr als {MAX_DATEIEN} Dateien -- "
+                                   f"abgebrochen."))
+            break
+        lokal = _wolke_holen(d["fern"], d.get("etag", ""))
+        if not lokal:
+            fehler.append((d["rel"], "Nicht ladbar."))
+            continue
+        try:
+            for blatt, rahmen, kopf in _blaetter(lokal):
+                eintraege.append({
+                    "datei": d["rel"],
+                    "blatt": blatt,
+                    "raum": raum,
+                    "wurzel": ordner,
+                    "kopfzeile": kopf,
+                    "zeilen": int(len(rahmen)),
+                    "gross": len(rahmen) >= GROSS_AB,
+                    "spalten": _spaltenangaben(rahmen),
+                    "groesse": int(d.get("groesse") or 0),
+                    "geaendert": 0,
+                })
+        except Exception as e:
+            fehler.append((d["rel"], f"{type(e).__name__}: {e}"))
+    return eintraege, fehler, gesehen
+
+
 def _lies_ordner(ordner, raum, uebrig):
     """Ein Ordner in Katalogeintraege. (eintraege, fehler, gelesen)."""
+    if str(ordner).startswith(WOLKE):
+        return _lies_wolke(ordner, raum, uebrig)
     eintraege, fehler, gesehen = [], [], 0
     if not os.path.isdir(ordner):
         # Kein Fehlschlag des Ganzen: ein nicht eingehaengtes
@@ -820,10 +939,19 @@ def _lade(datei, blatt, wurzel=None):
     # Ordner: seit jede Quelle zu einem Raum gehoert, liegen zwei
     # Dateien gleichen Namens in verschiedenen Raeumen -- und "inventur.xlsx"
     # allein sagt nicht mehr, welche gemeint ist.
-    wurzel_ = os.path.realpath(wurzel or pfad())
-    voll = os.path.realpath(os.path.join(wurzel_, datei))
-    if not (voll == wurzel_ or voll.startswith(wurzel_ + os.sep)):
-        raise ValueError("Die Datei liegt ausserhalb ihrer Quelle.")
+    if str(wurzel or "").startswith(WOLKE):
+        # Der Rundlauf steht hier und nicht beim Katalogbau: die
+        # Frischezusage gilt fuer JEDE Frage, nicht fuer den Stand vom
+        # letzten Einlesen. _wolke_holen laedt nur bei anderem etag,
+        # der uebliche Fall ist also eine Anfrage und kein Download.
+        voll = _wolke_holen(wurzel[len(WOLKE):].strip("/") + "/" + datei)
+        if not voll:
+            raise ValueError(f"Nicht aus ownCloud ladbar: {datei}")
+    else:
+        wurzel_ = os.path.realpath(wurzel or pfad())
+        voll = os.path.realpath(os.path.join(wurzel_, datei))
+        if not (voll == wurzel_ or voll.startswith(wurzel_ + os.sep)):
+            raise ValueError("Die Datei liegt ausserhalb ihrer Quelle.")
     if not os.path.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
     stand = (voll, os.path.getmtime(voll), os.path.getsize(voll))
