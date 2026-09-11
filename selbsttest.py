@@ -1047,6 +1047,22 @@ pruef("damit faellt er aus der Liste der fremden Raeume",
       _prv in raeume.lesbar("markus", notzugang=(_prv,))
       and _prv not in raeume.lesbar("markus"))
 
+# UND ER DARF AUFRAEUMEN. Lesen allein genuegt nicht: der Notzugang
+# wird beantragt, weil ein Besitzer nicht mehr erreichbar ist -- dann
+# will jemand sichten, verschieben und den Rest loeschen.
+#
+# Beobachtet im Betrieb: der Raum stand mit Klarnamen in der
+# Dokumentenverwaltung ("Nur lesen.") und daneben mit Kennungen in der
+# Fremdenliste, und das EINZIGE, was ging, war Loeschen ueber die
+# Kennung -- also genau das, wovor die Kennungen schuetzen sollen.
+pruef("mit Notzugang darf er im Raum auch verwalten",
+      raeume.darf_schreiben("markus", _prv, True, (_prv,)))
+pruef("ohne Notzugang nicht -- auch als Verwalter nicht",
+      not raeume.darf_schreiben("markus", _prv, True))
+pruef("und ein anderer Raum wird davon nicht mit geoeffnet",
+      not raeume.darf_schreiben("markus", raeume.privat_kennung("chef"),
+                                True, (_prv,)))
+
 print()
 print("=== 20. Bilder werden zu Text ===")
 # Zwei Faelle, die verschieden sind und oft verwechselt werden: eine
