@@ -2102,9 +2102,22 @@ with st.sidebar:
             for f in _dateien:
                 st.caption(f"📄 {f}")
 
-            # Verwalten darf, wer den Raum schreiben darf.
+            # Verwalten darf, wer den Raum schreiben darf -- und dazu
+            # gehoert ein bestaetigter Notzugang.
+            #
+            # schreibbar() sagt das seit jeher ausdruecklich: der
+            # Notzugang ist zum AUFRAEUMEN da, und dafuer genuegt Lesen
+            # nicht. Uebergeben wurde er hier trotzdem nicht.
+            #
+            # Die Folge war ein Zustand, den niemand erklaeren kann:
+            # der Raum stand mit Klarnamen in der Dokumentenverwaltung
+            # und daneben mit Kennungen in der Fremdenliste, und das
+            # EINZIGE, was ging, war Loeschen ueber die Kennung. Also
+            # genau das, wovor die Kennungen schuetzen sollen -- der
+            # Weg hinein war ja von zwei Personen bestaetigt.
             _darf = raeume.darf_schreiben(st.session_state["username"], _r,
-                                          is_admin())
+                                          is_admin(),
+                                          tuple(mein_notzugang()))
             if not _darf:
                 st.caption("Nur lesen.")
                 continue
@@ -2115,7 +2128,8 @@ with st.sidebar:
             _spalte1, _spalte2 = st.columns(2)
             with _spalte1:
                 _andere = [x for x in raeume.schreibbar(
-                    st.session_state["username"], is_admin()) if x != _r]
+                    st.session_state["username"], is_admin(),
+                    tuple(mein_notzugang())) if x != _r]
                 _nach = st.selectbox("verschieben nach:",
                                      ["-"] + _andere,
                                      format_func=lambda x: (
