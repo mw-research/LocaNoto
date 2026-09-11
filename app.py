@@ -135,6 +135,17 @@ def sitzung_abgelaufen():
 # die erste eigene Frage speicherte ihn unter dem neuen Namen. Die
 # Verschluesselung half nicht: die Kopie war fuer den Neuen
 # verschluesselt.
+# Eine gueltige Bescheinigung aus der Adresszeile gilt wie eine
+# Anmeldung. Geprueft wird sie in benutzer.pruefe_merkzettel: Frist,
+# Unterschrift, und ob es den Zugang ueberhaupt noch gibt -- ein
+# geloeschter Zugang ist sofort draussen, auch wenn die Frist laeuft.
+if "username" not in st.session_state:
+    _wer = benutzer.pruefe_merkzettel(st.query_params.get("sitzung", ""))
+    if _wer:
+        st.session_state["username"] = _wer
+        st.session_state["letzte_tat"] = time.time()
+
+
 SITZUNGSSCHLUESSEL = ("username", "letzte_tat", "current_chat_id",
                       "messages", "last_loaded_chat", "chat_besitzer",
                       "pdf_upload_nr", "listen_upload_nr")
@@ -144,6 +155,14 @@ def beende_sitzung():
     """Alles vergessen, was zu dieser Anmeldung gehoert."""
     for schluessel in SITZUNGSSCHLUESSEL:
         st.session_state.pop(schluessel, None)
+    # Auch die Bescheinigung aus der Adresszeile. Ohne das waere
+    # Abmelden eine Geste: der naechste Aufbau loeste sie wieder ein,
+    # und wer sich abmeldet, weil er den Rechner verlaesst, waere
+    # weiter angemeldet.
+    try:
+        del st.query_params["sitzung"]
+    except (KeyError, Exception):
+        pass
 
 
 if "username" in st.session_state and sitzung_abgelaufen():
@@ -185,6 +204,14 @@ if "username" not in st.session_state:
                 if benutzer.pruefe(login_user, login_pass):
                     st.session_state["username"] = login_user
                     st.session_state["letzte_tat"] = time.time()
+                    # Befristete Bescheinigung in die Adresszeile, damit
+                    # ein Neuladen nicht wieder vor der Anmeldemaske
+                    # endet. Nur wenn der Betreiber es eingeschaltet
+                    # hat -- sie steht sichtbar in der Adresse, und wer
+                    # die Adresse weitergibt, gibt die Anmeldung mit.
+                    _zettel = benutzer.merkzettel(login_user)
+                    if _zettel:
+                        st.query_params["sitzung"] = _zettel
                     st.rerun()
                 else:
                     st.error("Anmeldung fehlgeschlagen.")
@@ -806,8 +833,20 @@ def _quellen_klickbar(text, quellen, nr):
         k = wohin.get((name.lower(), seite))
         if k is None:
             return treffer.group(0)
-        ziel = f"{nr}-{k}"
-        return f"[{name}, Seite {seite}](?quelle={ziel}#q{ziel})"
+        # NUR die Sprungmarke, kein Abfrageparameter.
+        #
+        # Mit "?quelle=..." war es fuer den Browser ein Verweis auf
+        # eine ANDERE Adresse, und Streamlit oeffnet solche in einem
+        # neuen Tab. Dort ist die Sitzung leer -- man landete also bei
+        # der Anmeldemaske statt bei der Fundstelle. Die Bequemlichkeit
+        # kostete genau das, wofuer sie gedacht war.
+        #
+        # Eine reine Sprungmarke bleibt im Tab. Der Preis: der
+        # Aufklapper geht nicht von selbst auf -- dafuer braeuchte der
+        # Server den Klick, und ein Klick, der den Server erreicht, ist
+        # eine Navigation. Springen und einmal klicken ist besser als
+        # springen, sich neu anmelden und dann suchen.
+        return f"[{name}, Seite {seite}](#q{nr}-{k})"
 
     # NICHT in Codebloecke hineinschreiben. Dort ist "[a, Seite 3]"
     # kein Beleg, sondern Code -- ein Markdown-Verweis mittendrin
@@ -3459,7 +3498,11 @@ if _bestand > 0:
                 st.markdown("---")
                 st.markdown("📚 **Verwendete Quellen:**")
                 
-                _gewuenscht = str(st.query_params.get("quelle") or "")
+                # Kein Abfrageparameter mehr (siehe _quellen_klickbar).
+                # Der erste Aufklapper steht offen: nach dem Sprung
+                # sieht man damit sofort Text und nicht nur eine
+                # geschlossene Leiste.
+                _gewuenscht = ""
                 for _k, source in enumerate(msg["sources"]):
                     file_n = source["file"]
                     page_n = source["page"]
@@ -3472,7 +3515,8 @@ if _bestand > 0:
                     st.markdown(f'<div id="q{_ziel}"></div>',
                                 unsafe_allow_html=True)
                     with st.expander(f"📄 {file_n} (Seite {page_n})",
-                                     expanded=(_gewuenscht == _ziel)):
+                                     expanded=(_gewuenscht == _ziel
+                                               or _k == 0)):
                         for t in source["texts"]:
                             st.info(t)
                         
