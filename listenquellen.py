@@ -104,6 +104,20 @@ def pruefe_pfad(p):
     p = (p or "").strip()
     if not p:
         return False, "Kein Pfad angegeben."
+    if p.startswith("owncloud:"):
+        # Eine Quelle in der angebundenen Instanz. Die Wurzeln und die
+        # Sperre auf die eigenen Verzeichnisse gelten hier nicht: es
+        # ist kein Dateisystempfad, und was das Dienstkonto dort
+        # erreicht, entscheidet ownCloud.
+        import owncloud
+        if not owncloud.eingerichtet():
+            return False, ("Fuer eine ownCloud-Quelle muss die Anbindung "
+                           "eingerichtet sein (OWNCLOUD_URL, "
+                           "OWNCLOUD_USER, OWNCLOUD_PASSWORT).")
+        if not p[len("owncloud:"):].strip("/"):
+            return False, "Kein Pfad hinter 'owncloud:'."
+        return True, ""
+
     probe = p.replace(PLATZHALTER, "platzhalter")
     if not os.path.isabs(probe):
         return False, "Ein absoluter Pfad, bitte -- relative Angaben " \
