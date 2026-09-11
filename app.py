@@ -1001,7 +1001,7 @@ def fremde_raeume(current_user):
     return sorted(aus)
 
 
-def process_uploaded_pdf(uploaded_file, raum):
+def process_uploaded_pdf(uploaded_file, raum, projekt=""):
     """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
     vektorisiert beides.
 
@@ -1041,6 +1041,12 @@ def process_uploaded_pdf(uploaded_file, raum):
     dateiname = paths.sicherer_dateiname(uploaded_file.name)
     ziel_ordner = (DOCS_DIR if raum == raeume.ALLGEMEIN
                    else paths.raum_ordner(raum))
+    # Ein Projektordner sortiert innerhalb des Raums. Der Name wird
+    # entschaerft, nicht abgelehnt: wer "Angebot / Meier" tippt, meint
+    # einen Ordner und keinen Pfad.
+    projekt = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]", "", str(projekt or "")).strip()
+    if projekt:
+        ziel_ordner = os.path.join(ziel_ordner, projekt)
     os.makedirs(ziel_ordner, exist_ok=True)
 
     # Im Wurzelbereich kann trotzdem noch etwas im Weg liegen -- eine
@@ -1093,7 +1099,7 @@ def process_uploaded_pdf(uploaded_file, raum):
                 chunks.append(chunk)
                 metadatas.append({
                     "file_name": dateiname, "page": nummer,
-                    "raum": raum,
+                    "raum": raum, "folder": projekt,
                     "access": "shared" if raum == raeume.ALLGEMEIN
                               else "private",
                     "owner": st.session_state["username"], "type": "text"})
@@ -1122,6 +1128,7 @@ def process_uploaded_pdf(uploaded_file, raum):
                     "file_name": dateiname,
                     "page": page_num + 1,
                     "raum": raum,
+                    "folder": projekt,
                     "owner": st.session_state["username"],
                     "type": "table"
                 })
@@ -1143,6 +1150,7 @@ def process_uploaded_pdf(uploaded_file, raum):
                     "file_name": dateiname,
                     "page": page_num + 1,
                     "raum": raum,
+                    "folder": projekt,
                     "owner": st.session_state["username"],
                     "type": "text"
                 })
@@ -1414,12 +1422,38 @@ with st.sidebar:
         help="Leer lassen, um alle Räume zu durchsuchen, die du sehen "
              "darfst."
     ) if len(raum_optionen) > 1 else []
+    # --- PROJEKT ---
+    #
+    # Eine Stufe zwischen Raum und Datei, und nur im eigenen Raum. Es
+    # schraenkt ueber die DATEIEN ein und nicht ueber einen eigenen
+    # Filter: dann gibt es genau einen Weg, auf dem die Suche
+    # eingegrenzt wird, und keinen zweiten, den jemand zu pflegen
+    # vergisst.
+    _mein_raum_f = raeume.privat_kennung(st.session_state["username"])
+    _projekte = {k: v for k, v in
+                 pipeline.projekte(st.session_state["username"],
+                                   _mein_raum_f,
+                                   notzugang=mein_notzugang()).items() if k}
+    _projekt_dateien = []
+    if _projekte:
+        _gewaehlt_p = st.multiselect(
+            "Projekt:", options=sorted(_projekte), default=[],
+            help="Nur im eigenen Raum. Leer lassen, um alles zu "
+                 "durchsuchen.")
+        for _p in _gewaehlt_p:
+            _projekt_dateien += _projekte[_p]
+
     selected_docs = st.multiselect(
         "Suche beschränken auf:", 
         options=all_available_files,
         default=[],
         help="Leer lassen, um in allen Dokumenten zu suchen."
     )
+    # Ein gewaehltes Projekt wirkt wie eine Dateiauswahl. Beides
+    # zugleich waere ein Widerspruch, den niemand aufloest -- deshalb
+    # gewinnt die ausdrueckliche Dateiauswahl.
+    if _projekt_dateien and not selected_docs:
+        selected_docs = _projekt_dateien
 
 
     # --- LISTEN ---
@@ -1852,10 +1886,30 @@ with st.sidebar:
             st.caption("Sichtbar für alle." if "*" in _m
                        else f"Sichtbar für {len(_m)} Mitglieder.")
 
+        # PROJEKT -- nur im eigenen Raum, und nur zum Sortieren.
+        #
+        # Wer viele Vorgaenge hat, will eine Frage zu Projekt B
+        # stellen, ohne dass A mitantwortet. Das ist keine
+        # Rechtefrage, sondern eine der Menge: ein Modell, das zwoelf
+        # Abschnitte aus fuenf Vorgaengen bekommt, mischt sie.
+        #
+        # Geteilt wird ueber Raeume. Ein Ordner, der aussieht wie ein
+        # Recht und keines ist, war schon einmal da und hiess
+        # Sachgebiet.
+        _projekt = ""
+        if ziel_raum == _mein:
+            _bekannt = [p for p in pipeline.projekte(
+                st.session_state["username"], _mein) if p]
+            _projekt = st.text_input(
+                "Projekt (optional)", value="", key="upload_projekt",
+                help="Sortiert im eigenen Raum. Vorhandene: "
+                     + (", ".join(_bekannt) if _bekannt else "noch keine"))
+
         if st.button("Hochladen & Vektorisieren"):
             with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
                 raeume.sichere_anlage_privat(st.session_state["username"])
-                _n, _hinweis = process_uploaded_pdf(uploaded_file, ziel_raum)
+                _n, _hinweis = process_uploaded_pdf(
+                    uploaded_file, ziel_raum, _projekt)
             refresh_document_index()
             if _n:
                 st.success(f"'{uploaded_file.name}' in "

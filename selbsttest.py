@@ -792,7 +792,42 @@ pruef("Verweise entstehen nur ausserhalb der Codebloecke",
 pruef("und der Code bleibt unangetastet",
       "# [a.pdf, Seite 3] ist hier Code" in _aus3)
 
-print("=== 15. Angemeldet bleiben, aber befristet ===")
+print("=== 15. Projekte im eigenen Raum ===")
+# Zum Sortieren, nicht zum Teilen. Wer viele Vorgaenge im eigenen Raum
+# hat, will eine Frage zu Projekt B stellen, ohne dass A mitantwortet
+# -- das ist keine Rechtefrage, sondern eine der Menge: ein Modell,
+# das zwoelf Abschnitte aus fuenf Vorgaengen bekommt, mischt sie.
+_pr = raeume.privat_kennung("anna")
+_sml_p = store.sammlung(raeume.sammlung(_pr))
+for _datei, _proj in (("Angebot_A.pdf", "ProjektA"),
+                      ("Plan_A.pdf", "ProjektA"),
+                      ("Angebot_B.pdf", "ProjektB"),
+                      ("Lose.pdf", "")):
+    store.schreibe(_sml_p, [f"{_datei}_p1"],
+                   documents=[f"Inhalt von {_datei}"],
+                   metadatas=[{"file_name": _datei, "page": 1,
+                               "raum": _pr, "folder": _proj}],
+                   embeddings=[vek()])
+_p = pipeline.projekte("anna", _pr)
+# Nicht auf Gleichheit pruefen: in diesem Raum liegt aus einem
+# frueheren Abschnitt schon etwas anderes. Ein Test, der an fremdem
+# Bestand scheitert, prueft die Testreihenfolge und nicht die
+# Funktion.
+pruef("die Projekte kommen aus den Ordnerangaben",
+      {"ProjektA", "ProjektB"} <= set(_p), sorted(_p))
+pruef("und jedes kennt seine Dateien",
+      _p["ProjektA"] == ["Angebot_A.pdf", "Plan_A.pdf"], _p.get("ProjektA"))
+pruef("was ohne Projekt liegt, faellt nicht weg",
+      _p.get("") == ["Lose.pdf"], _p.get(""))
+# Ein Projekt ist KEINE Berechtigung. Geteilt wird ueber Raeume; ein
+# Ordner, der aussieht wie ein Recht und keines ist, war schon einmal
+# da und hiess Sachgebiet.
+pruef("ein Fremder sieht die Projekte nicht",
+      pipeline.projekte("markus", _pr) == {},
+      pipeline.projekte("markus", _pr))
+
+print()
+print("=== 16. Angemeldet bleiben, aber befristet ===")
 # Streamlit haelt die Sitzung im Arbeitsspeicher des Browser-Tabs --
 # beim Neuladen ist sie weg. Die Bescheinigung traegt Name, Ablauf und
 # Unterschrift; sie steht in der Adresszeile, und wer die Adresse
@@ -834,7 +869,7 @@ pruef("nach dem Loeschen nicht mehr",
 benutzer.MERKEN_STUNDEN = 0
 
 print()
-print("=== 16. Ein Datenbankkonto je Raum ===")
+print("=== 17. Ein Datenbankkonto je Raum ===")
 # Bis hierher lief jede Frage ueber EIN Konto aus der .env. Damit
 # entscheidet die Anwendung, wer was sehen darf -- und sie entscheidet
 # es fuer die Datenbank mit, obwohl die es selbst besser weiss.
