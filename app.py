@@ -325,6 +325,57 @@ def save_chat(chat_id, messages, titel=None):
     chats.speichere(st.session_state["username"], chat_id, messages, titel)
 
 
+def _anzeigefertig(text):
+    """Markdown, das AUCH halbfertig richtig aussieht.
+
+    Ein Codeblock beginnt mit ``` und endet mit ```. Waehrend er
+    geschrieben wird, ist der zweite noch nicht da -- und Markdown
+    zeigt bis dahin rohen Text mit drei Anfuehrungszeichen davor.
+    Gerade bei Code ist das die haesslichste Art zu warten: man sieht
+    eine Minute lang Zeilen ohne Einrueckung und ohne Faerbung, und
+    erst am Ende springt alles in Form.
+
+    Eine ungerade Zahl von Zaeunen bekommt deshalb einen
+    Schlusszaun -- nur fuer die Anzeige. Gespeichert wird der
+    unveraenderte Text.
+    """
+    if text.count("```") % 2:
+        return text + "\n" + "``" + "`"
+    return text
+
+
+def _strom_zeichnen(strom, kennung, bisher, takt=2.0):
+    """Zeichnet die Antwort waehrend sie entsteht. Gibt sie zurueck.
+
+    Ersetzt st.write_stream: das kann den Text nicht anfassen, bevor
+    es ihn zeigt, und genau das ist hier noetig -- ein halber
+    Codeblock muss beim Zeichnen geschlossen werden, beim Speichern
+    nicht.
+
+    Der Mitschnitt bleibt: alle paar Sekunden wird abgelegt, was schon
+    da ist. Bricht der Lauf ab, ist die Antwort nicht verloren.
+    """
+    platz = st.empty()
+    teile = []
+    letzte = time.time()
+    for stueck in strom:
+        teile.append(stueck if isinstance(stueck, str) else str(stueck))
+        platz.markdown(_anzeigefertig("".join(teile)))
+        if time.time() - letzte >= takt:
+            letzte = time.time()
+            try:
+                save_chat(kennung, bisher + [{"role": "assistant",
+                                              "content": "".join(teile),
+                                              "unvollstaendig": True}])
+            except Exception:
+                # Ein misslungener Zwischenstand darf die Antwort nicht
+                # kosten -- sie laeuft ja gerade.
+                pass
+    ganz = "".join(teile)
+    platz.markdown(_anzeigefertig(ganz))
+    return ganz
+
+
 def _mitschreiben(strom, kennung, bisher, takt=2.0):
     """Gibt den Strom weiter UND legt ihn unterwegs ab.
 
@@ -758,7 +809,15 @@ def _quellen_klickbar(text, quellen, nr):
         ziel = f"{nr}-{k}"
         return f"[{name}, Seite {seite}](?quelle={ziel}#q{ziel})"
 
-    return _QUELLENMUSTER.sub(ersetze, text)
+    # NICHT in Codebloecke hineinschreiben. Dort ist "[a, Seite 3]"
+    # kein Beleg, sondern Code -- ein Markdown-Verweis mittendrin
+    # zerstoert ihn, und beim Kopieren merkt man es erst, wenn es
+    # nicht laeuft.
+    aus, offen = [], False
+    for teil in text.split("```"):
+        aus.append(teil if offen else _QUELLENMUSTER.sub(ersetze, teil))
+        offen = not offen
+    return "```".join(aus)
 
 
 def _loeschfreigabe(kennung, zahl, key):
@@ -3652,14 +3711,14 @@ if _bestand > 0:
                         st.write("Keine Chunks gefunden.")
 
                 # --- 4. ANTWORT ---
-                answer = st.write_stream(_mitschreiben(
+                answer = _strom_zeichnen(
                     pipeline.antwort(
                         chat_client, chat_model,
                         pipeline.systemprompt(dynamic_context,
                                               aktives_preset),
                         st.session_state.messages),
                     st.session_state.current_chat_id,
-                    list(st.session_state.messages)))
+                    list(st.session_state.messages))
 
                 # --- 5. QUELLEN SPEICHERN ---
                 st.session_state.messages.append({

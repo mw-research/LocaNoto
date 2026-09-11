@@ -759,6 +759,35 @@ pruef("ohne Quellen bleibt der Text unveraendert",
       _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
       == "Dort [infraUser.pdf, Seite 5666].")
 
+# Codebloecke. Waehrend ein Block geschrieben wird, fehlt sein
+# Schlusszaun -- und Markdown zeigt bis dahin rohen Text mit drei
+# Anfuehrungszeichen davor. Gerade bei Code ist das die haesslichste
+# Art zu warten.
+_a3 = _quelle.index("def _anzeigefertig(")
+_raum3 = {}
+exec(_quelle[_a3:_quelle.index("\ndef _strom_zeichnen(")], _raum3)
+_fertig = _raum3["_anzeigefertig"]
+_zaun = "`" * 3
+_halb = "Hier:\n" + _zaun + "python\ndef gruss():\n    print("
+_ganz = _halb + "'hallo')\n" + _zaun
+pruef("ein halber Codeblock wird fuer die Anzeige geschlossen",
+      _fertig(_halb).count(_zaun) == 2)
+pruef("ein fertiger bleibt unveraendert", _fertig(_ganz) == _ganz)
+pruef("und Text ohne Code auch", _fertig("nur Text") == "nur Text")
+
+# Und ein Verweis darf nicht IN den Codeblock geschrieben werden --
+# dort ist "[a.pdf, Seite 3]" kein Beleg, sondern Code. Ein
+# Markdown-Verweis mittendrin zerstoert ihn, und beim Kopieren merkt
+# man es erst, wenn es nicht laeuft.
+_mit_code = ("Steht in [a.pdf, Seite 3].\n" + _zaun + "python\n"
+             "# [a.pdf, Seite 3] ist hier Code\n" + _zaun
+             + "\nUnd [a.pdf, Seite 3].")
+_aus3 = _klick(_mit_code, [{"file": "a.pdf", "page": 3}], 1)
+pruef("Verweise entstehen nur ausserhalb der Codebloecke",
+      _aus3.count("?quelle=") == 2, _aus3.count("?quelle="))
+pruef("und der Code bleibt unangetastet",
+      "# [a.pdf, Seite 3] ist hier Code" in _aus3)
+
 print("=== 15. Ein Datenbankkonto je Raum ===")
 # Bis hierher lief jede Frage ueber EIN Konto aus der .env. Damit
 # entscheidet die Anwendung, wer was sehen darf -- und sie entscheidet
