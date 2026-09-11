@@ -440,6 +440,33 @@ def quellen(treffer):
             for (raum, datei, seite), texte in gesammelt.items()]
 
 
+def projekte(benutzer, raum, notzugang=()):
+    """{projekt: [dateien]} eines Raums, aus dem Ordner je Datei.
+
+    Zum SORTIEREN, nicht zum Teilen. Wer viele Vorgaenge im eigenen
+    Raum hat, will eine Frage zu Projekt B stellen, ohne dass A
+    mitantwortet -- und das ist keine Rechtefrage, sondern eine der
+    Menge: ein Modell, das zwoelf Abschnitte aus fuenf Vorgaengen
+    bekommt, mischt sie.
+
+    Eine Berechtigung ist das ausdruecklich NICHT. Geteilt wird ueber
+    Raeume; ein Ordner, der aussieht wie ein Recht und keines ist, war
+    schon einmal da und hiess Sachgebiet.
+    """
+    aus = {}
+    for r, sml in sammlungen(benutzer, nur=[raum], notzugang=notzugang):
+        try:
+            daten = sml.get(include=["metadatas"])
+        except Exception:
+            continue
+        for m in store.metadaten_klartext(r, daten.get("metadatas") or []):
+            if not m or not m.get("file_name"):
+                continue
+            aus.setdefault(str(m.get("folder") or ""), set()).add(
+                m["file_name"])
+    return {k: sorted(v) for k, v in sorted(aus.items())}
+
+
 def dokumente(benutzer, nur=None, notzugang=()):
     """Welche Dokumente dieser Nutzer sehen darf, je Raum.
 
