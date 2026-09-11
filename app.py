@@ -692,6 +692,45 @@ def remove_pdf_if_orphaned(filename, raum=None):
     return True
 
 
+_QUELLENMUSTER = re.compile(
+    r"\[([^\[\]]{1,120}?),\s*(?:Seite|S\.)\s*(\d+)\]")
+
+
+def _quellen_klickbar(text, quellen, nr):
+    """Macht "[Datei, Seite 12]" im Antworttext anklickbar.
+
+    Zwei Dinge auf einmal, weil eines allein nicht genuegt:
+    der Anker (#q...) springt an die Stelle, der Abfrageparameter
+    (?quelle=...) loest einen Lauf aus, in dem sich der richtige
+    Aufklapper oeffnet. Ohne den Anker landet man oben, ohne den
+    Parameter vor einem zugeklappten Kasten.
+
+    Nur Verweise, zu denen es WIRKLICH eine Quelle gibt, werden zu
+    Verweisen. Ein Modell nennt gelegentlich eine Seite, die es aus dem
+    Zusammenhang erschlossen hat; ein Link, der ins Leere fuehrt, ist
+    schlechter als gar keiner, weil er Nachpruefbarkeit vortaeuscht.
+    """
+    if not quellen or not text:
+        return text
+
+    wohin = {}
+    for k, q in enumerate(quellen):
+        name = str(q.get("file") or "").strip().lower()
+        seite = str(q.get("page") or "").strip()
+        if name:
+            wohin[(name, seite)] = k
+
+    def ersetze(treffer):
+        name, seite = treffer.group(1).strip(), treffer.group(2).strip()
+        k = wohin.get((name.lower(), seite))
+        if k is None:
+            return treffer.group(0)
+        ziel = f"{nr}-{k}"
+        return f"[{name}, Seite {seite}](?quelle={ziel}#q{ziel})"
+
+    return _QUELLENMUSTER.sub(ersetze, text)
+
+
 def _loeschfreigabe(kennung, zahl, key):
     """Freigabe fuer einen Loeschvorgang, der einen ganzen Raum trifft.
 
@@ -3127,7 +3166,11 @@ if _bestand > 0:
                 rohbild = vision.lade(bild)
                 if rohbild:
                     st.image(rohbild, width=360)
-            st.write(msg["content"])
+            if msg["role"] == "assistant":
+                st.write(_quellen_klickbar(msg["content"],
+                                           msg.get("sources"), i))
+            else:
+                st.write(msg["content"])
             if msg.get("unvollstaendig"):
                 # Ein Zwischenstand, dessen Strom abgebrochen ist. Ohne
                 # diesen Hinweis saehe ein mitten im Satz endender Text
@@ -3175,11 +3218,20 @@ if _bestand > 0:
                 st.markdown("---")
                 st.markdown("📚 **Verwendete Quellen:**")
                 
-                for source in msg["sources"]:
+                _gewuenscht = str(st.query_params.get("quelle") or "")
+                for _k, source in enumerate(msg["sources"]):
                     file_n = source["file"]
                     page_n = source["page"]
                     
-                    with st.expander(f"📄 {file_n} (Seite {page_n})"):
+                    # Ein leerer Anker davor: darauf springt der
+                    # Browser, wenn der Verweis im Text angeklickt
+                    # wurde. Streamlit vergibt keine eigenen
+                    # Sprungmarken fuer Aufklapper.
+                    _ziel = f"{i}-{_k}"
+                    st.markdown(f'<div id="q{_ziel}"></div>',
+                                unsafe_allow_html=True)
+                    with st.expander(f"📄 {file_n} (Seite {page_n})",
+                                     expanded=(_gewuenscht == _ziel)):
                         for t in source["texts"]:
                             st.info(t)
                         

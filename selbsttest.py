@@ -730,6 +730,35 @@ pruef("die Verwaltungsansicht zeigt Kennungen statt Namen",
 pruef("und schliesst die Namen NICHT auf",
       "metadaten_klartext" not in _rumpf)
 
+# Anklickbare Quellenangaben. Die Funktion liegt im Streamlit-Skript
+# und laesst sich nicht importieren -- also aus dem Quelltext holen
+# und mit echten Werten ausfuehren. Das prueft Verhalten, nicht
+# Schreibweise.
+_a2 = _quelle.index("_QUELLENMUSTER = re.compile(")
+import re as _re
+_raum2 = {"re": _re}
+exec(_quelle[_a2:_quelle.index("\ndef _loeschfreigabe(")], _raum2)
+_klick = _raum2["_quellen_klickbar"]
+_qu = [{"file": "infraUser.pdf", "page": 5666},
+       {"file": "infraExpert.pdf", "page": 7809}]
+_aus = _klick("Dort [infraUser.pdf, Seite 5666] und auch "
+              "[infraExpert.pdf, S. 7809].", _qu, 3)
+pruef("Quellenangaben werden zu Verweisen",
+      _aus.count("?quelle=") == 2, _aus)
+pruef("und zeigen auf die richtige Stelle",
+      "?quelle=3-0#q3-0" in _aus and "?quelle=3-1#q3-1" in _aus, _aus)
+
+# Ein Modell nennt gelegentlich eine Seite, die es aus dem
+# Zusammenhang erschlossen hat. Ein Verweis, der ins Leere fuehrt,
+# ist schlechter als gar keiner -- er taeuscht Nachpruefbarkeit vor.
+_erfunden = _klick("Steht in [infraUser.pdf, Seite 99] und in "
+                   "[Erfunden.pdf, Seite 5666].", _qu, 3)
+pruef("eine erfundene Fundstelle wird NICHT verlinkt",
+      "?quelle=" not in _erfunden, _erfunden)
+pruef("ohne Quellen bleibt der Text unveraendert",
+      _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
+      == "Dort [infraUser.pdf, Seite 5666].")
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
