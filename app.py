@@ -11,6 +11,7 @@ import sicherheit
 import store
 import keyword_index
 import listenquellen
+import quellticket
 import sqldb
 import sqlquellen
 import llm
@@ -833,7 +834,24 @@ def _quellen_klickbar(text, quellen, nr):
         k = wohin.get((name.lower(), seite))
         if k is None:
             return treffer.group(0)
-        # NUR die Sprungmarke, kein Abfrageparameter.
+        # EIN EIGENER TAB, mit einem Ticket statt einer Anmeldung.
+        #
+        # Ein neuer Tab ist eine neue Sitzung -- dort ist niemand
+        # angemeldet. Die Anmeldung mitzugeben waere der naheliegende
+        # Weg und der falsche: sie stuende in jedem Quellenverweis,
+        # also in jeder Antwort, und wer eine Antwort weiterleitet,
+        # gaebe seine Anmeldung mit.
+        #
+        # Ein Ticket nennt genau eine Fundstelle und gilt Minuten. Es
+        # entsteht beim ZEICHNEN, nicht beim Speichern: ein alter Chat
+        # traegt weiter den blossen Text und bekommt beim Ansehen ein
+        # frisches.
+        _tk = quellticket.stelle_aus(
+            (quellen[k] or {}).get("raum") or raeume.ALLGEMEIN,
+            name, seite, st.session_state.get("username", ""))
+        if _tk:
+            return f"[{name}, Seite {seite}](quelle?t={_tk})"
+        # Ohne Schluessel kein Ticket -- dann bleibt die Sprungmarke.
         #
         # Mit "?quelle=..." war es fuer den Browser ein Verweis auf
         # eine ANDERE Adresse, und Streamlit oeffnet solche in einem

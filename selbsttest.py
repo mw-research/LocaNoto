@@ -736,21 +736,36 @@ pruef("und schliesst die Namen NICHT auf",
 # Schreibweise.
 _a2 = _quelle.index("_QUELLENMUSTER = re.compile(")
 import re as _re
-_raum2 = {"re": _re}
+import types as _types
+import quellticket as _qt
+# Die Funktion lebt im Streamlit-Skript und laesst sich nicht
+# importieren. Sie bekommt hier dieselben Nachbarn wie dort -- nur
+# Streamlit selbst ist eine Attrappe, denn gebraucht wird davon genau
+# der angemeldete Name.
+_raum2 = {"re": _re, "quellticket": _qt, "raeume": raeume,
+          "st": _types.SimpleNamespace(session_state={"username": "anna"})}
 exec(_quelle[_a2:_quelle.index("\ndef _loeschfreigabe(")], _raum2)
 _klick = _raum2["_quellen_klickbar"]
-_qu = [{"file": "infraUser.pdf", "page": 5666},
-       {"file": "infraExpert.pdf", "page": 7809}]
+_qu = [{"file": "infraUser.pdf", "page": 5666, "raum": "einkauf"},
+       {"file": "infraExpert.pdf", "page": 7809, "raum": "einkauf"}]
 _aus = _klick("Dort [infraUser.pdf, Seite 5666] und auch "
               "[infraExpert.pdf, S. 7809].", _qu, 3)
 pruef("Quellenangaben werden zu Verweisen",
-      _aus.count("](#q") == 2, _aus)
-# NUR eine Sprungmarke, kein Abfrageparameter: mit Parameter war es
-# fuer den Browser eine andere Adresse, und Streamlit oeffnet solche
-# in einem neuen Tab -- dort ist die Sitzung leer, man landete bei der
-# Anmeldemaske statt bei der Fundstelle.
-pruef("und zwar als reine Sprungmarke, ohne Parameter",
-      "(#q3-0)" in _aus and "(#q3-1)" in _aus and "?" not in _aus, _aus)
+      _aus.count("](quelle?t=") == 2, _aus[:120])
+# Der Verweis traegt ein TICKET und nicht die Anmeldung. Sonst stuende
+# sie in jeder Antwort, und wer eine Antwort weiterleitet, gaebe seine
+# Anmeldung mit.
+# Geprueft wird, dass KEINE Anmeldung mitfaehrt. Den Namen traegt
+# das Ticket sehr wohl -- er ist kein Geheimnis, und er ist
+# noetig, weil beim Einloesen die Berechtigung genau dieses
+# Nutzers geprueft wird. Eine Pruefung, die mehr behauptet, als
+# sie prueft, ist schlimmer als keine.
+pruef("und zwar mit einem Ticket, nicht mit der Anmeldung",
+      "sitzung=" not in _aus, _aus[:120])
+_tk2 = _aus.split("quelle?t=")[1].split(")")[0]
+pruef("das Ticket nennt genau diese Fundstelle",
+      (_qt.loese_ein(_tk2) or {}).get("datei") == "infraUser.pdf",
+      _qt.loese_ein(_tk2))
 
 # Ein Modell nennt gelegentlich eine Seite, die es aus dem
 # Zusammenhang erschlossen hat. Ein Verweis, der ins Leere fuehrt,
@@ -758,7 +773,7 @@ pruef("und zwar als reine Sprungmarke, ohne Parameter",
 _erfunden = _klick("Steht in [infraUser.pdf, Seite 99] und in "
                    "[Erfunden.pdf, Seite 5666].", _qu, 3)
 pruef("eine erfundene Fundstelle wird NICHT verlinkt",
-      "](#q" not in _erfunden, _erfunden)
+      "](quelle?t=" not in _erfunden, _erfunden)
 pruef("ohne Quellen bleibt der Text unveraendert",
       _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
       == "Dort [infraUser.pdf, Seite 5666].")
@@ -788,7 +803,8 @@ _mit_code = ("Steht in [a.pdf, Seite 3].\n" + _zaun + "python\n"
              + "\nUnd [a.pdf, Seite 3].")
 _aus3 = _klick(_mit_code, [{"file": "a.pdf", "page": 3}], 1)
 pruef("Verweise entstehen nur ausserhalb der Codebloecke",
-      _aus3.count("](#q") == 2, _aus3.count("](#q"))
+      _aus3.count("](quelle?t=") == 2,
+      _aus3.count("](quelle?t="))
 pruef("und der Code bleibt unangetastet",
       "# [a.pdf, Seite 3] ist hier Code" in _aus3)
 
@@ -827,7 +843,36 @@ pruef("ein Fremder sieht die Projekte nicht",
       pipeline.projekte("markus", _pr))
 
 print()
-print("=== 16. Angemeldet bleiben, aber befristet ===")
+print("=== 16. Ein Ticket fuer eine Fundstelle ===")
+# Ein Verweis oeffnet die Quelle in einem eigenen Tab -- und ein neuer
+# Tab ist eine neue Sitzung. Die Anmeldung mitzugeben waere der
+# naheliegende Weg und der falsche: sie stuende in jeder Antwort, und
+# wer eine Antwort weiterleitet, gaebe seine Anmeldung mit.
+import quellticket
+_tk = quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "anna")
+pruef("ein Ticket wird ausgestellt", bool(_tk))
+_ein = quellticket.loese_ein(_tk)
+pruef("und nennt genau diese Fundstelle",
+      _ein and _ein["datei"] == "Preise.pdf" and _ein["seite"] == "7"
+      and _ein["raum"] == "einkauf", _ein)
+pruef("ein veraendertes gilt nicht",
+      quellticket.loese_ein(_tk[:-3] + "aaa") is None)
+# Der wichtigste Fall: das Ticket ist eine Abkuerzung fuer den Weg
+# dorthin, kein Ersatz fuer das Recht, dort zu sein.
+pruef("fuer einen Fremden gilt es gar nicht erst",
+      quellticket.loese_ein(
+          quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "markus"))
+      is None)
+# Und abgelaufen ist abgelaufen.
+quellticket.MINUTEN = -1
+pruef("eine abgelaufene Frist gilt nicht",
+      quellticket.loese_ein(
+          quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "anna"))
+      is None)
+quellticket.MINUTEN = 30
+
+print()
+print("=== 17. Angemeldet bleiben, aber befristet ===")
 # Streamlit haelt die Sitzung im Arbeitsspeicher des Browser-Tabs --
 # beim Neuladen ist sie weg. Die Bescheinigung traegt Name, Ablauf und
 # Unterschrift; sie steht in der Adresszeile, und wer die Adresse
@@ -869,7 +914,7 @@ pruef("nach dem Loeschen nicht mehr",
 benutzer.MERKEN_STUNDEN = 0
 
 print()
-print("=== 17. Ein Datenbankkonto je Raum ===")
+print("=== 18. Ein Datenbankkonto je Raum ===")
 # Bis hierher lief jede Frage ueber EIN Konto aus der .env. Damit
 # entscheidet die Anwendung, wer was sehen darf -- und sie entscheidet
 # es fuer die Datenbank mit, obwohl die es selbst besser weiss.
