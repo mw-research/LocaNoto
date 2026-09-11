@@ -754,6 +754,24 @@ pruef("die Verwaltungsansicht zeigt Kennungen statt Namen",
 pruef("und schliesst die Namen NICHT auf",
       "metadaten_klartext" not in _rumpf)
 
+# Eine zweite Quelltextwache, aus einem Absturz im Betrieb.
+#
+# app.py ist ein Skript, kein Modul: alles im Seitenleisten-Teil lebt
+# im selben Namensraum. _p ist dort die Voreinstellung (presets.lese)
+# und wird hundert Zeilen spaeter als Woerterbuch gebraucht. Eine
+# Schleife "for _p in ..." macht daraus eine Zeichenkette, und die
+# Anwendung bricht mit "string indices must be integers" an einer
+# Stelle ab, die mit der Schleife nichts zu tun hat.
+#
+# Aufgefallen ist es erst, als jemand den betreffenden Filter
+# tatsaechlich SETZTE -- ohne Auswahl laeuft die Schleife nie. Ein
+# Fehler, der nur bei Benutzung auftritt, ist genau der, den kein
+# Start bemerkt.
+pruef("kein 'for _p in' in app.py -- _p ist die Voreinstellung",
+      "for _p in " not in _quelle)
+pruef("und _p wird auch sonst nicht neu gebunden",
+      ", _p = " not in _quelle)
+
 # Anklickbare Quellenangaben. Die Funktion liegt im Streamlit-Skript
 # und laesst sich nicht importieren -- also aus dem Quelltext holen
 # und mit echten Werten ausfuehren. Das prueft Verhalten, nicht
