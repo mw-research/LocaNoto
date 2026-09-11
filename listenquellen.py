@@ -240,8 +240,18 @@ def _ueberlappung(quellen):
     Berechtigungsfehler, aber jede Datei stuende zweimal im Katalog,
     und das Modell bekaeme dieselbe Liste doppelt zur Auswahl.
     """
+    import raeume
     for i, a in enumerate(quellen):
         for b in quellen[i + 1:]:
+            # Das Muster und ein einzelner persoenlicher Raum liegen
+            # zwangslaeufig ineinander -- der eigene Eintrag steht ja
+            # im eigenen Bereich. Das ist kein Konflikt, sondern eine
+            # UEBERSTEUERUNG: wer seinen Ordner selbst eintraegt,
+            # bekommt ihn statt des Musters.
+            arten = {a["raum"], b["raum"]}
+            if MUSTER_RAUM in arten and any(
+                    raeume.ist_privat(r) for r in arten):
+                continue
             oben, unten = _feste_wurzel(a["pfad"]), _feste_wurzel(b["pfad"])
             if _enthaelt(oben, unten) or _enthaelt(unten, oben):
                 if a["raum"] == b["raum"]:
@@ -267,6 +277,8 @@ def aufgeloest(benutzer=None):
     """
     import raeume
     aus = []
+    eigene = {q.get("raum") for q in liste()
+              if raeume.ist_privat(str(q.get("raum") or ""))}
     for q in liste():
         raum, p = q.get("raum"), q.get("pfad") or ""
         if raum != MUSTER_RAUM:
@@ -281,8 +293,14 @@ def aufgeloest(benutzer=None):
             except Exception:
                 namen = []
         for name in namen:
-            aus.append((raeume.privat_kennung(name),
-                        p.replace(PLATZHALTER, _dateiname(name))))
+            kennung = raeume.privat_kennung(name)
+            if kennung in eigene:
+                # Dieser Nutzer hat seinen Ordner selbst eingetragen.
+                # Beides zu nehmen ergaebe jede Datei zweimal im
+                # Katalog -- und zwar in demselben Raum, also ohne dass
+                # es als Doppelung auffiele.
+                continue
+            aus.append((kennung, p.replace(PLATZHALTER, _dateiname(name))))
     return aus
 
 
@@ -303,6 +321,111 @@ def fuer_benutzer(benutzer, notzugang=()):
     import raeume
     erlaubt = set(raeume.lesbar(benutzer, notzugang=notzugang))
     return [(r, p) for r, p in aufgeloest() if r in erlaubt]
+
+
+# --- EINE QUELLE JE RAUM, DORT WO DER RAUM ENTSTEHT ---
+#
+# Der Textblock in den Einstellungen ist der Weg fuer jemanden, der
+# alle Quellen auf einmal sieht. Im Betrieb entsteht eine Quelle aber
+# nicht dort, sondern beim Anlegen eines Raums: wer "Einkauf"
+# einrichtet, weiss in diesem Moment, wo dessen Listen liegen -- und
+# nur dann. Muss er es sich fuer spaeter merken, bleibt das Feld leer.
+#
+# WER WAS SETZEN DARF, und warum das nicht gleich ist:
+#
+# Der Container liest mit EINER Kennung. Duerfte jeder einen
+# beliebigen Pfad eintragen, koennte er den Ordner einer fremden
+# Abteilung eintragen -- die Anwendung hat die Rechte und prueft nur,
+# was jemand tippt. Deshalb:
+#
+#   Verwalter   jeder Pfad unterhalb von LISTEN_WURZELN
+#   Nutzer      nur innerhalb seines EIGENEN Bereichs, also unterhalb
+#               des Ordners, den das Muster fuer ihn ergibt
+#
+# Damit kann jemand seinen persoenlichen Ordner umbenennen oder einen
+# Unterordner waehlen -- aber nicht in den Bereich eines anderen
+# zeigen. Das ist der Unterschied zwischen "meine Ablage anpassen" und
+# "mir Zugriff geben".
+
+
+def eigener_bereich(benutzer):
+    """Der Ordner, den das Muster fuer diesen Nutzer ergibt. "" ohne Muster."""
+    for q in liste():
+        if q.get("raum") == MUSTER_RAUM:
+            p = (q.get("pfad") or "").replace(PLATZHALTER,
+                                              _dateiname(benutzer))
+            try:
+                return os.path.realpath(p)
+            except OSError:
+                return p
+    return ""
+
+
+def darf_setzen(raum, benutzer, ist_verwalter=False):
+    """(ok, meldung) -- darf dieser Mensch die Quelle dieses Raums setzen?"""
+    import raeume
+    if ist_verwalter:
+        return True, ""
+    if raum == raeume.privat_kennung(benutzer):
+        return True, ""
+    return False, ("Die Quelle eines gemeinsamen Raums setzt ein "
+                   "Verwalter. Deinen eigenen Ordner kannst du selbst "
+                   "eintragen.")
+
+
+def setze_raum(raum, pfad, benutzer="?", ist_verwalter=False):
+    """Traegt die Quelle EINES Raums ein oder entfernt sie. (ok, meldung).
+
+    Leerer Pfad heisst: Eintrag weg. Das ist kein Sonderfall, sondern
+    der Normalfall beim Abschalten -- ein Raum ohne Listenordner ist
+    zulaessig.
+    """
+    import raeume
+    darf, grund = darf_setzen(raum, benutzer, ist_verwalter)
+    if not darf:
+        return False, grund
+
+    quellen = [q for q in liste() if q.get("raum") != raum]
+    pfad = (pfad or "").strip()
+    if not pfad:
+        ok, meldung = speichere(quellen)
+        return ok, ("Quelle entfernt." if ok else meldung)
+
+    if PLATZHALTER in pfad and raum != MUSTER_RAUM:
+        return False, (f"{PLATZHALTER} gehoert zum Muster fuer die "
+                       f"persoenlichen Raeume, nicht zu einem einzelnen.")
+
+    # Ein Nutzer darf nur in seinem eigenen Bereich bleiben. Geprueft
+    # wird der AUFGELOESTE Pfad: "meinordner/../../fremd" sieht sonst
+    # harmlos aus.
+    if not ist_verwalter and not raeume.ist_privat(raum):
+        return False, "Nur Verwalter."
+    if not ist_verwalter:
+        bereich = eigener_bereich(benutzer)
+        try:
+            echt = os.path.realpath(pfad)
+        except OSError:
+            echt = pfad
+        if not bereich:
+            return False, ("Fuer persoenliche Ordner ist kein Muster "
+                           "hinterlegt. Ein Verwalter traegt es einmal "
+                           "ein, danach kannst du deinen Ordner selbst "
+                           "waehlen.")
+        if not _enthaelt(bereich, echt):
+            return False, (f"Nur innerhalb deines eigenen Bereichs "
+                           f"({bereich}). Ein anderer Ordner waere ein "
+                           f"Zugriff, den dir niemand gegeben hat.")
+
+    quellen.append({"raum": raum, "pfad": pfad})
+    return speichere(quellen)
+
+
+def pfad_von(raum):
+    """Der eingetragene Pfad eines Raums, oder ""."""
+    for q in liste():
+        if q.get("raum") == raum:
+            return q.get("pfad") or ""
+    return ""
 
 
 def beschreibung():
