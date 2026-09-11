@@ -692,6 +692,40 @@ def remove_pdf_if_orphaned(filename, raum=None):
     return True
 
 
+def _loeschfreigabe(kennung, zahl, key):
+    """Freigabe fuer einen Loeschvorgang, der einen ganzen Raum trifft.
+
+    Ein Haken war zu wenig, und zwar aus einem bestimmten Grund: er
+    haengt an seinem eigenen Schluessel, nicht am Ziel. Wer ihn fuer
+    Raum A setzt und danach im Auswahlfeld auf Raum B wechselt, hat
+    eine gesetzte Freigabe fuer einen Raum, den er nie bestaetigt hat
+    -- ein Klick, und B ist leer.
+    #
+    Die Kennung einzutippen bindet die Freigabe an das Ziel. Sie laesst
+    sich nicht stehen lassen: wechselt die Auswahl, passt der Text
+    nicht mehr. Und sie zwingt dazu, den Namen zu LESEN, statt eine
+    Gewohnheitsbewegung auszufuehren.
+
+    Ein Abzug ist die einzige Umkehr. Deshalb steht sein Alter dabei --
+    "vor drei Wochen" ist eine andere Auskunft als "heute Nacht".
+    """
+    st.warning(f"{zahl:,} Abschnitte. Nicht rueckgaengig zu machen.")
+    try:
+        _abz = sicherung.liste()
+        if _abz:
+            st.caption(f"Neuester Abzug: {_abz[0][0]}")
+        else:
+            st.caption("KEIN Abzug vorhanden. Danach ist es endgueltig.")
+    except Exception:
+        pass
+    st.caption("Zum Bestaetigen die Kennung des Raums eintippen:")
+    st.code(kennung, language=None)
+    eingabe = st.text_input("Kennung", key=f"{key}_text",
+                            label_visibility="collapsed",
+                            placeholder=kennung)
+    return eingabe.strip() == kennung
+
+
 def loesche_dokument(filename, raum, kennung_statt_name=False):
     """Loescht ein Dokument aus genau einem Raum.
 
@@ -1752,9 +1786,7 @@ with st.sidebar:
                                        + format(_zahlen[r], ",")
                                        + " Abschnitte"),
                 key="streng_wahl")
-            _ok_s = st.checkbox(
-                "Alle Abschnitte dieses Raums endgültig löschen",
-                key="streng_ok")
+            _ok_s = _loeschfreigabe(_wahl_s, _zahlen[_wahl_s], "streng")
             if st.button("🗑️ Raum leeren",
                          use_container_width=True, disabled=not _ok_s):
                 ok, meldung = store.loesche(raeume.sammlung(_wahl_s))
@@ -2432,9 +2464,15 @@ with st.sidebar:
                             st.rerun()
                     with _sp2:
                         _zahl = _mit_daten.get(_bearbeiten, 0)
-                        _sicher = st.checkbox(
-                            f"{_zahl:,} Abschnitte endgültig löschen",
-                            key=f"raum_x_{_bearbeiten}")
+                        # Derselbe Mechanismus wie im strengen
+                        # Betrieb. Hier haengt der Haken zwar am Raum
+                        # und bleibt beim Wechsel nicht stehen -- aber
+                        # zwei verschiedene Freigaben fuer denselben
+                        # Vorgang sind eine zu viel: die schwaechere
+                        # wird zur Gewohnheit, und die Gewohnheit
+                        # traegt man zur staerkeren hinueber.
+                        _sicher = _loeschfreigabe(
+                            _bearbeiten, _zahl, f"raum_x_{_bearbeiten}")
                         if st.button("Daten löschen",
                                      use_container_width=True,
                                      disabled=not _sicher,
