@@ -1204,7 +1204,8 @@ with st.sidebar:
     _eintraege = tabellen.sichtbar(_katalog.get("eintraege", []),
                                    st.session_state.get("username", ""))
 
-    if _eintraege or tabellen.vorhanden() or is_admin():
+    if (_eintraege or tabellen.vorhanden() or is_admin()
+            or listenquellen.liste()):
         st.markdown("---")
         st.header("\U0001f4ca Listen")
 
@@ -1295,6 +1296,46 @@ with st.sidebar:
             with st.expander(f"Nicht lesbar ({len(_katalog['fehler'])})"):
                 for datei, grund in _katalog["fehler"]:
                     st.caption(f"`{datei}` -- {grund}")
+
+        # --- MEIN EIGENER ORDNER ---
+        #
+        # Fuer jeden, nicht nur fuer Verwalter: der persoenliche
+        # Listenordner ist der einzige, den sein Besitzer besser kennt
+        # als die IT. Er darf ihn deshalb selbst eintragen -- aber nur
+        # INNERHALB seines Bereichs.
+        #
+        # Der Grund fuer die Grenze ist derselbe wie ueberall hier: der
+        # Container liest mit einer Kennung. Ein frei waehlbarer Pfad
+        # waere kein "meine Ablage anpassen", sondern "mir Zugriff
+        # geben" -- die Anwendung hat die Rechte und prueft nur, was
+        # jemand tippt.
+        _mein_raum = raeume.privat_kennung(
+            st.session_state.get("username", ""))
+        _mein_bereich = listenquellen.eigener_bereich(
+            st.session_state.get("username", ""))
+        if _mein_bereich:
+            with st.expander("\U0001f4c1 Mein Listenordner", expanded=False):
+                st.caption(
+                    f"Nur du siehst die Listen aus diesem Ordner. Er "
+                    f"muss innerhalb von `{_mein_bereich}` liegen -- ein "
+                    f"anderer waere ein Zugriff, den dir niemand "
+                    f"gegeben hat.")
+                _mp_alt = listenquellen.pfad_von(_mein_raum) or _mein_bereich
+                _mp = st.text_input("Ordner", value=_mp_alt,
+                                    key="mein_listenordner")
+                if st.button("Uebernehmen", use_container_width=True,
+                             key="mein_listenordner_b"):
+                    _ok_mp, _m_mp = listenquellen.setze_raum(
+                        _mein_raum, _mp,
+                        benutzer=st.session_state.get("username", "?"))
+                    if not _ok_mp:
+                        st.error(_m_mp)
+                    else:
+                        with st.spinner("Lese die Listen ein ..."):
+                            tabellen.baue_katalog()
+                        st.success("Uebernommen.")
+                        time.sleep(1)
+                        st.rerun()
 
         # Neu einlesen heisst: den Ordner vollstaendig durchgehen und den
         # Katalog neu anlegen. Noetig nur, wenn Dateien dazukommen oder sich
@@ -2255,8 +2296,41 @@ with st.sidebar:
                                 f"Nicht als Benutzer angelegt und damit "
                                 f"wirkungslos: {', '.join(_unbekannt)}")
 
+                # --- LISTENORDNER ---
+                #
+                # Hier und nicht in den allgemeinen Einstellungen: wer
+                # einen Raum einrichtet, weiss in diesem Moment, wo
+                # dessen Listen liegen. Muss er es sich fuer spaeter
+                # merken, bleibt das Feld leer -- und die Listensuche
+                # fuer diesen Raum entsteht nie.
+                _lq_alt = listenquellen.pfad_von(_bearbeiten)
+                _lq = st.text_input(
+                    "Listenordner (xlsx, csv)", value=_lq_alt,
+                    key=f"raum_lq_{_bearbeiten}",
+                    help="Vollstaendiger Pfad, wie er im Container gilt "
+                         "-- etwa /mnt/abteilungen/einkauf/listen. Die "
+                         "Dateien bleiben, wo sie sind; niemand muss sie "
+                         "ein zweites Mal ablegen. Leer = keine Listen "
+                         "fuer diesen Raum.")
+                if listenquellen.WURZELN:
+                    st.caption("Erlaubt unterhalb von: "
+                               + ", ".join(f"`{w}`"
+                                           for w in listenquellen.WURZELN))
+
                 if st.button("Speichern", use_container_width=True,
                              key=f"raum_s_{_bearbeiten}"):
+                    if _lq.strip() != _lq_alt:
+                        _ok_lq, _m_lq = listenquellen.setze_raum(
+                            _bearbeiten, _lq,
+                            benutzer=st.session_state.get("username", "?"),
+                            ist_verwalter=True)
+                        if not _ok_lq:
+                            st.error(_m_lq)
+                        else:
+                            with st.spinner("Lese die Listen ein ..."):
+                                _k, _f = tabellen.baue_katalog()
+                            st.caption(f"{len(_k['eintraege'])} Blaetter "
+                                       f"im Katalog.")
                     raeume.beschriften(_bearbeiten, _name, _besch)
                     if "*" not in _m and not _ist_privat:
                         raeume.mitglieder_setzen(_bearbeiten, _neu_m)

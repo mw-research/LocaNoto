@@ -625,6 +625,39 @@ pruef("aufgeschlossen steht wieder alles da",
       all(e.get("datei") and e.get("wurzel")
           for e in tabellen.sichtbar(_roh, "markus")))
 
+# Eine Quelle entsteht dort, wo der Raum entsteht -- und wer sie setzen
+# darf, ist nicht fuer jeden gleich. Der Container liest mit EINER
+# Kennung: duerfte jeder einen beliebigen Pfad eintragen, koennte er
+# den Ordner einer fremden Abteilung eintragen und die Anwendung
+# laese ihn vor.
+_meiner = raeume.privat_kennung("markus")
+pruef("ein Verwalter setzt die Quelle eines Fachraums",
+      listenquellen.setze_raum("einkauf",
+                               os.path.join(_netz, "abteilung", "einkauf"),
+                               benutzer="markus", ist_verwalter=True)[0])
+pruef("ein Nutzer darf das NICHT",
+      not listenquellen.setze_raum("einkauf", os.path.join(_netz, "allgemein"),
+                                   benutzer="anna")[0])
+pruef("aber seinen eigenen Ordner schon",
+      listenquellen.setze_raum(
+          _meiner, os.path.join(_netz, "heim", "markus", "Listen"),
+          benutzer="markus")[0])
+pruef("und nur INNERHALB seines Bereichs",
+      not listenquellen.setze_raum(
+          _meiner, os.path.join(_netz, "heim", "anna", "Listen"),
+          benutzer="markus")[0])
+# Der Umweg ueber ".." sieht harmlos aus und fuehrt zum selben Ort.
+pruef("auch nicht ueber einen Umweg",
+      not listenquellen.setze_raum(
+          _meiner,
+          os.path.join(_netz, "heim", "markus", "Listen", "..", "..",
+                       "anna", "Listen"),
+          benutzer="markus")[0])
+pruef("ein leerer Pfad entfernt den Eintrag",
+      listenquellen.setze_raum("einkauf", "", benutzer="markus",
+                               ist_verwalter=True)[0]
+      and listenquellen.pfad_von("einkauf") == "")
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
