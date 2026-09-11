@@ -744,9 +744,13 @@ _qu = [{"file": "infraUser.pdf", "page": 5666},
 _aus = _klick("Dort [infraUser.pdf, Seite 5666] und auch "
               "[infraExpert.pdf, S. 7809].", _qu, 3)
 pruef("Quellenangaben werden zu Verweisen",
-      _aus.count("?quelle=") == 2, _aus)
-pruef("und zeigen auf die richtige Stelle",
-      "?quelle=3-0#q3-0" in _aus and "?quelle=3-1#q3-1" in _aus, _aus)
+      _aus.count("](#q") == 2, _aus)
+# NUR eine Sprungmarke, kein Abfrageparameter: mit Parameter war es
+# fuer den Browser eine andere Adresse, und Streamlit oeffnet solche
+# in einem neuen Tab -- dort ist die Sitzung leer, man landete bei der
+# Anmeldemaske statt bei der Fundstelle.
+pruef("und zwar als reine Sprungmarke, ohne Parameter",
+      "(#q3-0)" in _aus and "(#q3-1)" in _aus and "?" not in _aus, _aus)
 
 # Ein Modell nennt gelegentlich eine Seite, die es aus dem
 # Zusammenhang erschlossen hat. Ein Verweis, der ins Leere fuehrt,
@@ -754,7 +758,7 @@ pruef("und zeigen auf die richtige Stelle",
 _erfunden = _klick("Steht in [infraUser.pdf, Seite 99] und in "
                    "[Erfunden.pdf, Seite 5666].", _qu, 3)
 pruef("eine erfundene Fundstelle wird NICHT verlinkt",
-      "?quelle=" not in _erfunden, _erfunden)
+      "](#q" not in _erfunden, _erfunden)
 pruef("ohne Quellen bleibt der Text unveraendert",
       _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
       == "Dort [infraUser.pdf, Seite 5666].")
@@ -784,11 +788,53 @@ _mit_code = ("Steht in [a.pdf, Seite 3].\n" + _zaun + "python\n"
              + "\nUnd [a.pdf, Seite 3].")
 _aus3 = _klick(_mit_code, [{"file": "a.pdf", "page": 3}], 1)
 pruef("Verweise entstehen nur ausserhalb der Codebloecke",
-      _aus3.count("?quelle=") == 2, _aus3.count("?quelle="))
+      _aus3.count("](#q") == 2, _aus3.count("](#q"))
 pruef("und der Code bleibt unangetastet",
       "# [a.pdf, Seite 3] ist hier Code" in _aus3)
 
-print("=== 15. Ein Datenbankkonto je Raum ===")
+print("=== 15. Angemeldet bleiben, aber befristet ===")
+# Streamlit haelt die Sitzung im Arbeitsspeicher des Browser-Tabs --
+# beim Neuladen ist sie weg. Die Bescheinigung traegt Name, Ablauf und
+# Unterschrift; sie steht in der Adresszeile, und wer die Adresse
+# weitergibt, gibt die Anmeldung mit. Deshalb standardmaessig aus.
+pruef("ausgeschaltet wird gar keine ausgestellt",
+      benutzer.MERKEN_STUNDEN == 0 and benutzer.merkzettel("markus") == "")
+benutzer.MERKEN_STUNDEN = 8
+_zettel = benutzer.merkzettel("markus")
+pruef("eingeschaltet schon", bool(_zettel))
+pruef("und sie gilt fuer den Richtigen",
+      benutzer.pruefe_merkzettel(_zettel) == "markus")
+pruef("eine gefaelschte gilt nicht",
+      benutzer.pruefe_merkzettel(_zettel[:-4] + "aaaa") == "")
+pruef("ein anderer Name darin auch nicht",
+      benutzer.pruefe_merkzettel("anna" + _zettel[6:]) == "")
+# Die Frist steht IN der Bescheinigung und ist mitunterschrieben --
+# sie laesst sich nicht verlaengern, ohne die Unterschrift zu
+# zerstoeren.
+_name, _bis, _sig = _zettel.rsplit("|", 2)
+pruef("die Frist laesst sich nicht verlaengern",
+      benutzer.pruefe_merkzettel(f"{_name}|{int(_bis) + 99999}|{_sig}") == "")
+_alt = benutzer.merkzettel("markus")
+_n2, _b2, _s2 = _alt.rsplit("|", 2)
+import time as _t
+_abgelaufen = f"{_n2}|{int(_t.time()) - 10}|"
+_abgelaufen += geheim.signiere(_abgelaufen[:-1].encode("utf-8"))
+pruef("eine abgelaufene gilt nicht",
+      benutzer.pruefe_merkzettel(_abgelaufen) == "")
+# Der wichtigste Fall: ein geloeschter Zugang muss SOFORT draussen
+# sein, auch wenn die Frist noch laeuft. Geprueft wird deshalb beim
+# Einloesen und nicht nur beim Ausstellen.
+benutzer.anlege("kurzzeit", "kurzzeitpasswort", von="markus")
+_kz = benutzer.merkzettel("kurzzeit")
+pruef("solange es den Zugang gibt, gilt sie",
+      benutzer.pruefe_merkzettel(_kz) == "kurzzeit")
+benutzer.loesche("kurzzeit", von="markus")
+pruef("nach dem Loeschen nicht mehr",
+      benutzer.pruefe_merkzettel(_kz) == "")
+benutzer.MERKEN_STUNDEN = 0
+
+print()
+print("=== 16. Ein Datenbankkonto je Raum ===")
 # Bis hierher lief jede Frage ueber EIN Konto aus der .env. Damit
 # entscheidet die Anwendung, wer was sehen darf -- und sie entscheidet
 # es fuer die Datenbank mit, obwohl die es selbst besser weiss.

@@ -440,6 +440,65 @@ def _letzte_kette():
     return ""
 
 
+# --- ANGEMELDET BLEIBEN ---
+#
+# Streamlit haelt die Sitzung im Arbeitsspeicher des Browsers-Tabs.
+# Beim Neuladen ist sie weg, und man steht wieder vor der
+# Anmeldemaske -- bei jedem F5, nach jedem Schliessen, bei jedem
+# Verweis, der in einem neuen Tab landet.
+#
+# Ein Merkzettel ist eine BEFRISTETE Bescheinigung: Name, Ablauf,
+# Unterschrift. Wer sie hat, gilt bis zum Ablauf als angemeldet.
+#
+# WAS DAS KOSTET, und es gehoert vor die Entscheidung:
+# Die Bescheinigung steht in der Adresszeile. Wer die Adresse
+# weitergibt -- kopiert, in einen Chat stellt, ueber die Schulter
+# zeigen laesst --, gibt die Anmeldung mit. Eine Adresse sieht
+# harmlos aus, diese ist es nicht.
+#
+# Deshalb: standardmaessig AUS. Wer sie einschaltet, soll wissen,
+# was er einschaltet, und die Frist kurz halten.
+MERKEN_STUNDEN = paths.env_int("SITZUNG_MERKEN_STUNDEN", 0)
+
+
+def merkzettel(name):
+    """Eine befristete Bescheinigung fuer diesen Nutzer. "" wenn aus."""
+    if MERKEN_STUNDEN <= 0 or not name:
+        return ""
+    # time.time(), nicht _jetzt(): das liefert hier einen
+    # lesbaren Zeitstempel fuer das Protokoll, keine Zahl.
+    import time as zeit
+    bis = int(zeit.time() + MERKEN_STUNDEN * 3600)
+    kern = f"{name}|{bis}"
+    return kern + "|" + geheim.signiere(kern.encode("utf-8"))
+
+
+def pruefe_merkzettel(zettel):
+    """Der Name hinter der Bescheinigung, oder "".
+
+    Drei Gruende fuer "": abgelaufen, gefaelscht, oder der Zugang
+    existiert nicht mehr. Der letzte ist der wichtigste -- ein
+    geloeschter Zugang muss sofort draussen sein, auch wenn die Frist
+    noch laeuft.
+    """
+    if MERKEN_STUNDEN <= 0 or not zettel:
+        return ""
+    try:
+        name, bis, unterschrift = str(zettel).rsplit("|", 2)
+    except ValueError:
+        return ""
+    if not geheim.pruefe_signatur(f"{name}|{bis}".encode("utf-8"),
+                                  unterschrift):
+        return ""
+    try:
+        import time as zeit
+        if zeit.time() > int(bis):
+            return ""
+    except ValueError:
+        return ""
+    return name if eintrag(name) else ""
+
+
 def protokolliere(aktion, ziel, von="?", hinweis=""):
     eintrag_ = {"zeit": _jetzt(), "aktion": aktion, "ziel": ziel,
                 "von": von, "hinweis": hinweis}
