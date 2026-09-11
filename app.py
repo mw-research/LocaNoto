@@ -2043,7 +2043,24 @@ with st.sidebar:
     #
     # Die Arbeitsliste fuer glossar.txt und fuer Luecken im Bestand: hier
     # steht, was gefragt wurde und nichts fand.
+    # --- VERWALTUNG ---
+    #
+    # Vierzehn Aufklapper untereinander sind kein Menue, sondern eine
+    # Wand. Das meiste davon braucht ein Verwalter an einem
+    # gewoehnlichen Tag nie -- also erst auf Zuruf.
+    #
+    # Ein Aufklapper um die Aufklapper ginge nicht: Streamlit laesst
+    # sie nicht ineinander. Und ein Schalter je Gruppe waere
+    # gefaehrlich -- dann liefe nur der gewaehlte Block, und einer,
+    # der eine Angabe aus einem anderen benutzt, ginge still kaputt.
+    _vw = False
     if is_admin():
+        st.markdown("---")
+        _vw = st.toggle("\U0001f6e0\ufe0f Verwaltung", value=False,
+                        key="verwaltung_offen",
+                        help="Benutzer, Raeume, Sicherung, Prompts und "
+                             "alles Weitere zum Einrichten.")
+    if _vw:
         zahlen = _verwaltungsstand()["rueckmeldungen"]
         gesamt = sum(zahlen.values())
         if gesamt:
@@ -2124,7 +2141,9 @@ with st.sidebar:
     # verlangt das Skript die Anmeldung eines Verwalters -- und derselbe
     # Vorgang steht hier, weil ein Verwalter dafuer nicht auf den Server
     # steigen sollte.
-    if is_admin():
+    if _vw:
+        st.caption("**Zugaenge**")
+    if _vw:
         with st.expander("👥 Benutzer verwalten"):
             _zustand = benutzer.zustand()
             _gesperrt = benutzer.ungueltige()
@@ -2285,7 +2304,7 @@ with st.sidebar:
     # Was verschluesselt ist, was nicht, und warum. Steht in der
     # Oberflaeche, weil ein Zustand, den man nur im Quelltext nachlesen
     # kann, bei einer Datenschutzfrage nicht hilft.
-    if is_admin():
+    if _vw:
         with st.expander("🔐 Verschlüsselung"):
             st.caption(f"Zustand: **{geheim.beschreibung()}**")
             if not geheim.verfuegbar():
@@ -2465,7 +2484,7 @@ with st.sidebar:
     # entsteht beim ersten Upload, nicht hier: ein Raum ohne Inhalt braucht
     # keine Sammlung, und eine leere anzulegen wuerde jede Suche mit einer
     # weiteren Abfrage belasten.
-    if is_admin():
+    if _vw:
         with st.expander("🚪 Räume verwalten"):
             _alle = raeume.liste()
             _bekannt = benutzer.namen()
@@ -2764,7 +2783,9 @@ with st.sidebar:
     # die Dokumente dort, wo sie gepflegt werden, und die Rechte auf dem
     # Ordner sind die von ownCloud -- die Mitgliedschaft des Raums
     # entscheidet dann, wer die daraus gebauten Abschnitte sieht.
-    if is_admin():
+    if _vw:
+        st.caption("**Betrieb**")
+    if _vw:
         with st.expander("☁️ ownCloud"):
             _ok, _meldung = _owncloud_stand()
             (st.success if _ok else st.warning)(_meldung)
@@ -2975,7 +2996,7 @@ with st.sidebar:
     # Gelesen wird ueber die Schnittstelle, nicht als Dateikopie: eine
     # Kopie mitten in einem Schreibvorgang ist ein Abzug, der sich nicht
     # zurueckholen laesst -- und das zeigt sich erst beim Zurueckholen.
-    if is_admin():
+    if _vw:
         with st.expander("🗃️ Sicherung der Vektordatenbank"):
             _abzuege = _verwaltungsstand()["abzuege"]
             st.caption(f"Ablage: `{sicherung.ORDNER}`"
@@ -3077,7 +3098,9 @@ with st.sidebar:
     # dessen, was sie NICHT leistet. Ein offener Punkt heisst nicht
     # "kaputt", sondern "hier ist die Zusage schwaecher, als sie
     # aussieht".
-    if is_admin():
+    if _vw:
+        st.caption("**Lage**")
+    if _vw:
         _lage = sicherheit.lage()
         _offen = [n for n, _ok, _t in _lage if not _ok]
         with st.expander(f"\U0001f512 Sicherheitslage "
@@ -3097,7 +3120,7 @@ with st.sidebar:
     # Wo welcher Zustand liegt, auf einem Bildschirm. Bei einer Frage nach
     # der Datenhaltung ist "schau in die docker-compose.yaml und in fuenf
     # Module" keine Antwort.
-    if is_admin():
+    if _vw:
         with st.expander("💾 Speicherorte"):
             for _name, _pfad, _gesetzt in paths.wurzeln():
                 st.caption(f"**{_name}** · `{_pfad}` · "
@@ -3145,7 +3168,9 @@ with st.sidebar:
                 "kostet nichts: der Stichwortindex baut sich mit rund "
                 "18.600 Abschnitten je Sekunde neu auf.")
 
-    if is_admin():
+    if _vw:
+        st.caption("**Inhalte**")
+    if _vw:
         with st.expander("\U0001f5e3\ufe0f Glossar bearbeiten"):
             pfad = paths.resolve_glossar()
             try:
@@ -3192,7 +3217,7 @@ with st.sidebar:
     # Angelegt werden sie von Verwaltern, ausgewaehlt von allen. Eine
     # Voreinstellung buendelt, was zusammengehoert -- wer das jedes Mal von
     # Hand umstellt, macht es entweder selten oder falsch.
-    if is_admin():
+    if _vw:
         with st.expander("🎛️ Voreinstellungen verwalten"):
             vorhanden = presets.namen()
             bearbeiten = st.selectbox(
@@ -3263,7 +3288,7 @@ with st.sidebar:
     #
     # Nur fuer Verwalter: eine unglueckliche Formulierung wirkt auf jede
     # Antwort, die danach gegeben wird.
-    if is_admin():
+    if _vw:
         with st.expander("📜 Prompts bearbeiten"):
             namen = prompts.verfuegbar()
             if not namen:
@@ -3335,7 +3360,7 @@ with st.sidebar:
     #
     # Angezeigt werden nur Namen, nie Werte; Namen, die auf ein Geheimnis
     # hindeuten, werden gar nicht erst verglichen.
-    if is_admin():
+    if _vw:
         try:
             fehlend, abweichend, unbekannt = envcheck.vergleiche()
         except Exception:
