@@ -706,6 +706,30 @@ pruef("ein neues etag holt die Datei neu", "0,99" in str(_z2), _z2)
 listenquellen.setze_raum("allgemein", "", benutzer="markus",
                          ist_verwalter=True)
 
+print("=== 14. Kein verdeckter Name in der Oberflaeche ===")
+# Eine Quelltextwache, und sie ist es wert: derselbe Fehler ist jetzt
+# VIERMAL aufgetreten -- im Stichwortindex, beim Verschieben zwischen
+# Raeumen, im Listenkatalog und in der Verwaltungsansicht fremder
+# persoenlicher Raeume. Jedes Mal las jemand file_name direkt aus den
+# Metadaten und bekam "LNX1:hcQwhq0WblWU...".
+#
+# Das ist das Schlechteste von beidem: dem Betrachter nuetzt es
+# nichts, und dass ein Eintrag existiert, verraet es trotzdem. Auffallen
+# tut es nur dem, der hinsieht -- eine Ausnahme gibt es nicht.
+#
+# Die Wache prueft nicht Verhalten, sondern Quelltext. Das ist
+# unueblich und hier richtig: die betroffene Stelle liegt in einem
+# Streamlit-Skript, das sich nicht importieren laesst, und die Regel
+# ist einfach genug, um sie am Text zu pruefen.
+_quelle = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "app.py"), encoding="utf-8").read()
+_a = _quelle.index("def list_foreign_private_documents(")
+_rumpf = _quelle[_a:_quelle.index("\ndef ", _a + 10)]
+pruef("die Verwaltungsansicht schliesst die Dateinamen auf",
+      "metadaten_klartext" in _rumpf)
+pruef("und liest sie nicht roh aus den Metadaten",
+      "for m in data.get(" not in _rumpf)
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
