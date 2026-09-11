@@ -148,10 +148,7 @@ def main():
             except EOFError:
                 name = ""
         if name and not passwort:
-            try:
-                passwort = getpass.getpass("  Passwort: ")
-            except (EOFError, OSError):
-                passwort = ""
+            passwort = _frage_passwort()
         # NACHFRAGEN statt weiterlaufen.
         #
         # Bis hierher endete ein zu kurzes Passwort so: die Ablehnung
@@ -166,11 +163,15 @@ def main():
         # hinterlassen.
         ok = False
         versuche = 0
-        while name and passwort and not ok and versuche < 5:
+        while name and not ok and versuche < 5:
             versuche += 1
-            ok, meldung = benutzer.anlege(name, passwort, "admin",
-                                          von="einrichtung")
-            sagt(f"  {'+' if ok else '!'} {meldung}")
+            if passwort:
+                ok, meldung = benutzer.anlege(name, passwort, "admin",
+                                              von="einrichtung")
+                sagt(f"  {'+' if ok else '!'} {meldung}")
+            # Ohne Passwort gar nicht erst anlegen: die Ablehnung waere
+            # eine zweite Meldung fuer denselben Vorgang. Wer sich eben
+            # vertippt hat, hat schon gelesen, woran es lag.
             if ok or not sys.stdin.isatty():
                 # Ohne Terminal hat ein zweiter Versuch keinen Sinn: es
                 # gibt niemanden, der etwas anderes eingeben koennte.
@@ -179,10 +180,15 @@ def main():
             try:
                 eingabe = input(f"  Kennung [{name}]: ").strip()
                 name = eingabe or name
-                passwort = getpass.getpass("  Passwort: ")
             except (EOFError, OSError, KeyboardInterrupt):
                 sagt()
                 break
+            passwort = _frage_passwort()
+            if not passwort:
+                # Zwei verschiedene Eingaben sind kein Abbruchgrund --
+                # das ist der haeufigste Fall, in dem jemand es gleich
+                # noch einmal versuchen will.
+                continue
 
         if not ok:
             sagt("  KEIN ZUGANG ANGELEGT. Ohne ihn kann sich niemand "
@@ -269,6 +275,32 @@ def main():
     sagt("  * Den Stand jederzeit nachsehen:")
     sagt(f"      {_vorspann()} python was_sieht_die_platte.py")
     return 0
+
+
+def _frage_passwort(was="  Passwort: "):
+    """Ein Passwort, zweimal eingegeben. Leer, wenn es nicht passt.
+
+    Zweimal, weil die Eingabe verdeckt ist und es hier um das ERSTE
+    Passwort einer frischen Installation geht: ein Vertipper sperrt aus
+    einem System aus, in dem es noch keinen zweiten Zugang gibt. Man
+    merkt es nicht beim Anlegen, sondern an der Anmeldemaske -- und bis
+    dahin ist oft schon etwas eingelesen.
+
+    create_user.py fragt seit jeher doppelt. Dass einrichten.py es
+    nicht tat, war keine Entscheidung, sondern ein uebersehener
+    Unterschied zwischen zwei Wegen zum selben Ziel.
+    """
+    try:
+        eins = getpass.getpass(was)
+        if not eins:
+            return ""
+        zwei = getpass.getpass("  Passwort wiederholen: ")
+    except (EOFError, OSError):
+        return ""
+    if eins != zwei:
+        sagt("  ! Die beiden Eingaben sind verschieden.")
+        return ""
+    return eins
 
 
 def _in_kubernetes():
