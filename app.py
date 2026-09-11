@@ -692,7 +692,7 @@ def remove_pdf_if_orphaned(filename, raum=None):
     return True
 
 
-def loesche_dokument(filename, raum):
+def loesche_dokument(filename, raum, kennung_statt_name=False):
     """Loescht ein Dokument aus genau einem Raum.
 
     Der Raum ist nicht optional. Ohne ihn traefe der Loeschbefehl jeden
@@ -702,6 +702,16 @@ def loesche_dokument(filename, raum):
     sml = raum_sammlung(raum, anlegen=False)
     if sml is None:
         return False, "Der Raum hat keine Daten."
+    if kennung_statt_name:
+        # Der Verwalter hat nur die Kennung, nicht den Namen -- das ist
+        # der Sinn. Geloescht wird ueber sie. Stichwortindex und Datei
+        # brauchen den Namen, den es hier nicht gibt; beides holt der
+        # naechste Aufbau nach: der Index entsteht aus den Sammlungen,
+        # und eine Datei ohne Abschnitte faellt beim Aufraeumen weg.
+        sml.delete(where={"datei_id": filename})
+        refresh_document_index()
+        return True, (f"Eintrag {filename[:12]}... aus "
+                      f"'{raeume.bezeichnung(raum)}' entfernt.")
     sml.delete(where=store.datei_filter(filename))
     keyword_index.delete_document(filename, raum=raum)
     remove_pdf_if_orphaned(filename, raum)
@@ -733,21 +743,40 @@ def list_foreign_private_documents(current_user):
             data = sml.get(include=["metadatas"])
         except Exception:
             continue
-        # AUFSCHLIESSEN. Ohne das stand hier "LNX1:hcQwhq0WblWU..." --
-        # also weder ein Name noch nichts, sondern das Schlechteste von
-        # beidem: dem Verwalter nuetzt es nichts, und dass ein Eintrag
-        # existiert, verraet es trotzdem.
+        # GRIFF OHNE EINSICHT.
         #
-        # Die Entscheidung, OB ein Verwalter den Namen sehen darf,
-        # faellt eine Zeile hoeher in darf_dateien_sehen(). Ist sie
-        # gefallen, gehoert der Name lesbar hin.
-        for m in store.metadaten_klartext(kennung,
-                                          data.get("metadatas") or []):
+        # Der Verwalter soll eine verwaiste Ablage aufraeumen koennen,
+        # ohne zu erfahren, worum es ging. Ein Dateiname verraet den
+        # Vorgang -- "Kuendigung_Mueller_2026.pdf" muss dafuer niemand
+        # oeffnen. Wer den Inhalt wirklich braucht, geht ueber den
+        # Notzugang, und dann stehen zwei Namen im Protokoll.
+        #
+        # datei_id ist dafuer das Mittel: eine bestimmte Kennung je
+        # DATEI, aus dem Namen abgeleitet und nicht umkehrbar.
+        #
+        # Der Geheimtext des Namens taugt NICHT dafuer, obwohl er
+        # danach aussieht: er traegt einen zufaelligen Nonce, ist also
+        # je ABSCHNITT verschieden. Die Liste zeigte damit acht
+        # Eintraege fuer eine Datei -- und ein Loeschen traf genau
+        # einen Abschnitt davon, sichtbar nur daran, dass die Datei
+        # danach noch da war.
+        for m in data.get("metadatas") or []:
             if not m:
                 continue
-            fname = m.get("file_name", "")
-            if fname:
-                seen.add((kennung, fname))
+            kenn = m.get("datei_id") or ""
+            if not kenn:
+                # Abschnitte aus der Zeit vor der Verschluesselung
+                # tragen keine Kennung. Ohne diesen Zweig waere die
+                # Liste bei einem alten Bestand einfach leer -- und der
+                # Verwalter suchte den Fehler bei den Rechten.
+                #
+                # Der Name liegt dort ohnehin im Klartext; ihn zu
+                # hashen gibt denselben Griff wie ueberall und
+                # verraet nichts, was nicht schon offen laege.
+                import raumschluessel
+                kenn = raumschluessel.datei_id(m.get("file_name") or "")
+            if kenn:
+                seen.add((kennung, kenn))
     return sorted(seen)
 
 
@@ -1686,14 +1715,20 @@ with st.sidebar:
                                        f"({len(_je_raum[r])})"),
                 key="fremd_raum")
             _name_f = st.selectbox(
-                "Dokument", sorted(_je_raum[_wahl_r]), key="fremd_datei")
+                "Eintrag", sorted(_je_raum[_wahl_r]),
+                format_func=lambda k: k[:16] + "...", key="fremd_datei")
+            st.caption(
+                "Kennungen statt Namen: ein Dateiname verraet den "
+                "Vorgang. Wer den Inhalt braucht, geht ueber den "
+                "Notzugang -- dann stehen zwei Namen im Protokoll.")
             # Kein Zusammensetzen und Wiederzerlegen einer Beschriftung:
             # ein Dateiname mit " / " darin zerbrach das vorher, und
             # zwar still -- geloescht wurde dann etwas anderes oder
             # nichts.
             _raum_f = _wahl_r
             if st.button("🗑️ Endgültig löschen", use_container_width=True):
-                ok, meldung = loesche_dokument(_name_f, _raum_f)
+                ok, meldung = loesche_dokument(_name_f, _raum_f,
+                                               kennung_statt_name=True)
                 (st.success if ok else st.error)(meldung)
                 time.sleep(1)
                 st.rerun()
