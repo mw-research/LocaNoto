@@ -295,6 +295,47 @@ def save_chat(chat_id, messages, titel=None):
     chats.speichere(st.session_state["username"], chat_id, messages, titel)
 
 
+def _mitschreiben(strom, kennung, bisher, takt=2.0):
+    """Gibt den Strom weiter UND legt ihn unterwegs ab.
+
+    Der Anlass ist ein beobachteter Verlust: eine Antwort war beim
+    Schreiben zu sehen, verschwand mitten im Strom, und nach dem
+    Neuladen war sie nicht da. Der Grund liegt im Ablauf, nicht in der
+    Ursache des Abbruchs -- gespeichert wurde erst NACH dem letzten
+    Stueck. Bricht der Skriptlauf vorher ab, laeuft die Speicherzeile
+    nie, und es gibt kein Ereignis, an dem sich das nachholen liesse.
+
+    Was den Lauf abbricht, ist dabei zweitrangig: eine unterbrochene
+    WebSocket-Verbindung, ein Neustart des Pods, ein geschlossener
+    Browser. Gegen alle drei hilft dasselbe -- unterwegs ablegen.
+
+    Der Takt ist ein Kompromiss: jedes Stueck einzeln waere bei einer
+    langen Antwort ein Schreibvorgang je Wort, gar nicht ist der
+    Zustand von vorher. Zwei Sekunden kosten bei einer halben Minute
+    Antwort rund fuenfzehn kleine Schreibvorgaenge.
+
+    Ein so abgelegter Zwischenstand ist als unvollstaendig markiert.
+    Ohne die Markierung saehe ein abgebrochener Satz wie eine fertige
+    Antwort aus -- und das waere schlimmer als der Verlust, weil
+    niemand es bemerkt.
+    """
+    teile = []
+    letzte = time.time()
+    for stueck in strom:
+        teile.append(stueck if isinstance(stueck, str) else str(stueck))
+        yield stueck
+        if time.time() - letzte >= takt:
+            letzte = time.time()
+            try:
+                save_chat(kennung, bisher + [{"role": "assistant",
+                                              "content": "".join(teile),
+                                              "unvollstaendig": True}])
+            except Exception:
+                # Ein misslungener Zwischenstand darf die Antwort nicht
+                # kosten -- sie laeuft ja gerade.
+                pass
+
+
 def delete_chat(chat_id):
     chats.loesche(st.session_state["username"], chat_id)
 
@@ -2914,6 +2955,13 @@ if _bestand > 0:
                 if rohbild:
                     st.image(rohbild, width=360)
             st.write(msg["content"])
+            if msg.get("unvollstaendig"):
+                # Ein Zwischenstand, dessen Strom abgebrochen ist. Ohne
+                # diesen Hinweis saehe ein mitten im Satz endender Text
+                # wie eine fertige Antwort aus -- und das waere
+                # schlimmer als der Verlust, weil es niemand bemerkt.
+                st.caption("\u26a0\ufe0f Abgebrochen -- die Antwort ist "
+                           "unvollstaendig. Frage noch einmal stellen.")
             
             # --- RUECKMELDUNG ---
             #
@@ -3175,10 +3223,14 @@ if _bestand > 0:
                         st.write("Keine Chunks gefunden.")
 
                 # --- 4. ANTWORT ---
-                answer = st.write_stream(pipeline.antwort(
-                    chat_client, chat_model,
-                    pipeline.systemprompt(dynamic_context, aktives_preset),
-                    st.session_state.messages))
+                answer = st.write_stream(_mitschreiben(
+                    pipeline.antwort(
+                        chat_client, chat_model,
+                        pipeline.systemprompt(dynamic_context,
+                                              aktives_preset),
+                        st.session_state.messages),
+                    st.session_state.current_chat_id,
+                    list(st.session_state.messages)))
 
                 # --- 5. QUELLEN SPEICHERN ---
                 st.session_state.messages.append({
