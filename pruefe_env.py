@@ -48,6 +48,10 @@ EIGEN = {
     # unbeaufsichtigte Einrichtung gehoeren sie an den einzelnen Aufruf:
     #   docker compose exec -e LOCANOTO_ERSTER_VERWALTER=markus     #       -e LOCANOTO_ERSTES_PASSWORT=... locanoto_bot python einrichten.py
     "LOCANOTO_ERSTER_VERWALTER", "LOCANOTO_ERSTES_PASSWORT",
+    # Setzt das Kubelet in jedem Container, ohne Zutun. einrichten.py
+    # liest es, um zu erkennen, ob es in einem Pod laeuft -- und
+    # entsprechend kubectl statt docker compose vorzuschlagen.
+    "KUBERNETES_SERVICE_HOST",
 }
 
 fehlt_compose = sorted(k for k in gelesen

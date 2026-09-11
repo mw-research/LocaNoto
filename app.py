@@ -11,6 +11,8 @@ import sicherheit
 import store
 import keyword_index
 import listenquellen
+import sqldb
+import sqlquellen
 import llm
 import envcheck
 from embedding import embed_batch
@@ -76,6 +78,34 @@ HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)    # Titel
 chat_client = llm.client("CHAT")
 title_client = llm.client("TITLE")
 embed_client = llm.client("EMBEDDING")
+sql_client = llm.client("SQL")
+
+
+@st.cache_data(ttl=3600, show_spinner="Lese die Struktur der Datenbank...")
+def lade_sql_schema(raum=""):
+    """Tabellen und Spalten, gelesen MIT DEN RECHTEN DIESES RAUMS.
+
+    Die Struktur wird nicht gepflegt, sondern gelesen -- damit stimmt
+    sie auch dann noch, wenn dort eine Spalte hinzukommt.
+
+    Der Raum steht im Schluessel, nicht der Zugang: ein Passwort
+    gehoert in keinen Zwischenspeicher-Schluessel. Und je Raum ein
+    eigener Eintrag ist noetig, weil zwei Konten verschiedene Tabellen
+    sehen -- ein gemeinsamer Zwischenspeicher zeigte dem einen das
+    Schema des anderen.
+
+    Eine Stunde gehalten, weil sich ein Schema selten aendert, eine
+    Aenderung aber ohne Neustart ankommen soll. Auch der ERFOLGLOSE
+    Versuch wird gehalten: sonst wartet jeder Seitenaufbau erneut
+    SQL_TIMEOUT Sekunden auf einen Server, der nicht antwortet.
+    """
+    z = sqlquellen.zugang(raum) if raum else None
+    if not sqldb.ist_konfiguriert(z):
+        return "", ""
+    try:
+        return sqldb.lade_schema(z), ""
+    except Exception as e:
+        return "", str(e)
 
 # --- LOGIN SYSTEM ---
 #
@@ -1315,6 +1345,64 @@ with st.sidebar:
     _eintraege = tabellen.sichtbar(_katalog.get("eintraege", []),
                                    st.session_state.get("username", ""))
 
+    # --- DATENBANK ---
+    #
+    # Der Abschnitt erscheint nur, wenn eine Verbindung hinterlegt ist
+    # -- entweder aus der Umgebung oder als Zugang eines Raums.
+    sql_aktiv = False
+    sql_schema = ""
+    sql_raum = ""
+    _zugaenge = sqlquellen.fuer_benutzer(st.session_state["username"],
+                                         notzugang=mein_notzugang())
+    if _zugaenge or sqldb.ist_konfiguriert():
+        st.markdown("---")
+        st.header("\U0001f5c4\ufe0f Datenbank")
+
+        # DER EIGENE ZUGANG STEHT VORN und ist die Vorgabe. Ein
+        # persoenliches Konto umfasst in aller Regel die Rechte der
+        # Raeume, in denen jemand ist -- umgekehrt gilt das nicht: ein
+        # Raumkonto ist auf den Raum zugeschnitten.
+        #
+        # Automatisch alle Konten nacheinander zu versuchen waere
+        # bequem und falsch: dieselbe Frage liefe noch einmal mit
+        # fremden Rechten, und niemand saehe, mit welchem Konto die
+        # Antwort entstand.
+        _wahlen = [r for r, _z in _zugaenge]
+        if sqldb.ist_konfiguriert():
+            _wahlen.append("")
+        if len(_wahlen) > 1:
+            sql_raum = st.selectbox(
+                "Zugang", _wahlen,
+                format_func=lambda r: (raeume.bezeichnung(r) if r
+                                       else "Vorgabe aus der Umgebung"),
+                key="sql_zugang")
+        else:
+            sql_raum = _wahlen[0] if _wahlen else ""
+        _z = sqlquellen.zugang(sql_raum) if sql_raum else None
+        if _z:
+            st.caption(f"Angemeldet als `{_z.get('benutzer')}`")
+
+        sql_schema, sql_fehler = lade_sql_schema(sql_raum)
+        if sql_fehler:
+            # Kurz und im Klartext. Die Meldung des Treibers nennt
+            # Adresse und Zustand der Verbindung -- das gehoert nicht
+            # auf den Bildschirm jedes Nutzers.
+            st.warning("Keine Verbindung zur Datenbank. Die Antworten "
+                       "stammen allein aus den Dokumenten.")
+            if is_admin():
+                with st.expander("Meldung des Treibers"):
+                    st.code(sql_fehler, language="text")
+            if st.button("Erneut verbinden", use_container_width=True):
+                lade_sql_schema.clear()
+                st.rerun()
+        elif sql_schema:
+            sql_aktiv = st.toggle(
+                "Datenbank einbeziehen",
+                value=paths.env_flag("SQL_DEFAULT_ON", False),
+                key="sql_an",
+                help="Das Modell formuliert eine SELECT-Abfrage. "
+                     "Ausgefuehrt wird sie mit dem Konto oben.")
+
     if (_eintraege or tabellen.vorhanden() or is_admin()
             or listenquellen.liste()):
         st.markdown("---")
@@ -1445,6 +1533,36 @@ with st.sidebar:
                         with st.spinner("Lese die Listen ein ..."):
                             tabellen.baue_katalog()
                         st.success("Uebernommen.")
+                        time.sleep(1)
+                        st.rerun()
+
+        # --- MEIN DATENBANKZUGANG ---
+        #
+        # Sein Datenbankkonto kennt nur er selbst. Muesste ein
+        # Verwalter es eintragen, muesste er es KENNEN -- und damit
+        # waere aus "jeder mit seinen Rechten" wieder ein gemeinsames
+        # Konto geworden, nur muehsamer.
+        if sqldb.ist_konfiguriert() or sqlquellen.liste():
+            _mz = sqlquellen.zugang(_mein_raum) or {}
+            with st.expander("\U0001f5c4\ufe0f Mein Datenbankzugang",
+                             expanded=False):
+                st.caption(
+                    "Dein eigenes Konto an der Fachdatenbank. Fragen "
+                    "laufen dann mit DEINEN Rechten -- und das Modell "
+                    "sieht nur die Tabellen, die du sehen darfst.")
+                _mz_b = st.text_input("Benutzer",
+                                      value=_mz.get("benutzer", ""),
+                                      key="mein_sql_b")
+                _mz_p = st.text_input("Passwort",
+                                      value=_mz.get("passwort", ""),
+                                      type="password", key="mein_sql_p")
+                if st.button("Uebernehmen", use_container_width=True,
+                             key="mein_sql_ok"):
+                    _ok_mz, _m_mz = sqlquellen.setze(
+                        _mein_raum, {"benutzer": _mz_b, "passwort": _mz_p},
+                        benutzer=st.session_state.get("username", "?"))
+                    (st.success if _ok_mz else st.error)(_m_mz)
+                    if _ok_mz:
                         time.sleep(1)
                         st.rerun()
 
@@ -2449,8 +2567,47 @@ with st.sidebar:
                                + ", ".join(f"`{w}`"
                                            for w in listenquellen.WURZELN))
 
+                # --- DATENBANKZUGANG ---
+                #
+                # Ein Konto je Raum, mit den Rechten dieses Raums. Damit
+                # kommt auch das Schema mit diesen Rechten, und das
+                # Sprachmodell sieht nur Tabellen, die es lesen darf.
+                _sqz = sqlquellen.zugang(_bearbeiten) or {}
+                with st.expander("Datenbankzugang dieses Raums",
+                                 expanded=False):
+                    st.caption(
+                        "Ein Konto mit genau den Rechten, die dieser "
+                        "Raum haben soll -- idealerweise nur lesend. "
+                        "Leer = der Raum benutzt den Zugang aus der "
+                        "Umgebung.")
+                    _sq_b = st.text_input("Benutzer",
+                                          value=_sqz.get("benutzer", ""),
+                                          key=f"sqb_{_bearbeiten}")
+                    _sq_p = st.text_input(
+                        "Passwort", value=_sqz.get("passwort", ""),
+                        type="password", key=f"sqp_{_bearbeiten}")
+                    _sq_d = st.text_input(
+                        "Datenbank (leer = Vorgabe)",
+                        value=_sqz.get("datenbank", ""),
+                        key=f"sqd_{_bearbeiten}")
+                    st.caption(
+                        "Das Passwort wird mit dem Schluessel dieses "
+                        "Raums verschluesselt abgelegt. Ohne "
+                        "Installationsschluessel wird es gar nicht "
+                        "gespeichert.")
+
                 if st.button("Speichern", use_container_width=True,
                              key=f"raum_s_{_bearbeiten}"):
+                    if (_sq_b != _sqz.get("benutzer", "")
+                            or _sq_p != _sqz.get("passwort", "")
+                            or _sq_d != _sqz.get("datenbank", "")):
+                        _ok_sq, _m_sq = sqlquellen.setze(
+                            _bearbeiten,
+                            {"benutzer": _sq_b, "passwort": _sq_p,
+                             "datenbank": _sq_d},
+                            benutzer=st.session_state.get("username", "?"),
+                            ist_verwalter=True)
+                        (st.success if _ok_sq else st.error)(_m_sq)
                     if _lq.strip() != _lq_alt:
                         _ok_lq, _m_lq = listenquellen.setze_raum(
                             _bearbeiten, _lq,
@@ -3364,7 +3521,54 @@ if _bestand > 0:
                                f"Treffer aus {zahlen['ranglisten']} Ranglisten "
                                f"auf die besten {len(treffer)} destilliert.*")
 
+                # --- DATENBANK ABFRAGEN ---
+                #
+                # Das Modell formuliert die Abfrage selbst; geprueft
+                # wird sie in sqlpruefung.py. Ausgefuehrt wird sie mit
+                # dem gewaehlten Konto -- die Schranke liegt damit in
+                # der Datenbank und nicht allein in der Pruefung.
+                #
+                # Scheitert hier etwas, wird es vermerkt und die
+                # Antwort entsteht allein aus den Dokumenten. Eine
+                # halbe Antwort ist besser als ein Abbruch.
                 bloecke = []
+                if sql_aktiv and sql_schema:
+                    _sqz = (sqlquellen.zugang(sql_raum) if sql_raum
+                            else None)
+                    abfrage, sql_ergebnis, sql_grund = "", "", ""
+                    with st.spinner("Frage die Datenbank ab..."):
+                        try:
+                            abfrage = sqldb.formuliere(
+                                sql_client, llm.modell("SQL", chat_model),
+                                user_query, sql_schema, verlauf)
+                            if not abfrage:
+                                sql_grund = ("Das Modell sieht die Frage "
+                                             "nicht durch die Datenbank "
+                                             "beantwortbar.")
+                        except Exception as e:
+                            sql_grund = f"Abfrage nicht erzeugt: {e}"
+                        if abfrage:
+                            try:
+                                spalten, zeilen = sqldb.fuehre_aus(
+                                    abfrage, zugang=_sqz)
+                                sql_ergebnis = sqldb.als_tabelle(spalten,
+                                                                 zeilen)
+                            except ValueError as e:
+                                # Die Pruefung hat abgelehnt -- die
+                                # Abfrage hat die Datenbank nie erreicht.
+                                sql_grund = str(e)
+                            except Exception as e:
+                                sql_grund = f"Datenbankfehler: {e}"
+                    if sql_ergebnis:
+                        bloecke += [("datenbank_abfrage", abfrage),
+                                    ("datenbank_ergebnis", sql_ergebnis)]
+                        with st.expander("\U0001f5c4\ufe0f Datenbankabfrage"):
+                            st.code(abfrage, language="sql")
+                            st.caption(
+                                f"Konto: "
+                                f"{(_sqz or {}).get('benutzer') or 'Vorgabe'}")
+                    elif sql_grund:
+                        st.caption("\U0001f5c4\ufe0f *" + sql_grund + "*")
 
                 # --- LISTEN ABFRAGEN ---
                 #
