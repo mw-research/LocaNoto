@@ -938,7 +938,7 @@ def loesche_dokument(filename, raum, kennung_statt_name=False):
     return True, f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
 
 
-def list_foreign_private_documents(current_user):
+def list_foreign_private_documents(current_user, notzugang_=()):
     """(raum, file_name) fremder Raeume -- nur wo das erlaubt ist.
 
     Fuer den Verwaltungsbereich, damit verwaiste Ablagen ausgeschiedener
@@ -953,7 +953,17 @@ def list_foreign_private_documents(current_user):
     """
     seen = set()
     for kennung, sml in _alle_raum_sammlungen():
-        if raeume.darf_lesen(current_user, kennung):
+        # MIT BESTAETIGTEM NOTZUGANG IST DER RAUM NICHT MEHR FREMD.
+        #
+        # Ohne diese Angabe blieb er in der Verwaltungsliste stehen --
+        # mit Kennungen statt Namen --, waehrend seine Dokumente
+        # daneben in der gewoehnlichen Dokumentenverwaltung mit
+        # Klarnamen auftauchten. Zweimal dasselbe, einmal lesbar und
+        # einmal nicht, und der Unterschied war nicht zu erklaeren.
+        #
+        # Der Notzugang ist das Verfahren, mit dem jemand hineindarf.
+        # Ist er bestaetigt, gilt er auch hier.
+        if raeume.darf_lesen(current_user, kennung, notzugang_):
             continue
         if not raeume.darf_dateien_sehen(current_user, kennung,
                                          ist_verwalter=is_admin()):
@@ -999,7 +1009,7 @@ def list_foreign_private_documents(current_user):
     return sorted(seen)
 
 
-def fremde_raeume(current_user):
+def fremde_raeume(current_user, notzugang_=()):
     """[(raum, anzahl)] der Raeume, die dieser Nutzer nicht lesen darf.
 
     Ohne Dateinamen. Das ist die Ansicht, die im strengen Betrieb bleibt:
@@ -1008,7 +1018,10 @@ def fremde_raeume(current_user):
     """
     aus = []
     for kennung, sml in _alle_raum_sammlungen():
-        if raeume.darf_lesen(current_user, kennung):
+        # Auch hier: ein Raum mit bestaetigtem Notzugang
+        # ist nicht fremd.
+        if raeume.darf_lesen(current_user, kennung,
+                             notzugang_):
             continue
         try:
             anzahl = sml.count()
@@ -1357,9 +1370,17 @@ def _zahl_abschnitte(name, raeume_liste):
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _fremdes(name, ist_verwalter):
-    """(dateien, raeume) fremder Raeume -- zwei volle Metadatenabzuege."""
-    return (list_foreign_private_documents(name), fremde_raeume(name))
+def _fremdes(name, ist_verwalter, notzugang_=()):
+    """(dateien, raeume) fremder Raeume -- zwei volle Metadatenabzuege.
+
+    notzugang_ gehoert in die Signatur und nicht nur in den Rumpf: der
+    Zwischenspeicher schluesselt ueber die Argumente. Ohne die Angabe
+    bekaeme jemand nach einer Bestaetigung bis zu dreissig Sekunden
+    lang noch die alte Antwort -- und die Bestaetigung saehe aus, als
+    haette sie nicht gewirkt.
+    """
+    return (list_foreign_private_documents(name, notzugang_),
+            fremde_raeume(name, notzugang_))
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -2114,7 +2135,8 @@ with st.sidebar:
     # ein Loeschrecht ist kein Leserecht.
     if is_admin():
         foreign, _alle_fremd = _fremdes(
-            st.session_state["username"], is_admin())
+            st.session_state["username"], is_admin(),
+            tuple(mein_notzugang()))
         _stille = [(r, n) for r, n in _alle_fremd
                    if r not in {x for x, _f in foreign}]
 
