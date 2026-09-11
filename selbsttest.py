@@ -759,6 +759,75 @@ pruef("ohne Quellen bleibt der Text unveraendert",
       _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
       == "Dort [infraUser.pdf, Seite 5666].")
 
+print("=== 15. Ein Datenbankkonto je Raum ===")
+# Bis hierher lief jede Frage ueber EIN Konto aus der .env. Damit
+# entscheidet die Anwendung, wer was sehen darf -- und sie entscheidet
+# es fuer die Datenbank mit, obwohl die es selbst besser weiss.
+#
+# Jetzt bringt jeder Raum sein eigenes Konto mit. Das Schema kommt mit
+# denselben Rechten, das Sprachmodell sieht also nur Tabellen, die
+# dieses Konto lesen darf.
+import sqlquellen
+sqlquellen.QUELLEN = os.path.join(paths.CONFIG_DIR, "sqlquellen.json")
+
+pruef("ein Verwalter legt den Zugang eines Fachraums fest",
+      sqlquellen.setze("einkauf",
+                       {"benutzer": "ek_lesen", "passwort": "geheim123"},
+                       benutzer="markus", ist_verwalter=True)[0])
+pruef("ein Nutzer darf das NICHT",
+      not sqlquellen.setze("einkauf",
+                           {"benutzer": "ich", "passwort": "x"},
+                           benutzer="anna")[0])
+# Sein eigenes Konto kennt nur er. Muesste ein Verwalter es eintragen,
+# muesste er es KENNEN -- und damit waere aus "jeder mit seinen
+# Rechten" wieder ein gemeinsames Konto geworden, nur muehsamer.
+pruef("seinen eigenen Zugang traegt jeder selbst ein",
+      sqlquellen.setze(raeume.privat_kennung("anna"),
+                       {"benutzer": "anna_db", "passwort": "annageheim"},
+                       benutzer="anna")[0])
+pruef("Benutzer ohne Passwort wird abgewiesen",
+      not sqlquellen.setze("einkauf", {"benutzer": "nur_name"},
+                           benutzer="markus", ist_verwalter=True)[0])
+
+# Das Passwort liegt verschluesselt -- mit dem Schluessel des Raums,
+# dem es gehoert. Wer die Konfigurationsdatei kopiert, bekommt
+# Geheimtext.
+_roh = io.open(sqlquellen.QUELLEN, encoding="utf-8").read()
+pruef("das Passwort steht nicht im Klartext in der Datei",
+      "geheim123" not in _roh and "annageheim" not in _roh)
+pruef("aufgeschlossen kommt es zurueck",
+      sqlquellen.zugang("einkauf")["passwort"] == "geheim123")
+pruef("und der Benutzername bleibt lesbar -- er ist kein Geheimnis",
+      "ek_lesen" in _roh)
+
+# Wer welchen Zugang benutzen darf, entscheidet dieselbe Funktion wie
+# ueberall: raeume.lesbar.
+_za = dict(sqlquellen.fuer_benutzer("anna"))
+_zm = dict(sqlquellen.fuer_benutzer("markus"))
+pruef("anna bekommt den Einkauf und ihren eigenen",
+      set(_za) == {"einkauf", raeume.privat_kennung("anna")}, sorted(_za))
+pruef("der Verwalter bekommt den Einkauf NICHT -- kein Mitglied",
+      "einkauf" not in _zm, sorted(_zm))
+pruef("der eigene Zugang steht vorn",
+      sqlquellen.fuer_benutzer("anna")[0][0]
+      == raeume.privat_kennung("anna"))
+
+# Die Verbindungsangaben ergaenzen sich: was der Raum nicht mitbringt,
+# kommt aus der Umgebung. Sonst muesste jeder Raum Server, Port und
+# Datenbank wiederholen.
+import sqldb
+sqldb.SQL_SERVER, sqldb.SQL_DB = "dbhost", "INFRA"
+sqldb.SQL_USER, sqldb.SQL_PASS = "vorgabe", "vorgabe"
+pruef("Server und Datenbank kommen aus der Umgebung",
+      sqldb._wert(sqlquellen.zugang("einkauf"), "server", sqldb.SQL_SERVER)
+      == "dbhost"
+      and sqldb._wert(sqlquellen.zugang("einkauf"), "benutzer",
+                      sqldb.SQL_USER) == "ek_lesen")
+pruef("und ein Raum ohne Zugang laeuft weiter ueber die Vorgabe",
+      sqldb.ist_konfiguriert(None) and sqldb._wert(None, "benutzer",
+                                                   sqldb.SQL_USER)
+      == "vorgabe")
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
