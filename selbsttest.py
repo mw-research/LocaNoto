@@ -1339,6 +1339,68 @@ pruef("und einen fehlenden Ordner als leer",
       _bl.zaehle_ordner(os.path.join(tmp, "gibtsnicht")) == (0, 0))
 
 
+
+# --- DOKUMENTE NACH OWNCLOUD SPIEGELN ---
+#
+# Der Weg nach oben. Geprueft wird mit einer Attrappe: eine echte
+# ownCloud steht im Test nicht zur Verfuegung, und die drei Faelle, auf
+# die es ankommt, haengen ohnehin nicht am WebDAV, sondern an der
+# Buchhaltung -- hochgeladen, lag schon da, Fehler.
+import spiegeln as _sp
+
+_quelle = os.path.join(tmp, "spiegelprobe")
+os.makedirs(os.path.join(_quelle, "unterordner"), exist_ok=True)
+for _p in (["a.pdf"], ["b.pdf"], ["unterordner", "c.pdf"], [".versteckt"]):
+    with open(os.path.join(_quelle, *_p), "wb") as _f:
+        _f.write(b"x")
+
+pruef("gespiegelt wird auch aus Unterordnern",
+      len(_sp._dateien(_quelle)) == 3, len(_sp._dateien(_quelle)))
+pruef("versteckte Dateien bleiben aussen vor",
+      not any(r.startswith(".") for _v, r in _sp._dateien(_quelle)))
+pruef("die Pfade sind mit Schraegstrich, wie WebDAV sie will",
+      all("\\" not in r for _v, r in _sp._dateien(_quelle)))
+
+# Die Attrappe: eine Datei liegt dort schon, eine schlaegt fehl.
+_oc = types.ModuleType("owncloud")
+_oc.ordner_fuer = lambda raum: "/Abteilungen/Probe"
+_oc.ablage = lambda raum: _quelle
+_gelegt = []
+
+
+def _lege_ab(quelle, fern, ueberschreiben=False):
+    _gelegt.append(fern)
+    if fern.endswith("b.pdf"):
+        return False, "'b.pdf' liegt dort schon. Nicht ueberschrieben."
+    if fern.endswith("c.pdf"):
+        return False, "Nicht abgelegt: Verbindung abgelehnt"
+    return True, "abgelegt"
+
+
+_oc.lege_ab = _lege_ab
+sys.modules["owncloud"] = _oc
+_h, _u, _f = _sp.spiegle("probe", sagen=lambda *_a: None)
+pruef("eine hochgeladen, eine lag schon da, eine schlug fehl",
+      (_h, _u, _f) == (1, 1, 1), (_h, _u, _f))
+# Die Unterscheidung ist der Punkt: "liegt dort schon" ist KEIN Fehler.
+# Blind zu ueberschreiben, was jemand von Hand abgelegt hat, waere
+# schlimmer als es stehen zu lassen.
+pruef("der Zielpfad haengt am zugeordneten Ordner",
+      all(p.startswith("/Abteilungen/Probe/") for p in _gelegt), _gelegt)
+
+# Und der Stand: er muss aus dem entstehen, was DANACH dort liegt --
+# nicht aus dem, was wir hochgeladen haben. Sonst nennt er Dateien, die
+# nie ankamen, und der naechste Abgleich haelt sie fuer entfallen und
+# loescht sie lokal samt Abschnitten.
+_geschrieben = {}
+_oc.dateien = lambda ordner: [
+    {"rel": "a.pdf", "etag": "e1", "groesse": 1, "geaendert": "x"}]
+_oc._stand_schreiben = lambda raum, daten: _geschrieben.update({raum: daten})
+_sp.stand_neu("probe", sagen=lambda *_a: None)
+pruef("der Stand kommt aus dem, was wirklich dort liegt",
+      list(_geschrieben["probe"]) == ["a.pdf"], _geschrieben)
+sys.modules.pop("owncloud", None)
+
 # --- DER LISTENABSCHNITT BRAUCHT SEINE EIGENE LISTE ---
 #
 # Im Betrieb stuerzte die Oberflaeche beim Laden ab:
