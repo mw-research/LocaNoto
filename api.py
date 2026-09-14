@@ -37,6 +37,7 @@ import tabellen
 import sqlpruefung
 import ranking
 import store
+import budget
 
 paths.bootstrap()
 
@@ -87,6 +88,27 @@ STANDARD_TOP_K = paths.env_int("TOP_K", 5)
 # spricht zur Pruefung einmal mit dem Endpunkt, und das gehoert nicht in
 # den Weg jeder Frage.
 _bewerter, BEWERTER_INFO = ranking.lade_bewerter()
+
+
+@app.exception_handler(budget.Ueberzogen)
+def budget_aufgebraucht(anfrage, fehler):
+    """429 statt 500: das ist kein Fehler, das ist eine Schwelle.
+
+    Ungefangen wurde daraus ein Serverfehler ohne Text -- fuer den
+    Aufrufer nicht von einem Absturz zu unterscheiden, und in der
+    Oberflaeche eine rote Rueckverfolgung mitten im Chat. Die Meldung
+    sagt, was los ist und welche Einstellung es hebt; sie gehoert
+    weitergereicht und nicht verschluckt.
+
+    429 und nicht 403: die Anfrage war berechtigt, es waren nur zu
+    viele. Retry-After nennt den Rest des Fensters -- frueher hat es
+    keinen Zweck, und Raten kostet nur weitere Versuche.
+    """
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": str(fehler), "grund": "entnahmebudget"},
+        headers={"Retry-After": str(budget.FENSTER_MINUTEN * 60)})
 
 
 def benutzer(x_locanoto_token: str = Header(default="")):

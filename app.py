@@ -34,6 +34,7 @@ import chats
 import geheim
 import hintergrund
 import sqlpruefung
+import budget
 from textutils import strip_boilerplate
 from tables import build_table_chunks
 
@@ -3810,6 +3811,18 @@ if _bestand > 0:
                             search_queries, st.session_state["username"], top_k,
                             dateien=selected_docs or None,
                             bewerter=reranker)
+                    except budget.Ueberzogen as e:
+                        # Das Entnahmebudget ist eine ERWARTETE Grenze,
+                        # kein Fehler. Ungefangen endete sie als rote
+                        # Rueckverfolgung mitten im Chat -- und so sieht
+                        # sie fuer den Benutzer aus wie ein Absturz. Sie
+                        # hat einen Grund und nennt die Einstellung, die
+                        # sie hebt; also gehoert beides hin.
+                        #
+                        # Eigene Klausel und nicht die darunter: Ueberzogen
+                        # ist kein ValueError, es waere vorbeigeflogen.
+                        st.warning(str(e))
+                        st.stop()
                     except ValueError as e:
                         st.error(str(e))
                         st.stop()
