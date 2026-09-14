@@ -46,6 +46,18 @@ FRAGEN = [
 
 STUFEN = ("einbettung", "vektorsuche", "stichwortsuche", "rangfolge")
 
+# Der Kopf, den die Schnittstelle liest. Er heisst ausdruecklich NICHT
+# Authorization: api.benutzer() nimmt x_locanoto_token entgegen, woraus
+# FastAPI diesen Namen ableitet.
+#
+# Das stand hier einmal als "Authorization: Bearer", weil das ueblich ist.
+# Die Folge war kein Fehler im Werkzeug, sondern eine vollstaendige
+# Tabelle aus Nullen: der fremde Kopf wird still verworfen, die Anfrage
+# kommt ohne Token an, und die Schnittstelle antwortet voellig zu Recht
+# mit 401. Der Selbsttest vergleicht diesen Namen deshalb mit dem, den
+# api.py tatsaechlich entgegennimmt.
+KOPF = "X-LocaNoto-Token"
+
 
 def _eine_frage(adresse, token, frage, zeitlimit):
     """(gesamt_ms, zeiten, fehler)."""
@@ -53,7 +65,7 @@ def _eine_frage(adresse, token, frage, zeitlimit):
     try:
         a = requests.post(
             adresse.rstrip("/") + "/frage",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={KOPF: token},
             json={"frage": frage},
             timeout=zeitlimit)
     except requests.RequestException as e:
@@ -163,6 +175,26 @@ def main():
                 haeufig[f] = haeufig.get(f, 0) + 1
             print(" " * 20 + "Fehler: "
                   + ", ".join(f"{k} ({v}x)" for k, v in haeufig.items()))
+
+        # Keine einzige Antwort: die weiteren Stufen messen dasselbe
+        # Nichts. Vier Zeilen Nullen sehen aus wie ein Ergebnis und sind
+        # keines -- lieber hier abbrechen und sagen, woran es liegt.
+        if not ergebnisse:
+            print()
+            if all(f == "HTTP 401" for f in fehler):
+                print("KEINE MESSUNG -- die Schnittstelle weist das Token ab.")
+                print(f"  Der Kopf heisst {KOPF}. Zum Nachstellen von Hand:")
+                print(f"    curl -H \"{KOPF}: DEIN_TOKEN\" "
+                      f"{args.adresse.rstrip('/')}/status")
+                print("  Antwortet /status ebenfalls mit 401, ist das Token")
+                print("  abgelaufen, widerrufen oder gehoert zu einer anderen")
+                print("  Installation: python create_token.py --liste")
+            elif all(f == "HTTP 404" for f in fehler):
+                print("KEINE MESSUNG -- /frage gibt es unter dieser Adresse")
+                print("  nicht. Laeuft dort wirklich api:app?")
+            else:
+                print("KEINE MESSUNG -- keine einzige Anfrage kam durch.")
+            return 1
 
     print()
     print("ABLESEN:")

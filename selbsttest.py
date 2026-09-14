@@ -1166,6 +1166,32 @@ pruef("mit je eigener Frage an das Modell",
       len(set(_gerufen)) == 2, _gerufen)
 sys.modules.pop("vision", None)
 
+# --- DER LASTTEST MUSS DIESELBE SPRACHE SPRECHEN WIE DIE SCHNITTSTELLE ---
+#
+# Er schickte einmal "Authorization: Bearer". Das ist der uebliche Kopf,
+# nur liest die Schnittstelle ihn nicht. Herausgekommen ist eine
+# vollstaendige Tabelle aus Nullen -- kein Absturz, keine Warnung, nur
+# 401 in jeder Zeile. Die Attrappe im Probelauf nahm jeden Kopf an und
+# konnte das gar nicht bemerken.
+#
+# Deshalb wird hier nicht der Aufruf geprueft, sondern der NAME: der
+# Parameter von api.benutzer() gegen die Konstante im Lasttest. Wandert
+# einer von beiden, faellt es hier auf und nicht erst in einer
+# nutzlosen Messung.
+import lasttest as _lt
+
+_api_quelle = io.open(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "api.py"),
+    encoding="utf-8").read()
+_treffer = _re.search(r"def benutzer\(\s*(\w+)\s*:", _api_quelle)
+pruef("api.benutzer nimmt den Token-Kopf entgegen", bool(_treffer))
+if _treffer:
+    # FastAPI leitet aus x_locanoto_token den Kopf X-LocaNoto-Token ab.
+    _erwartet = _treffer.group(1).replace("_", "-")
+    pruef("der Lasttest schickt genau diesen Kopf",
+          _lt.KOPF.lower() == _erwartet.lower(),
+          f"{_lt.KOPF} gegen {_erwartet}")
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
