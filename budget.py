@@ -15,8 +15,15 @@ den Faktor neun daneben und brach mitten im Betrieb ab.
 
 Gezaehlt wird in einem gleitenden Fenster:
 
-    ABSCHNITTE   wie viele entschluesselt wurden
+    ABSCHNITTE   wie viele entschluesselt wurden -- JE RAUM
     RAEUME       wie viele VERSCHIEDENE dabei geoeffnet wurden
+
+Die erste Zahl gilt je Raum und nicht ueber alle summiert. Sonst
+verkuerzt jede zusaetzliche Leseberechtigung die Reichweite: dieselbe
+Frage kostet bei fuenf Raeumen das Fuenffache, und die Schwelle reisst
+nach einem Fuenftel der Fragen. Wer mehr darf, koennte weniger
+arbeiten -- und eine Schwelle, die den Berechtigtsten zuerst trifft,
+schuetzt nichts, sie stoert nur.
 
 Die zweite Zahl ist die aussagekraeftigere. Ein Mitarbeiter, der viel
 arbeitet, liest viele Abschnitte aus wenigen Raeumen. Wer alle Raeume
@@ -56,13 +63,16 @@ import paths
 #
 #     breit = max(10, top_k * 3)        36 Kandidaten bei TOP_K=12
 #     mal drei Sonden                   die Suche fragt mehrfach
-#     mal Anzahl gelesener Raeume
 #
 # Das sind 108 Abschnitte je Frage und Raum, nicht zwoelf. Die Schwelle
-# lag damit bei 37 Fragen in der Stunde statt bei 300 -- und wer fuenf
-# Raeume liest, war nach sieben Fragen draussen. Gemessen, nicht
+# lag damit bei 37 Fragen in der Stunde statt bei 300. Gemessen, nicht
 # geschaetzt: im Lasttest brach sie nach genau 37 Fragen, bei 3.996
 # gebuchten Abschnitten.
+#
+# Die Zahl gilt JE RAUM, seit je Raum gezaehlt wird. Vorher lief die
+# Summe ueber alle Raeume, und dann kostete dieselbe Frage bei fuenf
+# Raeumen das Fuenffache -- die Schwelle traf den zuerst, der am
+# meisten lesen durfte.
 #
 # DER NEUE WERT KOMMT VON DER ANDEREN SEITE. Eine Antwort braucht rund
 # 35 Sekunden. Mehr als etwa hundert Fragen in der Stunde kann ein
@@ -107,14 +117,24 @@ def _aufraeumen(jetzt):
         _ereignisse.pop(0)
 
 
-def stand(benutzer=None):
-    """(abschnitte, raeume) im laufenden Fenster."""
+def stand(benutzer=None, raum=None):
+    """(abschnitte, raeume) im laufenden Fenster.
+
+    Ohne raum ist die erste Zahl der GROESSTE Raum und nicht die Summe:
+    gezaehlt wird je Raum, also ist der groesste der, der als naechstes
+    an die Schwelle stoesst. Eine Summe stuende neben MAX_ABSCHNITTE und
+    liesse die Anzeige naeher am Limit aussehen, als sie ist.
+    """
     with _sperre:
         jetzt = _jetzt()
         _aufraeumen(jetzt)
         passend = [e for e in _ereignisse
                    if benutzer is None or e[1] == benutzer]
-        return sum(e[3] for e in passend), len({e[2] for e in passend})
+        raeume_ = {e[2] for e in passend}
+        if raum is not None:
+            return sum(e[3] for e in passend if e[2] == raum), len(raeume_)
+        je_raum = [sum(e[3] for e in passend if e[2] == r) for r in raeume_]
+        return (max(je_raum) if je_raum else 0), len(raeume_)
 
 
 def zaehle(benutzer, raum, anzahl, wartung=False):
@@ -123,6 +143,11 @@ def zaehle(benutzer, raum, anzahl, wartung=False):
     Gezaehlt wird JE NUTZER und nicht insgesamt: sonst brechen zwanzig
     fleissige Kollegen gemeinsam eine Schwelle, die fuer einen gedacht
     war, und die Anwendung steht mitten am Vormittag.
+
+    Die Menge zaehlt zusaetzlich JE RAUM. Sonst trifft dieselbe Schwelle
+    denjenigen zuerst, der am meisten lesen darf -- siehe den Kopf des
+    Moduls. Die Breite bleibt ueber alle Raeume gezaehlt; genau sie ist
+    das Zeichen, auf das es ankommt.
     """
     if anzahl <= 0:
         return
@@ -161,13 +186,14 @@ def zaehle(benutzer, raum, anzahl, wartung=False):
         _aufraeumen(jetzt)
         _ereignisse.append((jetzt, benutzer, raum, int(anzahl)))
         eigene = [e for e in _ereignisse if e[1] == benutzer]
-        summe = sum(e[3] for e in eigene)
+        summe = sum(e[3] for e in eigene if e[2] == raum)
         raeume_ = len({e[2] for e in eigene})
 
     zu_viel = None
     if MAX_ABSCHNITTE and summe > MAX_ABSCHNITTE:
-        zu_viel = (f"{summe} Abschnitte in {FENSTER_MINUTEN} Minuten "
-                   f"(Schwelle {MAX_ABSCHNITTE})")
+        zu_viel = (f"{summe} Abschnitte aus '{raum}' in "
+                   f"{FENSTER_MINUTEN} Minuten "
+                   f"(Schwelle {MAX_ABSCHNITTE} je Raum)")
     elif MAX_RAEUME and raeume_ > MAX_RAEUME:
         zu_viel = (f"{raeume_} verschiedene Raeume in {FENSTER_MINUTEN} "
                    f"Minuten (Schwelle {MAX_RAEUME})")
@@ -242,7 +268,7 @@ def beschreibung():
     if not AKTIV:
         return "Entnahmebudget: aus"
     a, r = stand()
-    teile = [f"{a}/{MAX_ABSCHNITTE} Abschnitte",
+    teile = [f"{a}/{MAX_ABSCHNITTE} Abschnitte (groesster Raum)",
              f"{r}/{MAX_RAEUME} Raeume",
              f"Fenster {FENSTER_MINUTEN} min"]
     teile.append("Protokoll nach " + (ZIEL if ZIEL else "NUR neben die Daten"))

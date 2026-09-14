@@ -432,6 +432,42 @@ pruef("ein Massenabzug bricht ab",
       not _budget_laeuft("dieb", None, 5, 10))
 budget._ereignisse.clear()
 
+# --- WER MEHR LESEN DARF, DARF NICHT WENIGER ARBEITEN ---
+#
+# Die Menge zaehlt je Raum. Vorher lief sie ueber alle Raeume summiert,
+# und damit verkuerzte jede zusaetzliche Leseberechtigung die
+# Reichweite: dieselbe Frage kostete bei fuenf Raeumen das Fuenffache.
+# Getroffen hat die Schwelle also zuerst den, der am meisten darf.
+#
+# Hier drei Raeume mit je 30 Buchungen bei einer Schwelle von 40. In der
+# Summe waeren das 90 und laengst darueber; je Raum sind es 30 und
+# damit in Ordnung. Genau diese Pruefung faellt mit der alten Zaehlung.
+budget.MAX_RAEUME = 25          # die Breite soll hier nicht dazwischenfunken
+pruef("drei Raeume mit je 30 reissen die Schwelle von 40 nicht",
+      all(_budget_laeuft("vielleser", r, 30, 1)
+          for r in ("einkauf", "technik", "recht")))
+
+# Und der umgekehrte Fall muss weiter greifen: genug aus EINEM Raum
+# bricht ab, sonst waere die Schwelle nur noch Zierde.
+budget._ereignisse.clear()
+pruef("aber 60 aus einem einzigen Raum schon",
+      not _budget_laeuft("sammler", "einkauf", 30, 2))
+
+# Die Anzeige nennt den groessten Raum, nicht die Summe: neben
+# MAX_ABSCHNITTE stuende eine Summe fuer eine Naehe zur Schwelle, die
+# es nicht gibt.
+budget._ereignisse.clear()
+budget.zaehle("vielleser", "einkauf", 30)
+budget.zaehle("vielleser", "technik", 12)
+_a, _r = budget.stand("vielleser")
+pruef("der Stand zeigt den groessten Raum", _a == 30, _a)
+pruef("und die Breite ueber alle Raeume", _r == 2, _r)
+pruef("nach Raum gefragt kommt dessen Wert",
+      budget.stand("vielleser", "technik")[0] == 12)
+
+budget.MAX_RAEUME = 3
+budget._ereignisse.clear()
+
 # Der Indexaufbau liest den GANZEN Bestand -- das ist seine Aufgabe. Bis
 # hierher rechnete er auf dasselbe Budget und riss jede Schwelle: die
 # Anwendung startete bei jedem Bestand ueber der Schwelle nicht mehr,
