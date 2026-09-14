@@ -1487,9 +1487,15 @@ with st.sidebar:
     #
     # Die Kennung ist zufaellig, der Titel kommt aus dem verschluesselten
     # Verzeichnis. Angezeigt wird der Titel, ausgewaehlt die Kennung.
-    _eintraege = get_all_chats()
-    _titel = {k: t for k, t, _g in _eintraege}
-    existing_chats = [k for k, _t, _g in _eintraege]
+    # NICHT _eintraege: so heisst weiter unten der Tabellenkatalog.
+    # Beides unter demselben Namen ging gut, solange die Neubelegung
+    # dazwischen stand -- und fiel sie weg, stuerzte die Oberflaeche
+    # beim Laden ab, weil .get() auf einem Tupel nichts findet. Das
+    # ist die freundliche Fassung; bei zwei Woerterbuechern haette sie
+    # stattdessen das Falsche angezeigt.
+    _chatliste = get_all_chats()
+    _titel = {k: t for k, t, _g in _chatliste}
+    existing_chats = [k for k, _t, _g in _chatliste]
     if existing_chats or st.session_state.current_chat_id:
         # Ein noch nicht gespeicherter Chat steht nicht im Verzeichnis --
         # ohne ihn faende die Auswahl ihren eigenen Eintrag nicht.

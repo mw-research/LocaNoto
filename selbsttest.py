@@ -1338,6 +1338,28 @@ pruef("sie zaehlt auch in Unterordnern",
 pruef("und einen fehlenden Ordner als leer",
       _bl.zaehle_ordner(os.path.join(tmp, "gibtsnicht")) == (0, 0))
 
+
+# --- DER LISTENABSCHNITT BRAUCHT SEINE EIGENE LISTE ---
+#
+# Im Betrieb stuerzte die Oberflaeche beim Laden ab:
+#   AttributeError: 'tuple' object has no attribute 'get'
+# _eintraege trug dort noch die Chatliste -- Tupel statt
+# Woerterbuecher --, weil die Neubelegung aus dem Tabellenkatalog
+# fehlte. In einer Ablage war der ganze Block verlorengegangen; die
+# beiden anderen waren in Ordnung, und deshalb fiel es nirgends auf.
+_app = _datei("app.py")
+
+_neu = _app.find("_eintraege = tabellen.sichtbar(")
+_nutzung = _app.find('_eintraege if e.get("gross")')
+pruef("der Tabellenkatalog wird _eintraege zugewiesen", _neu > 0, _neu)
+pruef("und zwar VOR der ersten Verwendung als Katalog",
+      0 < _neu < _nutzung, f"Zuweisung {_neu}, Verwendung {_nutzung}")
+
+# Und die Ursache: zwei verschiedene Dinge unter einem Namen.
+pruef("die Chatliste heisst nicht mehr wie der Katalog",
+      "_eintraege = get_all_chats()" not in _app)
+pruef("sie hat einen eigenen Namen", "_chatliste = get_all_chats()" in _app)
+
 # --- ANLEGEN-FORMULARE WERDEN NACH ERFOLG GELEERT ---
 _app = _datei("app.py")
 
