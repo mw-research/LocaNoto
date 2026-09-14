@@ -1278,6 +1278,27 @@ pruef("der Lasttest kann mehrere Token reihum verwenden",
 
 
 
+
+# --- DIE BESTANDSLISTE ZAEHLT RICHTIG ---
+#
+# Sie ist das Werkzeug, mit dem sich ein Umzug ueberhaupt pruefen
+# laesst: vorher im alten Container, nachher im neuen, und die beiden
+# Ausgaben nebeneinander. Zaehlt sie falsch, ist die Pruefung eine
+# Bestaetigung ohne Inhalt -- schlimmer als keine.
+import bestandsliste as _bl
+
+_probe = os.path.join(tmp, "zaehlprobe")
+os.makedirs(os.path.join(_probe, "tief", "tiefer"), exist_ok=True)
+for _p, _inhalt in ((["a.txt"], b"12345"),
+                    (["tief", "b.txt"], b"123"),
+                    (["tief", "tiefer", "c.txt"], b"1")):
+    with open(os.path.join(_probe, *_p), "wb") as _f:
+        _f.write(_inhalt)
+pruef("sie zaehlt auch in Unterordnern",
+      _bl.zaehle_ordner(_probe) == (3, 9), _bl.zaehle_ordner(_probe))
+pruef("und einen fehlenden Ordner als leer",
+      _bl.zaehle_ordner(os.path.join(tmp, "gibtsnicht")) == (0, 0))
+
 # --- ANLEGEN-FORMULARE WERDEN NACH ERFOLG GELEERT ---
 _app = _datei("app.py")
 
