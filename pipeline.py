@@ -17,6 +17,7 @@ Hinweise zurueck; wie daraus eine Bildschirmzeile wird, entscheidet die
 Oberflaeche.
 """
 import os
+import time
 
 import paths
 import keyword_index
@@ -286,9 +287,26 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     # Kontextfenster nicht ueberschreiten. Sie kostete bei einem
     # haengenden Endpunkt dreimal das Zeitlimit obendrauf -- gemessen
     # acht Minuten Spinner, bevor eine Meldung erschien.
+    # ZEITEN JE STUFE.
+    #
+    # Ohne sie sagt eine langsame Antwort nur, dass sie langsam ist.
+    # Mit ihnen sagt sie, WO -- und das ist der Unterschied zwischen
+    # "wir brauchen mehr Hardware" und "der Rerank-Endpunkt antwortet
+    # nicht". Gemessen wird in Millisekunden und mitgegeben in zahlen;
+    # das kostet nichts und steht damit auch in der Schnittstelle.
+    _t0 = time.perf_counter()
+    _zeiten = {}
+
+    def _merke(name):
+        nonlocal _t0
+        _jetzt = time.perf_counter()
+        _zeiten[name] = round((_jetzt - _t0) * 1000)
+        _t0 = _jetzt
+
     vektoren = embed_batch(embed_client, list(sonden_liste), embed_modell,
                            timeout=SUCHE_EMBED_TIMEOUT,
                            nacharbeit=False)
+    _merke("einbettung")
     # Sonde und Vektor gemeinsam filtern. Wuerde man nur die Vektoren
     # zusammenschieben, verschoeben sich die Indizes und die Treffer
     # bekaemen die falsche Sonde zugeordnet.
@@ -322,6 +340,7 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
                  for _d, t, m in liste_roh]
         if liste:
             ranglisten.append(liste)
+    _merke("vektorsuche")
 
     # B. STICHWORTSUCHE (SQLite FTS5)
     #
@@ -338,15 +357,18 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
         if liste:
             ranglisten.append(liste)
 
+    _merke("stichwortsuche")
     zahlen = {"kandidaten": sum(len(l) for l in ranglisten),
-              "ranglisten": len(ranglisten)}
+              "ranglisten": len(ranglisten),
+              "zeiten": _zeiten}
 
     if not ranglisten:
         return [], zahlen
 
     ergebnis = []
-    for text, _score, eintrag in ranking.rank(ranglisten, top_k,
-                                              bewerter=bewerter):
+    _rang = ranking.rank(ranglisten, top_k, bewerter=bewerter)
+    _merke("rangfolge")
+    for text, _score, eintrag in _rang:
         # Kopie: die Metadaten kommen direkt aus ChromaDB und sollen dort
         # nicht veraendert werden.
         meta = dict(eintrag["meta"] or {})
