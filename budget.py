@@ -6,10 +6,12 @@ Prozess hat, hat den Klartext. Das ist keine Luecke in der Umsetzung,
 das ist Arithmetik.
 
 Was geht, ist das Abziehen LAUT und LANGSAM zu machen statt unmoeglich.
-Eine Frage braucht ein Dutzend Abschnitte aus ein bis drei Raeumen. Wer
-den Bestand ausleert, braucht Zehntausende aus allen. Der Unterschied ist
-so gross, dass eine Schwelle dazwischen passt, ohne dem Betrieb im Weg zu
-stehen.
+Eine Frage kostet gut hundert Abschnitte je Raum. Wer den Bestand
+ausleert, braucht Zehntausende aus allen. Der Unterschied ist so gross,
+dass eine Schwelle dazwischen passt, ohne dem Betrieb im Weg zu stehen --
+vorausgesetzt, sie ist an dem ausgerichtet, was eine Frage WIRKLICH
+kostet. Siehe die Rechnung bei MAX_ABSCHNITTE; die erste Fassung lag um
+den Faktor neun daneben und brach mitten im Betrieb ab.
 
 Gezaehlt wird in einem gleitenden Fenster:
 
@@ -44,12 +46,38 @@ import time
 
 import paths
 
-# Schwellen je Fenster. Grosszuegig gewaehlt: sie sollen einen Abzug
-# treffen und keinen fleissigen Menschen. Gemessen an einer gewoehnlichen
-# Frage -- zwoelf Abschnitte, ein bis drei Raeume -- sind 4.000
-# Abschnitte rund 300 Fragen in der Stunde.
+# Schwellen je Fenster. Sie sollen einen Abzug treffen und keinen
+# fleissigen Menschen.
+#
+# DIE ERSTE FASSUNG TRAF DEN FLEISSIGEN MENSCHEN. Sie stand bei 4.000
+# und rechnete mit "zwoelf Abschnitten je Frage", also rund 300 Fragen
+# in der Stunde. Die Annahme war falsch. Was eine Frage wirklich kostet,
+# steht in pipeline.suche:
+#
+#     breit = max(10, top_k * 3)        36 Kandidaten bei TOP_K=12
+#     mal drei Sonden                   die Suche fragt mehrfach
+#     mal Anzahl gelesener Raeume
+#
+# Das sind 108 Abschnitte je Frage und Raum, nicht zwoelf. Die Schwelle
+# lag damit bei 37 Fragen in der Stunde statt bei 300 -- und wer fuenf
+# Raeume liest, war nach sieben Fragen draussen. Gemessen, nicht
+# geschaetzt: im Lasttest brach sie nach genau 37 Fragen, bei 3.996
+# gebuchten Abschnitten.
+#
+# DER NEUE WERT KOMMT VON DER ANDEREN SEITE. Eine Antwort braucht rund
+# 35 Sekunden. Mehr als etwa hundert Fragen in der Stunde kann ein
+# Mensch also gar nicht stellen, und das nur, wenn er zwischen den
+# Antworten weder liest noch nachdenkt. Hundert Fragen sind rund 11.000
+# Abschnitte. 20.000 liegt sicher darueber und ist von keinem Menschen
+# an einer Tastatur zu erreichen.
+#
+# Weich wird der Schutz dadurch nicht: ein Skript mit acht parallelen
+# Anfragen schafft gemessene 11 Fragen je Minute, also gut 1.200
+# Abschnitte. Es reisst die Schwelle nach etwa siebzehn Minuten -- lange
+# bevor ein Bestand von Bedeutung draussen ist. Der Tausch ist eindeutig
+# richtig: sie trifft seltener den Falschen und immer noch den Richtigen.
 FENSTER_MINUTEN = paths.env_int("BUDGET_FENSTER_MINUTEN", 60)
-MAX_ABSCHNITTE = paths.env_int("BUDGET_ABSCHNITTE", 4000)
+MAX_ABSCHNITTE = paths.env_int("BUDGET_ABSCHNITTE", 20000)
 MAX_RAEUME = paths.env_int("BUDGET_RAEUME", 25)
 
 # 0 schaltet ab. Ausdruecklich moeglich, weil eine Schwelle, die im

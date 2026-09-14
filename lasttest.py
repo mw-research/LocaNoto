@@ -60,6 +60,8 @@ KOPF = "X-LocaNoto-Token"
 
 
 def _eine_frage(adresse, token, frage, zeitlimit):
+    # token ist EIN Token. Die Auswahl trifft _runde -- siehe dort,
+    # warum das nicht gleichgueltig ist.
     """(gesamt_ms, zeiten, fehler)."""
     t0 = time.perf_counter()
     try:
@@ -94,14 +96,24 @@ def _eine_frage(adresse, token, frage, zeitlimit):
 
 
 def _runde(adresse, token, gleichzeitig, je, zeitlimit, fragen):
-    """Eine Stufe. (ergebnisse, fehler)."""
+    """Eine Stufe. (ergebnisse, fehler).
+
+    token darf mehrere sein. Das ist kein Komfort, sondern eine
+    Frage der Gueltigkeit: das Entnahmebudget zaehlt JE NUTZER. Mit
+    einem einzigen Token treffen sechzehn gleichzeitige Anfragen
+    gebuendelt eine Schwelle, die sich bei sechzehn Menschen auf
+    sechzehn Konten verteilt haette. Gemessen wuerde dann nicht die
+    Gleichzeitigkeit, sondern das Budget -- und die Tabelle saehe aus
+    wie ein Engpass, wo keiner ist.
+    """
     aufgaben = [fragen[i % len(fragen)] for i in range(je)]
     ergebnisse, fehler = [], []
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=gleichzeitig) as pool:
         for gesamt, zeiten, grund in pool.map(
-                lambda f: _eine_frage(adresse, token, f, zeitlimit),
-                aufgaben):
+                lambda p: _eine_frage(adresse, token[p[0] % len(token)],
+                                      p[1], zeitlimit),
+                list(enumerate(aufgaben))):
             if grund:
                 fehler.append(grund)
             else:
@@ -122,7 +134,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--adresse", default="http://127.0.0.1:8600")
     p.add_argument("--token", required=True,
-                   help="Zugangstoken (create_token.py)")
+                   help="Zugangstoken (create_token.py). Mehrere durch "
+                        "Komma getrennt -- dann wird reihum gefragt, "
+                        "wie es mehrere Menschen taeten. Das Budget "
+                        "zaehlt je Nutzer, siehe _runde().")
     p.add_argument("--gleichzeitig", default="1,2,4,8",
                    help="Stufen, kommagetrennt (Vorgabe 1,2,4,8)")
     p.add_argument("--je", type=int, default=6,
@@ -131,6 +146,11 @@ def main():
     p.add_argument("--fragen", default="",
                    help="Datei mit einer Frage je Zeile")
     args = p.parse_args()
+
+    token = [t.strip() for t in args.token.split(",") if t.strip()]
+    if not token:
+        print("Kein Token.")
+        return 2
 
     fragen = FRAGEN
     if args.fragen:
@@ -143,7 +163,14 @@ def main():
     print("=" * 72)
     print(f"LASTTEST  {args.adresse}")
     print("=" * 72)
-    print(f"{len(fragen)} verschiedene Fragen, je Stufe {args.je} Anfragen.")
+    print(f"{len(fragen)} verschiedene Fragen, je Stufe {args.je} "
+          f"Anfragen, {len(token)} Token.")
+    if len(token) == 1:
+        print("HINWEIS: nur EIN Token. Das Entnahmebudget zaehlt je")
+        print("Nutzer -- ab etwa vierzig Fragen in der Stunde antwortet")
+        print("die Schnittstelle mit 429, und die Messung misst dann das")
+        print("Budget statt der Last. Fuer hohe Stufen mehrere Token")
+        print("anlegen und durch Komma trennen.")
     print()
 
     kopf = (f"{'gleichz.':>8} {'ok':>4} {'Fehler':>6} {'Durchsatz':>10} "
@@ -154,7 +181,7 @@ def main():
 
     for stufe in [int(x) for x in args.gleichzeitig.split(",") if x.strip()]:
         ergebnisse, fehler, dauer = _runde(
-            args.adresse, args.token, stufe, args.je, args.zeitlimit, fragen)
+            args.adresse, token, stufe, args.je, args.zeitlimit, fragen)
         gesamt = [g for g, _z in ergebnisse]
         durchsatz = len(ergebnisse) / dauer * 60 if dauer else 0
         zeile = (f"{stufe:>8} {len(ergebnisse):>4} {len(fehler):>6} "
@@ -181,7 +208,15 @@ def main():
         # keines -- lieber hier abbrechen und sagen, woran es liegt.
         if not ergebnisse:
             print()
-            if all(f == "HTTP 401" for f in fehler):
+            if all(f == "HTTP 429" for f in fehler):
+                print("KEINE MESSUNG -- das Entnahmebudget ist")
+                print("  aufgebraucht. Es zaehlt JE NUTZER in einem")
+                print("  gleitenden Fenster von 60 Minuten; mit einem")
+                print("  einzigen Token laufen alle Anfragen auf dasselbe")
+                print("  Konto. Entweder mehrere Token durch Komma")
+                print("  trennen, oder eine Stunde warten, oder fuer den")
+                print("  Messlauf BUDGET_ABSCHNITTE heraufsetzen.")
+            elif all(f == "HTTP 401" for f in fehler):
                 print("KEINE MESSUNG -- die Schnittstelle weist das Token ab.")
                 print(f"  Der Kopf heisst {KOPF}. Zum Nachstellen von Hand:")
                 print(f"    curl -H \"{KOPF}: DEIN_TOKEN\" "

@@ -395,6 +395,11 @@ print("=== 11. Verschluesselt im Bestand ===")
 # Der Zweck in einem Satz: wer das Datenvolume kopiert, soll Vektoren
 # bekommen und keinen Satz Text.
 import raumschluessel, budget, sicherheit
+
+# Der eingestellte Wert, BEVOR der Test ihn gleich auf 40 setzt, um das
+# Reissen ueberhaupt ausloesen zu koennen. Am Ende wird gegen diesen
+# geprueft -- die Attrappe zu pruefen waere wertlos.
+_BUDGET_EINGESTELLT = budget.MAX_ABSCHNITTE
 _geheim = "Streng vertrauliche Pruefanweisung fuer Kessel"
 _sml = store.sammlung(raeume.sammlung("einkauf"))
 store.schreibe(_sml, ["krypt1"], documents=[_geheim],
@@ -1191,6 +1196,67 @@ if _treffer:
     pruef("der Lasttest schickt genau diesen Kopf",
           _lt.KOPF.lower() == _erwartet.lower(),
           f"{_lt.KOPF} gegen {_erwartet}")
+
+# --- DIE BUDGETGRENZE IST KEINE AUSNAHME, DIE NIEMAND FAENGT ---
+#
+# budget.Ueberzogen wurde nirgends gefangen. In der Schnittstelle wurde
+# daraus HTTP 500, in der Oberflaeche eine rote Rueckverfolgung mitten
+# im Chat -- fuer den Benutzer nicht von einem Absturz zu
+# unterscheiden. Dabei ist es eine ERWARTETE Grenze mit einer Meldung,
+# die sogar sagt, welche Einstellung sie hebt.
+#
+# Der Grund, warum es durchrutschte, ist der Stammbaum: app.py fing an
+# der Suche nur ValueError. Ueberzogen ist keiner -- also flog es
+# vorbei. Genau das haelt die erste Pruefung fest.
+_datei = lambda n: io.open(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), n), encoding="utf-8").read()
+
+pruef("Ueberzogen wird von einer ValueError-Klausel NICHT gefangen",
+      issubclass(budget.Ueberzogen, Exception)
+      and not issubclass(budget.Ueberzogen, ValueError))
+
+_app = _datei("app.py")
+_stelle = _app.find("pipeline.suche(")
+pruef("app.py ruft die Suche auf", _stelle > 0)
+# Der Fangblock steht unmittelbar hinter dem Aufruf. Weiter zu suchen
+# hiesse, einen Block irgendwo anders im Modul als Beleg zu nehmen.
+# Auf das ganze Wort pruefen. "budget.Ueberzogen" als blosse
+# Teilzeichenkette liesse auch "budget.UeberzogenX" durchgehen -- der
+# Gegentest zu dieser Zeile bestand, ohne dass die Klausel noch
+# funktioniert haette.
+pruef("und faengt das Budget dort ab",
+      bool(_re.search(r"except\s+budget\.Ueberzogen\b",
+                      _app[_stelle:_stelle + 1200])))
+
+_api = _datei("api.py")
+pruef("die Schnittstelle behandelt es eigens",
+      bool(_re.search(r"exception_handler\(budget\.Ueberzogen\)", _api)))
+pruef("und antwortet mit 429, nicht mit 500",
+      "status_code=429" in _api)
+
+# Und der Lasttest darf nicht alles auf ein Konto buchen: das Budget
+# zaehlt je Nutzer, ein einziges Token buendelt, was sich auf viele
+# Menschen verteilt haette.
+pruef("der Lasttest kann mehrere Token reihum verwenden",
+      "token[p[0] % len(token)]" in _datei("lasttest.py"))
+
+# --- DIE SCHWELLE MUSS UEBER EINER STUNDE HANDARBEIT LIEGEN ---
+#
+# Sonst trifft sie den fleissigen Menschen statt den Abzug, und genau
+# das ist passiert: 4.000 klang grosszuegig, war aber bei den
+# tatsaechlichen Kosten einer Frage nach 37 Fragen aufgebraucht.
+#
+# Geprueft wird deshalb nicht die Zahl, sondern das Verhaeltnis. Die
+# Kosten kommen aus derselben Formel wie in pipeline.suche, die
+# Stundenleistung aus der gemessenen Antwortzeit. Wird TOP_K erhoeht
+# oder eine vierte Sonde eingebaut, faellt es hier auf.
+_JE_FRAGE = 3 * max(10, paths.env_int("TOP_K", 5) * 3)   # Sonden x Kandidaten
+_SEKUNDEN_JE_ANTWORT = 35                                 # gemessen
+_PRO_STUNDE = 3600 // _SEKUNDEN_JE_ANTWORT                # ohne Lesen, ohne Denken
+pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
+      _BUDGET_EINGESTELLT >= _JE_FRAGE * _PRO_STUNDE,
+      f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
+      f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
 
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
