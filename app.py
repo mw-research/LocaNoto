@@ -1942,12 +1942,20 @@ with st.sidebar:
     # Wie beim Listen-Upload: ohne wechselnden Schluessel bleibt die Datei
     # nach dem Verarbeiten im Feld stehen.
     _pdf_nr = st.session_state.setdefault("pdf_upload_nr", 0)
-    uploaded_file = st.file_uploader(
-        "Dokument hochladen", key=f"pdf_upload_{_pdf_nr}",
+    # Mehrere auf einmal: Raum, Projekt und der Bildschalter darunter
+    # gelten dann fuer den ganzen Stapel. Wer je Datei etwas anderes
+    # will, laedt einzeln -- das geht weiterhin.
+    hochgeladen = st.file_uploader(
+        "Dokumente hochladen", key=f"pdf_upload_{_pdf_nr}",
         type=["pdf", "PDF", "docx", "md", "markdown", "txt"],
-        help="PDF, Word, Markdown oder Text. Wird vektorisiert und "
-             "durchsuchbar.")
-    if uploaded_file:
+        accept_multiple_files=True,
+        help="PDF, Word, Markdown oder Text. Mehrere auf einmal moeglich; "
+             "Raum und Projekt gelten dann fuer alle. Wird vektorisiert "
+             "und durchsuchbar.")
+    if hochgeladen:
+        if len(hochgeladen) > 1:
+            st.caption(f"{len(hochgeladen)} Dateien. Sie werden "
+                       f"nacheinander verarbeitet.")
         # --- RAUM ---
         #
         # Der Raum entscheidet, wer das Dokument sehen kann. Vorgabe ist
@@ -1999,14 +2007,22 @@ with st.sidebar:
             value=False, key="upload_bilder",
             help="Fuer PDFs ohne Textebene und fuer Schaubilder. "
                  "Kostet einen Modellaufruf je Bild.")
-        if _bilder and uploaded_file.name.lower().endswith(".pdf"):
-            # Die Schaetzung VOR der Zustimmung. Sie kostet keinen
-            # Modellaufruf -- gezaehlt wird im Dokument.
+        _pdfs = [d for d in hochgeladen if d.name.lower().endswith(".pdf")]
+        if _bilder and _pdfs:
+            # Die Schaetzung VOR der Zustimmung, und ueber den GANZEN
+            # Stapel. Sie kostet keinen Modellaufruf -- gezaehlt wird im
+            # Dokument. Je Datei zu schaetzen waere hier wertlos: die
+            # Zustimmung gilt fuer alle, also muss die Zahl daneben auch
+            # fuer alle gelten.
             try:
                 import bildtext, pymupdf as _pm
-                with _pm.open(stream=uploaded_file.getvalue(),
-                              filetype="pdf") as _d:
-                    _s, _a = bildtext.zaehle(_d)
+                _s = _a = 0
+                for _datei in _pdfs:
+                    with _pm.open(stream=_datei.getvalue(),
+                                  filetype="pdf") as _d:
+                        _ds, _da = bildtext.zaehle(_d)
+                    _s += _ds
+                    _a += _da
                 if _s or _a:
                     st.caption(
                         f"\u2192 {_s} gescannte Seite(n), {_a} "
@@ -2017,30 +2033,56 @@ with st.sidebar:
                 st.caption(f"Nicht abschaetzbar: {_e}")
 
         if st.button("Hochladen & Vektorisieren"):
-            with st.spinner("Verarbeite Dokument (das kann kurz dauern)..."):
-                raeume.sichere_anlage_privat(st.session_state["username"])
-                _n, _hinweis = process_uploaded_pdf(
-                    uploaded_file, ziel_raum, _projekt, _bilder)
+            raeume.sichere_anlage_privat(st.session_state["username"])
+            _stand = st.empty()
+            _ergebnisse = []
+            for _i, _datei in enumerate(hochgeladen, 1):
+                # Der Stand VOR der Datei und nicht danach: bei einem
+                # grossen Scan steht der Spinner minutenlang, und ohne
+                # den Namen daneben weiss niemand, ob es noch laeuft
+                # oder an welcher Stelle es haengt.
+                _stand.caption(f"{_i} von {len(hochgeladen)}: {_datei.name}")
+                with st.spinner(f"Verarbeite '{_datei.name}' ..."):
+                    _n, _hinweis = process_uploaded_pdf(
+                        _datei, ziel_raum, _projekt, _bilder)
+                _ergebnisse.append((_datei.name, _n, _hinweis))
+            _stand.empty()
             refresh_document_index()
-            if _n:
-                st.success(f"'{uploaded_file.name}' in "
-                           f"'{raeume.bezeichnung(ziel_raum)}' — "
-                           f"{_n} Abschnitte durchsuchbar.")
+
+            # Je Datei melden. Ein Stapel hat nicht einen Ausgang,
+            # sondern einen je Datei -- von fuenf kann eine ein Scan
+            # ohne Textebene sein, und "3 von 5 verarbeitet" allein
+            # sagt nicht, WELCHE fehlt.
+            _schlecht = [e for e in _ergebnisse if not e[1]]
+            for _name, _n, _hinweis in _ergebnisse:
+                if _n:
+                    st.success(f"'{_name}' in "
+                               f"'{raeume.bezeichnung(ziel_raum)}' — "
+                               f"{_n} Abschnitte durchsuchbar.")
+                else:
+                    st.error(f"'{_name}' wurde NICHT durchsuchbar.")
                 if _hinweis:
-                    st.warning(_hinweis)
+                    st.warning(f"{_name}: {_hinweis}")
+
+            if _schlecht:
+                # Kein Neuladen: die Dateien liegen jetzt auf der
+                # Platte, sind aber in keiner Sammlung. Wer hier ein
+                # gruenes "hinzugefuegt" sieht, sucht spaeter vergeblich
+                # und haelt es fuer einen Fehler der Suche.
+                #
+                # Das Feld behaelt dabei auch die gelungenen Dateien.
+                # Ein zweiter Druck verarbeitet sie erneut -- das kostet
+                # Zeit, verdoppelt aber nichts: store.schreibe nimmt
+                # upsert, und die Kennungen sind aus Dateiname und Seite
+                # gebildet.
+                st.caption(f"{len(_schlecht)} von {len(_ergebnisse)} "
+                           f"liegen in der Ablage, aber kein Abschnitt "
+                           f"davon steht in der Suche. Behebe die Ursache "
+                           f"und lade sie erneut hoch.")
+            else:
                 st.session_state["pdf_upload_nr"] = _pdf_nr + 1
                 time.sleep(1)
                 st.rerun()
-            else:
-                # Kein Erfolg melden und NICHT neu laden: die Datei liegt
-                # jetzt auf der Platte, ist aber in keiner Sammlung. Wer
-                # hier ein gruenes "hinzugefuegt" sieht, sucht spaeter
-                # vergeblich und haelt es fuer einen Fehler der Suche.
-                st.error(f"'{uploaded_file.name}' wurde NICHT durchsuchbar.")
-                st.warning(_hinweis or "Kein Abschnitt gespeichert.")
-                st.caption("Die Datei liegt in der Ablage, aber kein "
-                           "Abschnitt davon steht in der Suche. Behebe die "
-                           "Ursache und lade sie erneut hoch.")
 
     # --- LANGE LAEUFE ---
     #

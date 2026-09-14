@@ -1276,6 +1276,33 @@ pruef("und antwortet mit 429, nicht mit 500",
 pruef("der Lasttest kann mehrere Token reihum verwenden",
       "token[p[0] % len(token)]" in _datei("lasttest.py"))
 
+
+# --- MEHRERE DOKUMENTE AUF EINMAL ---
+_app = _datei("app.py")
+_feld = _app.find('"Dokumente hochladen"')
+pruef("das Dokumentenfeld gibt es", _feld > 0)
+pruef("und es nimmt mehrere Dateien",
+      "accept_multiple_files=True" in _app[_feld:_feld + 500])
+
+_knopf = _app.find('st.button("Hochladen & Vektorisieren")')
+pruef("der Knopf arbeitet einen Stapel ab",
+      "for _i, _datei in enumerate(hochgeladen" in _app[_knopf:_knopf + 900])
+
+# Jede Datei bekommt ihre eigene Meldung. "3 von 5 verarbeitet" sagt
+# nicht, WELCHE fehlt -- und genau danach wird gesucht.
+_block = _app[_knopf:_knopf + 3000]
+pruef("und meldet je Datei", "for _name, _n, _hinweis in _ergebnisse" in _block)
+
+# Und das Entscheidende: kein Neuladen, solange eine Datei nicht
+# durchsuchbar wurde. Geprueft wird die REIHENFOLGE im Quelltext --
+# st.rerun() muss hinter dem else des Fehlerzweigs stehen.
+_fehlerzweig = _block.find("if _schlecht:")
+_neuladen = _block.find("st.rerun()")
+pruef("bei einem Fehlschlag wird nicht neu geladen",
+      0 < _fehlerzweig < _neuladen, f"if bei {_fehlerzweig}, rerun bei {_neuladen}")
+pruef("und genau einmal wird ueberhaupt neu geladen",
+      _block.count("st.rerun()") == 1, _block.count("st.rerun()"))
+
 # --- DIE SCHWELLE MUSS UEBER EINER STUNDE HANDARBEIT LIEGEN ---
 #
 # Sonst trifft sie den fleissigen Menschen statt den Abzug, und genau
