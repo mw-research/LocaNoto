@@ -1333,6 +1333,42 @@ def _unvollstaendig(stand):
     return bool(stand.get("fehler")) or stand.get("vollstaendig") is False
 
 
+def _feldschluessel(bereich, name):
+    """Schluessel eines Eingabefeldes in der laufenden Runde.
+
+    Streamlit haelt den Inhalt eines Feldes unter seinem Schluessel in
+    der Sitzung. Ein st.rerun() leert deshalb nichts: das Feld kommt mit
+    demselben Schluessel zurueck und holt sich denselben Inhalt. Den
+    Inhalt nachtraeglich zu setzen verweigert Streamlit, sobald das Feld
+    in diesem Lauf schon gezeichnet wurde.
+
+    Was bleibt, ist ein NEUER Schluessel. Denselben Weg geht das
+    Hochladefeld schon -- siehe pdf_upload_nr.
+    """
+    return f"{bereich}_{name}_{st.session_state.get('_runde_' + bereich, 0)}"
+
+
+def _felder_leeren(bereich, *namen):
+    """Ein Anlegen-Formular leeren. NUR nach Erfolg aufrufen.
+
+    Nach einem Fehlschlag muessen die Felder stehen bleiben: wer sich
+    beim Passwort vertippt hat, soll die Kennung nicht neu eintippen.
+
+    Die alten Eintraege werden entfernt und nicht liegengelassen --
+    sonst sammelt sich in einer langen Sitzung ein Eintrag je
+    angelegtem Benutzer an. Scheitert das Entfernen, ist das nicht
+    schlimm: der neue Schluessel sorgt ohnehin fuer ein leeres Feld,
+    das Aufraeumen ist die Zugabe.
+    """
+    runde = st.session_state.get("_runde_" + bereich, 0)
+    for name in namen:
+        try:
+            del st.session_state[f"{bereich}_{name}_{runde}"]
+        except Exception:
+            pass
+    st.session_state["_runde_" + bereich] = runde + 1
+
+
 def _leeren():
     """Nach jeder Aenderung an Dokumenten oder Raeumen aufrufen."""
     _zahl_abschnitte.clear()
@@ -1899,8 +1935,9 @@ with st.sidebar:
                         ["(Basis)"] + _bekannt + ["+ neues anlegen"],
                         key="listen_upload_bereich")
                     if _bwahl == "+ neues anlegen":
-                        _bneu = st.text_input("Name des neuen Bereichs",
-                                              key="listen_upload_neu")
+                        _bneu = st.text_input(
+                            "Name des neuen Bereichs",
+                            key=_feldschluessel("listen_neu", "bereich"))
                         _ziel_bereich = _bneu.strip()
                     else:
                         _ziel_bereich = "" if _bwahl == "(Basis)" else _bwahl
@@ -1920,6 +1957,7 @@ with st.sidebar:
                             st.error(m)
                         if _abgelegt:
                             st.session_state["listen_upload_nr"] = _nr + 1
+                            _felder_leeren("listen_neu", "bereich")
                             time.sleep(1)
                             st.rerun()
             else:
@@ -2454,17 +2492,20 @@ with st.sidebar:
                 key="benutzer_wahl")
 
             if _wahl == "(neu anlegen)":
-                _name = st.text_input("Kennung", key="benutzer_neu_name")
+                _name = st.text_input(
+                    "Kennung", key=_feldschluessel("benutzer_neu", "name"))
                 _rolle = st.selectbox(
                     "Rolle", list(benutzer.ROLLEN),
                     index=list(benutzer.ROLLEN).index("nutzer"),
-                    key="benutzer_neu_rolle",
+                    key=_feldschluessel("benutzer_neu", "rolle"),
                     help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
                 _pw1 = st.text_input(
                     f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
-                    type="password", key="benutzer_neu_pw1")
-                _pw2 = st.text_input("Passwort wiederholen", type="password",
-                                     key="benutzer_neu_pw2")
+                    type="password",
+                    key=_feldschluessel("benutzer_neu", "pw1"))
+                _pw2 = st.text_input(
+                    "Passwort wiederholen", type="password",
+                    key=_feldschluessel("benutzer_neu", "pw2"))
                 if st.button("Benutzer anlegen", use_container_width=True,
                              disabled=not (_name.strip() and _pw1)):
                     if _pw1 != _pw2:
@@ -2485,6 +2526,8 @@ with st.sidebar:
                                     _name, _pw1, _name)
                             _oc_bericht(_b, "Der Zugang")
                             _leeren()
+                            _felder_leeren("benutzer_neu", "name", "rolle",
+                                           "pw1", "pw2")
                             time.sleep(2 if _b.get("fehler") else 1)
                             st.rerun()
             else:
@@ -2511,10 +2554,14 @@ with st.sidebar:
                         time.sleep(1)
                         st.rerun()
 
+                # Der Bereich traegt die Kennung: sonst teilten sich
+                # zwei Benutzer eine Runde, und das Umschalten auf den
+                # naechsten leerte das Feld des vorigen mit.
+                _pwb = f"benutzer_pw_{_wahl}"
                 _pw1 = st.text_input("Neues Passwort", type="password",
-                                     key=f"benutzer_pw1_{_wahl}")
+                                     key=_feldschluessel(_pwb, "pw1"))
                 _pw2 = st.text_input("Wiederholen", type="password",
-                                     key=f"benutzer_pw2_{_wahl}")
+                                     key=_feldschluessel(_pwb, "pw2"))
                 if st.button("Passwort setzen", use_container_width=True,
                              disabled=not _pw1, key=f"benutzer_pws_{_wahl}"):
                     if _pw1 != _pw2:
@@ -2523,6 +2570,10 @@ with st.sidebar:
                         ok, meldung = benutzer.passwort_setzen(
                             _wahl, _pw1, von=st.session_state["username"])
                         (st.success if ok else st.error)(meldung)
+                        if ok:
+                            _felder_leeren(_pwb, "pw1", "pw2")
+                            time.sleep(1)
+                            st.rerun()
 
                 # Loeschen entfernt den Zugang, nicht die Daten. Chats und
                 # der persoenliche Raum bleiben -- wer beides in einem Klick
@@ -2771,11 +2822,14 @@ with st.sidebar:
                 key="raum_bearbeiten")
 
             if _bearbeiten == "(neu anlegen)":
-                _name = st.text_input("Bezeichnung", key="raum_neu_name")
-                _besch = st.text_input("Beschreibung (optional)",
-                                       key="raum_neu_besch")
+                _name = st.text_input(
+                    "Bezeichnung", key=_feldschluessel("raum_neu", "name"))
+                _besch = st.text_input(
+                    "Beschreibung (optional)",
+                    key=_feldschluessel("raum_neu", "besch"))
                 _mitglieder = st.multiselect(
-                    "Mitglieder", _bekannt, key="raum_neu_mit",
+                    "Mitglieder", _bekannt,
+                    key=_feldschluessel("raum_neu", "mit"),
                     help="Nur diese Nutzer sehen die Dokumente des Raums.")
                 if st.button("Raum anlegen", use_container_width=True,
                              disabled=not _name.strip()):
@@ -2787,6 +2841,7 @@ with st.sidebar:
                             _b = owncloud.richte_raum_ein(meldung)
                         _oc_bericht(_b, "Der Raum")
                         refresh_document_index()
+                        _felder_leeren("raum_neu", "name", "besch", "mit")
                         time.sleep(2 if _b.get("fehler") else 1)
                         st.rerun()
                     else:

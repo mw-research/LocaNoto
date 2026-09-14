@@ -1277,6 +1277,34 @@ pruef("der Lasttest kann mehrere Token reihum verwenden",
       "token[p[0] % len(token)]" in _datei("lasttest.py"))
 
 
+
+# --- ANLEGEN-FORMULARE WERDEN NACH ERFOLG GELEERT ---
+_app = _datei("app.py")
+
+pruef("es gibt einen wechselnden Feldschluessel",
+      "def _feldschluessel(" in _app)
+pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
+
+# Die vier Anlegen-Formulare: Benutzer, Passwort, Raum, Listenbereich.
+# Einmal abziehen fuer die Definition selbst.
+_aufrufe = _app.count("_felder_leeren(") - _app.count("def _felder_leeren(")
+pruef("vier Formulare werden geleert", _aufrufe == 4, _aufrufe)
+
+for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
+    pruef(f"{_bereich} benutzt den wechselnden Schluessel",
+          f'_feldschluessel("{_bereich}"' in _app)
+
+# UND DAS WICHTIGERE: die Bearbeiten-Felder nicht. Sie zeigen den
+# gespeicherten Wert; ein wechselnder Schluessel wuerde sie bei jedem
+# Speichern leeren und eine geltende Einstellung als geloescht
+# darstellen.
+for _feld, _wert in (("raum_lq_", "value=_lq_alt"),
+                     ("sqp_", 'value=_sqz.get("passwort", "")'),
+                     ("raum_g_", "value=_gruppe_alt")):
+    _st = _app.find(_feld)
+    pruef(f"das Bearbeiten-Feld {_feld} zeigt weiter seinen Wert",
+          _st > 0 and _wert in _app[max(0, _st - 200):_st + 200])
+
 # --- MEHRERE DOKUMENTE AUF EINMAL ---
 _app = _datei("app.py")
 _feld = _app.find('"Dokumente hochladen"')
