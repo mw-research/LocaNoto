@@ -16,6 +16,7 @@ Ohne CHROMA_HOST bleibt es bei der Dateiablage -- richtig, solange nur ein
 Prozess zugreift, und die Voreinstellung fuer eine Einzelinstallation.
 """
 import os
+import threading
 import time
 
 import chromadb
@@ -54,6 +55,23 @@ CHROMA_CLOUD_DATABASE = (os.getenv("CHROMA_CLOUD_DATABASE", "").strip()
 
 _client = None
 
+# EINE SPERRE UM DAS ERZEUGEN.
+#
+# Streamlit gibt jeder Sitzung einen eigenen Faden im SELBEN Prozess.
+# Fragen drei Leute gleichzeitig, laufen drei Faeden durch client() --
+# und ohne Sperre sehen alle drei "_client is None" und bauen jeder
+# einen PersistentClient auf denselben Pfad. Genau der Fall, den der
+# Kommentar unten vermeiden will.
+#
+# Was dabei herauskommt, ist nicht vorhersagbar: im besten Fall zwei
+# Clients, von denen einer weggeworfen wird, im schlechteren eine
+# Ausnahme mitten in einer Anfrage -- und fuer den Fragenden bricht
+# der Chat ab, ohne dass irgendwo steht, warum.
+#
+# Die Sperre gilt NUR fuer das Erzeugen. Ist der Client da, geht jeder
+# Faden ohne Wartezeit daran vorbei.
+_client_sperre = threading.Lock()
+
 
 def im_server_betrieb():
     return bool(CHROMA_HOST or CHROMA_CLOUD_KEY)
@@ -67,7 +85,13 @@ def client():
     den dieses Modul vermeiden soll.
     """
     global _client
-    if _client is None:
+    if _client is not None:
+        return _client
+    with _client_sperre:
+        # Zweite Pruefung INNERHALB der Sperre: zwischen der ersten und
+        # dem Zugriff kann ein anderer Faden fertig geworden sein.
+        if _client is not None:
+            return _client
         if CHROMA_CLOUD_KEY:
             _client = chromadb.CloudClient(
                 tenant=CHROMA_CLOUD_TENANT or None,

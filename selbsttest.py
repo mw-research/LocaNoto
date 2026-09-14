@@ -1025,7 +1025,48 @@ pruef("und ein Raum ohne Zugang laeuft weiter ueber die Vorgabe",
                                                    sqldb.SQL_USER)
       == "vorgabe")
 
-print("=== 19. Mit Notzugang ist ein Raum nicht mehr fremd ===")
+print("=== 19. Gleichzeitige Nutzer ===")
+# Streamlit gibt jeder Sitzung einen eigenen Faden im SELBEN Prozess.
+# Fragen mehrere Leute gleichzeitig, laufen mehrere Faeden durch
+# store.client() -- und ohne Sperre sehen alle "_client is None" und
+# bauen jeder einen eigenen PersistentClient auf denselben Pfad.
+#
+# Was dabei herauskommt, ist nicht vorhersagbar. Im besten Fall wird
+# einer weggeworfen, im schlechteren gibt es eine Ausnahme mitten in
+# einer Anfrage -- und fuer den Fragenden bricht der Chat ab, ohne
+# dass irgendwo steht, warum.
+import threading as _th
+import time as _zeit
+
+_gebaut = []
+_echt_pc = store.chromadb.PersistentClient
+
+
+class _LangsamerClient:
+    def __init__(self, path=None, **kw):
+        # Die Verzoegerung ist der Punkt: ohne sie waere das Fenster
+        # zwischen Pruefung und Zuweisung zu klein, um es im Test zu
+        # treffen. Im Betrieb ist es gross -- ein PersistentClient
+        # oeffnet Dateien und liest einen Index.
+        _zeit.sleep(0.05)
+        _gebaut.append(path)
+
+
+store.chromadb.PersistentClient = _LangsamerClient
+store._client = None
+_faeden = [_th.Thread(target=store.client) for _ in range(6)]
+for _f in _faeden:
+    _f.start()
+for _f in _faeden:
+    _f.join()
+pruef("sechs gleichzeitige Zugriffe bauen EINEN Client",
+      len(_gebaut) == 1, len(_gebaut))
+store.chromadb.PersistentClient = _echt_pc
+store._client = None
+store.vergiss()
+
+print()
+print("=== 20. Mit Notzugang ist ein Raum nicht mehr fremd ===")
 # Beobachtet im Betrieb: nach einem bestaetigten Notzugang standen
 # annas Dokumente in der gewoehnlichen Verwaltung mit KLARNAMEN -- und
 # gleichzeitig in der Liste "fremde Raeume" mit Kennungen. Zweimal
@@ -1064,7 +1105,7 @@ pruef("und ein anderer Raum wird davon nicht mit geoeffnet",
                                 True, (_prv,)))
 
 print()
-print("=== 20. Bilder werden zu Text ===")
+print("=== 21. Bilder werden zu Text ===")
 # Zwei Faelle, die verschieden sind und oft verwechselt werden: eine
 # gescannte Seite ohne Textebene findet die Suche GAR NICHT -- nicht
 # wenig, sondern nichts. Eine Abbildung in einem Textdokument findet
