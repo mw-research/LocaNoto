@@ -1279,6 +1279,45 @@ pruef("der Lasttest kann mehrere Token reihum verwenden",
 
 
 
+
+# --- DAS PACKEN FUER EINEN UMZUG ---
+#
+# Geprueft wird das Auslassen. Was ableitbar ist, soll NICHT mitkommen:
+# der Chroma-Ordner vor allem. Er traegt das Dateiformat der Fassung,
+# die ihn geschrieben hat, und die neue muss es nicht lesen koennen --
+# deshalb geht der Bestand ueber den Abzug aus .npy und .jsonl, der
+# versionsunabhaengig ist.
+#
+# Kaeme er trotzdem mit, waere der Schaden nicht einmal sichtbar: die
+# Dateien laegen im neuen Band, wuerden ignoriert, und niemand
+# bemerkte, dass ein halbes Gigabyte Altlast mitgereist ist.
+import packe_umzug as _pu
+import zipfile as _zip
+
+_alt = os.path.join(tmp, "altinstallation")
+for _u in ("chats", "dokumente", "chroma_db", "sicherungen"):
+    os.makedirs(os.path.join(_alt, _u), exist_ok=True)
+for _p, _inhalt in ((["chats", "a.json"], b"12"),
+                    (["dokumente", "b.pdf"], b"345"),
+                    (["chroma_db", "chroma.sqlite3"], b"XXXXX"),
+                    (["sicherungen", "raum_allgemein.npy"], b"6789"),
+                    (["keyword_index.sqlite3"], b"YYY")):
+    with open(os.path.join(_alt, *_p), "wb") as _f:
+        _f.write(_inhalt)
+
+_ziel = os.path.join(tmp, "probe.zip")
+_n, _b = _pu.packe(_alt, _ziel, _pu.ABLEITBAR)
+_drin = [z.replace("\\", "/") for z in _zip.ZipFile(_ziel).namelist()]
+pruef("der Chroma-Ordner bleibt draussen",
+      not any("chroma_db" in z for z in _drin), _drin)
+pruef("der Stichwortindex auch",
+      not any("keyword_index" in z for z in _drin), _drin)
+pruef("die Sicherung kommt mit -- sie traegt die Vektoren",
+      any("sicherungen/" in z for z in _drin), _drin)
+pruef("Chats und Dokumente ebenso",
+      any("chats/" in z for z in _drin) and any("dokumente/" in z for z in _drin))
+pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
+
 # --- DIE BESTANDSLISTE ZAEHLT RICHTIG ---
 #
 # Sie ist das Werkzeug, mit dem sich ein Umzug ueberhaupt pruefen
