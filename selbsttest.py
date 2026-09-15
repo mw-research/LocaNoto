@@ -1363,7 +1363,7 @@ pruef("die Pfade sind mit Schraegstrich, wie WebDAV sie will",
 
 # Die Attrappe: eine Datei liegt dort schon, eine schlaegt fehl.
 _oc = types.ModuleType("owncloud")
-_oc.zuordnung_wirksam = lambda: {"probe": "/Abteilungen/Probe"}
+_oc.ordner_fuer = lambda raum: "/Abteilungen/Probe"
 _oc.ablage = lambda raum: _quelle
 _gelegt = []
 
@@ -1508,11 +1508,19 @@ pruef("eine Sperre ohne Auftrag heilt sich",
 # schreibt, kommt dort nicht vor -- ohne Handzuordnung waere jeder
 # Raum uebersprungen worden, und die Meldung haette "kein Ordner
 # zugeordnet" gesagt, obwohl gerade danach ausgewaehlt wurde.
-_sp_quelle = _datei("spiegeln.py")
-pruef("das Spiegeln nimmt auch den Standardbaum",
-      "zuordnung_wirksam().get(raum)" in _sp_quelle)
-pruef("und fragt nicht mehr nur die Handzuordnung",
-      "owncloud.ordner_fuer" not in _sp_quelle)
+# Geprueft wird die FUNKTION, nicht ihre Aufrufer. Vorher stand hier
+# eine Quelltextpruefung auf spiegeln.py -- die bestand, waehrend der
+# naechtliche Abgleich weiter ins Leere lief. Eine Pruefung, die eine
+# Umgehung festhaelt statt der Sache, bestaetigt den halben Fix.
+import owncloud as _ocw
+pruef("ordner_fuer kennt den Standardbaum",
+      _ocw.ordner_fuer(raeume.ALLGEMEIN) == _ocw.raum_pfad(raeume.ALLGEMEIN),
+      _ocw.ordner_fuer(raeume.ALLGEMEIN))
+pruef("und zwar fuer jeden angelegten Raum",
+      all(_ocw.ordner_fuer(r) for r in raeume.liste()),
+      {r: _ocw.ordner_fuer(r) for r in raeume.liste()})
+pruef("fuer einen unbekannten Raum aber nichts",
+      _ocw.ordner_fuer("gibtsnicht") is None)
 
 # --- DER ALLGEMEINE RAUM LIEGT IM WURZELBEREICH ---
 #
