@@ -1404,6 +1404,38 @@ sys.modules.pop("owncloud", None)
 
 
 
+
+# --- JEDER AENDERT SEIN EIGENES PASSWORT ---
+#
+# Bis hierher konnte das nur ein Verwalter. Damit war das Passwort
+# eines Nutzers eines, das jemand anders vergeben hat und weiter kennt
+# -- und wer sich damit anmeldet, ist im Protokoll nicht von seinem
+# Besitzer zu unterscheiden.
+_app = _datei("app.py")
+_stelle = _app.find('with st.expander("\\U0001f511 Passwort aendern")')
+pruef("es gibt die eigene Passwortaenderung", _stelle > 0)
+_block = _app[_stelle:_stelle + 3000]
+
+# DAS WICHTIGSTE: das bisherige Passwort wird geprueft.
+pruef("das bisherige Passwort wird geprueft",
+      "benutzer.pruefe(_ich, _alt)" in _block)
+pruef("und erst danach gesetzt",
+      0 < _block.find("benutzer.pruefe(_ich, _alt)")
+      < _block.find("benutzer.passwort_setzen(_ich"))
+pruef("im Protokoll steht der Nutzer selbst",
+      "von=_ich" in _block)
+pruef("die Ablage zieht mit",
+      "owncloud.richte_nutzer_ein(_ich" in _block)
+
+# Und der Grund, warum die Oberflaeche pruefen MUSS: das Modul tut es
+# nicht. passwort_setzen nimmt nur Name und neues Passwort entgegen --
+# wer es aufruft, hat die Berechtigung schon festgestellt oder eben
+# nicht.
+import inspect as _inspect
+pruef("passwort_setzen fragt selbst NICHT nach dem alten",
+      "alt" not in _inspect.signature(benutzer.passwort_setzen).parameters,
+      list(_inspect.signature(benutzer.passwort_setzen).parameters))
+
 # --- BEIM PASSWORTSETZEN WIRD DIE ABLAGE NACHGEZOGEN ---
 #
 # Das ownCloud-Konto entsteht beim ANLEGEN eines Benutzers. Wer aus
@@ -1411,7 +1443,11 @@ sys.modules.pop("owncloud", None)
 # Das Passwortsetzen ist der einzige Moment, in dem wieder ein
 # Klartextpasswort vorliegt.
 _app = _datei("app.py")
-_pwstelle = _app.find("benutzer.passwort_setzen(")
+# Ausdruecklich die VERWALTER-Stelle: seit es die eigene
+# Passwortaenderung gibt, steht weiter oben ein zweiter Aufruf, und
+# der erste Treffer waere der falsche. Ein Anker, der auf zwei Dinge
+# passt, prueft irgendwann das andere.
+_pwstelle = _app.find("_wahl, _pw1, von=")
 pruef("es gibt das Passwortsetzen", _pwstelle > 0)
 _block = _app[_pwstelle:_pwstelle + 2200]
 pruef("danach wird die Ablage eingerichtet",
@@ -1547,8 +1583,10 @@ pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 
 # Die vier Anlegen-Formulare: Benutzer, Passwort, Raum, Listenbereich.
 # Einmal abziehen fuer die Definition selbst.
+# Fuenf Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
+# Verwalter, eigenes Passwort, Raum, Listenbereich.
 _aufrufe = _app.count("_felder_leeren(") - _app.count("def _felder_leeren(")
-pruef("vier Formulare werden geleert", _aufrufe == 4, _aufrufe)
+pruef("fuenf Formulare werden geleert", _aufrufe == 5, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
