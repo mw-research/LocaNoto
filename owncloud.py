@@ -132,7 +132,22 @@ def setze_zuordnung(neu):
 
 
 def ordner_fuer(raum):
-    return zuordnung().get(raum)
+    """Der Ordner, der fuer diesen Raum gilt. None, wenn es ihn nicht gibt.
+
+    Handzuordnung geht vor, sonst der Standardbaum -- also dasselbe, was
+    zuordnung_wirksam() fuer alle Raeume liefert.
+
+    Frueher stand hier zuordnung().get(raum), also NUR die Handzuordnung.
+    Das war eine Funktion mit zwei Bedeutungen, und im Betrieb kam dabei
+    heraus: der naechtliche Abgleich meldete fuer jeden Raum "kein Ordner
+    eingerichtet", obwohl die Ordner standen und kurz zuvor etwas
+    hineingeladen worden war. owncloud.json gibt es in einer
+    eingebetteten Installation naemlich gar nicht.
+
+    Wer die rohe Handzuordnung braucht -- die Oberflaeche, um
+    "(Standard)" danebenzuschreiben --, ruft zuordnung().
+    """
+    return zuordnung_wirksam().get(raum)
 
 
 # --- ABLAGE ---
