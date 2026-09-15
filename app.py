@@ -1450,8 +1450,26 @@ meine_raeume = sorted(dateien_je_raum)
 all_available_files = sorted({d for liste in dateien_je_raum.values()
                               for d in liste})
 
+# --- LAEUFT GERADE EINE ANTWORT? ---
+#
+# Muss hier stehen und nicht weiter unten: die Seitenleiste wird gleich
+# gezeichnet, und was sie sperren soll, muss vorher feststehen.
+_antwortet = bool(st.session_state.get("_laeuft"))
+if _antwortet and not st.session_state.get("_auftrag"):
+    # Gesperrt, aber nichts zu tun: der antwortende Lauf ist nicht bis
+    # zum Ende gekommen. Abgebrochen, gestoppt, abgestuerzt -- gleich
+    # welcher Grund, die Sperre darf nicht haengenbleiben. Eine Leiste,
+    # die sich nach einem Fehler nie wieder bedienen laesst, waere
+    # schlimmer als der Fehler.
+    st.session_state["_laeuft"] = False
+    _antwortet = False
+
 # --- SIDEBAR (UI) ---
 with st.sidebar:
+    if _antwortet:
+        st.warning("Antwort laeuft. Die Bedienung wartet, bis sie "
+                   "fertig ist -- ein Klick jetzt wuerde sie abreissen.")
+
     # --- VOREINSTELLUNG ---
     #
     # Ganz oben, weil sie alles darunter faerbt: Modell, Umfang der Treffer,
@@ -2362,9 +2380,11 @@ with st.sidebar:
     if is_admin():
         st.markdown("---")
         _vw = st.toggle("\U0001f6e0\ufe0f Verwaltung", value=False,
-                        key="verwaltung_offen",
+                        key="verwaltung_offen", disabled=_antwortet,
                         help="Benutzer, Raeume, Sicherung, Prompts und "
-                             "alles Weitere zum Einrichten.")
+                             "alles Weitere zum Einrichten."
+                             + (" -- gesperrt, solange eine Antwort laeuft."
+                                if _antwortet else ""))
     if _vw:
         zahlen = _verwaltungsstand()["rueckmeldungen"]
         gesamt = sum(zahlen.values())
@@ -3831,13 +3851,51 @@ if _bestand > 0:
 
     eingabe = st.chat_input(
         "Frage an die Datenbank -- Bilder koennen angehaengt werden ...",
-        accept_file="multiple", file_type=vision.ERLAUBTE_TYPEN)
+        accept_file="multiple", file_type=vision.ERLAUBTE_TYPEN,
+        disabled=_antwortet)
 
-    if eingabe:
-        # Mit accept_file liefert chat_input ein Objekt mit .text und .files
-        # statt einer Zeichenkette.
-        user_query = (eingabe.text or "").strip()
-        angehaengt = list(eingabe.files or [])
+    # --- ANNEHMEN, NICHT BEANTWORTEN ---
+    #
+    # Hier wird die Frage nur gemerkt und neu gezeichnet. Geantwortet
+    # wird im naechsten Lauf -- dessen Seitenleiste ist von Anfang an
+    # gesperrt, und nur so laesst sich der Antwortstrom schuetzen. Im
+    # selben Lauf ginge es nicht: die Leiste steht zu diesem Zeitpunkt
+    # laengst.
+    #
+    # Die Bilddateien gehen dabei sofort auf die Platte, denn die
+    # Objekte aus chat_input ueberleben den neuen Lauf nicht. Das
+    # Speichern ist schnell; die Beschreibung -- ein Modellaufruf je
+    # Bild, bei einem Scan Minuten -- passiert erst danach, hinter der
+    # Sperre.
+    if eingabe and not st.session_state.get("_laeuft"):
+        _text = (eingabe.text or "").strip()
+        _pfade, _namen = [], []
+        for n, datei in enumerate(eingabe.files or []):
+            try:
+                endung = os.path.splitext(datei.name)[1].lower() or ".jpg"
+                kennung = st.session_state.current_chat_id
+                name = (f"{kennung.rsplit('.', 1)[0]}"
+                        f"_{len(st.session_state.messages)}_{n}{endung}")
+                _pfade.append(vision.speichern(
+                    datei.getvalue(), st.session_state["username"], name))
+                _namen.append(datei.name)
+            except Exception as e:
+                st.warning(f"Bild '{datei.name}' konnte nicht gelesen "
+                           f"werden: {e}")
+        if not _text and not _pfade:
+            st.stop()
+        st.session_state["_auftrag"] = {"frage": _text, "bilder": _pfade,
+                                        "namen": _namen}
+        st.session_state["_laeuft"] = True
+        st.rerun()
+
+    # Der Auftrag wird HERAUSGENOMMEN und nicht nur gelesen: bricht der
+    # Lauf gleich ab, soll die Frage nicht beim naechsten Zeichnen
+    # erneut gestellt werden.
+    _auftrag = st.session_state.pop("_auftrag", None)
+    if _auftrag:
+        user_query = _auftrag["frage"]
+        bild_pfade = list(_auftrag["bilder"])
 
         # --- ANGEHAENGTE BILDER BESCHREIBEN ---
         #
@@ -3846,23 +3904,20 @@ if _bestand > 0:
         # ueberhaupt etwas zum Bild findet, und im Kontext der Antwort. Das
         # Chat-Modell selbst bekommt das Bild nicht -- es kann in dieser
         # Aufteilung ein reines Textmodell sein.
-        bild_pfade, bild_texte = [], []
-        for n, datei in enumerate(angehaengt):
-            with st.spinner(f"Lese Bild {n + 1} von {len(angehaengt)} ..."):
-                rohdaten = datei.getvalue()
+        bild_texte = []
+        for n, (pfad, anzeige) in enumerate(zip(bild_pfade,
+                                                _auftrag["namen"])):
+            with st.spinner(f"Lese Bild {n + 1} von {len(bild_pfade)} ..."):
                 try:
-                    endung = os.path.splitext(datei.name)[1].lower() or ".jpg"
-                    kennung = st.session_state.current_chat_id
-                    name = (f"{kennung.rsplit('.', 1)[0]}"
-                            f"_{len(st.session_state.messages)}_{n}{endung}")
-                    bild_pfade.append(vision.speichern(
-                        rohdaten, st.session_state["username"], name))
-                    bild_texte.append(vision.beschreibe(rohdaten, user_query))
+                    with open(pfad, "rb") as _f:
+                        bild_texte.append(vision.beschreibe(_f.read(),
+                                                            user_query))
                 except Exception as e:
-                    st.warning(f"Bild '{datei.name}' konnte nicht gelesen "
+                    st.warning(f"Bild '{anzeige}' konnte nicht gelesen "
                                f"werden: {e}")
 
         if not user_query and not bild_texte:
+            st.session_state["_laeuft"] = False
             st.stop()
         if not user_query:
             user_query = ("Was ist auf dem Bild zu sehen, und was sagt die "
@@ -4098,11 +4153,17 @@ if _bestand > 0:
                 save_chat(st.session_state.current_chat_id,
                           st.session_state.messages)
 
+                # Die Antwort steht -- die Bedienung darf wieder.
+                st.session_state["_laeuft"] = False
+
                 # Neu zeichnen, damit die Nachricht durch die Chat-Schleife
                 # oben laeuft und ihre Quellen-Aufklapper bekommt.
                 st.rerun()
 
             except Exception as e:
+                # Auch hier loesen: eine Sperre, die einen Fehler
+                # ueberlebt, macht die Anwendung unbedienbar.
+                st.session_state["_laeuft"] = False
                 st.error(f"Fehler bei der Verarbeitung: {e}")
 
 else:
