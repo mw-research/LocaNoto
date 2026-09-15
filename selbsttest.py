@@ -1403,6 +1403,34 @@ sys.modules.pop("owncloud", None)
 
 
 
+
+# --- BEIM PASSWORTSETZEN WIRD DIE ABLAGE NACHGEZOGEN ---
+#
+# Das ownCloud-Konto entsteht beim ANLEGEN eines Benutzers. Wer aus
+# einer Migration kommt, hat keins -- dort kamen nur bcrypt-Hashes mit.
+# Das Passwortsetzen ist der einzige Moment, in dem wieder ein
+# Klartextpasswort vorliegt.
+_app = _datei("app.py")
+_pwstelle = _app.find("benutzer.passwort_setzen(")
+pruef("es gibt das Passwortsetzen", _pwstelle > 0)
+_block = _app[_pwstelle:_pwstelle + 2200]
+pruef("danach wird die Ablage eingerichtet",
+      "owncloud.richte_nutzer_ein(" in _block)
+
+# UND DAS WICHTIGERE: ein vorhandenes Konto darf nicht ueberschrieben
+# werden. LocaNoto wird oft auf ein Haus gesetzt, in dem es die Leute
+# in ownCloud laengst gibt -- ihnen von hier aus das Passwort ihres
+# Firmenkontos zu nehmen, spaerrte sie aus allem aus, was daran haengt.
+import owncloud as _ocp
+_qu = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "owncloud.py"), encoding="utf-8").read()
+_na = _qu.split("def nutzer_anlegen(", 1)[1]
+_na = _na.split("def richte_nutzer_ein(", 1)[0]
+pruef("ein vorhandenes ownCloud-Konto bleibt unangetastet",
+      "if nutzer_vorhanden(kennung):" in _na and "gab es schon" in _na)
+pruef("und der Verwalter erfaehrt, dass dort das alte Passwort gilt",
+      "NICHT geaendert" in _block)
+
 # --- DIE LAUFENDE ANTWORT IST GESCHUETZT ---
 _app = _datei("app.py")
 
