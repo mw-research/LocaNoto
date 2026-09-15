@@ -160,8 +160,23 @@ def ablage(raum):
 
     Unterhalb von data/dokumente, damit der gewoehnliche Ingest sie findet
     und die Unterordner wie gewohnt zu Sachgebieten werden.
+
+    DER ALLGEMEINE RAUM IST DIE AUSNAHME und behaelt den Wurzelbereich.
+    Genauso legt der Upload ab (siehe app.py): dort liegt der gewachsene
+    Bestand, und ein Ingest ueber data/dokumente soll ihn als "(Basis)"
+    sehen und nicht als Sachgebiet "allgemein".
+
+    Vorher stand hier ein Unterordner, und die beiden Stellen waren sich
+    uneinig. Sichtbar wurde es beim Spiegeln -- es fand im Unterordner
+    nichts, waehrend die Dokumente im Wurzelbereich lagen. Schlimmer
+    waere der Abgleich gewesen: er haette dieselben Dateien in den
+    Unterordner geholt, neben die vorhandenen. Zweimal dasselbe
+    Dokument, zweimal vektorisiert, zweimal in jeder Antwort -- das
+    faellt nicht auf, es macht die Antworten nur langsam schlechter.
     """
-    p = os.path.join(paths.DOCS_DIR, paths.sicherer_teil(raum))
+    import raeume
+    p = (paths.DOCS_DIR if raum == raeume.ALLGEMEIN
+         else os.path.join(paths.DOCS_DIR, paths.sicherer_teil(raum)))
     os.makedirs(p, exist_ok=True)
     return p
 

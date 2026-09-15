@@ -1401,6 +1401,46 @@ pruef("der Stand kommt aus dem, was wirklich dort liegt",
       list(_geschrieben["probe"]) == ["a.pdf"], _geschrieben)
 sys.modules.pop("owncloud", None)
 
+
+# --- DER ALLGEMEINE RAUM LIEGT IM WURZELBEREICH ---
+#
+# Zwei Stellen waren sich uneinig: der Upload legte ihn nach DOCS_DIR,
+# owncloud.ablage nach DOCS_DIR/allgemein. Sichtbar wurde es beim
+# Spiegeln -- es fand im Unterordner nichts. Schlimmer waere der
+# Abgleich gewesen: dieselben Dateien ein zweites Mal daneben, zweimal
+# vektorisiert, zweimal in jeder Antwort.
+import owncloud as _ocw
+
+pruef("der allgemeine Raum liegt in der Wurzel",
+      os.path.normpath(_ocw.ablage(raeume.ALLGEMEIN))
+      == os.path.normpath(paths.DOCS_DIR),
+      _ocw.ablage(raeume.ALLGEMEIN))
+pruef("jeder andere Raum in seinem Unterordner",
+      os.path.normpath(_ocw.ablage("einkauf"))
+      == os.path.normpath(os.path.join(paths.DOCS_DIR, "einkauf")),
+      _ocw.ablage("einkauf"))
+
+# Und die Stelle, die es sonst wieder auseinanderlaufen laesst: der
+# Upload muss dieselbe Regel haben.
+_app = _datei("app.py")
+pruef("der Upload benutzt dieselbe Regel",
+      "DOCS_DIR if raum == raeume.ALLGEMEIN" in _app)
+
+# Beim Spiegeln des allgemeinen Raums duerfen die Ordner der anderen
+# Raeume NICHT mitkommen. Sie liegen darunter, und sie gehoeren
+# anderen Leuten -- der allgemeine Raum ist fuer alle sichtbar.
+_w = os.path.join(tmp, "wurzelprobe")
+os.makedirs(os.path.join(_w, "einkauf"), exist_ok=True)
+os.makedirs(os.path.join(_w, "offen"), exist_ok=True)
+for _p in (["basis.pdf"], ["offen", "auch.pdf"], ["einkauf", "geheim.pdf"]):
+    with open(os.path.join(_w, *_p), "wb") as _f:
+        _f.write(b"x")
+_gefunden = [r for _v, r in _sp._dateien(_w, [os.path.join(_w, "einkauf")])]
+pruef("der Ordner eines fremden Raums bleibt aussen vor",
+      "einkauf/geheim.pdf" not in _gefunden, _gefunden)
+pruef("alles andere kommt mit",
+      sorted(_gefunden) == ["basis.pdf", "offen/auch.pdf"], _gefunden)
+
 # --- DER LISTENABSCHNITT BRAUCHT SEINE EIGENE LISTE ---
 #
 # Im Betrieb stuerzte die Oberflaeche beim Laden ab:
