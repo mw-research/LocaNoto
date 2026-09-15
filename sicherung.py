@@ -256,7 +256,24 @@ def sichere(fortschritt=None):
     # unterscheiden -- die Dateien der anderen Raeume liegen ja da. Ohne
     # diese Angabe faellt es erst beim Zurueckholen auf, und dann ist es
     # der falsche Zeitpunkt.
-    bericht["vollstaendig"] = not bericht["fehler"]
+    # "Kein Fehler" ist keine Zusage, wenn nichts versucht wurde. Ein
+    # Abzug ohne eine einzige Sammlung -- etwa weil Chroma beim
+    # Herunterfahren schon weg war -- erfuellt "keine Fehler" muehelos
+    # und waere damit der neueste VOLLSTAENDIGE. Der Wiederanlauf haette
+    # daraus null Abschnitte eingespielt und Erfolg gemeldet.
+    bericht["vollstaendig"] = bool(bericht["raeume"]) and not bericht["fehler"]
+
+    # Und dann gar nicht erst ablegen. Es gibt nichts zu sichern, also
+    # soll auch keine Attrappe entstehen, die in der Liste steht und
+    # unter BEHALTEN einen echten Abzug verdraengt.
+    if not bericht["raeume"] and not bericht["fehler"]:
+        shutil.rmtree(vorlaeufig, ignore_errors=True)
+        bericht["leer"] = True
+        bericht["grund"] = (
+            "Keine Sammlung gefunden -- nichts gesichert. Laeuft Chroma? "
+            "Beim Herunterfahren des Pods ist der Beiwagen oft schon weg.")
+        bericht["pfad"] = ""
+        return bericht
 
     with open(os.path.join(vorlaeufig, "stand.json"), "w",
               encoding="utf-8") as f:
@@ -402,6 +419,23 @@ def _leer_genug():
         return False
 
 
+def vollstaendige():
+    """Namen der Abzuege, aus denen sich zurueckholen laesst. Neueste zuerst.
+
+    Geprueft wird nicht nur der Vermerk. Ein Stummel aus der Zeit vor
+    dieser Pruefung traegt vollstaendig=true, obwohl er keine einzige
+    Sammlung enthaelt -- daran aendert eine Korrektur am Schreiben
+    nichts mehr. Die Zahl daneben verraet ihn trotzdem.
+
+    Wer eine Zusage nachrechnen kann, soll sie nachrechnen. Das ist der
+    Unterschied zwischen einer Pruefung und einem Vertrauensvorschuss,
+    und an dieser Stelle haengt die Wiederherstellung daran.
+    """
+    return [n for n, _p, _g, s in liste()
+            if s.get("vollstaendig") and not s.get("fehler")
+            and s.get("abschnitte")]
+
+
 def hole_zurueck(name, nur_raum=None, fortschritt=None):
     """Spielt einen Abzug in die Sammlungen zurueck.
 
@@ -542,16 +576,15 @@ def main():
             # Datenbank auf fluechtigem Speicher liegt, muss sich beim
             # Hochkommen selbst wiederherstellen. Er kann dabei keinen
             # Namen kennen.
-            vollstaendige = [n for n, _p, _g, s in liste()
-                             if s.get("vollstaendig") and not s.get("fehler")]
-            if not vollstaendige:
+            brauchbare = vollstaendige()
+            if not brauchbare:
                 print("Kein vollstaendiger Abzug vorhanden.")
                 # KEIN Fehler: beim allerersten Start gibt es keinen, und
                 # das ist der Normalfall. Ein Fehlschlag hier liesse den
                 # Pod in einer Schleife haengen, ohne dass etwas kaputt
                 # waere.
                 return 0
-            name = vollstaendige[0]
+            name = brauchbare[0]
             if not _leer_genug() and "--trotzdem" not in sys.argv:
                 print(f"Es liegen schon Abschnitte in den Sammlungen. "
                       f"'{name}' wird NICHT eingespielt -- sonst"
