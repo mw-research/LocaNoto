@@ -39,10 +39,35 @@ import paths
 import raeume
 
 
-def _dateien(wurzel):
-    """[(vollpfad, relativ)] unterhalb von wurzel."""
+def _fremde_ordner(raum):
+    """Die Ablageordner der ANDEREN Raeume, absolut.
+
+    Gebraucht nur fuer den allgemeinen Raum: der liegt im Wurzelbereich
+    von data/dokumente, und darunter liegen die Unterordner der uebrigen
+    Raeume. Ohne diese Liste wuerde das Spiegeln des allgemeinen Raums
+    die Dokumente aller anderen gleich mit nach oben laden -- in seinen
+    Ordner, fuer seine Mitglieder sichtbar.
+
+    Das waere kein Schoenheitsfehler, sondern ein Rechtebruch: der
+    allgemeine Raum ist fuer alle sichtbar, ein Abteilungsraum nicht.
+    """
+    import raeume
+    aus = set()
+    for r in raeume.liste():
+        if r == raeume.ALLGEMEIN:
+            continue
+        aus.add(os.path.normpath(os.path.join(paths.DOCS_DIR,
+                                              paths.sicherer_teil(r))))
+    return aus
+
+
+def _dateien(wurzel, ausser=()):
+    """[(vollpfad, relativ)] unterhalb von wurzel, ohne die Ordner in ausser."""
+    ausser = {os.path.normpath(a) for a in ausser}
     aus = []
-    for pfad, _o, dateien in os.walk(wurzel):
+    for pfad, unter, dateien in os.walk(wurzel):
+        unter[:] = [u for u in unter
+                    if os.path.normpath(os.path.join(pfad, u)) not in ausser]
         for d in dateien:
             if d.startswith("."):
                 continue
@@ -61,7 +86,11 @@ def spiegle(raum, ueberschreiben=False, pruefen=False, sagen=print):
         return 0, 0, 0
 
     quelle = owncloud.ablage(raum)
-    dateien = _dateien(quelle)
+    # Im Wurzelbereich -- also beim allgemeinen Raum -- liegen die
+    # Ordner der anderen Raeume daneben. Sie gehoeren nicht mit hoch.
+    import raeume as _r
+    dateien = _dateien(quelle,
+                       _fremde_ordner(raum) if raum == _r.ALLGEMEIN else ())
     if not dateien:
         sagen(f"  {raum}: nichts lokal.")
         return 0, 0, 0
