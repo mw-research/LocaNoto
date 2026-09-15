@@ -80,7 +80,11 @@ def spiegle(raum, ueberschreiben=False, pruefen=False, sagen=print):
     """(hochgeladen, uebersprungen, fehler)."""
     import owncloud
 
-    ziel = owncloud.ordner_fuer(raum)
+    # zuordnung_wirksam und NICHT ordner_fuer: das kennt nur von Hand
+    # eingetragene Zuordnungen. Der Standardbaum -- den einrichten.py
+    # anlegt und in den jeder Upload schreibt -- kommt dort nicht vor,
+    # und ohne Handzuordnung waere jeder Raum uebersprungen worden.
+    ziel = owncloud.zuordnung_wirksam().get(raum)
     if not ziel:
         sagen(f"  {raum}: kein Ordner zugeordnet -- uebersprungen.")
         return 0, 0, 0
@@ -134,7 +138,7 @@ def stand_neu(raum, sagen=print):
     import owncloud
     import time
 
-    ordner = owncloud.ordner_fuer(raum)
+    ordner = owncloud.zuordnung_wirksam().get(raum)
     if not ordner:
         return 0
     fern = {d["rel"]: d for d in owncloud.dateien(ordner)}

@@ -1363,7 +1363,7 @@ pruef("die Pfade sind mit Schraegstrich, wie WebDAV sie will",
 
 # Die Attrappe: eine Datei liegt dort schon, eine schlaegt fehl.
 _oc = types.ModuleType("owncloud")
-_oc.ordner_fuer = lambda raum: "/Abteilungen/Probe"
+_oc.zuordnung_wirksam = lambda: {"probe": "/Abteilungen/Probe"}
 _oc.ablage = lambda raum: _quelle
 _gelegt = []
 
@@ -1436,6 +1436,19 @@ pruef("auch wenn die Verarbeitung scheitert",
 # Und die Selbstheilung: gesperrt ohne Auftrag darf nicht bleiben.
 pruef("eine Sperre ohne Auftrag heilt sich",
       "if _antwortet and not st.session_state.get(\"_auftrag\")" in _app)
+
+
+# Und der Zielordner kommt aus zuordnung_wirksam, nicht aus
+# ordner_fuer: das kennt nur von Hand eingetragene Zuordnungen. Der
+# Standardbaum, den einrichten.py anlegt und in den jeder Upload
+# schreibt, kommt dort nicht vor -- ohne Handzuordnung waere jeder
+# Raum uebersprungen worden, und die Meldung haette "kein Ordner
+# zugeordnet" gesagt, obwohl gerade danach ausgewaehlt wurde.
+_sp_quelle = _datei("spiegeln.py")
+pruef("das Spiegeln nimmt auch den Standardbaum",
+      "zuordnung_wirksam().get(raum)" in _sp_quelle)
+pruef("und fragt nicht mehr nur die Handzuordnung",
+      "owncloud.ordner_fuer" not in _sp_quelle)
 
 # --- DER ALLGEMEINE RAUM LIEGT IM WURZELBEREICH ---
 #
