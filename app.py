@@ -2597,8 +2597,39 @@ with st.sidebar:
                             _wahl, _pw1, von=st.session_state["username"])
                         (st.success if ok else st.error)(meldung)
                         if ok:
+                            # --- DIE ABLAGE NACHZIEHEN ---
+                            #
+                            # Beim Anlegen entsteht das ownCloud-Konto
+                            # mit. Wer aus einer Migration kommt, hat
+                            # keins -- dort kamen nur bcrypt-Hashes mit,
+                            # und daraus laesst sich keines erzeugen.
+                            # Hier liegt wieder ein Klartextpasswort vor,
+                            # also ist das der Moment.
+                            #
+                            # Ein VORHANDENES Konto bleibt unangetastet:
+                            # LocaNoto wird oft auf ein Haus gesetzt, in
+                            # dem es die Leute in ownCloud laengst gibt.
+                            # Ihnen von hier aus das Passwort ihres
+                            # Firmenkontos zu ueberschreiben waere ein
+                            # Uebergriff -- und einer, der sie aus allem
+                            # aussperrt, was sonst daran haengt.
+                            _b = {}
+                            if owncloud.eingerichtet():
+                                with st.spinner("Richte die Ablage ein ..."):
+                                    _b = owncloud.richte_nutzer_ein(
+                                        _wahl, _pw1, _wahl)
+                                _oc_bericht(_b, "Der Zugang")
+                                if any("gab es schon" in _s for _s
+                                       in _b.get("schritte") or []):
+                                    # Sonst glaubt der Verwalter, die
+                                    # beiden Passwoerter seien jetzt
+                                    # gleich. Sie sind es nicht.
+                                    st.info("Das ownCloud-Konto gab es "
+                                            "bereits. Sein Passwort wurde "
+                                            "NICHT geaendert -- dort gilt "
+                                            "weiter das alte.")
                             _felder_leeren(_pwb, "pw1", "pw2")
-                            time.sleep(1)
+                            time.sleep(3 if _b.get("fehler") else 1)
                             st.rerun()
 
                 # Loeschen entfernt den Zugang, nicht die Daten. Chats und
