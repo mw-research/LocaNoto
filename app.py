@@ -2376,6 +2376,61 @@ with st.sidebar:
     # sie nicht ineinander. Und ein Schalter je Gruppe waere
     # gefaehrlich -- dann liefe nur der gewaehlte Block, und einer,
     # der eine Angabe aus einem anderen benutzt, ginge still kaputt.
+    # --- EIGENES PASSWORT ---
+    #
+    # Bis hierher konnte nur ein Verwalter Passwoerter setzen. Damit ist
+    # das Passwort eines Nutzers eines, das jemand anders vergeben hat
+    # -- und eines, das jemand anders kennt. Wer sich damit anmeldet,
+    # ist im Protokoll nicht von seinem Besitzer zu unterscheiden.
+    st.markdown("---")
+    with st.expander("\U0001f511 Passwort aendern"):
+        _pwe = "eigenes_pw"
+        _alt = st.text_input("Bisheriges Passwort", type="password",
+                             key=_feldschluessel(_pwe, "alt"),
+                             disabled=_antwortet)
+        _neu1 = st.text_input(
+            f"Neues Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+            type="password", key=_feldschluessel(_pwe, "neu1"),
+            disabled=_antwortet)
+        _neu2 = st.text_input("Wiederholen", type="password",
+                              key=_feldschluessel(_pwe, "neu2"),
+                              disabled=_antwortet)
+        if st.button("Aendern", use_container_width=True,
+                     key="eigenes_pw_knopf",
+                     disabled=_antwortet or not (_alt and _neu1)):
+            _ich = st.session_state["username"]
+            if _neu1 != _neu2:
+                st.error("Die Eingaben stimmen nicht ueberein.")
+            elif _neu1 == _alt:
+                st.error("Das ist das bisherige Passwort.")
+            elif not benutzer.pruefe(_ich, _alt):
+                # Geprueft und nicht geglaubt: sonst genuegt ein
+                # unbeaufsichtigter Bildschirm, um jemanden dauerhaft
+                # auszusperren -- und im Protokoll stuende dabei sein
+                # eigener Name.
+                st.error("Das bisherige Passwort stimmt nicht.")
+            else:
+                _ok, _m = benutzer.passwort_setzen(_ich, _neu1, von=_ich)
+                (st.success if _ok else st.error)(_m)
+                if _ok:
+                    # Dieselbe Ueberlegung wie im Verwalterweg: hier
+                    # liegt wieder ein Klartextpasswort vor, also
+                    # entsteht jetzt das ownCloud-Konto, falls es fehlt.
+                    # Ein vorhandenes bleibt unangetastet.
+                    _bo = {}
+                    if owncloud.eingerichtet():
+                        with st.spinner("Richte die Ablage ein ..."):
+                            _bo = owncloud.richte_nutzer_ein(_ich, _neu1,
+                                                             _ich)
+                        if any("gab es schon" in _t for _t
+                               in _bo.get("schritte") or []):
+                            st.info("In ownCloud gilt weiter das alte "
+                                    "Passwort -- das Konto gab es dort "
+                                    "schon.")
+                    _felder_leeren(_pwe, "alt", "neu1", "neu2")
+                    time.sleep(3 if _bo.get("fehler") else 2)
+                    st.rerun()
+
     _vw = False
     if is_admin():
         st.markdown("---")
