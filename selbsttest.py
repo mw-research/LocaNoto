@@ -1318,6 +1318,45 @@ pruef("Chats und Dokumente ebenso",
       any("chats/" in z for z in _drin) and any("dokumente/" in z for z in _drin))
 pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
 
+
+# --- EIN ABZUG OHNE ABSCHNITTE IST KEINER ---
+#
+# Der preStop-Haken laeuft bei jedem Herunterfahren. Zu dem Zeitpunkt
+# ist der Chroma-Beiwagen oft schon weg -- es gibt keine Reihenfolge
+# beim Beenden. Der Abzug fand dann keine Sammlung, war nach 0,1
+# Sekunden fertig, hatte keinen Fehler und galt damit als
+# VOLLSTAENDIG. --neuester nimmt den neuesten vollstaendigen, also
+# haette der Wiederanlauf null Abschnitte eingespielt und Erfolg
+# gemeldet.
+_alt_samml = sicherung._raum_sammlungen
+sicherung._raum_sammlungen = lambda: []
+_vorher = (set(os.listdir(sicherung.ORDNER))
+           if os.path.isdir(sicherung.ORDNER) else set())
+_ber = sicherung.sichere()
+_nachher = (set(os.listdir(sicherung.ORDNER))
+            if os.path.isdir(sicherung.ORDNER) else set())
+sicherung._raum_sammlungen = _alt_samml
+
+pruef("ein Abzug ohne Sammlungen gilt nicht als vollstaendig",
+      not _ber.get("vollstaendig"), _ber.get("vollstaendig"))
+pruef("und wird gar nicht erst abgelegt", _vorher == _nachher,
+      sorted(_nachher - _vorher))
+pruef("der Grund steht im Bericht", "Chroma" in (_ber.get("grund") or ""),
+      _ber.get("grund"))
+
+# Und die andere Haelfte: ein Stummel, der schon auf der Platte liegt,
+# traegt vollstaendig=true. Daran aendert das Schreiben von heute
+# nichts -- also muss das LESEN ihn erkennen.
+_stummel = os.path.join(sicherung.ORDNER, "2000-01-01_00-00-00")
+os.makedirs(_stummel, exist_ok=True)
+with open(os.path.join(_stummel, "stand.json"), "w", encoding="utf-8") as _f:
+    json.dump({"name": "2000-01-01_00-00-00", "raeume": {},
+               "abschnitte": 0, "fehler": [], "vollstaendig": True}, _f)
+pruef("ein alter Stummel taugt nicht zum Zurueckholen",
+      "2000-01-01_00-00-00" not in sicherung.vollstaendige(),
+      sicherung.vollstaendige())
+shutil.rmtree(_stummel, ignore_errors=True)
+
 # --- DIE BESTANDSLISTE ZAEHLT RICHTIG ---
 #
 # Sie ist das Werkzeug, mit dem sich ein Umzug ueberhaupt pruefen
