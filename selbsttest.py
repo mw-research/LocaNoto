@@ -1402,6 +1402,41 @@ pruef("der Stand kommt aus dem, was wirklich dort liegt",
 sys.modules.pop("owncloud", None)
 
 
+
+# --- DIE LAUFENDE ANTWORT IST GESCHUETZT ---
+_app = _datei("app.py")
+
+_zustand = _app.find("_antwortet = bool(st.session_state")
+_leiste = _app.find('st.toggle("\\U0001f6e0\\ufe0f Verwaltung"')
+pruef("es gibt einen Zustand fuer die laufende Antwort", _zustand > 0)
+pruef("und er steht VOR der Seitenleiste", 0 < _zustand < _leiste,
+      f"Zustand {_zustand}, Leiste {_leiste}")
+pruef("der Verwaltungsschalter haengt daran",
+      "disabled=_antwortet" in _app[_leiste:_leiste + 400])
+
+# Angenommen wird die Frage in einem Lauf, beantwortet im naechsten --
+# anders laesst sich die Leiste nicht rechtzeitig sperren.
+_annahme = _app.find('st.session_state["_auftrag"] = {')
+_arbeit = _app.find('_auftrag = st.session_state.pop("_auftrag"')
+pruef("die Frage wird gemerkt", _annahme > 0)
+pruef("und erst im naechsten Lauf abgearbeitet", 0 < _annahme < _arbeit,
+      f"Annahme {_annahme}, Arbeit {_arbeit}")
+pruef("dazwischen wird neu gezeichnet",
+      "st.rerun()" in _app[_annahme:_arbeit])
+
+# DAS WICHTIGSTE: die Sperre muss sich auf jedem Ausgang loesen.
+# Vier Stellen -- Selbstheilung, leere Frage, Erfolg, Fehler.
+_loesen = _app.count('st.session_state["_laeuft"] = False')
+pruef("die Sperre loest sich an jedem Ausgang", _loesen == 4, _loesen)
+pruef("auch wenn die Verarbeitung scheitert",
+      'st.session_state["_laeuft"] = False' in _app[
+          _app.find("except Exception as e:", _arbeit):
+          _app.find("except Exception as e:", _arbeit) + 400])
+
+# Und die Selbstheilung: gesperrt ohne Auftrag darf nicht bleiben.
+pruef("eine Sperre ohne Auftrag heilt sich",
+      "if _antwortet and not st.session_state.get(\"_auftrag\")" in _app)
+
 # --- DER ALLGEMEINE RAUM LIEGT IM WURZELBEREICH ---
 #
 # Zwei Stellen waren sich uneinig: der Upload legte ihn nach DOCS_DIR,
