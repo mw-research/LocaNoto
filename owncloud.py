@@ -770,6 +770,24 @@ def raum_pfad(raum):
     return f"/{WURZEL}/raeume/{paths.sicherer_teil(raum)}"
 
 
+def ziel_pfad(raum, lokal):
+    """Wohin eine lokale Datei dieses Raums in ownCloud gehoert.
+
+    Der Pfad RELATIV zur Ablage des Raums bleibt erhalten. Wer nur den
+    Dateinamen nimmt, verliert den Projektordner -- dann liegt in
+    ownCloud alles flach nebeneinander, und das Projekt steht nur noch
+    in den Metadaten, also nirgends, wo es jemand sieht.
+
+    Die Wurzel kommt aus ordner_fuer(): Handzuordnung zuerst, sonst der
+    Standardbaum -- dieselbe, aus der der Abgleich liest. Wer hier
+    raum_pfad() nimmt, schreibt bei einer eingetragenen Handzuordnung
+    woanders hin, als spaeter gelesen wird.
+    """
+    wurzel = ordner_fuer(raum) or raum_pfad(raum)
+    rel = os.path.relpath(lokal, ablage(raum)).replace("\\", "/")
+    return wurzel.rstrip("/") + "/" + rel.lstrip("./")
+
+
 def zuordnung_wirksam():
     """{raum: ordner} -- von Hand eingetragen, sonst der Standardbaum.
 

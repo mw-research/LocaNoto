@@ -1110,9 +1110,17 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     try:
         import owncloud
         if owncloud.eingerichtet():
+            # Der Pfad RELATIV zur Ablage des Raums und nicht der
+            # blosse Dateiname: sonst faellt der Projektordner weg und
+            # in ownCloud liegt alles flach nebeneinander. Das Projekt
+            # ist dann nur noch in den Metadaten -- also nirgends, wo
+            # jemand es sieht.
+            #
+            # Und ordner_fuer statt raum_pfad: der Abgleich liest von
+            # dort. Wer eine Handzuordnung eingetragen hat, schriebe
+            # sonst woanders hin, als spaeter gelesen wird.
             ok_oc, meldung_oc = owncloud.lege_ab(
-                pdf_path,
-                owncloud.raum_pfad(raum) + "/" + os.path.basename(pdf_path))
+                pdf_path, owncloud.ziel_pfad(raum, pdf_path))
             if not ok_oc:
                 wolke_hinweis = f"Nicht in ownCloud abgelegt: {meldung_oc}"
     except Exception as e:
@@ -1575,6 +1583,10 @@ with st.sidebar:
                  pipeline.projekte(st.session_state["username"],
                                    _mein_raum_f,
                                    notzugang=mein_notzugang()).items() if k}
+    # Umgekehrt nachschlagbar: welche Datei gehoert zu welchem Projekt.
+    # Wird unten in der Dokumentenliste gebraucht und kostet nichts --
+    # _projekte steht ohnehin schon da.
+    _projekt_von = {d: k for k, dateien in _projekte.items() for d in dateien}
     _projekt_dateien = []
     if _projekte:
         _gewaehlt_p = st.multiselect(
@@ -1593,11 +1605,25 @@ with st.sidebar:
         for _pj in _gewaehlt_p:
             _projekt_dateien += _projekte[_pj]
 
+    # Die Auswahl folgt dem, was darueber eingestellt ist. Vorher
+    # standen hier IMMER alle Dateien aller Raeume -- wer Raum und
+    # Projekt gesetzt hatte, bekam trotzdem den vollen Bestand
+    # angeboten und musste raten, welche Datei dazugehoert. Die
+    # Einstellung darueber sah dabei aus, als haette sie keine Wirkung.
+    if _projekt_dateien:
+        _auswahl = sorted(set(_projekt_dateien))
+    elif selected_raeume:
+        _auswahl = sorted({d for _rr in selected_raeume
+                           for d in dateien_je_raum.get(_rr, [])})
+    else:
+        _auswahl = all_available_files
     selected_docs = st.multiselect(
         "Suche beschränken auf:", 
-        options=all_available_files,
+        options=_auswahl,
         default=[],
-        help="Leer lassen, um in allen Dokumenten zu suchen."
+        help="Leer lassen, um in allen Dokumenten der Auswahl oben zu "
+             "suchen. Die Liste zeigt nur, was zu Raum und Projekt "
+             "darueber passt."
     )
     # Ein gewaehltes Projekt wirkt wie eine Dateiauswahl. Beides
     # zugleich waere ein Widerspruch, den niemand aufloest -- deshalb
@@ -2205,7 +2231,13 @@ with st.sidebar:
                 st.caption("Leer.")
                 continue
             for f in _dateien:
-                st.caption(f"📄 {f}")
+                # Das Projekt dazu, wo es eines gibt. Es steht in den
+                # Metadaten und im Ordner -- bisher nur nicht auf dem
+                # Bildschirm, und damit war es fuer den Nutzer nicht
+                # vorhanden. Die Zuordnung liegt fuer den eigenen Raum
+                # schon vor; der Filter oben hat sie berechnet.
+                _pj = _projekt_von.get(f, "") if _r == _mein_raum_f else ""
+                st.caption(f"📄 {f}" + (f"  ·  {_pj}" if _pj else ""))
 
             # Verwalten darf, wer den Raum schreiben darf -- und dazu
             # gehoert ein bestaetigter Notzugang.
