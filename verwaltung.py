@@ -4,7 +4,7 @@ Herausgeloest aus app.py, das mit 4.300 Zeilen zu gross geworden war --
 davon 1.385 fuer diesen Bereich. Die Trennung ist die inhaltlich
 richtige: was NUTZER tun gegen was VERWALTER einstellen.
 
-DIE SCHNITTSTELLE IST ABSICHTLICH SICHTBAR. Elf Namen kommen aus
+DIE SCHNITTSTELLE IST ABSICHTLICH SICHTBAR. Zwoelf Namen kommen aus
 app.py, und sie stehen einzeln in der Signatur statt in einem
 Sammelobjekt. Wer einen zwoelften braucht, muss ihn hinschreiben --
 und merkt dabei, dass er die Kopplung vergroessert.
@@ -99,7 +99,7 @@ def zeichne(*, is_admin,
             _felder_leeren,
             _verwaltungsstand,
             _alle_raum_sammlungen,
-            _loeschfreigabe):
+            _loeschfreigabe, _p):
     """Zeichnet den Verwaltungsbereich in die Seitenleiste.
 
     Die Parameter sind die gemessene Kopplung an app.py --
