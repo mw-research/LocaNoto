@@ -1434,6 +1434,66 @@ try:
 finally:
     _vb.schliesse()
 
+
+# --- WAS RAUSGEHT, GEHT NICHT ZURUECK ---
+#
+# Das Modell schlaegt vor, ein Mensch schickt. Ausnahme: ein
+# Funktionspostfach, das ausdruecklich freigeschaltet ist -- und dann
+# traegt jede Nachricht einen Hinweis, dass sie automatisch entstand.
+_mcp_konf = os.path.join(paths.CONFIG_DIR, "mcp.json")
+with open(_mcp_konf, "w", encoding="utf-8") as _f:
+    json.dump({
+        "persoenlich": {"transport": "http", "url": "http://x"},
+        "info": {"transport": "http", "url": "http://x",
+                 "sendet": ["send_mail"], "automatisch": True,
+                 "textfeld": "body", "hinweis": "Automatisch erstellt."},
+        "ohne_feld": {"transport": "http", "url": "http://x",
+                      "sendet": ["send_mail"], "automatisch": True,
+                      "textfeld": "gibtsnicht"},
+    }, _f)
+
+# Lesen braucht nie eine Bestaetigung -- sonst klickt sich niemand
+# durch eine Recherche.
+pruef("Lesen laeuft ohne Rueckfrage",
+      not _mcp.braucht_bestaetigung("persoenlich", "suche", {"frage": "x"}))
+
+# Das persoenliche Postfach ist nicht freigeschaltet: Entwurf.
+pruef("das persoenliche Postfach verlangt eine Bestaetigung",
+      _mcp.braucht_bestaetigung("persoenlich", "send_mail",
+                                {"body": "Hallo"}))
+
+# Das freigeschaltete Funktionspostfach darf -- und bekommt den Hinweis.
+pruef("ein freigeschaltetes Funktionspostfach darf ohne Rueckfrage",
+      not _mcp.braucht_bestaetigung("info", "send_mail", {"body": "Hallo"}))
+_mit = _mcp.mit_hinweis("info", {"an": "a@b.c", "body": "Hallo"})
+pruef("und der Hinweis steht am Ende der Nachricht",
+      _mit["body"].startswith("Hallo")
+      and _mit["body"].rstrip().endswith("Automatisch erstellt."), _mit)
+pruef("die uebrigen Angaben bleiben unangetastet",
+      _mit["an"] == "a@b.c")
+
+# UND DIE RICHTUNG, IN DIE DER ZWEIFEL FAELLT: ohne Textfeld laesst
+# sich der Hinweis nicht anhaengen -- dann wird bestaetigt, auch wenn
+# der Schalter an ist. Sonst ginge eine automatische Antwort ohne
+# Kennzeichnung hinaus, und genau das soll der Schalter nicht
+# bedeuten.
+pruef("ohne Textfeld wird trotz Freischaltung bestaetigt",
+      _mcp.braucht_bestaetigung("ohne_feld", "send_mail", {"an": "a@b.c"}))
+_ja, _grund = _mcp.darf_automatisch("ohne_feld", "send_mail", {"an": "x"})
+pruef("und der Grund wird benannt", "Textfeld" in _grund, _grund)
+
+# Die Namensregel greift nur, wo der Betreiber nichts eingetragen hat.
+# Sie ist eine Kruecke und darf nur zu VIEL bestaetigen lassen.
+pruef("ohne Liste erkennt die Namensregel ein Sendewerkzeug",
+      _mcp.sendet("persoenlich", "reply_to_message"))
+pruef("und laesst Lesewerkzeuge in Ruhe",
+      not _mcp.sendet("persoenlich", "get_message"))
+pruef("mit Liste gilt nur die Liste",
+      _mcp.sendet("info", "send_mail")
+      and not _mcp.sendet("info", "reply_to_message"))
+
+os.remove(_mcp_konf)
+
 # --- DER OWNCLOUD-ZIELPFAD BEHAELT DEN PROJEKTORDNER ---
 #
 # Dreimal war diese Berechnung falsch, jedes Mal woanders: ablage()

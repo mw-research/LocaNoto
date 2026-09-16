@@ -294,3 +294,125 @@ def teile_namen(voller_name):
     """'server__werkzeug' -> (server, werkzeug)."""
     server, _, name = str(voller_name or "").partition("__")
     return server, name
+
+
+# --- WAS RAUSGEHT, GEHT NICHT ZURUECK ---
+#
+# Eine verschickte Nachricht ist das Einzige in diesem System, das sich
+# nicht rueckgaengig machen laesst. Kein Abzug hilft, keine
+# Wiederherstellung, und der Empfaenger hat sie. Der wahrscheinlichere
+# Fehler ist dabei nicht ein schlechter Text, sondern ein falscher
+# Adressat -- und dann liegt Kundeninformation bei jemandem, der sie
+# nie haette sehen duerfen.
+#
+# Deshalb: das Modell SCHLAEGT VOR, ein Mensch schickt. Wer das fuer
+# ein Funktionspostfach anders will, schaltet es dort ausdruecklich
+# frei -- und dann traegt jede Nachricht einen Hinweis, dass sie
+# automatisch entstanden ist.
+
+# Wonach ein Sendewerkzeug erkannt wird, wenn der Betreiber nichts
+# eingetragen hat. Eine Namensregel ist eine Kruecke und wird auch so
+# behandelt: sie kann nur zu VIEL bestaetigen lassen, nie zu wenig --
+# siehe braucht_bestaetigung().
+_SENDEWOERTER = ("send", "sende", "reply", "antwort", "forward",
+                 "weiterleit", "mail_post", "post_mail", "draft_send")
+
+# Wo der Hinweis angehaengt wird, wenn kein Feld eingetragen ist.
+_TEXTFELDER = ("body", "text", "content", "inhalt", "message", "nachricht")
+
+HINWEIS_VORGABE = ("Diese Nachricht wurde automatisch erstellt und vor "
+                   "dem Versand nicht von einem Menschen gelesen.")
+
+
+def _angaben(server):
+    return lies_konfiguration().get(server) or {}
+
+
+def sendet(server, werkzeug):
+    """Verschickt dieses Werkzeug etwas?
+
+    Zuerst die Liste des Betreibers -- sie ist die verlaessliche
+    Auskunft, denn nur er kennt die Werkzeuge seines Servers. Ohne
+    Liste bleibt die Namensregel, und die ist ausdruecklich eine
+    Kruecke: ein Sendewerkzeug, das 'dispatch' heisst, faellt durch.
+
+    Genau deshalb entscheidet nicht diese Funktion allein, ob ohne
+    Rueckfrage gesendet wird -- siehe braucht_bestaetigung().
+    """
+    a = _angaben(server)
+    liste = a.get("sendet")
+    if isinstance(liste, list):
+        return werkzeug in liste
+    n = str(werkzeug or "").lower()
+    return any(w in n for w in _SENDEWOERTER)
+
+
+def textfeld(server, argumente):
+    """Der Name des Arguments, in dem der Nachrichtentext steht.
+
+    Leer, wenn keines zu finden ist -- und das ist kein Schoenheits-
+    fehler, sondern die Stelle, an der das automatische Antworten
+    ausfaellt: ohne Textfeld laesst sich der Hinweis nicht anhaengen.
+    """
+    a = _angaben(server)
+    eingetragen = a.get("textfeld")
+    if eingetragen:
+        return eingetragen if eingetragen in (argumente or {}) else ""
+    for name in _TEXTFELDER:
+        if name in (argumente or {}):
+            return name
+    return ""
+
+
+def darf_automatisch(server, werkzeug, argumente):
+    """(ja, grund) -- darf dieses Werkzeug ohne Rueckfrage laufen?
+
+    Drei Bedingungen, und alle drei muessen erfuellt sein:
+
+      1. Der Betreiber hat es fuer dieses Postfach freigeschaltet.
+      2. Es gibt ein Feld, in dem der Text steht.
+      3. Es gibt einen Hinweis, der hineingeschrieben werden kann.
+
+    Faellt eine davon aus, wird bestaetigt. Das ist die Richtung, in
+    die ein Zweifel fallen muss: eine Nachricht zu viel zu bestaetigen
+    kostet einen Klick, eine zu wenig kostet eine Nachricht, die drau-
+    ssen ist.
+    """
+    a = _angaben(server)
+    if not a.get("automatisch"):
+        return False, "fuer dieses Postfach nicht freigeschaltet"
+    if not textfeld(server, argumente):
+        return False, ("kein Textfeld gefunden -- der Hinweis liesse "
+                       "sich nicht anhaengen")
+    if not (a.get("hinweis") or HINWEIS_VORGABE).strip():
+        return False, "kein Hinweistext hinterlegt"
+    return True, ""
+
+
+def braucht_bestaetigung(server, werkzeug, argumente=None):
+    """Muss ein Mensch diesen Aufruf bestaetigen?
+
+    Nur Sendewerkzeuge ueberhaupt, und auch die nicht, wenn das
+    Postfach ausdruecklich freigeschaltet ist.
+    """
+    if not sendet(server, werkzeug):
+        return False
+    ja, _grund = darf_automatisch(server, werkzeug, argumente or {})
+    return not ja
+
+
+def mit_hinweis(server, argumente):
+    """Argumente mit angehaengtem Hinweis. Unveraendert, wenn keiner geht.
+
+    Der Hinweis steht am ENDE und nicht am Anfang: eine Nachricht, die
+    mit einer Fussnote beginnt, liest sich wie ein Formbrief, und der
+    Empfaenger soll zuerst die Antwort sehen.
+    """
+    feld = textfeld(server, argumente)
+    if not feld:
+        return dict(argumente or {})
+    a = _angaben(server)
+    hinweis = (a.get("hinweis") or HINWEIS_VORGABE).strip()
+    aus = dict(argumente or {})
+    aus[feld] = f"{aus.get(feld) or ''}\n\n-- \n{hinweis}"
+    return aus
