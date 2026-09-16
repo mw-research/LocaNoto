@@ -1937,7 +1937,44 @@ _zf = next(k for k in _ast.parse(_datei("verwaltung.py")).body
            if isinstance(k, _ast.FunctionDef) and k.name == "zeichne")
 _sig = [a.arg for a in _zf.args.kwonlyargs]
 pruef("die Verwaltung ist eine eigene Datei mit zeichne()", bool(_sig))
-pruef("und haengt an genau elf Namen aus app.py", len(_sig) == 11, len(_sig))
+pruef("und haengt an genau zwoelf Namen aus app.py",
+      len(_sig) == 12, len(_sig))
+
+# UND DIE PRUEFUNG, DIE DEN ZWOELFTEN GEFUNDEN HAETTE.
+#
+# Beim Herausloesen wurde _p uebersehen: die Voreinstellung aus app.py.
+# Sie galt als mitgebracht, weil _p im Block auch vorkommt -- als
+# Schleifenvariable in Generatorausdruecken. Solche Namen haben in
+# Python eine eigene Sichtbarkeit und lecken nicht in die Funktion; die
+# selbstgebaute Analyse wusste das nicht, und der einzige echte
+# Lesezugriff fiel durch. Im Betrieb dann ein NameError.
+#
+# Also nicht selbst nachbauen. symtable ist Pythons eigener
+# Namensaufloeser und sagt fuer jede Funktion, welche Namen sie aus dem
+# Modul holt. Was dort steht und im Modul nicht definiert ist, fehlt --
+# ohne Heuristik, ohne Zeilenordnung, ohne Sonderfaelle.
+import builtins as _bi
+import symtable as _sym
+
+_quelle_vw = _datei("verwaltung.py")
+_tab = _sym.symtable(_quelle_vw, "verwaltung.py", "exec")
+_modul = {s.get_name() for s in _tab.get_symbols() if s.is_assigned()
+          or s.is_imported()}
+_modul |= {k.name for k in _ast.parse(_quelle_vw).body
+           if isinstance(k, (_ast.FunctionDef, _ast.ClassDef))}
+
+
+def _freie(raum):
+    """Namen, die dieser Bereich aus dem Modul holt -- und alle darin."""
+    aus = {s.get_name() for s in raum.get_symbols() if s.is_global()}
+    for unter in raum.get_children():
+        aus |= _freie(unter)
+    return aus
+
+
+_fehlt = sorted(_freie(_tab.lookup("zeichne").get_namespace())
+                - _modul - set(dir(_bi)))
+pruef("kein Name in verwaltung.py haengt in der Luft", not _fehlt, _fehlt)
 pruef("die nur benannt uebergeben werden koennen",
       not _zf.args.args and not _zf.args.posonlyargs,
       [a.arg for a in _zf.args.args])

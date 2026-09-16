@@ -2459,7 +2459,8 @@ with st.sidebar:
         _felder_leeren=_felder_leeren,
         _verwaltungsstand=_verwaltungsstand,
         _alle_raum_sammlungen=_alle_raum_sammlungen,
-        _loeschfreigabe=_loeschfreigabe)
+        _loeschfreigabe=_loeschfreigabe,
+        _p=_p)
 
 # --- CHAT & RETRIEVAL ---
 #
