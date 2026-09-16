@@ -416,3 +416,91 @@ def mit_hinweis(server, argumente):
     aus = dict(argumente or {})
     aus[feld] = f"{aus.get(feld) or ''}\n\n-- \n{hinweis}"
     return aus
+
+
+# --- WAS KANN DIESER SERVER? ---
+
+def main():
+    """python mcp.py [server] [--roh]
+
+    Zeigt, was die eingerichteten Werkzeugserver anbieten. Gebraucht an
+    zwei Stellen:
+
+    BEIM EINRICHTEN. Welches Werkzeug sucht, welches sendet und wie das
+    Feld mit dem Nachrichtentext heisst -- das steht in dieser Ausgabe
+    und muss danach in mcp.json unter "sendet" und "textfeld" nach.
+    Raten waere hier teuer: ein nicht erkanntes Sendewerkzeug liefe
+    ohne Rueckfrage.
+
+    ALS PROBE. Antwortet der Server? Stimmen die Anmeldedaten? Eine
+    Frage im Chat ist ein schlechtes Messwerkzeug dafuer -- dort sieht
+    ein nicht erreichbarer Server aus wie ein Modell, das nichts weiss.
+
+    --roh gibt die Antwort so aus, wie sie kam. DIE KONFIGURATION WIRD
+    NIE MITGEDRUCKT: dort koennen Token stehen, und eine Ausgabe, die
+    man weiterschickt, soll sich weiterschicken lassen.
+    """
+    import sys
+
+    paths.bootstrap()
+    roh = "--roh" in sys.argv
+    nur = next((a for a in sys.argv[1:] if not a.startswith("-")), "")
+
+    konf = lies_konfiguration()
+    if not konf:
+        print(f"Kein Werkzeugserver eingerichtet ({KONFIG} fehlt).")
+        print()
+        print("Beispiel:")
+        print(json.dumps({"postfach": {
+            "transport": "http", "url": "https://.../mcp",
+            "sendet": ["send_mail"], "textfeld": "body"}},
+            indent=2, ensure_ascii=False))
+        return 2
+
+    fehler = 0
+    for name, angaben in sorted(konf.items()):
+        if nur and name != nur:
+            continue
+        print("=" * 62)
+        print(f"{name}   ({angaben.get('transport') or 'http'})")
+        print("=" * 62)
+        v = Verbindung(name, angaben)
+        try:
+            wz = v.werkzeuge()
+        except Exception as e:
+            print(f"  [!] {e}")
+            fehler += 1
+            continue
+        finally:
+            v.schliesse()
+        if not wz:
+            print("  Keine Werkzeuge gemeldet.")
+            continue
+        for w in wz:
+            marke = "SENDET" if sendet(name, w["name"]) else "liest"
+            print(f"\n  [{marke}] {w['name']}")
+            if w["beschreibung"]:
+                print(f"      {w['beschreibung'][:200]}")
+            felder = (w["schema"] or {}).get("properties") or {}
+            pflicht = set((w["schema"] or {}).get("required") or [])
+            for f, angabe in felder.items():
+                art = (angabe or {}).get("type") or "?"
+                print(f"      - {f} ({art})"
+                      + ("  PFLICHT" if f in pflicht else ""))
+            if roh:
+                print("      " + json.dumps(w["schema"], ensure_ascii=False))
+        print()
+        # Der Hinweis, der die eigentliche Arbeit beim Einrichten ist.
+        sendende = [w["name"] for w in wz if sendet(name, w["name"])]
+        if sendende and not isinstance(angaben.get("sendet"), list):
+            print(f"  ACHTUNG: 'sendet' ist fuer '{name}' nicht eingetragen.")
+            print(f"  Erkannt ueber die Namensregel: {', '.join(sendende)}")
+            print("  Ein Sendewerkzeug, das anders heisst, faellt durch --")
+            print("  und liefe damit ohne Rueckfrage. Bitte eintragen.")
+            print()
+    return 1 if fehler else 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
