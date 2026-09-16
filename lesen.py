@@ -118,6 +118,14 @@ def _docx(pfad):
             nummer += 1
             kopf = f"KONTEXT ZUR TABELLE: {titel}\n\n" if titel else ""
             yield nummer, titel, kopf + "\n".join(zeilen)
+            # Was nach der Tabelle kommt, ist ein NEUER Abschnitt.
+            # Ohne diese Zeile sammelt sich der folgende Text unter
+            # derselben Nummer weiter, die die Tabelle gerade vergeben
+            # hat -- und die Abschnittskennung ist aus Dateiname,
+            # Nummer und Position gebaut. Zweimal dieselbe Nummer heisst
+            # zweimal dieselbe Kennung, und Chroma weist den ganzen
+            # Upload deswegen ab.
+            nummer += 1
 
     eintrag = fertig()
     if eintrag:

@@ -443,6 +443,37 @@ def metadaten_klartext(raum, metadatas, benutzer="?"):
     return aus
 
 
+def _eindeutige_kennungen(ids):
+    """Kennungen innerhalb EINES Aufrufs eindeutig machen.
+
+    Chroma weist einen Aufruf mit Dubletten komplett ab. Ein einziges
+    Dokument, das zwei gleiche Kennungen erzeugt, laesst sich damit gar
+    nicht hochladen -- der Nutzer sieht eine Rueckverfolgung, und die
+    Datei liegt auf der Platte, ohne in der Suche zu stehen.
+
+    Beobachtet an einer Word-Datei, in der auf eine Tabelle normaler
+    Text folgte: beide bekamen dieselbe Abschnittsnummer. Die Ursache
+    gehoert dorthin, wo die Nummern entstehen, und ist dort behoben.
+    Hier steht die Sicherung, denn die Kennungen entstehen an drei
+    Stellen (Oberflaeche, Ingest, Bilder-Ingest) und werden alle durch
+    diese Funktion geschrieben.
+
+    Die zweite Verwendung heisst _w2, die dritte _w3. NICHT die zweite
+    verwerfen: die beiden Eintraege sind verschiedene Texte, und einer
+    davon waere sonst weg -- ohne Meldung, und niemand sucht danach.
+
+    Wer keine Dublette hat, bekommt seine Kennungen unveraendert
+    zurueck. Ein bestehender Bestand wird also nicht angefasst.
+    """
+    gesehen = {}
+    aus = []
+    for k in ids:
+        wie_oft = gesehen.get(k, 0) + 1
+        gesehen[k] = wie_oft
+        aus.append(k if wie_oft == 1 else f"{k}_w{wie_oft}")
+    return aus
+
+
 def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
              stapel=None, ersetzen=True, fortschritt=None):
     """Schreibt Abschnitte in Stapeln. Anzahl der geschriebenen.
@@ -454,6 +485,7 @@ def schreibe(sammlung, ids, documents=None, metadatas=None, embeddings=None,
     n = len(ids)
     if not n:
         return 0
+    ids = _eindeutige_kennungen(ids)
     # Verschluesseln VOR dem Aufteilen: sonst traegt jeder Stapel die
     # Entscheidung erneut, und einer davon vergisst sie irgendwann.
     _raum = raum_von(sammlung)
