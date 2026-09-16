@@ -170,7 +170,7 @@ def zaehle(benutzer, raum, anzahl, wartung=False):
     #
     # Sie faellt trotzdem nicht unter den Tisch: das Protokoll bekommt
     # den Eintrag mit der vollen Zahl. Wer spaeter nachliest, sieht
-    # "20.608 Abschnitte aufgeschlossen, Grund: Indexaufbau" und kann
+    # "20.000 Abschnitte aufgeschlossen, Grund: Indexaufbau" und kann
     # pruefen, ob zu dieser Zeit ein Start stattfand.
     if wartung:
         melde("wartung_klartext", benutzer,
