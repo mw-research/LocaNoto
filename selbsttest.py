@@ -1831,6 +1831,27 @@ sys.modules.pop("owncloud", None)
 
 
 # --- JEDER AENDERT SEIN EIGENES PASSWORT ---
+# Und der Auftrag wird GANZ OBEN herausgenommen, vor der Seitenleiste.
+#
+# Im Betrieb blieb die Bedienung sonst dauerhaft gesperrt: zwischen der
+# Selbstheilung und dem Chat liegen tausend Zeilen, und alles davon
+# kann abbrechen. Blieb der Auftrag dabei liegen, sah der naechste Lauf
+# "gesperrt UND Auftrag vorhanden" und heilte sich nicht -- und der
+# naechste genauso.
+_pop = _app.find('_auftrag = st.session_state.pop("_auftrag"')
+_leiste2 = _app.rindex("with st.sidebar:")
+pruef("der Auftrag wird vor der Seitenleiste herausgenommen",
+      0 < _pop < _leiste2, f"pop {_pop}, Leiste {_leiste2}")
+pruef("und nur an dieser einen Stelle",
+      _app.count('st.session_state.pop("_auftrag"') == 1,
+      _app.count('st.session_state.pop("_auftrag"'))
+
+# Und der Knopf haengt nicht am Feldinhalt: Streamlit uebernimmt den
+# erst beim Verlassen, ein Klick direkt nach dem Tippen liefe also ins
+# Leere -- auf einen Knopf, der noch gesperrt ist.
+pruef("der Aenderungsknopf haengt nicht am Feldinhalt",
+      'key="eigenes_pw_knopf", disabled=_antwortet)' in _app)
+
 #
 # Bis hierher konnte das nur ein Verwalter. Damit war das Passwort
 # eines Nutzers eines, das jemand anders vergeben hat und weiter kennt
@@ -1948,7 +1969,10 @@ pruef("der Verwaltungsschalter haengt daran",
 # Angenommen wird die Frage in einem Lauf, beantwortet im naechsten --
 # anders laesst sich die Leiste nicht rechtzeitig sperren.
 _annahme = _app.find('st.session_state["_auftrag"] = {')
-_arbeit = _app.find('_auftrag = st.session_state.pop("_auftrag"')
+# Das Herausnehmen steht seit der Sperrkorrektur ganz oben. Was
+# hier zaehlt, ist die Stelle, an der der Auftrag ABGEARBEITET
+# wird -- und die liegt weiterhin hinter der Annahme.
+_arbeit = _app.find("    if _auftrag:")
 pruef("die Frage wird gemerkt", _annahme > 0)
 pruef("und erst im naechsten Lauf abgearbeitet", 0 < _annahme < _arbeit,
       f"Annahme {_annahme}, Arbeit {_arbeit}")
@@ -1966,7 +1990,7 @@ pruef("auch wenn die Verarbeitung scheitert",
 
 # Und die Selbstheilung: gesperrt ohne Auftrag darf nicht bleiben.
 pruef("eine Sperre ohne Auftrag heilt sich",
-      "if _antwortet and not st.session_state.get(\"_auftrag\")" in _app)
+      "if _antwortet and not _auftrag:" in _app)
 
 
 # Und der Zielordner kommt aus zuordnung_wirksam, nicht aus

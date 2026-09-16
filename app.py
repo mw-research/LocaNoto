@@ -1426,8 +1426,21 @@ all_available_files = sorted({d for liste in dateien_je_raum.values()
 #
 # Muss hier stehen und nicht weiter unten: die Seitenleiste wird gleich
 # gezeichnet, und was sie sperren soll, muss vorher feststehen.
+# Der Auftrag wird HIER herausgenommen und nicht erst beim Chat.
+#
+# Dazwischen liegen rund tausend Zeilen, und alles davon kann
+# abbrechen -- ein st.stop() wegen einer gerissenen Budgetschwelle, ein
+# Fehler, ein Klick auf einen anderen Zweig. Blieb der Auftrag dabei
+# liegen, sah der naechste Lauf "gesperrt UND Auftrag vorhanden", heilte
+# sich also nicht, und die naechste Runde genauso: die Bedienung war
+# tot, bis jemand die Sitzung beendete. Genau so gemeldet worden.
+#
+# Als gewoehnliche Variable ueberlebt er nur diesen einen Lauf. Was auch
+# immer dazwischen abbricht -- der naechste findet keinen Auftrag und
+# loest die Sperre.
+_auftrag = st.session_state.pop("_auftrag", None)
 _antwortet = bool(st.session_state.get("_laeuft"))
-if _antwortet and not st.session_state.get("_auftrag"):
+if _antwortet and not _auftrag:
     # Gesperrt, aber nichts zu tun: der antwortende Lauf ist nicht bis
     # zum Ende gekommen. Abgebrochen, gestoppt, abgestuerzt -- gleich
     # welcher Grund, die Sperre darf nicht haengenbleiben. Eine Leiste,
@@ -2391,11 +2404,19 @@ with st.sidebar:
         _neu2 = st.text_input("Wiederholen", type="password",
                               key=_feldschluessel(_pwe, "neu2"),
                               disabled=_antwortet)
+        # Nicht ueber den Feldinhalt sperren. Streamlit uebernimmt den
+        # Inhalt eines Textfelds erst beim Verlassen -- wer tippt und
+        # dann auf den Knopf klickt, klickt auf einen noch gesperrten
+        # Knopf, und es passiert nichts. Zweimal klicken hilft, aber
+        # das weiss niemand. Also immer druckbar, und der Knopf sagt
+        # selbst, was fehlt.
         if st.button("Aendern", use_container_width=True,
-                     key="eigenes_pw_knopf",
-                     disabled=_antwortet or not (_alt and _neu1)):
+                     key="eigenes_pw_knopf", disabled=_antwortet):
             _ich = st.session_state["username"]
-            if _neu1 != _neu2:
+            if not (_alt and _neu1):
+                st.error("Bitte das bisherige und das neue Passwort "
+                         "eintragen.")
+            elif _neu1 != _neu2:
                 st.error("Die Eingaben stimmen nicht ueberein.")
             elif _neu1 == _alt:
                 st.error("Das ist das bisherige Passwort.")
@@ -2599,10 +2620,8 @@ if _bestand > 0:
         st.session_state["_laeuft"] = True
         st.rerun()
 
-    # Der Auftrag wird HERAUSGENOMMEN und nicht nur gelesen: bricht der
-    # Lauf gleich ab, soll die Frage nicht beim naechsten Zeichnen
-    # erneut gestellt werden.
-    _auftrag = st.session_state.pop("_auftrag", None)
+    # _auftrag wurde ganz oben herausgenommen, noch vor der
+    # Seitenleiste -- siehe dort, warum.
     if _auftrag:
         user_query = _auftrag["frage"]
         bild_pfade = list(_auftrag["bilder"])
