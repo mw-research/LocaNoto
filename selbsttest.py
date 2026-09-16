@@ -1435,6 +1435,117 @@ finally:
     _vb.schliesse()
 
 
+
+# --- DER WERKZEUGKREIS ---
+#
+# Das Modell darf nachschlagen, bevor es antwortet. Ein Postfach passt
+# nicht in den Zusammenhang, der vorher feststeht: niemand weiss,
+# wonach zu suchen ist, bevor die Frage da ist.
+import pipeline as _pl
+
+
+class _FalscheAntwort:
+    def __init__(self, inhalt="", rufe=()):
+        self.message = types.SimpleNamespace(
+            content=inhalt,
+            tool_calls=[types.SimpleNamespace(
+                id=f"r{i}", function=types.SimpleNamespace(
+                    name=n, arguments=json.dumps(a)))
+                for i, (n, a) in enumerate(rufe)] or None)
+
+
+class _FalschesModell:
+    """Gibt der Reihe nach vorbereitete Antworten. Zaehlt die Aufrufe."""
+
+    def __init__(self, folge):
+        self.folge = list(folge)
+        self.aufrufe = 0
+        self.chat = types.SimpleNamespace(
+            completions=types.SimpleNamespace(create=self._create))
+
+    def _create(self, **kw):
+        self.aufrufe += 1
+        a = self.folge.pop(0) if self.folge else _FalscheAntwort("fertig")
+        return types.SimpleNamespace(choices=[a])
+
+
+class _FalscheVerbindung:
+    def __init__(self, name, werkzeugnamen):
+        self.name = name
+        self._w = werkzeugnamen
+        self.gerufen = []
+
+    def werkzeuge(self):
+        return [{"server": self.name, "name": n, "beschreibung": n,
+                 "schema": {"type": "object"}} for n in self._w]
+
+    def rufe(self, name, argumente=None):
+        self.gerufen.append((name, argumente))
+        return f"Ergebnis von {name}"
+
+
+# 1. OHNE SERVER PASSIERT NICHTS -- und das wird gezaehlt.
+_m = _FalschesModell([])
+_zusatz, _entw = _pl.werkzeuglauf(_m, "x", "sys", [], {})
+pruef("ohne Server kein Werkzeuglauf", (_zusatz, _entw) == ([], []))
+pruef("und vor allem kein Modellaufruf", _m.aufrufe == 0, _m.aufrufe)
+
+# 2. Konfiguration wie im Betrieb: ein persoenliches Postfach ohne
+#    Freigabe, ein Funktionspostfach mit.
+_mk = os.path.join(paths.CONFIG_DIR, "mcp.json")
+with open(_mk, "w", encoding="utf-8") as _f:
+    json.dump({"mein": {"transport": "http", "url": "http://x",
+                        "sendet": ["send_mail"]},
+               "info": {"transport": "http", "url": "http://x",
+                        "sendet": ["send_mail"], "automatisch": True,
+                        "textfeld": "body", "hinweis": "Automatisch."}},
+              _f)
+
+# 3. Lesen wird ausgefuehrt, Senden nicht -- im selben Lauf.
+_vb = {"mein": _FalscheVerbindung("mein", ["suche", "send_mail"])}
+_m = _FalschesModell([
+    _FalscheAntwort("", [("mein__suche", {"frage": "Rechnung"}),
+                         ("mein__send_mail", {"an": "a@b.c",
+                                              "body": "Hallo"})]),
+    _FalscheAntwort("fertig")])
+_zusatz, _entw = _pl.werkzeuglauf(_m, "x", "sys", [], _vb)
+pruef("das Lesewerkzeug wurde ausgefuehrt",
+      [n for n, _a in _vb["mein"].gerufen] == ["suche"],
+      _vb["mein"].gerufen)
+pruef("das Sendewerkzeug NICHT", len(_entw) == 1
+      and _entw[0]["werkzeug"] == "send_mail", _entw)
+pruef("und der Entwurf traegt die Angaben",
+      _entw[0]["argumente"]["an"] == "a@b.c", _entw)
+
+# Das Modell muss ERFAHREN, dass nichts gesendet wurde -- sonst
+# schreibt es dem Nutzer, die Nachricht sei unterwegs.
+_tools = [z for z in _zusatz if z.get("role") == "tool"]
+pruef("das Modell erfaehrt, dass nichts gesendet wurde",
+      any("NICHT ausgefuehrt" in z["content"] for z in _tools), _tools)
+
+# 4. Das freigeschaltete Funktionspostfach sendet -- mit Hinweis.
+_vb2 = {"info": _FalscheVerbindung("info", ["send_mail"])}
+_m = _FalschesModell([
+    _FalscheAntwort("", [("info__send_mail", {"an": "a@b.c",
+                                              "body": "Hallo"})]),
+    _FalscheAntwort("fertig")])
+_zusatz2, _entw2 = _pl.werkzeuglauf(_m, "x", "sys", [], _vb2)
+pruef("das freigeschaltete Postfach sendet ohne Rueckfrage",
+      not _entw2 and len(_vb2["info"].gerufen) == 1, (_entw2, _vb2["info"].gerufen))
+pruef("und der Hinweis haengt an der Nachricht",
+      "Automatisch." in _vb2["info"].gerufen[0][1]["body"],
+      _vb2["info"].gerufen[0][1])
+
+# 5. Der Kreis ist begrenzt. Ein Modell, das immer weiter ruft, darf
+#    den Menschen davor nicht endlos warten lassen.
+_vb3 = {"mein": _FalscheVerbindung("mein", ["suche"])}
+_m = _FalschesModell([_FalscheAntwort("", [("mein__suche", {})])] * 20)
+_pl.werkzeuglauf(_m, "x", "sys", [], _vb3)
+pruef("der Kreis bricht nach den vorgesehenen Runden ab",
+      _m.aufrufe == _pl.WERKZEUG_RUNDEN, (_m.aufrufe, _pl.WERKZEUG_RUNDEN))
+
+os.remove(_mk)
+
 # --- WAS RAUSGEHT, GEHT NICHT ZURUECK ---
 #
 # Das Modell schlaegt vor, ein Mensch schickt. Ausnahme: ein

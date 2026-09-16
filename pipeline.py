@@ -16,6 +16,7 @@ Anzeigetexte gehoeren nicht hierher. Die Funktionen geben Zahlen und
 Hinweise zurueck; wie daraus eine Bildschirmzeile wird, entscheidet die
 Oberflaeche.
 """
+import json
 import os
 import time
 
@@ -415,7 +416,106 @@ def systemprompt(kontexttext, preset=None):
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
 
 
-def antwort(client, modell, system, nachrichten, verlauf_anzahl=20):
+# Wie oft das Modell hoechstens nachschlagen darf, bevor es antworten
+# muss. Ohne Grenze kann es sich im Kreis drehen -- und jede Runde
+# kostet einen Modellaufruf und die Wartezeit des Menschen davor.
+WERKZEUG_RUNDEN = paths.env_int("MCP_RUNDEN", 4)
+
+
+def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
+                 verlauf_anzahl=20, fortschritt=None):
+    """Laesst das Modell Werkzeuge rufen, bis es antworten kann.
+
+    Rueckgabe: (zusatz, entwuerfe)
+
+      zusatz     Nachrichten, die an den Verlauf gehaengt werden, damit
+                 die Antwort das Nachgeschlagene kennt.
+      entwuerfe  Aufrufe, die NICHT ausgefuehrt wurden, weil sie etwas
+                 verschicken wuerden. Sie warten auf einen Menschen.
+
+    OHNE SERVER PASSIERT NICHTS: kein Modellaufruf, keine Werkzeugliste,
+    ([], []) zurueck. Eine Installation ohne Postfach merkt von diesem
+    Code nichts.
+    """
+    import mcp
+
+    if not verbindungen:
+        return [], []
+    werkzeuge = mcp.als_werkzeugliste(verbindungen, sagen=fortschritt)
+    if not werkzeuge:
+        return [], []
+
+    an_modell = [{"role": "system", "content": system}]
+    for m in nachrichten[-verlauf_anzahl:]:
+        an_modell.append({"role": m["role"], "content": m["content"]})
+
+    zusatz, entwuerfe = [], []
+    for _runde in range(max(1, WERKZEUG_RUNDEN)):
+        try:
+            a = client.chat.completions.create(
+                model=modell, messages=an_modell + zusatz,
+                tools=werkzeuge, tool_choice="auto",
+                timeout=HELPER_TIMEOUT)
+        except Exception as e:
+            # Ein Modell, das mit Werkzeugen nicht umgehen kann, darf die
+            # Antwort nicht verhindern. Dann eben ohne Nachschlagen --
+            # das ist genau der Zustand von vor dieser Erweiterung.
+            if fortschritt:
+                fortschritt(f"Werkzeuge nicht nutzbar: {type(e).__name__}")
+            return [], []
+
+        nachricht = a.choices[0].message if a.choices else None
+        rufe = list(getattr(nachricht, "tool_calls", None) or [])
+        if not rufe:
+            break
+
+        zusatz.append({
+            "role": "assistant",
+            "content": nachricht.content or "",
+            "tool_calls": [{"id": r.id, "type": "function",
+                            "function": {"name": r.function.name,
+                                         "arguments": r.function.arguments}}
+                           for r in rufe],
+        })
+
+        for r in rufe:
+            server, name = mcp.teile_namen(r.function.name)
+            try:
+                argumente = json.loads(r.function.arguments or "{}")
+            except ValueError:
+                argumente = {}
+            if fortschritt:
+                fortschritt(f"{server}: {name}")
+
+            if server not in verbindungen:
+                ergebnis = f"Kein Server namens '{server}'."
+            elif mcp.braucht_bestaetigung(server, name, argumente):
+                # NICHT ausfuehren. Der Entwurf geht an die Oberflaeche,
+                # und das Modell erfaehrt ausdruecklich, dass nichts
+                # verschickt wurde -- sonst schreibt es dem Nutzer, die
+                # Nachricht sei unterwegs.
+                entwuerfe.append({"server": server, "werkzeug": name,
+                                  "argumente": argumente})
+                ergebnis = ("NICHT ausgefuehrt. Der Entwurf liegt dem "
+                            "Nutzer zur Bestaetigung vor; erst sein Klick "
+                            "verschickt ihn. Sage ihm, dass ein Entwurf "
+                            "bereitliegt -- nicht, dass gesendet wurde.")
+            else:
+                if mcp.sendet(server, name):
+                    argumente = mcp.mit_hinweis(server, argumente)
+                try:
+                    ergebnis = verbindungen[server].rufe(name, argumente)
+                except Exception as e:
+                    ergebnis = f"Fehler: {e}"
+
+            zusatz.append({"role": "tool", "tool_call_id": r.id,
+                           "content": (ergebnis or "")[:8000]})
+
+    return zusatz, entwuerfe
+
+
+def antwort(client, modell, system, nachrichten, verlauf_anzahl=20,
+            zusatz=()):
     """Erzeugt die Antwort und gibt sie stueckweise aus.
 
     Stueckweise, weil eine Antwort auf einem lokalen 27B-Modell leicht eine
@@ -425,6 +525,9 @@ def antwort(client, modell, system, nachrichten, verlauf_anzahl=20):
     an_modell = [{"role": "system", "content": system}]
     for m in nachrichten[-verlauf_anzahl:]:
         an_modell.append({"role": m["role"], "content": m["content"]})
+    # Was der Werkzeugkreis nachgeschlagen hat, gehoert dazu -- sonst
+    # antwortet das Modell, ohne zu wissen, was es gerade erfragt hat.
+    an_modell.extend(zusatz or [])
 
     strom = client.chat.completions.create(
         model=modell,
