@@ -2466,6 +2466,20 @@ with st.sidebar:
         _loeschfreigabe=_loeschfreigabe,
         _p=_p)
 
+    # NICHT in der Verwaltung, obwohl der Schnitt ihn beim
+    # Herausloesen einmal mitgenommen hatte: der Regler gehoert
+    # jedem, nicht nur einem Verwalter -- und die Suche unten
+    # braucht seinen Wert. In verwaltung.py gesetzt, war er hier
+    # schlicht nicht vorhanden.
+    # Bei dichten Regelwerken kann 5 zu wenig sein: eine vollstaendige
+    # Auskunft braucht dann mehrere Tabellen aus mehreren Dokumenten
+    # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
+    # aufgebraucht. Der Standard bleibt dennoch 5; wer mehr braucht, zieht
+    # den Regler oder setzt TOP_K.
+    top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
+                      value=_p["top_k"] or paths.env_int("TOP_K", 5),
+                      key=f"topk_{aktives_preset}")
+
 # --- CHAT & RETRIEVAL ---
 #
 # Gezaehlt wird ueber die Raeume dieses Nutzers: wer in keinem Raum etwas
