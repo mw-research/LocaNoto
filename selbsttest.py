@@ -1320,6 +1320,37 @@ pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
 
 
 
+
+# --- DER OWNCLOUD-ZIELPFAD BEHAELT DEN PROJEKTORDNER ---
+#
+# Dreimal war diese Berechnung falsch, jedes Mal woanders: ablage()
+# zeigte fuer den allgemeinen Raum auf einen Unterordner, ordner_fuer()
+# kannte nur die Handzuordnung, und der Upload baute den Zielpfad aus
+# dem blossen Dateinamen -- dabei fiel der Projektordner weg und in
+# ownCloud lag alles flach nebeneinander.
+import owncloud as _ocw
+pruef("der Projektordner bleibt erhalten",
+      _ocw.ziel_pfad(raeume.ALLGEMEIN,
+                     os.path.join(paths.DOCS_DIR, "Projekt A", "x.pdf"))
+      == _ocw.raum_pfad(raeume.ALLGEMEIN) + "/Projekt A/x.pdf",
+      _ocw.ziel_pfad(raeume.ALLGEMEIN,
+                     os.path.join(paths.DOCS_DIR, "Projekt A", "x.pdf")))
+pruef("ohne Projekt liegt die Datei direkt im Raumordner",
+      _ocw.ziel_pfad(raeume.ALLGEMEIN,
+                     os.path.join(paths.DOCS_DIR, "x.pdf"))
+      == _ocw.raum_pfad(raeume.ALLGEMEIN) + "/x.pdf")
+pruef("und ein anderer Raum bekommt seinen eigenen Baum",
+      _ocw.ziel_pfad("einkauf",
+                     os.path.join(paths.DOCS_DIR, "einkauf", "P", "y.pdf"))
+      == _ocw.raum_pfad("einkauf") + "/P/y.pdf",
+      _ocw.ziel_pfad("einkauf",
+                     os.path.join(paths.DOCS_DIR, "einkauf", "P", "y.pdf")))
+
+# Und die Verdrahtung: der Upload muss diese Funktion benutzen und den
+# Pfad nicht wieder selbst zusammensetzen.
+pruef("der Upload benutzt sie",
+      "owncloud.ziel_pfad(raum, pdf_path)" in _datei("app.py"))
+
 # --- EINE TABELLE, GEFOLGT VON TEXT, GIBT KEINE DOPPELTE KENNUNG ---
 #
 # Im Betrieb liess sich eine Word-Datei nicht hochladen:
