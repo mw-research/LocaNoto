@@ -1319,6 +1319,72 @@ pruef("Chats und Dokumente ebenso",
 pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
 
 
+
+# --- EINE TABELLE, GEFOLGT VON TEXT, GIBT KEINE DOPPELTE KENNUNG ---
+#
+# Im Betrieb liess sich eine Word-Datei nicht hochladen:
+#   DuplicateIDError: found duplicates of: Angebot.docx_p4_c0
+# Die Tabelle erhoehte die Abschnittsnummer und gab sich damit aus --
+# und was danach kam, sammelte sich unter derselben weiter. Die
+# Kennung ist aus Dateiname, Nummer und Position gebaut.
+import lesen as _le
+from docx import Document as _Doc
+
+_dok = _Doc()
+_dok.add_heading("Kapitel", level=1)
+_dok.add_paragraph("Text vor der Tabelle.")
+_tab = _dok.add_table(rows=2, cols=2)
+_tab.cell(0, 0).text = "Spalte A"
+_tab.cell(0, 1).text = "Spalte B"
+_tab.cell(1, 0).text = "Wert 1"
+_tab.cell(1, 1).text = "Wert 2"
+_dok.add_paragraph("Text NACH der Tabelle -- hier brach es.")
+_docx_pfad = os.path.join(tmp, "tabellenprobe.docx")
+_dok.save(_docx_pfad)
+
+_abschnitte = list(_le.abschnitte(_docx_pfad))
+_nummern = [n for n, _t, _x in _abschnitte]
+pruef("die Word-Datei zerfaellt in mehrere Abschnitte",
+      len(_abschnitte) >= 3, len(_abschnitte))
+pruef("und jeder hat seine eigene Nummer",
+      len(_nummern) == len(set(_nummern)), _nummern)
+pruef("der Text nach der Tabelle geht nicht verloren",
+      any("NACH der Tabelle" in t for _n, _t2, t in _abschnitte))
+
+# Die Sicherung im Schreibweg. Sie greift fuer alle drei Stellen, an
+# denen Kennungen entstehen -- Oberflaeche, Ingest, Bilder-Ingest.
+pruef("doppelte Kennungen werden durchnummeriert",
+      store._eindeutige_kennungen(["a", "b", "a", "a"])
+      == ["a", "b", "a_w2", "a_w3"],
+      store._eindeutige_kennungen(["a", "b", "a", "a"]))
+
+# UND DAS WICHTIGERE: ohne Dublette bleibt alles, wie es war. Sonst
+# bekaeme ein bestehender Bestand beim naechsten Einlesen neue
+# Kennungen und stuende danach doppelt in der Suche.
+pruef("ohne Dublette bleibt jede Kennung unveraendert",
+      store._eindeutige_kennungen(["x_p1_c0", "x_p1_c1", "x_p2_c0"])
+      == ["x_p1_c0", "x_p1_c1", "x_p2_c0"])
+
+# Und die VERDRAHTUNG: schreibe() muss den Aufruf ueberstehen, nicht
+# nur die Funktion daneben existieren. Genau dieser Aufruf hat im
+# Betrieb den ganzen Upload gekostet -- Chroma weist einen Aufruf mit
+# Dubletten komplett ab.
+_dsml = store.sammlung(raeume.sammlung("einkauf"))
+_vorher_n = _dsml.count()
+try:
+    _gesch = store.schreibe(
+        _dsml, ["dopp", "dopp"], documents=["erster Text", "zweiter Text"],
+        metadatas=[{"file_name": "d.docx"}, {"file_name": "d.docx"}],
+        embeddings=[vek(), vek()])
+except Exception as _de:
+    # Gefangen, damit ein Rueckfall hier als FEHL erscheint und nicht
+    # den ganzen Lauf abbricht -- die Pruefungen danach sollen trotzdem
+    # laufen und zeigen, was sonst noch kaputt ist.
+    _gesch = type(_de).__name__
+pruef("ein Aufruf mit doppelter Kennung geht durch", _gesch == 2, _gesch)
+pruef("und BEIDE Texte stehen danach da -- keiner faellt weg",
+      _dsml.count() == _vorher_n + 2, (_vorher_n, _dsml.count()))
+
 # --- EIN ABZUG OHNE ABSCHNITTE IST KEINER ---
 #
 # Der preStop-Haken laeuft bei jedem Herunterfahren. Zu dem Zeitpunkt
