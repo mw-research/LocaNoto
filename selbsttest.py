@@ -483,7 +483,7 @@ budget._ereignisse.clear()
 _gemeldet = []
 _alt_melde = budget.melde
 budget.melde = lambda art, wer, angaben=None: _gemeldet.append((art, wer))
-budget.zaehle("aufbau", "einkauf", 20608, wartung=True)
+budget.zaehle("aufbau", "einkauf", 20000, wartung=True)
 budget.melde = _alt_melde
 pruef("und steht trotzdem im Protokoll",
       _gemeldet == [("wartung_klartext", "aufbau")])

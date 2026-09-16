@@ -210,7 +210,7 @@ def verschluessele_text(raum, text):
 
     base64 und nicht roh: Chroma legt Dokumente als Zeichenkette ab, und
     ein Bytefeld mit Nullbytes ueberlebt den Weg durch JSON nicht. Der
-    Aufschlag ist ein Drittel -- gemessen an 20.608 Abschnitten rund
+    Aufschlag ist ein Drittel -- bei zwanzigtausend Abschnitten rund
     10 MB, und damit die billigste Zeile dieses Moduls.
     """
     if text is None:
