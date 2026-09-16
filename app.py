@@ -2393,25 +2393,29 @@ with st.sidebar:
     # ist im Protokoll nicht von seinem Besitzer zu unterscheiden.
     st.markdown("---")
     with st.expander("\U0001f511 Passwort aendern"):
+        # EIN FORMULAR, und das ist der Kern. Ein Textfeld uebergibt
+        # seinen Inhalt erst, wenn es verlassen wird. Wer tippt und
+        # dann auf einen gewoehnlichen Knopf klickt, loest beides
+        # gleichzeitig aus: der Knopf ist gedrueckt, die Felder tragen
+        # noch die alten Werte -- das Skript sieht einen Druck auf
+        # leere Felder und meldet, es fehle etwas, obwohl alles da ist.
+        #
+        # In einem Formular werden alle Felder GEMEINSAM uebergeben,
+        # wenn der Absendeknopf gedrueckt wird. Den Zwischenzustand
+        # gibt es dann nicht. Die Anmeldemaske dieser Anwendung macht
+        # es seit jeher so.
         _pwe = "eigenes_pw"
-        _alt = st.text_input("Bisheriges Passwort", type="password",
-                             key=_feldschluessel(_pwe, "alt"),
-                             disabled=_antwortet)
-        _neu1 = st.text_input(
-            f"Neues Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
-            type="password", key=_feldschluessel(_pwe, "neu1"),
-            disabled=_antwortet)
-        _neu2 = st.text_input("Wiederholen", type="password",
-                              key=_feldschluessel(_pwe, "neu2"),
-                              disabled=_antwortet)
-        # Nicht ueber den Feldinhalt sperren. Streamlit uebernimmt den
-        # Inhalt eines Textfelds erst beim Verlassen -- wer tippt und
-        # dann auf den Knopf klickt, klickt auf einen noch gesperrten
-        # Knopf, und es passiert nichts. Zweimal klicken hilft, aber
-        # das weiss niemand. Also immer druckbar, und der Knopf sagt
-        # selbst, was fehlt.
-        if st.button("Aendern", use_container_width=True,
-                     key="eigenes_pw_knopf", disabled=_antwortet):
+        with st.form(f"eigenes_pw_{_feldschluessel(_pwe, 'runde')}"):
+            _alt = st.text_input("Bisheriges Passwort", type="password",
+                                 key=_feldschluessel(_pwe, "alt"))
+            _neu1 = st.text_input(
+                f"Neues Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+                type="password", key=_feldschluessel(_pwe, "neu1"))
+            _neu2 = st.text_input("Wiederholen", type="password",
+                                  key=_feldschluessel(_pwe, "neu2"))
+            _pw_ab = st.form_submit_button(
+                "Aendern", use_container_width=True, disabled=_antwortet)
+        if _pw_ab:
             _ich = st.session_state["username"]
             if not (_alt and _neu1):
                 st.error("Bitte das bisherige und das neue Passwort "

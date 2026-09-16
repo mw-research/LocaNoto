@@ -1849,8 +1849,28 @@ pruef("und nur an dieser einen Stelle",
 # Und der Knopf haengt nicht am Feldinhalt: Streamlit uebernimmt den
 # erst beim Verlassen, ein Klick direkt nach dem Tippen liefe also ins
 # Leere -- auf einen Knopf, der noch gesperrt ist.
-pruef("der Aenderungsknopf haengt nicht am Feldinhalt",
-      'key="eigenes_pw_knopf", disabled=_antwortet)' in _app)
+# Und das Passwortaendern steht in einem FORMULAR.
+#
+# Gemeldet: alle drei Felder ausgefuellt, und trotzdem "bitte
+# eintragen". Ein Textfeld uebergibt seinen Inhalt erst beim
+# Verlassen; wer tippt und dann klickt, loest beides gleichzeitig aus,
+# und das Skript sieht einen Druck auf leere Felder.
+#
+# Vorher war derselbe Umstand als ausgegrauter Knopf sichtbar. Ihn
+# druckbar zu machen hat aus einem stummen Knopf eine falsche Meldung
+# gemacht -- behoben war nichts. Ein Formular uebergibt alle Felder
+# gemeinsam; den Zwischenzustand gibt es dann nicht.
+_pwform = _app.find('with st.form(f"eigenes_pw_')
+pruef("das Passwortaendern steht in einem Formular", _pwform > 0)
+pruef("mit einem Absendeknopf statt eines gewoehnlichen",
+      "st.form_submit_button(" in _app[_pwform:_pwform + 900])
+pruef("und die drei Felder liegen darin",
+      all(f'_feldschluessel(_pwe, "{f}")' in _app[_pwform:_pwform + 900]
+          for f in ("alt", "neu1", "neu2")))
+
+# Die Anmeldemaske macht es seit jeher so -- das war der Hinweis, den
+# ich haette lesen sollen, statt eine Sperre zu bauen.
+pruef("so wie die Anmeldemaske", 'st.form("login_form")' in _app)
 
 #
 # Bis hierher konnte das nur ein Verwalter. Damit war das Passwort
