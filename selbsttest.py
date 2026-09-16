@@ -1934,6 +1934,47 @@ pruef("und der Verwalter erfaehrt, dass dort das alte Passwort gilt",
       "NICHT geaendert" in _block)
 
 
+
+# --- UND IN DIE ANDERE RICHTUNG ---
+#
+# Beim Herausloesen habe ich gezaehlt, was der Block LIEST. Was er
+# SETZT und app.py danach braucht, blieb ungeprueft -- und genau das
+# war top_k: der Regler "Relevante Abschnitte abrufen" lag als letzte
+# Anweisung im Schnitt, die Suche unten brauchte seinen Wert, und im
+# Betrieb kam "name 'top_k' is not defined".
+#
+# Ein Block, der aus einer Datei wandert, darf nicht der einzige
+# Erzeuger von etwas sein, das dort zurueckbleibt.
+import ast as _ast
+
+_vq = _datei("verwaltung.py")
+_zfn = next(k for k in _ast.parse(_vq).body
+            if isinstance(k, _ast.FunctionDef) and k.name == "zeichne")
+_setzt = {u.id for u in _ast.walk(_zfn)
+          if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Store)}
+
+# Die ganze Datei lesen und nach ZEILE trennen, nicht den Text
+# zerschneiden: ein Bruchstueck, das mitten in einer Einrueckung
+# beginnt, laesst sich nicht als Modul lesen. Das ging nur so lange
+# gut, wie hinter dem Aufruf zufaellig nichts Eingeruecktes stand.
+_aq = _datei("app.py")
+_abaum = _ast.parse(_aq)
+_ab_zeile = _aq[:_aq.index("verwaltung.zeichne(")].count(chr(10)) + 1
+_braucht = {u.id for u in _ast.walk(_abaum)
+            if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Load)
+            and getattr(u, "lineno", 0) >= _ab_zeile}
+_hat = {u.id for u in _ast.walk(_abaum)
+        if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Store)}
+_hat |= {k.name for k in _abaum.body
+         if isinstance(k, (_ast.FunctionDef, _ast.ClassDef))}
+_hat |= {a.asname or a.name.split(".")[0] for k in _abaum.body
+         if isinstance(k, (_ast.Import, _ast.ImportFrom)) for a in k.names}
+
+_verloren = sorted(_setzt & _braucht - _hat
+                   - {p.arg for p in _zfn.args.kwonlyargs})
+pruef("die Verwaltung ist nicht der einzige Erzeuger von etwas",
+      not _verloren, _verloren)
+
 # --- DIE SCHNITTSTELLE ZWISCHEN OBERFLAECHE UND VERWALTUNG ---
 #
 # app.py hatte 4.300 Zeilen, davon 1.385 Verwaltung -- die Datei, in
