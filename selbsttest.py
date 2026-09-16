@@ -1321,6 +1321,119 @@ pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
 
 
 
+FAKE_MCP = '''"""Werkzeugserver zum Pruefen -- MCP ueber stdio."""
+import json
+import sys
+
+WERKZEUGE = [
+    {"name": "suche", "description": "Postfach durchsuchen",
+     "inputSchema": {"type": "object",
+                     "properties": {"frage": {"type": "string"}},
+                     "required": ["frage"]}},
+    {"name": "lies", "description": "Eine Nachricht lesen",
+     "inputSchema": {"type": "object",
+                     "properties": {"id": {"type": "string"}}}},
+]
+
+for zeile in sys.stdin:
+    zeile = zeile.strip()
+    if not zeile:
+        continue
+    try:
+        n = json.loads(zeile)
+    except ValueError:
+        continue
+    m = n.get("method")
+    if m == "initialize":
+        r = {"protocolVersion": "2024-11-05", "capabilities": {}}
+    elif m == "tools/list":
+        r = {"tools": WERKZEUGE}
+    elif m == "tools/call":
+        p = n.get("params") or {}
+        if p.get("name") == "kaputt":
+            r = {"content": [{"type": "text", "text": "geht nicht"}],
+                 "isError": True}
+        else:
+            r = {"content": [
+                {"type": "text", "text": "Treffer zu " + json.dumps(
+                    p.get("arguments") or {}, sort_keys=True)},
+                {"type": "image", "data": "IGNORIEREN"}]}
+    else:
+        # Mitteilungen bekommen KEINE Antwort.
+        continue
+    sys.stdout.write(json.dumps(
+        {"jsonrpc": "2.0", "id": n.get("id"), "result": r}) + chr(10))
+    sys.stdout.flush()
+'''
+
+# --- WERKZEUGSERVER NACH MCP ---
+#
+# Geprueft gegen einen echten Unterprozess, nicht gegen eine Attrappe.
+# Die Fehler hier sind Fehler des ZUSAMMENSPIELS: ein fehlender
+# Handschlag, eine Mitteilung, auf die jemand eine Antwort erwartet.
+# Eine selbstgeschriebene Attrappe haette genau die Annahmen, die man
+# ohnehin hatte -- der Client hing anfangs bei
+# notifications/initialized, weil er blind eine Zeile las.
+import mcp as _mcp
+
+pruef("ohne Konfiguration ist kein Server eingerichtet",
+      not _mcp.eingerichtet())
+
+_fake = os.path.join(tmp, "fake_mcp.py")
+with open(_fake, "w", encoding="utf-8") as _f:
+    _f.write(FAKE_MCP)
+
+_vb = _mcp.Verbindung("probe", {"transport": "stdio",
+                                "befehl": [sys.executable, _fake]})
+try:
+    _wz = _vb.werkzeuge()
+    pruef("die Werkzeuge des Servers kommen an",
+          [w["name"] for w in _wz] == ["suche", "lies"],
+          [w["name"] for w in _wz])
+    pruef("mit Beschreibung und Schema",
+          _wz[0]["beschreibung"] and _wz[0]["schema"].get("properties"))
+
+    _erg = _vb.rufe("suche", {"frage": "Rechnung"})
+    pruef("ein Werkzeugaufruf liefert Text",
+          _erg == 'Treffer zu {"frage": "Rechnung"}', _erg)
+    # Bildteile fallen heraus: was ins Sprachmodell geht, ist Text, und
+    # ein Bild als Zeichensalat im Prompt waere schlechter als keins.
+    pruef("und Bildteile fallen dabei heraus", "IGNORIEREN" not in _erg)
+
+    _fehler = ""
+    try:
+        _vb.rufe("kaputt")
+    except _mcp.Fehler as _e:
+        _fehler = str(_e)
+    pruef("ein Werkzeugfehler kommt als Fehler an", "geht nicht" in _fehler,
+          _fehler)
+
+    # Fuer das Modell: der Servername gehoert in den Werkzeugnamen, sonst
+    # laesst sich bei zwei Servern mit gleichem Werkzeug nicht sagen,
+    # welches gemeint ist.
+    _liste = _mcp.als_werkzeugliste({"probe": _vb})
+    pruef("die Werkzeugliste traegt den Servernamen",
+          [w["function"]["name"] for w in _liste]
+          == ["probe__suche", "probe__lies"],
+          [w["function"]["name"] for w in _liste])
+    pruef("und laesst sich wieder aufteilen",
+          _mcp.teile_namen("probe__suche") == ("probe", "suche"))
+
+    # Ein Server, der nicht antwortet, darf die anderen nicht mitnehmen.
+    _tot = _mcp.Verbindung("tot", {"transport": "stdio",
+                                   "befehl": [sys.executable, "-c", "pass"]})
+    _gemeldet = []
+    _liste2 = _mcp.als_werkzeugliste({"tot": _tot, "probe": _vb},
+                                     sagen=_gemeldet.append)
+    pruef("ein toter Server nimmt die anderen nicht mit",
+          [w["function"]["name"] for w in _liste2]
+          == ["probe__suche", "probe__lies"],
+          [w["function"]["name"] for w in _liste2])
+    pruef("und wird dabei gemeldet statt verschwiegen",
+          len(_gemeldet) == 1, _gemeldet)
+finally:
+    _vb.schliesse()
+
 # --- DER OWNCLOUD-ZIELPFAD BEHAELT DEN PROJEKTORDNER ---
 #
 # Dreimal war diese Berechnung falsch, jedes Mal woanders: ablage()
