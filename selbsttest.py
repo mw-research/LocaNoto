@@ -1247,6 +1247,11 @@ if _treffer:
 _datei = lambda n: io.open(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), n), encoding="utf-8").read()
 
+# Die Oberflaeche besteht aus zwei Dateien, seit der
+# Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
+# wird in beiden gesucht -- ein Fundort ist keine Eigenschaft.
+_ui = _datei("app.py") + _datei("verwaltung.py")
+
 pruef("Ueberzogen wird von einer ValueError-Klausel NICHT gefangen",
       issubclass(budget.Ueberzogen, Exception)
       and not issubclass(budget.Ueberzogen, ValueError))
@@ -1867,9 +1872,9 @@ _app = _datei("app.py")
 # Passwortaenderung gibt, steht weiter oben ein zweiter Aufruf, und
 # der erste Treffer waere der falsche. Ein Anker, der auf zwei Dinge
 # passt, prueft irgendwann das andere.
-_pwstelle = _app.find("_wahl, _pw1, von=")
+_pwstelle = _ui.find("_wahl, _pw1, von=")
 pruef("es gibt das Passwortsetzen", _pwstelle > 0)
-_block = _app[_pwstelle:_pwstelle + 2200]
+_block = _ui[_pwstelle:_pwstelle + 2200]
 pruef("danach wird die Ablage eingerichtet",
       "owncloud.richte_nutzer_ein(" in _block)
 
@@ -1887,16 +1892,58 @@ pruef("ein vorhandenes ownCloud-Konto bleibt unangetastet",
 pruef("und der Verwalter erfaehrt, dass dort das alte Passwort gilt",
       "NICHT geaendert" in _block)
 
+
+# --- DIE SCHNITTSTELLE ZWISCHEN OBERFLAECHE UND VERWALTUNG ---
+#
+# app.py hatte 4.300 Zeilen, davon 1.385 Verwaltung -- die Datei, in
+# der jeder Fehler dieser Woche steckte. In 4.300 Zeilen findet man
+# einen fehlenden Block nicht.
+#
+# Herausgeloest wurde WOERTLICH: die Namen aus app.py sind Parameter
+# mit demselben Namen geworden, damit im Block keine Zeile
+# umgeschrieben werden musste. Eine Verschiebung ohne Umbenennung kann
+# nichts uebersehen.
+#
+# Gezaehlt wird die Kopplung, damit sie nicht unbemerkt waechst. Wer
+# einen zwoelften Namen braucht, aendert diese Zahl und merkt dabei,
+# was er tut.
+# Gelesen statt geladen: streamlit liegt im Test nicht, und deshalb
+# importiert dieser Lauf die Oberflaeche ueberhaupt nie. Die Signatur
+# steht im Quelltext und sagt dasselbe.
+import ast as _ast
+
+_zf = next(k for k in _ast.parse(_datei("verwaltung.py")).body
+           if isinstance(k, _ast.FunctionDef) and k.name == "zeichne")
+_sig = [a.arg for a in _zf.args.kwonlyargs]
+pruef("die Verwaltung ist eine eigene Datei mit zeichne()", bool(_sig))
+pruef("und haengt an genau elf Namen aus app.py", len(_sig) == 11, len(_sig))
+pruef("die nur benannt uebergeben werden koennen",
+      not _zf.args.args and not _zf.args.posonlyargs,
+      [a.arg for a in _zf.args.args])
+
+# Und der Aufruf uebergibt sie alle -- sonst faellt es erst auf, wenn
+# jemand die Verwaltung oeffnet.
+_a = _datei("app.py")
+_ruf = _a[_a.index("verwaltung.zeichne("):]
+_ruf = _ruf[:_ruf.index(")\n")]
+pruef("und der Aufruf uebergibt jeden davon",
+      all(f"{n}=" in _ruf for n in _sig),
+      [n for n in _sig if f"{n}=" not in _ruf])
+
 # --- DIE LAUFENDE ANTWORT IST GESCHUETZT ---
 _app = _datei("app.py")
+# Die Oberflaeche besteht aus zwei Dateien, seit der
+# Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
+# wird in beiden gesucht -- ein Fundort ist keine Eigenschaft.
+_ui = _app + _datei("verwaltung.py")
 
 _zustand = _app.find("_antwortet = bool(st.session_state")
-_leiste = _app.find('st.toggle("\\U0001f6e0\\ufe0f Verwaltung"')
+_leiste = _app.rindex("with st.sidebar:")
 pruef("es gibt einen Zustand fuer die laufende Antwort", _zustand > 0)
 pruef("und er steht VOR der Seitenleiste", 0 < _zustand < _leiste,
       f"Zustand {_zustand}, Leiste {_leiste}")
 pruef("der Verwaltungsschalter haengt daran",
-      "disabled=_antwortet" in _app[_leiste:_leiste + 400])
+      "disabled=_antwortet" in _datei("verwaltung.py"))
 
 # Angenommen wird die Frage in einem Lauf, beantwortet im naechsten --
 # anders laesst sich die Leiste nicht rechtzeitig sperren.
@@ -2013,12 +2060,12 @@ pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 # Einmal abziehen fuer die Definition selbst.
 # Fuenf Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
 # Verwalter, eigenes Passwort, Raum, Listenbereich.
-_aufrufe = _app.count("_felder_leeren(") - _app.count("def _felder_leeren(")
+_aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
 pruef("fuenf Formulare werden geleert", _aufrufe == 5, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
-          f'_feldschluessel("{_bereich}"' in _app)
+          f'_feldschluessel("{_bereich}"' in _ui)
 
 # UND DAS WICHTIGERE: die Bearbeiten-Felder nicht. Sie zeigen den
 # gespeicherten Wert; ein wechselnder Schluessel wuerde sie bei jedem
@@ -2027,9 +2074,9 @@ for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
 for _feld, _wert in (("raum_lq_", "value=_lq_alt"),
                      ("sqp_", 'value=_sqz.get("passwort", "")'),
                      ("raum_g_", "value=_gruppe_alt")):
-    _st = _app.find(_feld)
+    _st = _ui.find(_feld)
     pruef(f"das Bearbeiten-Feld {_feld} zeigt weiter seinen Wert",
-          _st > 0 and _wert in _app[max(0, _st - 200):_st + 200])
+          _st > 0 and _wert in _ui[max(0, _st - 200):_st + 200])
 
 # --- MEHRERE DOKUMENTE AUF EINMAL ---
 _app = _datei("app.py")
