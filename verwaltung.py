@@ -24,6 +24,7 @@ Funktion.
 import os
 import time
 import streamlit as st
+import auth
 import benutzer
 import chats
 import envcheck
@@ -403,6 +404,105 @@ def zeichne(*, is_admin,
     # Oberflaeche, weil ein Zustand, den man nur im Quelltext nachlesen
     # kann, bei einer Datenschutzfrage nicht hilft.
     if _vw:
+        # --- ZUGANGSTOKEN ---
+        #
+        # Die Mechanik lag fertig in auth.py und wurde nur von
+        # create_token.py im Terminal benutzt. Wer ein Token fuer die
+        # Schnittstelle brauchte, musste an eine Konsole im Pod -- fuer
+        # eine Aufgabe, die dem Verwalter gehoert, ein Umweg.
+        with st.expander("🎫 Zugangstoken für die Schnittstelle"):
+            st.caption(
+                "Ein Token weist einen Nutzer aus. Was er darf, steht in "
+                "der signierten Benutzerdatei — nicht im Token. Für einen "
+                "Masseningest in den **allgemeinen Raum** braucht es "
+                "deshalb das Token eines Verwalters; mit dem eines "
+                "gewöhnlichen Nutzers antwortet die Schnittstelle dort "
+                "mit 403.")
+
+            # ZUERST das frisch angelegte Token, falls eines aussteht.
+            # Genau einmal zu zeigen heisst in Streamlit: den Wert einen
+            # Lauf ueberdauern lassen und ihn wegwerfen, sobald jemand
+            # bestaetigt hat, ihn zu haben.
+            _frisch = st.session_state.get("_neues_token")
+            if _frisch:
+                st.success("Angelegt. **Dieser Wert erscheint nur "
+                           "dieses eine Mal** — gespeichert ist nur sein "
+                           "Hashwert.")
+                st.code(_frisch, language="text")
+                if st.button("Habe ich notiert", key="token_weg",
+                             use_container_width=True):
+                    del st.session_state["_neues_token"]
+                    st.rerun()
+                st.markdown("---")
+
+            _namen = benutzer.namen()
+            if not _namen:
+                st.caption("Noch kein Benutzer angelegt.")
+            else:
+                # Im Formular, aus demselben Grund wie beim
+                # Passwortaendern: ein Textfeld uebergibt seinen Inhalt
+                # erst beim Verlassen, und ein Klick direkt nach dem
+                # Tippen saehe sonst ein leeres Feld.
+                _tk = "token_neu"
+                with st.form(f"token_{_feldschluessel(_tk, 'runde')}"):
+                    _t_wer = st.selectbox(
+                        "Für wen", _namen,
+                        key=_feldschluessel(_tk, "wer"))
+                    _t_bez = st.text_input(
+                        "Bezeichnung", key=_feldschluessel(_tk, "bez"),
+                        help="Wofür es gedacht ist, etwa "
+                             "'Masseningest Laptop'. Erscheint in der "
+                             "Liste unten.")
+                    _t_tage = st.number_input(
+                        "Gültig für Tage (0 = unbegrenzt)",
+                        min_value=0, max_value=3650, value=0, step=30,
+                        key=_feldschluessel(_tk, "tage"))
+                    _t_ab = st.form_submit_button(
+                        "Token anlegen", use_container_width=True,
+                        disabled=_antwortet)
+                if _t_ab:
+                    try:
+                        st.session_state["_neues_token"] = auth.erzeuge(
+                            _t_wer, _t_bez, int(_t_tage) or None)
+                        _felder_leeren(_tk)
+                        _leeren()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Nicht angelegt: {type(e).__name__}: {e}")
+
+            # --- die vorhandenen ---
+            st.markdown("---")
+            _tokens = auth.liste()
+            if not _tokens:
+                st.caption("Keine Token angelegt.")
+            for _h, _e in _tokens:
+                _bis = _e.get("gueltig_bis")
+                _zusatz = _e.get("bezeichnung") or "ohne Bezeichnung"
+                if _bis:
+                    _zusatz += f" · bis {_bis[:10]}"
+                if not _e.get("gueltig", True):
+                    # Ohne gueltige Signatur: von Hand eingetragen oder
+                    # veraendert. Es gilt nicht -- und wird genau deshalb
+                    # gezeigt, statt verschwiegen.
+                    _zusatz += " · **UNGÜLTIG**"
+                _z1, _z2 = st.columns([4, 1])
+                with _z1:
+                    st.markdown(
+                        f"`{_h[:8]}` · **{_e.get('benutzer', '?')}** · "
+                        f"{_zusatz}")
+                    st.caption(f"angelegt {_e.get('erstellt', '?')[:19]}")
+                with _z2:
+                    if st.button("🗑️", key=f"token_weg_{_h[:12]}",
+                                 help="Widerrufen", disabled=_antwortet):
+                        _anzahl = auth.widerrufe(_h)
+                        if _anzahl == 1:
+                            st.info("Widerrufen.")
+                        else:
+                            st.error("Nicht widerrufen.")
+                        _leeren()
+                        time.sleep(1)
+                        st.rerun()
+
         with st.expander("🔐 Verschlüsselung"):
             st.caption(f"Zustand: **{geheim.beschreibung()}**")
             if not geheim.verfuegbar():

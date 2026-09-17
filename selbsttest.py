@@ -2192,12 +2192,15 @@ pruef("es gibt einen wechselnden Feldschluessel",
       "def _feldschluessel(" in _app)
 pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 
-# Die vier Anlegen-Formulare: Benutzer, Passwort, Raum, Listenbereich.
+# Sechs Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
+# Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken.
 # Einmal abziehen fuer die Definition selbst.
-# Fuenf Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
-# Verwalter, eigenes Passwort, Raum, Listenbereich.
+#
+# Die Namen stehen hier und nicht nur die Zahl: schlaegt die Pruefung
+# fehl, soll sie sagen, WELCHES Formular fehlt, statt nur dass eines
+# fehlt.
 _aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
-pruef("fuenf Formulare werden geleert", _aufrufe == 5, _aufrufe)
+pruef("sechs Formulare werden geleert", _aufrufe == 6, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
@@ -2647,6 +2650,40 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 # Huelle tadellos sein und nirgends stehen.
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
+
+# --- ZUGANGSTOKEN IN DER OBERFLAECHE ---
+#
+# Die Mechanik lag fertig in auth.py und wurde nur vom Terminal
+# benutzt. Jetzt legt der Verwalter Token dort an, wo er ohnehin ist.
+#
+# Der Wert ist das Einzige an dieser Oberflaeche, das sich nicht wieder
+# beschaffen laesst: gespeichert wird nur sein Hashwert.
+_vwq2 = _datei("verwaltung.py")
+
+pruef("die Verwaltung legt Token an",
+      "auth.erzeuge(" in _vwq2 and "auth.liste()" in _vwq2
+      and "auth.widerrufe(" in _vwq2)
+
+# EINMAL ZEIGEN UND WIEDER WEGWERFEN. Streamlit fuehrt das Skript bei
+# jeder Bedienung neu aus; was im Sitzungszustand steht, steht bei
+# jedem weiteren Lauf wieder auf dem Bildschirm. Ohne das Loeschen
+# haette der Verwalter sein Token dauerhaft vor sich liegen.
+pruef("das frische Token verschwindet wieder",
+      'del st.session_state["_neues_token"]' in _vwq2)
+
+# IM FORMULAR, aus demselben Grund wie beim Passwortaendern: ein
+# Textfeld uebergibt seinen Inhalt erst beim Verlassen, und ein Klick
+# direkt nach dem Tippen saehe sonst ein leeres Feld.
+pruef("und die Anlage steht in einem Formular",
+      'st.form(f"token_' in _vwq2)
+
+# NUR FUER VERWALTER. Der Bereich steht im Block hinter is_admin() --
+# gepruefft wird die Reihenfolge im Quelltext, denn ein Token fuer eine
+# fremde Kennung ist eine Vollmacht.
+_vw_anfang = _vwq2.find("    if _vw:")
+_token_stelle = _vwq2.find("Zugangstoken für die Schnittstelle")
+pruef("und nur Verwalter kommen hin",
+      0 < _vw_anfang < _token_stelle, (_vw_anfang, _token_stelle))
 
 # --- DIE SCHNITTSTELLE LAESST SICH AUCH HINTER EINEM PRAEFIX ANSEHEN ---
 #
