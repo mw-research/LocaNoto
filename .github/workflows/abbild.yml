@@ -94,6 +94,21 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}
             ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
+          # Die Marken reisen MIT DEM ABBILD, nicht mit dem
+          # Kennzeichner. Ausgerollt wird der wandernde Kennzeichner;
+          # aus seinem Digest kam bisher niemand auf den Commit zurueck
+          # -- im Cluster liess sich nur feststellen, dass das Abbild
+          # neuer ist, nicht, dass es genau dieser Stand ist. Und das
+          # ist die Verwechslung, die schon einmal gebissen hat: zwei
+          # Ablagen bauen unabhaengig, "neuer als vorher" galt fuer
+          # beide, und nur eine trug die Korrektur.
+          #
+          # Auslesen im Cluster:
+          #   crane config <abbild> | jq -r '.config.Labels'
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.variante.outputs.name }}
           build-args: |
             NUR_CPU=${{ steps.variante.outputs.nur_cpu }}
             RERANKER_MODEL=${{ steps.variante.outputs.reranker }}

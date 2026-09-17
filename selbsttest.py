@@ -2648,6 +2648,17 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
+# --- DAS ABBILD SAGT, AUS WELCHEM STAND ES GEBAUT WURDE ---
+#
+# Ausgerollt wird der wandernde Kennzeichner, und aus dessen Digest kam
+# niemand auf den Commit zurueck: im Cluster liess sich nur feststellen,
+# dass das Abbild NEUER ist. Genau diese Verwechslung hat zwei Rollouts
+# zuvor gebissen -- zwei Ablagen bauen unabhaengig, "neuer als vorher"
+# galt fuer beide, und nur eine trug die Korrektur.
+_bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
+pruef("das Abbild traegt den Commit als Marke",
+      "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
+
 # --- DIE LANDKARTE STIMMT MIT DEM CODE UEBEREIN ---
 #
 # Eine Uebersicht, die nur meistens stimmt, kostet mehr als sie bringt:
