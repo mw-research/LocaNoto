@@ -1,3 +1,14 @@
+"""Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen.
+
+Streamlit fuehrt diese Datei bei JEDER Bedienung von oben neu aus.
+Was ueber einen Lauf hinaus gelten soll, gehoert deshalb in
+st.session_state und nicht in eine gewoehnliche Variable.
+
+Der Verwaltungsbereich steht in verwaltung.py und wird von hier
+mit zwoelf benannten Werten aufgerufen; die Suche selbst steht in
+pipeline.py und ist von der Oberflaeche unabhaengig -- api.py
+benutzt dieselbe.
+"""
 import streamlit as st
 import pymupdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter

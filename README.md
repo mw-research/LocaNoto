@@ -18,31 +18,48 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 | **Anbindung** | ownCloud für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
 | **Betrieb** | Docker Compose oder Kubernetes; der Container hält keinen Zustand |
 
-**[→ In Kürze](#-in-kürze)** · [Einrichten](#-einrichten) · [Betrieb](#-betrieb) ·
-[Wie es funktioniert](#-wie-es-funktioniert)
+**Einrichten:** [mit Docker](#-einrichten-mit-docker) ·
+[auf Kubernetes](#-einrichten-auf-kubernetes)
+**Verstehen:** [die Landkarte](#-die-landkarte) — was welche Datei tut
+**Betreiben:** [Betrieb](#-betrieb) · [Speicherorte](#-speicherorte) ·
+[wenn etwas nicht geht](#wenn-etwas-nicht-geht)
 
 ---
 
-## 🚀 Von null auf lauffähig
+## 🚀 Einrichten mit Docker
 
-Wer die Anwendung frisch bekommt, braucht drei Befehle. ownCloud ist
-mitgeliefert — als eigener Dienst hinter einem Profil, nicht im selben
-Abbild.
+Voraussetzung ist Docker mit Compose und ein erreichbarer Modellserver
+für **Chat** und **Embedding** — Ollama, vLLM oder ein Gateway davor.
+Ohne ihn startet die Anwendung, findet aber nichts.
+
+Ein **Sehmodell** (Bilder in Dokumenten und im Chat) und ein
+**Rerank-Endpunkt** sind optional. Fehlt der Rerank-Endpunkt, greift das
+Modell aus dem Abbild; fehlt auch das, rankt allein die Fusion. Keine
+dieser Stufen kann den Start verhindern.
+
+### 1. Holen und `.env` anlegen
 
 ```bash
+git clone https://github.com/mw-research/LocaNoto.git
+cd LocaNoto
 cp .env.example .env
 ```
 
-Vier Werte für die Modelle, sechs weitere für das mitgelieferte
-ownCloud:
+`.env.example` ist ausführlich kommentiert — jeder Wert steht dort mit
+dem Grund, warum es ihn gibt. **Nötig sind fünf Einträge**, alles andere
+hat Vorgaben:
 
 ```ini
-OPENAI_BASE_URL=http://192.168.1.10:4000
-OPENAI_API_KEY=dein-schlüssel
-CHAT_MODEL=qwen3.8:27b
-EMBEDDING_MODEL=qwen3-embedding:8b
+OPENAI_BASE_URL=http://192.168.1.10:4000     # Modellserver oder Gateway
+OPENAI_API_KEY=dein-schluessel               # bei Ollama beliebig
+CHAT_MODEL=qwen3.8:27b                       # antwortet
+EMBEDDING_MODEL=qwen3-embedding:8b           # vektorisiert
+ADMIN_USERS=markus                           # erster Verwalter, klein
+```
 
-# Für das mitgelieferte ownCloud:
+Für das mitgelieferte ownCloud kommen sechs dazu:
+
+```ini
 OWNCLOUD_URL=http://owncloud:8080
 OWNCLOUD_USER=admin
 OWNCLOUD_PASSWORT=EIN-STARKES-PASSWORT
@@ -51,33 +68,59 @@ OWNCLOUD_ADMIN_PASSWORT=EIN-STARKES-PASSWORT
 OWNCLOUD_DB_PASSWORT=EIN-ANDERES-PASSWORT
 ```
 
+Und auf einem Server gehören Bestand und Konfiguration auf persistenten
+Speicher, getrennt voneinander — in `config/` liegt der Schlüssel, mit
+dem alle Chatverläufe lesbar sind:
+
+```ini
+CHROMA_HOST=chroma                           # Vektordatenbank als Dienst
+CHROMA_PORT=8000                             #   sonst schreiben zwei
+                                             #   Prozesse dieselben Dateien
+DATEN_PFAD=/mnt/speicher/locanoto/daten
+KONFIG_PFAD=/mnt/speicher/locanoto/konfig
+```
+
+**Blockspeicher, keine Freigabe.** Unter `DATEN_PFAD` liegen zwei
+SQLite-Bestände (`chroma_db`, `keyword_index.sqlite3`). Auf NFS oder SMB
+ist das kein Fehler, sondern ein beschädigter Index —
+[warum](#persistent-ist-nicht-dasselbe-wie-dateifreigabe).
+
+### 2. Starten
+
 ```bash
 docker compose --profile owncloud up -d
+```
+
+Der erste Build lädt das Reranker-Modell in das Abbild (rund 2 GB);
+danach braucht der Start dafür keinen Netzzugang mehr.
+
+Wer ein eigenes ownCloud im Haus hat, lässt `--profile owncloud` weg und
+trägt dessen Adresse ein. Das Profil sorgt dafür, dass die drei Dienste
+(ownCloud, MariaDB, Redis) nur mit dem Profil starten — wer sie nicht
+will, merkt nichts von ihnen.
+
+> **Warum ownCloud nicht im selben Abbild liegt:** zwei Programme in
+> einem Container heißt zwei Prozesse um PID 1, gemeinsame Protokolle,
+> und ein Update von LocaNoto risse ownCloud mit. Es ist trotzdem
+> dieselbe Installation: ein `compose`, ein Netz, ein Befehl.
+
+### 3. Einrichten
+
+```bash
 docker compose exec locanoto_bot python einrichten.py
 ```
 
-Das war es. `einrichten.py` wartet, bis ownCloud sich selbst eingerichtet
-hat — beim allerersten Start dauert das ein paar Minuten —, erzeugt den
-Installationsschlüssel, legt den ersten Verwalter **in beiden Systemen**
-an, baut den Ordnerbaum samt Freigaben und zeigt zum Schluss die
-Sicherheitslage mit dem, was noch offen ist.
+Ein Lauf, der sagt, was er tut: er wartet, bis ownCloud sich selbst
+eingerichtet hat — beim allerersten Start dauert das ein paar Minuten —,
+erzeugt den Installationsschlüssel, legt den **ersten Verwalter in
+beiden Systemen** an, baut den Ordnerbaum samt Freigaben und zeigt zum
+Schluss die Sicherheitslage mit dem, was noch offen ist.
 
 **Wiederholbar.** Was schon steht, bleibt: ein vorhandener Schlüssel wird
 nie ersetzt, ein vorhandener Zugang nicht überschrieben, Freigaben werden
-gesetzt statt ergänzt. Ein abgebrochener Lauf lässt sich einfach neu
-starten.
+gesetzt statt ergänzt. Ein abgebrochener Lauf lässt sich neu starten.
 
-### Ohne das mitgelieferte ownCloud
-
-Wer eines im Haus hat, lässt das Profil weg und trägt dessen Adresse ein
-— an allem anderen ändert sich nichts:
-
-```bash
-docker compose up -d
-docker compose exec locanoto_bot python einrichten.py
-```
-
-Und wer ganz ohne arbeitet:
+Ohne ownCloud:
 
 ```bash
 docker compose exec locanoto_bot python einrichten.py --ohne-owncloud
@@ -87,16 +130,7 @@ Dann liegt derselbe Baum lokal unter `data/dokumente/` — gleiche Namen,
 gleiche Aufteilung, nur ohne Freigaben. **Der Rückfall ist kein
 Sonderfall**, sondern derselbe Aufbau ohne ownCloud.
 
-### Warum ownCloud nicht im selben Abbild liegt
-
-Zwei Programme in einem Container heißt zwei Prozesse um PID 1,
-gemeinsame Protokolle, und ein Update von LocaNoto risse ownCloud mit.
-Es ist trotzdem **dieselbe Installation**: ein `compose`, ein Netz, ein
-Befehl. Das Profil sorgt dafür, dass die drei Dienste (ownCloud,
-MariaDB, Redis) nur mit `--profile owncloud` starten — wer sie nicht
-will, merkt nichts von ihnen.
-
-### Das Erste, was danach zu tun ist
+### 4. Den Schlüssel sichern — das Einzige, was niemand nachholen kann
 
 ```bash
 docker compose exec -T locanoto_bot cat /app/config/schluessel.key > ~/locanoto-schluessel.key && chmod 600 ~/locanoto-schluessel.key
@@ -104,295 +138,14 @@ docker compose exec -T locanoto_bot cat /app/config/schluessel.key > ~/locanoto-
 
 **Ohne diesen Schlüssel sind alle Chatverläufe und der verschlüsselte
 Bestand endgültig unlesbar** — ohne eine einzige Fehlermeldung, denn die
-Dateien liegen ja noch da. `einrichten.py` sagt es beim ersten Lauf, und
-es ist der einzige Schritt, den niemand nachholen kann.
+Dateien liegen ja noch da. Er gehört an einen anderen Ort als die
+Datensicherung; sonst liegt beides beisammen.
 
----
-
-## ⚡ In Kürze
-
-Alles, was für einen laufenden Stand nötig ist — auf einem Bildschirm.
-Ausführlich mit Begründungen steht dasselbe unter
-[Einrichten](#-einrichten).
-
-### 1. `.env` anlegen
-
-```bash
-cp .env.example .env
-```
-
-Diese Werte reichen. Alles andere in `.env.example` hat Vorgaben:
-
-```ini
-# --- PFLICHT ---
-OPENAI_BASE_URL=http://192.168.1.10:4000     # Modellserver oder Gateway
-OPENAI_API_KEY=dein-schluessel               # bei Ollama beliebig
-CHAT_MODEL=qwen3.8:27b                       # antwortet
-EMBEDDING_MODEL=qwen3-embedding:8b           # vektorisiert
-ADMIN_USERS=markus                           # erster Verwalter, klein
-
-# --- DRINGEND EMPFOHLEN ---
-CHROMA_HOST=chroma                           # Vektordatenbank als Dienst
-CHROMA_PORT=8000                             #   sonst schreiben zwei
-                                             #   Prozesse dieselben Dateien
-DATEN_PFAD=/mnt/speicher/locanoto/daten      # Bestand, extern
-KONFIG_PFAD=/mnt/speicher/locanoto/konfig    # Schlüssel, extern und getrennt
-
-# --- NACH BEDARF ---
-VISION_MODEL=qwen3-vl:32b                    # Bilder in Dokumenten und Chat
-RERANKER_BASE_URL=http://192.168.1.10:4000   # Rangfolge über Endpunkt
-RERANKER_API_MODEL=rerank                    #   Name AN DEINEM Gateway
-TOP_K=12                                     # Abschnitte je Antwort
-APP_PORT=8501
-CONTAINER_NAME=locanoto
-COMPANY_NAME=Musterfirma                     # erscheint in Antworten
-APP_TOPIC=Technische Dokumentation
-```
-
-**Blockspeicher, keine Freigabe.** Unter `DATEN_PFAD` liegen zwei
-SQLite-Bestände. Auf NFS oder SMB ist das kein Fehler, sondern ein
-beschädigter Index — [warum](#persistent-ist-nicht-dasselbe-wie-dateifreigabe).
-
-### 2. Bauen und starten
-
-```bash
-docker compose build && docker compose up -d
-```
-
-Der erste Build lädt das Reranker-Modell in das Abbild (~2 GB).
-
-### 3. Ersten Benutzer anlegen
-
-```bash
-docker compose exec locanoto_bot python create_user.py
-```
-
-Der erste wird Verwalter. Oberfläche: `http://localhost:8501`
-
-### 4. Absichern — beides wird gern übersehen
-
-```bash
-docker compose run --rm -v "$HOME:/aus" locanoto_bot sh -c "cp /app/config/schluessel.key /aus/locanoto-schluessel.key && chown $(id -u):$(id -g) /aus/locanoto-schluessel.key"
-```
-
-Ohne diesen Schlüssel sind alle Chatverläufe unlesbar — **ohne
-Fehlermeldung**. Und in der Seitenleiste unter *Benutzer verwalten* auf
-**Jetzt signieren**: danach kann sich ein von Hand in `config/users.json`
+Und in der Seitenleiste unter *Benutzer verwalten* auf **Jetzt
+signieren**: danach kann sich ein von Hand in `config/users.json`
 eingetragener Zugang nicht mehr anmelden.
 
 ### 5. Dokumente einlesen
-
-```bash
-docker compose exec locanoto_bot python ingest.py
-```
-
-Dateien vorher nach `data/dokumente/` legen — für einen bestimmten
-Raum in dessen Unterordner. Für Abbildungen zusätzlich
-`python ingest_images.py`.
-
-### 6. Prüfen
-
-Seitenleiste als Verwalter:
-
-| | soll zeigen |
-|---|---|
-| *Verschlüsselung* | „an" |
-| *Speicherorte* | Journalmodus `wal` |
-| *Modell-Endpunkte* | `RANGFOLGE  Endpunkt …` (nicht „Modell aus dem Image") |
-| *Benutzer verwalten* | „signiert", Kette in Ordnung |
-
-Dann eine Testfrage. Treffer mit Datei und Seite = fertig.
-
----
-
-### ownCloud in Kürze
-
-Ein Ordner wird auf einen Raum abgebildet, eine Gruppe bestimmt, wer ihn
-sieht. Ausführlich: [Dokumente aus ownCloud](#-dokumente-aus-owncloud).
-
-**a) Zugang in die `.env`:**
-
-```ini
-OWNCLOUD_URL=https://cloud.firma.de     # WURZEL, nicht der WebDAV-Pfad
-OWNCLOUD_USER=locanoto
-OWNCLOUD_PASSWORT=app-passwort          # bei 2FA ein APP-Passwort!
-
-# Nur für Gruppen -- braucht in ownCloud VERWALTERRECHTE.
-# Ohne diese zwei wird das Konto von oben benutzt, das dann Verwalter sein
-# muss. Für die Dateien allein genügt Lesen.
-OWNCLOUD_ADMIN_USER=admin
-OWNCLOUD_ADMIN_PASSWORT=app-passwort
-```
-
-**b) Zuordnung in der Oberfläche** — Seitenleiste → *ownCloud*:
-
-| Feld | Beispiel |
-|---|---|
-| Raum | `Einkauf` (vorher unter *Räume verwalten* anlegen) |
-| Ordner in ownCloud | `/Abteilungen/Einkauf/Handbücher` |
-
-Und am Raum selbst (*Räume verwalten* → „ownCloud-Gruppe"): den
-Gruppennamen, z. B. `Einkauf`. Deren Mitglieder kommen zu den von Hand
-eingetragenen **hinzu**.
-
-**c) Prüfen, dann abgleichen:**
-
-```bash
-docker compose exec locanoto_bot python abgleich.py --pruefen
-```
-
-Zeigt, was sich geändert hat, und **fasst nichts an**. Unbedingt zuerst:
-ein falsch eingerichteter Ordner sieht genau wie „alles gelöscht" aus, und
-danach sind die Abschnitte weg.
-
-```bash
-docker compose exec locanoto_bot python abgleich.py
-```
-
-Holt Gruppen, dann Dateien, dann liest ein. Für den Dauerbetrieb:
-
-```
-0 3 * * *  docker compose exec -T locanoto_bot python abgleich.py
-0 4 * * *  docker compose exec -T locanoto_bot python sicherung.py
-```
-
-**Die Kennungen müssen übereinstimmen.** Heißt jemand in ownCloud
-`m.wilhelm` und hier `markus`, sieht alles richtig aus und er kommt nicht
-in seinen Raum. Der Abgleich nennt die Kennungen, die er nicht zuordnen
-kann.
-
----
-
-### Wenn etwas nicht geht
-
-| Symptom | Ursache |
-|---|---|
-| Suche hängt nach den Sonden | Modellserver kalt oder nicht erreichbar. Meldung nennt jetzt den Grund; `SUCHE_EMBED_TIMEOUT` steuert die Wartezeit. |
-| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
-| Journalmodus nicht `wal` | `data/` liegt auf einer Dateifreigabe. Siehe [Speicherorte](#-speicherorte). |
-| Suche findet nichts nach einem Update | Abschnitte noch in der alten Sammlung: `python umsortieren.py --pruefen` |
-| Abzug heißt „UNVOLLSTÄNDIG" | Ein Raum ließ sich beim Sichern nicht lesen. Neu sichern; der letzte vollständige wird nicht weggeräumt. [Details](#die-vektordatenbank-sichern) |
-| Quellenansicht zeigt keine Seite | Die Datei liegt im Ordner eines anderen Raums — beim Verschieben war am Ziel eine gleichnamige. Meldung nennt es. |
-| „Benutzerdatei außerhalb der Anwendung geändert" | Signatur passt nicht. Bestehende Nutzer arbeiten weiter, neue Einträge sind gesperrt. |
-| Rechte-/Modellprobleme unklar | Seitenleiste → *Konfiguration* zeigt fehlende und abweichende Einträge (nur Namen, keine Werte). |
-
----
-
-## 🛠️ Einrichten
-
-### Voraussetzungen
-
-* Docker und Docker Compose.
-* Ein erreichbarer Modellserver für **Chat** und **Embedding** — Ollama,
-  vLLM oder ein Gateway davor. Ohne ihn startet die Anwendung, findet aber
-  nichts.
-* Optional ein **Sehmodell** (Bilder in Dokumenten und im Chat) und ein
-  **Rerank-Endpunkt**. Fehlt der Rerank-Endpunkt, greift das Modell aus dem
-  Abbild; fehlt auch das, rankt allein die Fusion. Keine dieser Stufen kann
-  den Start verhindern.
-
-### 1. Holen
-
-```bash
-git clone https://github.com/mw-research/LocaNoto.git
-cd LocaNoto
-```
-
-### 2. Konfiguration anlegen
-
-```bash
-cp .env.example .env
-```
-
-`.env.example` ist ausführlich kommentiert — jeder Wert steht dort mit dem
-Grund, warum es ihn gibt. **Nötig sind nur fünf Einträge:**
-
-| Eintrag | was hinein gehört |
-|---|---|
-| `OPENAI_BASE_URL` | Adresse des Modellservers, etwa `http://192.168.1.10:4000` |
-| `OPENAI_API_KEY` | dessen Schlüssel (bei Ollama ein beliebiger Wert) |
-| `CHAT_MODEL` | Name des Antwortmodells |
-| `EMBEDDING_MODEL` | Name des Vektormodells |
-| `ADMIN_USERS` | Kennung des ersten Verwalters, klein geschrieben |
-
-Alles andere hat brauchbare Vorgaben. Was in deiner `.env` fehlt oder von
-der Vorlage abweicht, zeigt die Oberfläche später selbst — Seitenleiste,
-Abschnitt *Konfiguration*, nur Namen und keine Werte.
-
-Läuft jede Aufgabe über einen anderen Server, bekommt sie ihren eigenen
-Block (`CHAT_BASE_URL`, `EMBEDDING_BASE_URL`, `VISION_BASE_URL`, …) — siehe
-[Modelle und Endpunkte](#-modelle-und-endpunkte).
-
-### 3. Wo die Daten liegen sollen
-
-Ohne Angabe liegen `data/` und `config/` neben der Compose-Datei. Für einen
-Server gehören sie auf persistenten Speicher:
-
-```bash
-# in der .env
-DATEN_PFAD=/mnt/speicher/locanoto/daten
-KONFIG_PFAD=/mnt/speicher/locanoto/konfig
-```
-
-Getrennt, weil in `config/` der Schlüssel liegt, mit dem alle Chatverläufe
-lesbar sind — andere Rechte, andere Aufbewahrung.
-
-**Ein Punkt, der später schwer zu finden ist:** unter `data/` liegen zwei
-SQLite-Bestände (`chroma_db`, `keyword_index.sqlite3`). Sie brauchen ein
-echtes Dateisystem — eine Platte, ein Blockgerät, ein
-ReadWriteOnce-Volume. Eine Freigabe über NFS oder SMB trägt sie nicht, und
-das Ergebnis ist kein Fehler, sondern ein beschädigter Index. Mehr unter
-[Speicherorte](#-speicherorte).
-
-### 4. Bauen und starten
-
-```bash
-docker compose build
-```
-
-Der erste Build lädt das Reranker-Modell in das Abbild (rund 2 GB) —
-danach braucht der Start keinen Netzzugang mehr dafür.
-
-```bash
-docker compose up -d
-```
-
-Die Oberfläche steht auf `http://localhost:8501`, oder auf dem Port aus
-`APP_PORT`.
-
-### 5. Ersten Benutzer anlegen
-
-Ohne Benutzer ist die Oberfläche nicht nutzbar.
-
-```bash
-docker compose exec locanoto_bot python create_user.py
-```
-
-Der erste wird **Verwalter** — es gibt noch nichts zu schützen, und
-irgendwer muss die weiteren anlegen können. Ab dem zweiten verlangt das
-Skript die Anmeldung eines Verwalters.
-
-### 6. Absichern
-
-Zwei Schritte, die man leicht übersieht und später vermisst.
-
-**Benutzerdatei signieren.** In der Seitenleiste unter *Benutzer
-verwalten* → **Jetzt signieren**. Danach kann sich ein von Hand in
-`config/users.json` eingetragener Zugang nicht mehr anmelden. Vorher gilt
-noch `ADMIN_USERS` aus der `.env`.
-
-**Den Schlüssel sichern.** Beim ersten Start entsteht
-`config/schluessel.key`. Geht er verloren, sind alle Chatverläufe
-unlesbar — und zwar **ohne Fehlermeldung**, die Dateien sind ja noch da.
-
-```bash
-docker compose run --rm -v "$HOME:/aus" locanoto_bot sh -c "cp /app/config/schluessel.key /aus/locanoto-schluessel.key && chown $(id -u):$(id -g) /aus/locanoto-schluessel.key"
-```
-
-Er gehört an einen anderen Ort als die Datensicherung — sonst liegt beides
-beisammen.
-
-### 7. Dokumente einlesen
 
 Dateien nach `data/dokumente/` legen — [ein Raum, ein
 Ordner](#-wo-die-dateien-liegen). Dann:
@@ -402,34 +155,403 @@ docker compose exec locanoto_bot python ingest.py
 ```
 
 Der Lauf ist unterbrechbar und setzt auf Seitenebene wieder auf. Für
-Abbildungen zusätzlich:
-
-```bash
-docker compose exec locanoto_bot python ingest_images.py
-```
-
-Beides geht auch über die Seitenleiste unter *Nachtragen und neu
-einlesen*, und läuft dort abgekoppelt weiter.
+Abbildungen zusätzlich `python ingest_images.py`. Beides geht auch über
+die Seitenleiste unter *Nachtragen und neu einlesen* und läuft dort
+abgekoppelt weiter.
 
 Wer die Dokumente in ownCloud pflegt, überspringt das und richtet den
 [Abgleich](#-dokumente-aus-owncloud) ein.
 
-### Prüfliste
+### 6. Prüfliste
 
-Nach dem ersten Start als Verwalter in der Seitenleiste:
+Die Oberfläche steht auf `http://localhost:8501`, oder auf dem Port aus
+`APP_PORT`. Als Verwalter in der Seitenleiste:
 
 | | soll zeigen |
 |---|---|
 | *Verschlüsselung* | „an" — sonst fehlt `cryptography` im Abbild |
 | *Speicherorte* | Journalmodus `wal` — sonst liegt `data/` auf einer Freigabe |
+| *Modell-Endpunkte* | `RANGFOLGE  Endpunkt …` (nicht „Modell aus dem Image") |
 | *Benutzer verwalten* | „signiert", Protokollkette in Ordnung |
 | *Konfiguration* | erscheint nur, wenn Einträge fehlen oder abweichen |
 
-Dann eine Testfrage stellen. Kommen Treffer mit Fundstelle, steht alles.
+Dann eine Testfrage. Treffer mit Datei und Seite = fertig.
+
+---
+
+## ☸️ Einrichten auf Kubernetes
+
+Fertige Manifeste liegen unter [`k8s/`](k8s/README.md). Der Pod ist nur
+das Gerüst; der ganze Bestand liegt auf zwei Volumes, und zwar in genau
+der `data/`-Struktur, die es auch neben der Compose-Datei gibt:
+
+```
+Pod locanoto                    PVC locanoto-daten  →  /app/data
+ ├── chroma  (Sidecar)              dokumente/  chats/  chroma_db/
+ ├── app     (Streamlit)            keyword_index.sqlite3
+ └── api     (uvicorn)              tabellen_katalog.json  feedback.jsonl
+                                    sicherungen/  owncloud/
+
+                                PVC locanoto-konfig →  /app/config
+                                    users.json  tokens.json  schluessel.key
+                                    raeume.json  owncloud.json  presets/
+```
+
+Nichts im Abbild, nichts im Pod — nachgewiesen: bei einem Durchlauf mit
+Anmeldung, Benutzeranlage, Raumanlage, Chat, Rückmeldung, Ingest,
+Listenkatalog und Abzug entstand im Abbild keine einzige Datei.
+
+### Der eine Punkt, den du vorher prüfen musst
+
+Das Datenvolume trägt zwei SQLite-Bestände und braucht deshalb **ein
+echtes Dateisystem**. `kubectl get storageclass` zeigt, was der Cluster
+anbietet:
+
+| Persistenter Speicher | taugt für das Datenvolume |
+|---|---|
+| angeschlossene Platte, local path | **ja** |
+| Ceph RBD, iSCSI, EBS, Azure Disk | **ja** |
+| NFS, SMB, CephFS, EFS | **nein** — siehe `k8s/90-variante-freigabe.yaml` |
+
+Persistent heißt nicht automatisch Dateifreigabe, und das ist die
+Verwechslung, an der es beim Aufsetzen scheitert. Eine Freigabe trägt
+SQLite im WAL-Betrieb nicht, und das Ergebnis ist kein Fehler, sondern
+ein beschädigter Index — SQLite fällt dabei **still** auf einen anderen
+Journalmodus zurück. Die Oberfläche liest den tatsächlichen Modus zurück
+und meldet es unter *Speicherorte*.
+
+### Aufsetzen
+
+```bash
+# 1. Abbild bauen und in die Registry des Clusters bringen
+docker build -t deine-registry/locanoto:1.0 .
+docker push deine-registry/locanoto:1.0
+
+# 2. Geheimnisse aus dem Stand erzeugen -- nicht aus der Vorlage
+kubectl create secret generic locanoto \
+  --from-literal=OPENAI_API_KEY=... \
+  --from-literal=OWNCLOUD_PASSWORT=...
+
+# 3. Speicher, Konfiguration, Pod
+kubectl apply -f k8s/10-speicher.yaml
+kubectl apply -f k8s/20-konfiguration.yaml   # nur die ConfigMap, siehe Datei
+kubectl apply -f k8s/30-anwendung.yaml
+
+# 4. Einrichten -- Schlüssel, erster Verwalter, Ordnerbaum
+kubectl exec -it deploy/locanoto -c app -- python einrichten.py
+
+# 5. Optional: nächtlicher Abgleich und Abzug
+kubectl apply -f k8s/40-zeitplan.yaml
+```
+
+Der Abbildname in den Manifesten ist `locanoto:lokal` — ersetze ihn durch
+deinen. Die Manifeste setzen bewusst keine `imagePullPolicy`, damit ein
+lokal gebautes Abbild in einem Einzelknoten-Cluster (k3s, minikube,
+Docker Desktop) ohne Registry funktioniert.
+
+### Den Schlüssel sichern
+
+```bash
+kubectl exec deploy/locanoto -c app -- cat /app/config/schluessel.key > ~/locanoto-schluessel.key && chmod 600 ~/locanoto-schluessel.key
+```
+
+Derselbe Satz wie bei Docker, und er gilt hier genauso: ohne diesen
+Schlüssel sind alle Chatverläufe endgültig unlesbar, ohne eine einzige
+Fehlermeldung.
+
+| | Verlust bedeutet |
+|---|---|
+| **der Pod** | nichts |
+| `locanoto-konfig` | Nutzer, Räume, **Schlüssel** — alle Chats unlesbar |
+| `locanoto-daten` | Dokumente, Chats, Vektoren, Rückmeldungen |
+
+### Warum Chroma ein eigener Prozess im selben Pod ist
+
+Chroma läuft als Sidecar und lauscht nur auf `127.0.0.1`. Nicht wegen der
+Skalierung, sondern weil sonst Oberfläche und Schnittstelle gleichzeitig
+in dieselben SQLite-Dateien schrieben — kein sauberer Fehler, sondern ein
+beschädigter Index. Als Dienst entscheidet Chroma, wer schreibt.
+`api.py` bricht deshalb beim Start ab, wenn kein `CHROMA_HOST` gesetzt
+ist.
+
+### Warum genau eine Instanz
+
+`replicas: 1`, und das ist kein Versäumnis: das Volume ist
+`ReadWriteOnce`, Streamlit hält den Sitzungszustand im Arbeitsspeicher,
+PID-Dateien gelten nur auf ihrem Rechner. Mehrere Instanzen bräuchten
+Stichwortindex und Sitzungszustand in einer Server-Datenbank — ein Umbau.
+Für eine interne Wissenssuche ist die Modellzeit der Engpass, nicht die
+Anwendung: [`lasttest.py`](lasttest.py) misst den Eigenanteil der
+Anwendung an einer Antwort, und der bleibt von 2 bis 32 gleichzeitigen
+Fragen flach.
+
+---
+
+## 🗺️ Die Landkarte
+
+Gut sechzig Dateien. Dieser Abschnitt sagt, was jede davon tut,
+woher ihre Werte kommen und wohin sie liefert — damit man eine Änderung
+anfassen kann, ohne vorher alles gelesen zu haben.
+
+**Er wird nicht gepflegt, sondern erzeugt.** Eine Übersicht, die jemand
+von Hand nachträgt, ist nach dem nächsten Modul falsch, und niemand
+merkt es, weil eine Beschreibung nicht abstürzt.
+
+```bash
+python landkarte.py              # die Übersicht
+python landkarte.py --tabelle    # die Tabelle unten
+```
+
+Der Selbsttest besteht darauf, dass jede Datei hier vorkommt — eine neue
+fällt auf, statt still herauszufallen.
+
+### Vier Schichten, und keine Kante zeigt nach oben
+
+```mermaid
+flowchart TB
+    EIN["① EINSTIEGE — was man startet<br/><br/>app.py · verwaltung.py · api.py · ingest.py<br/>abgleich.py · einrichten.py · sicherung.py"]
+    FACH["② FACHLOGIK — der Weg zur Antwort<br/><br/>pipeline.py · ranking.py · mcp.py<br/>tabellen.py · owncloud.py · lesen.py · tables.py"]
+    BEST["③ BESTAND — wo etwas liegt<br/><br/>store.py → Chroma · keyword_index.py → SQLite FTS5<br/>raeume.py · benutzer.py · raumschluessel.py · budget.py"]
+    GRU["④ GRUNDLAGE — kennt nichts über sich<br/><br/>paths.py — .env und alle Pfade<br/>geheim.py · llm.py · embedding.py"]
+    EIN --> FACH
+    FACH --> BEST
+    BEST --> GRU
+```
+
+Pfeile heißen „benutzt". **Keine einzige zeigt nach oben** — gemessen,
+nicht behauptet, und der Selbsttest prüft es. Das ist die Eigenschaft,
+an der die Wartbarkeit hängt: wer `paths.py` ändert, muss nichts über
+die Oberfläche wissen; wer die Oberfläche ändert, kann den Bestand nicht
+aus Versehen umbauen.
+
+| Schicht | Umfang | Regel |
+|---|---|---|
+| ① Einstiege | gut die Hälfte | wird gestartet oder gezeichnet; keine tiefere Schicht kennt sie |
+| ② Fachlogik | rund ein Drittel | kennt den Bestand, nicht die Oberfläche |
+| ③ Bestand | sechs Dateien | weiß, wo etwas liegt und wer es sehen darf |
+| ④ Grundlage | vier Dateien | kennt nur sich selbst und die `.env` |
+
+Genaue Zahlen nennt `python landkarte.py` — im README stünden sie nach
+der nächsten Datei falsch.
+
+### Der Weg einer Frage
+
+Derselbe für die Oberfläche und für die Schnittstelle — beide rufen
+`pipeline.py`, und das ist der Grund, warum eine Antwort über HTTP
+dieselbe ist wie eine im Browser.
+
+```mermaid
+sequenceDiagram
+    participant U as app.py / api.py
+    participant P as pipeline.py
+    participant E as embedding.py
+    participant S as store.py
+    participant K as keyword_index.py
+    participant R as ranking.py
+    participant L as llm.py
+
+    U->>P: Frage, Räume, top_k
+    P->>E: Frage vektorisieren
+    P->>S: Vektorsuche, nur erlaubte Räume
+    P->>K: Stichwortsuche, dieselbe Grenze
+    P->>R: beide Trefferlisten
+    R-->>P: eine Rangfolge (Fusion, dann Rerank)
+    P->>L: Kontext + Frage
+    L-->>P: Antwort
+    P-->>U: Antwort + Fundstellen
+```
+
+Zwei Dinge daran sind Absicht. **Die Rechtegrenze wird zweimal gezogen**,
+einmal je Suchweg — ein Suchweg ohne Filter wäre ein Leck, das niemand
+sähe, weil die Antwort ja richtig aussieht. Und **`ranking.py` fällt
+stufenweise zurück**: Endpunkt, sonst das Modell aus dem Abbild, sonst
+allein die Fusion. Keine dieser Stufen kann eine Antwort verhindern.
+
+### Der Weg eines Dokuments
+
+```mermaid
+flowchart LR
+    Q1["Hochladen<br/>in der Oberfläche"] --> L
+    Q2["data/dokumente<br/>ingest.py"] --> L
+    Q3["ownCloud<br/>abgleich.py"] --> Q2
+    L["lesen.py · tables.py<br/>Abschnitte + Tabellen"] --> EM["embedding.py<br/>Vektoren"]
+    EM --> ST["store.py<br/>raum_&lt;kennung&gt;"]
+    L --> KI["keyword_index.py<br/>FTS5"]
+    ST --> RS["raumschluessel.py<br/>verschlüsselt je Raum"]
+    KI --> RS
+```
+
+Drei Wege hinein, **ein** Weg hinaus: alles landet über `store.schreibe`
+in der Sammlung des Raums. Deshalb hängt die Abwehr doppelter Kennungen
+auch dort und nicht an drei Stellen.
+
+### Was man starten kann
+
+| Befehl | wofür |
+|---|---|
+| `python einrichten.py` | Von null auf lauffähig — Schlüssel, erster Verwalter, Ordnerbaum |
+| `python ingest.py` | Dokumente einlesen; `INGEST_RAUM` setzt den Zielraum |
+| `python ingest_images.py` | Abbildungen beschreiben und durchsuchbar machen |
+| `python abgleich.py --pruefen` | Was hat sich in ownCloud geändert? Fasst nichts an |
+| `python abgleich.py` | Gruppen, dann Dateien, dann einlesen |
+| `python sicherung.py` | Abzug der Vektordatenbank, ohne Modell zurückspielbar |
+| `python bestandsliste.py` | Was liegt in dieser Installation? |
+| `python selbsttest.py` | Stehen die Grundfunktionen? |
+| `python landkarte.py` | Diese Übersicht, aus dem Code gelesen |
+| `python lasttest.py` | Wie viele Leute gleichzeitig? |
+| `python mcp.py` | Was bietet ein angebundener Werkzeugserver an? |
+| `python create_token.py` | Zugangstoken für die Schnittstelle |
+| `python raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? |
+| `python listen_diagnose.py` | Warum findet die Listenabfrage nichts? |
+| `python was_sieht_die_platte.py` | Was liest jemand, der die Platte hat, aber nicht den Schlüssel? |
+
+### Wohin die Variablen gehen
+
+108 Einträge kann die `.env` haben. **96 davon werden an genau einer
+Stelle gelesen** — wer wissen will, was ein Wert bewirkt, findet genau
+eine Datei. Die zwölf Ausnahmen sind benannt und jede hat einen Grund:
+
+| Variable | gelesen in | warum zweimal |
+|---|---|---|
+| `OPENAI_BASE_URL`, `OPENAI_API_KEY` | `llm`, `ranking` | der Rerank-Endpunkt darf ein anderer sein und fällt sonst hierauf zurück |
+| `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `geheim`, `sicherheit` | `sicherheit` meldet, **woher** der Schlüssel kommt, ohne ihn zu benutzen |
+| `INGEST_RAUM`, `INGEST_ORDNER` | `ingest`, `ingest_images` | zwei Läufe mit derselben Steuerung |
+| `MIN_AREA`, `MIN_LONG_EDGE` | `bildtext`, `ingest_images` | dieselbe Schwelle beim Hochladen und im Stapellauf |
+| `VISION_TIMEOUT` | `vision`, `ingest_images` | eine Frage darf kürzer warten als ein Nachtlauf |
+| `TOP_K` | `api`, `app`, `selbsttest` | Vorgabe für beide Oberflächen; der Selbsttest prüft sie |
+| `HELPER_TIMEOUT` | `app`, `pipeline` | dieselbe Grenze für Vorstufen und Nebenläufe |
+| `TABELLEN_PFAD` | `paths`, `tabellen` | `paths` legt den Ort fest, `tabellen` liest ihn |
+
+Alles Übrige steht in [`.env.example`](.env.example), kommentiert mit dem
+Grund, warum es den Eintrag gibt. Was in der eigenen `.env` fehlt oder
+abweicht, zeigt die Oberfläche unter *Konfiguration* — nur Namen, keine
+Werte.
+
+### Jede Datei in einem Satz
+
+Erzeugt mit `python landkarte.py --tabelle`. „Liefert an" heißt: diese
+Dateien importieren sie.
+
+| Datei | Aufgabe | liest aus der `.env` | liefert an |
+|---|---|---|---|
+| **Grundlage** | | | |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand_loeschen`, `api`, `app` +48 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +12 |
+| `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `ingest`, `ingest_images`, `pipeline` |
+| `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `ingest`, `ingest_images` +2 |
+| **Bestand** | | | |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `altbestand_loeschen`, `api`, `app`, `bestandsliste` +13 |
+| `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `app`, `bestandsliste`, `budget` +9 |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `api`, `app`, `benutzer` +19 |
+| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `ingest`, `ingest_images`, `owncloud` +8 |
+| `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
+| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `nachverschluesseln`, `selbsttest` +4 |
+| **Fachlogik** | | | |
+| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
+| `owncloud.py` | Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `einrichten`, `ingest` +5 |
+| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `pipeline`, `selbsttest` |
+| `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `selbsttest`, `tabellen`, `verwaltung` |
+| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +8 | `api`, `app`, `pipeline` |
+| `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `api`, `app`, `selbsttest`, `verwaltung` |
+| `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `app`, `selbsttest`, `verwaltung` |
+| `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `app`, `selbsttest`, `verwaltung` |
+| `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +7 | `app`, `selbsttest` |
+| `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `ingest`, `ingest_images` |
+| `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `api`, `create_token` |
+| `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `app`, `selbsttest`, `verwaltung` |
+| `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `ingest`, `ingest_images`, `selbsttest` |
+| `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `app`, `bildtext` |
+| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | — | `app`, `verwaltung` |
+| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `api`, `app`, `sqldb`, `tabellen` |
+| `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `selbsttest` |
+| `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
+| `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `verwaltung` |
+| `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `selbsttest`, `verwaltung` |
+| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `api`, `app`, `pipeline`, `prompts` +1 |
+| `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `app`, `verwaltung` |
+| `quellticket.py` | Ein Ticket fuer genau eine Fundstelle, fuer kurze Zeit. | `QUELLE_TICKET_MINUTEN` | `app`, `selbsttest` |
+| `textutils.py` | Textbereinigung fuer den Ingest. | — | `app`, `ingest`, `tables` |
+| **Einstiege** | | | |
+| `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
+| `selbsttest.py` | Stehen die Grundfunktionen? -- python selbsttest.py | `TOP_K` | — |
+| `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
+| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `altbestand_loeschen`, `app`, `selbsttest`, `verwaltung` |
+| `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
+| `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `CHROMA_EINZELN`, `TOP_K` | — |
+| `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
+| `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
+| `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
+| `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
+| `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
+| `umsortieren.py` | Den bestehenden Bestand in Raeume umsortieren -- ohne neu zu vektorisieren. | — | — |
+| `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `selbsttest` |
+| `nachverschluesseln.py` | Den vorhandenen Bestand nachtraeglich verschluesseln. | — | — |
+| `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
+| `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
+| `altbestand_loeschen.py` | Die alte gemeinsame Sammlung loeschen -- nach einer Gegenprobe. | — | — |
+| `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
+| `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | — |
+| `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
+| `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
+| `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
+| `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
+| `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
+| `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
+| `migrate_db.py` | Einmaliger Umbau aus der Zeit vor den Raeumen. | — | — |
 
 ---
 
 ## ⚙️ Betrieb
+
+### Nach einem Rebuild
+
+```bash
+docker compose up -d --build
+```
+
+erzeugt den Container **neu**. Alle offenen Streamlit-Sitzungen sterben
+mit ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung
+dahinter ist tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das
+sieht aus wie ein Absturz und ist keiner: **Seite neu laden**, dann
+erneut anmelden. In Kubernetes gilt dasselbe für
+`kubectl rollout restart`.
+
+### Nach einem Update: Selbsttest
+
+```bash
+python selbsttest.py
+```
+
+Läuft über den echten Suchpfad — echte Sammlungen, echter Stichwortindex,
+echte Verschlüsselung, echte Rechteprüfung. Attrappen sind nur Embedding-
+und Rerank-Modell, damit er ohne Modellserver in Sekunden durchläuft. Er
+arbeitet in einem eigenen Verzeichnis und lässt den Bestand unberührt.
+
+Läuft er durch, stehen: Anmeldung und Rollen, Raumtrennung (auch dass ein
+Nutzer fremde Räume **nicht** sieht), Suche mit Quellenangabe,
+Chatverschlüsselung, Rückmeldungen, der Abzug samt Einspielen ohne Modell
+— und die Landkarte, also dass jede Datei eine Schicht hat und keine
+Kante nach oben zeigt.
+
+Die Zahl der Prüfungen nennt der Lauf selbst. Sie steht bewusst nicht
+hier: eine Zahl im README ist eine Zusage, die niemand nachträgt.
+
+### Wenn etwas nicht geht
+
+| Symptom | Ursache |
+|---|---|
+| Suche hängt nach den Sonden | Modellserver kalt oder nicht erreichbar. Die Meldung nennt den Grund; `SUCHE_EMBED_TIMEOUT` steuert die Wartezeit. |
+| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
+| Journalmodus nicht `wal` | `data/` liegt auf einer Dateifreigabe. Siehe [Speicherorte](#-speicherorte). |
+| Abzug heißt „UNVOLLSTÄNDIG" | Ein Raum ließ sich beim Sichern nicht lesen. Neu sichern; der letzte vollständige wird nicht weggeräumt. [Details](#die-vektordatenbank-sichern) |
+| Quellenansicht zeigt keine Seite | Die Datei liegt im Ordner eines anderen Raums — beim Verschieben war am Ziel eine gleichnamige. Die Meldung nennt es. |
+| „Benutzerdatei außerhalb der Anwendung geändert" | Signatur passt nicht. Bestehende Nutzer arbeiten weiter, neue Einträge sind gesperrt. |
+| Rechte- oder Modellprobleme unklar | Seitenleiste → *Konfiguration* zeigt fehlende und abweichende Einträge (nur Namen, keine Werte). |
+| Ein Dokument ist eingelesen und nicht auffindbar | `python raum_diagnose.py` |
+
+---
+
 
 ## 📥 Dokumente einlesen
 ```bash
@@ -483,6 +605,7 @@ Was es nicht gibt: eine Warteschlange, mehrere gleichzeitige Läufe, oder
 eine Wiederaufnahme nach einem Neustart des Containers. Das wäre ein
 Arbeiter neben der Anwendung — etwas anderes als ein Knopf.
 
+
 ## ☁️ Dokumente aus ownCloud
 **LocaNoto steht vorn, ownCloud liegt dahinter.** Wer hier einen Zugang
 anlegt, bekommt ihn dort auch; wer hier einen Raum anlegt, bekommt dort
@@ -528,17 +651,17 @@ trägt hier nur die Zuordnung ein. Das Holen läuft dann unverändert.
 
 `OWNCLOUD_WURZEL` verschiebt den Baum, Vorgabe `LocaNoto`.
 
-### Ein bestehender Bestand bleibt, wo er ist
+### Zuordnung von Hand
 
 Eine Zuordnung von Hand geht dem Standardbaum vor — für Unterlagen, die
-seit Jahren unter `/Abteilungen/Einkauf/Handbücher` gepflegt werden. Sie
-steht in `config/owncloud.json` und lässt sich in der Seitenleiste unter
-**ownCloud** setzen. Ohne Eintrag gilt der Standardbaum, und dann muss
-für einen neuen Raum niemand mehr etwas eintragen.
+an einem gewachsenen Ort wie `/Abteilungen/Einkauf/Handbücher` gepflegt
+werden. Sie steht in `config/owncloud.json` und lässt sich in der
+Seitenleiste unter **ownCloud** setzen. Ohne Eintrag gilt der
+Standardbaum, und dann muss für einen neuen Raum niemand etwas eintragen.
 
 **Ablage einrichten** in derselben Seitenleiste holt nach, was beim
-Anlegen nicht ging — weil ownCloud gerade nicht erreichbar war, oder weil
-die Installation älter ist als diese Anbindung. Der Ablauf ist
+Anlegen nicht ging — etwa weil ownCloud gerade nicht erreichbar war. Der
+Ablauf ist
 wiederholbar: vorhandene Ordner bleiben, Freigaben werden auf den
 Soll-Stand **gesetzt**, nicht ergänzt. Das ist der Unterschied, an dem es
 sonst scheitert: wer aus einem Raum ausscheidet, verliert damit auch den
@@ -664,6 +787,7 @@ verfallener Stand nimmt niemandem seine eigenen Unterlagen.
   nächste Schritt (OIDC/LDAP) — danach entfällt die zweite
   Nutzerverwaltung.
 * **Gruppenänderungen wirken erst beim Abgleich**, siehe oben.
+
 
 ## 💾 Speicherorte
 Nichts, was nicht der Container selbst ist, liegt im Container. Drei
@@ -810,104 +934,6 @@ entsteht beim ersten Start alles Übrige von selbst.
 
 ---
 
-### Nach einem Update: Selbsttest
-
-```bash
-docker compose run --rm locanoto_bot python selbsttest.py
-```
-
-31 Prüfungen über den echten Suchpfad — echte Sammlungen, echter
-Stichwortindex, echte Verschlüsselung, echte Rechteprüfung. Attrappen sind
-nur Embedding- und Rerank-Modell, damit er ohne Modellserver in Sekunden
-durchläuft. Er arbeitet in einem eigenen Verzeichnis und lässt den Bestand
-unberührt.
-
-Läuft er durch, stehen: Anmeldung und Rollen, Raumtrennung (auch dass ein
-Nutzer fremde Räume **nicht** sieht), Suche mit Quellenangabe,
-Chatverschlüsselung, Rückmeldungen, und der Abzug samt Einspielen ohne
-Modell.
-
----
-
-## ⚠️ Nach einem Rebuild
-```bash
-docker compose up -d --build
-```
-
-erzeugt den Container **neu**. Alle offenen Streamlit-Sitzungen sterben mit
-ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung dahinter ist
-tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das sieht aus wie ein
-Absturz der App und ist keiner: **Seite neu laden**, dann erneut anmelden.
-
-## 💾 Umzug einer bestehenden Installation
-Ohne diese Variablen bleibt alles, wo es war: `data/` und `config/` neben
-dem Code. **Ein Update verschiebt nichts von selbst** — ein Update, das die
-Vektordatenbank an einen anderen Ort legt, fände dort nichts vor und stünde
-ohne Fehlermeldung mit leeren Sammlungen da.
-
-Umziehen heißt also: Container anhalten, `data/` und `config/` an ihren
-neuen Ort kopieren, `DATEN_PFAD` und `KONFIG_PFAD` setzen, starten. Wer
-zusätzlich `LOCANOTO_INDEX` setzt, verschiebt `chroma_db/` von Hand mit —
-oder liest neu ein.
-
----
-
-## ☸️ Kubernetes
-Fertige Manifeste liegen unter [`k8s/`](k8s/README.md). Der Pod ist nur
-das Gerüst; der ganze Bestand liegt auf einem externen Volume, und zwar in
-**genau der `data/`-Struktur**, die es bisher neben der Compose-Datei gab:
-
-```
-Pod locanoto                    PVC locanoto-daten  →  /app/data
- ├── chroma  (Sidecar)              dokumente/  chats/  chroma_db/
- ├── app     (Streamlit)            keyword_index.sqlite3
- └── api     (uvicorn)              tabellen_katalog.json  feedback.jsonl
-                                    sicherungen/  owncloud/
-
-                                PVC locanoto-konfig →  /app/config
-                                    users.json  tokens.json  schluessel.key
-                                    raeume.json  owncloud.json  presets/
-```
-
-Nichts im Abbild, nichts im Pod — nachgewiesen: bei einem Durchlauf mit
-Anmeldung, Benutzeranlage, Raumanlage, Chat, Rückmeldung, Ingest,
-Listenkatalog und Abzug entstand im Abbild keine einzige Datei.
-
-Zwei Volumes, weil die Konfiguration getrennt gehört: dort liegt der
-Schlüssel, mit dem alle Chatverläufe lesbar sind.
-
-| | Verlust bedeutet |
-|---|---|
-| **der Pod** | nichts |
-| `locanoto-konfig` | Nutzer, Räume, **Schlüssel** — alle Chats unlesbar |
-| `locanoto-daten` | Dokumente, Chats, Vektoren, Rückmeldungen |
-
-**Vorher prüfen:** das Datenvolume trägt zwei SQLite-Bestände
-(`chroma_db`, `keyword_index.sqlite3`) und braucht deshalb ein echtes
-Dateisystem — eine angeschlossene Platte, Ceph RBD, iSCSI, EBS, local
-path. Alles davon ist persistent und in Ordnung. Eine Freigabe über NFS
-oder SMB ist es nicht; dafür liegt in `k8s/90-variante-freigabe.yaml` die
-Aufteilung, die dann nötig wird. Die Oberfläche meldet unter
-*Speicherorte*, wenn der Journalmodus nicht `wal` ist — das ist die
-Prüfung nach dem ersten Start.
-
-Chroma läuft als Sidecar im selben Pod und lauscht nur auf `127.0.0.1`.
-Nicht wegen der Skalierung, sondern weil sonst Oberfläche und
-Schnittstelle gleichzeitig in dieselben SQLite-Dateien schrieben — kein
-sauberer Fehler, sondern ein beschädigter Index. Als Dienst entscheidet
-Chroma, wer schreibt.
-
-**Eine Instanz** (`replicas: 1`): das Volume ist `ReadWriteOnce`,
-Streamlit hält den Sitzungszustand im Arbeitsspeicher, PID-Dateien gelten
-nur auf ihrem Rechner. Mehrere Instanzen bräuchten Stichwortindex und
-Sitzungszustand in einer Server-Datenbank — ein Umbau. Für eine interne
-Wissenssuche ist die Modellzeit der Engpass, nicht die Anwendung.
-
----
-
----
-
-## 📖 Wie es funktioniert
 
 ## 🚪 Räume
 Ein **Raum** ist eine Mitgliederliste und eine eigene Sammlung in der
@@ -958,31 +984,6 @@ nach Raum. Ein Abschnitt ohne Raum fällt dabei heraus statt als öffentlich
 zu gelten: bei einer unfertigen Umsortierung fehlen lieber Treffer, als
 dass fremde erscheinen.
 
-### Bestehende Installationen umsortieren
-
-Ein Bestand von vor den Räumen liegt noch in der gemeinsamen Sammlung. Er
-wird nicht mehr durchsucht, bis er umsortiert ist; die Seitenleiste weist
-darauf hin.
-
-```bash
-docker compose exec locanoto_bot python umsortieren.py --pruefen
-```
-
-zeigt, wohin die Abschnitte gehören, und schreibt nichts.
-
-```bash
-docker compose exec locanoto_bot python umsortieren.py
-```
-
-verschiebt sie und baut den Stichwortindex neu auf. **Die Vektoren werden
-mitgenommen, nicht neu berechnet** — kein Modellzugriff, keine GPU-Zeit.
-Zugeordnet wird nach den alten Merkmalen: `shared` und alles ohne
-Eigentümer in den allgemeinen Raum, jedes private Dokument in den
-persönlichen Raum seines Eigentümers.
-
-Die alte Sammlung bleibt danach stehen. Sie ist der Rückweg und kostet nur
-Platz; löschen lässt sie sich in der Oberfläche unter *Räume verwalten*.
-
 ### Wohin der Ingest einliest
 
 `ingest.py` und `ingest_images.py` schreiben in den allgemeinen Raum —
@@ -1007,6 +1008,7 @@ Offen und benannt, damit es niemand für erledigt hält:
 * **Es gibt kein Zugriffsprotokoll für Antworten.** Wer wann welche
   Antwort erhalten hat, steht nirgends — protokolliert werden
   Benutzeränderungen, Rückmeldungen und leere Suchen.
+
 
 ## 🔐 Persönliche Räume
 Jeder Nutzer bekommt **mit seinem Zugang** einen eigenen Raum — nicht erst
@@ -1136,6 +1138,7 @@ sie kann es nicht verhindern. `PRIVAT_STRENG` regelt, was die
 bleibt, wer an den Server kommt, und eine verschlüsselte Platte — siehe
 [Verschlüsselung](#-verschlüsselung).
 
+
 ## 🔐 Wenn jemand die Platte hat
 
 Die ehrliche Antwort zuerst, und sie lässt sich nachsehen statt glauben:
@@ -1248,6 +1251,7 @@ lassen sich nicht schließen, nur eingrenzen:
   Zählen — ein Massenabzug bricht ab und wird protokolliert, siehe
   `BUDGET_ABSCHNITTE` und `PROTOKOLL_ZIEL`.
 
+
 ## 🔐 Rechte
 | Raum | sichtbar für | hochladen und löschen darf |
 |---|---|---|
@@ -1263,6 +1267,7 @@ Wer Administrator ist, legt `ADMIN_USERS` in der `.env` fest.
 Siehe [Räume](#-räume) für die Einrichtung.
 
 ---
+
 
 ## 👥 Benutzer und Rollen
 Angelegt werden Benutzer von Verwaltern — in der Seitenleiste unter
@@ -1339,6 +1344,7 @@ Was diese Maßnahmen leisten, ist die Hürde von *„ein Skript starten"* auf
 gewöhnlichen Weg nachvollziehbar zu machen. Die wirkliche Grenze ist, wer
 überhaupt an den Server kommt, und eine verschlüsselte Platte.
 
+
 ## 🔒 Verschlüsselung
 Chatverläufe, angehängte Bilder und das Rückmeldungsprotokoll liegen
 verschlüsselt auf der Platte. Der Schlüssel gehört der **Installation**,
@@ -1395,6 +1401,7 @@ Schlüssel nicht im Dateisystem haben will, gibt ihn über
 
 ---
 
+
 ## 📄 Formate
 Vektorisiert werden PDF, Word (`docx`), Markdown (`md`, `markdown`) und
 einfacher Text (`txt`) — über den Upload wie über den Ingest.
@@ -1423,6 +1430,7 @@ die Bildunterschrift steht in Word meistens genau dort. Markdown und Text
 haben keine eingebetteten Bilder und werden übersprungen.
 
 Die Vorschau der Originalseite unter einer Quelle gibt es nur bei PDFs.
+
 
 ## 🗂️ Wo die Dateien liegen
 
@@ -1453,25 +1461,6 @@ Ein Ingest über `data/dokumente` überspringt die Ordner der anderen Räume
 und sagt, wie viele. Eingelesen werden sie mit `INGEST_RAUM` — oder von
 `abgleich.py`, das beides passend setzt.
 
-### Sachgebiete gibt es nicht mehr
-
-Bis vor Kurzem war ein Unterordner ein „Sachgebiet", und die Seitenleiste
-bot ihn als Filter an. Das ist entfallen, und zwar nicht zum Aufräumen:
-
-* Ein Sachgebiet **sah aus wie eine Rechteeinschränkung und war keine.**
-  Zwei Filter nebeneinander, von denen nur einer eine Grenze zieht, sind
-  einer zu viel.
-* Der Filter wurde aus der **Voreinstellung vorbelegt**. Wer ein neues
-  Sachgebiet anlegte und dorthin hochlud, fand sein Dokument nicht mehr —
-  es lag außerhalb der vorbelegten Auswahl, und nichts sagte es ihm.
-
-Der Raum leistet dasselbe und bindet es an eine Berechtigung. Wer eine
-Untergliederung braucht, legt einen Raum an; das kostet einen Klick mehr
-und trägt dafür eine Zusage.
-
-Vorhandene `folder`-Angaben in den Metadaten bleiben unangetastet — sie
-zu löschen wäre ein Schreibvorgang über den ganzen Bestand für nichts.
-Sie werden nur nicht mehr ausgewertet.
 
 ## 🧠 Rangfolge der Treffer
 Nach der Suche werden die Ranglisten aller Sonden und beider Suchwege
@@ -1503,6 +1492,7 @@ RERANKER_API_MODEL=bge-reranker-v2-m3
 Fällt der Endpunkt während des Betriebs aus, bleibt die Reihenfolge aus der
 Fusion stehen — die Frage wird beantwortet, nur ohne die zweite Bewertung.
 
+
 ## 🧩 Reranker-Modell im Image
 Das Modell (Standard `BAAI/bge-reranker-v2-m3`) wird **beim Bauen** in das
 Image geladen:
@@ -1527,6 +1517,7 @@ Anderes Modell: `RERANKER_MODEL` in der `.env` setzen und **neu bauen**.
 Leer (`RERANKER_MODEL=`) schaltet den Reranker ab; dann rankt allein die
 Rangfolge-Fusion. Lässt sich das Modell nicht laden, fällt die App auf
 Fusion zurück statt abzubrechen.
+
 
 ## 🔌 Modelle und Endpunkte
 Jede Aufgabe kann ihren eigenen Server bekommen:
@@ -1566,6 +1557,7 @@ Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
 > vorher löschen. Ohne das schlägt das Hinzufügen neuer Chunks mit einem
 > Dimensionsfehler fehl, und bereits vorhandene Treffer werden gegen die
 > falsche Vektorbasis bewertet.
+
 
 ## 📊 Listen aus Tabellendateien
 Bestandslisten, Preislisten, Zuordnungen: `xlsx`, `xlsm`, `csv` und `tsv`
@@ -1728,6 +1720,7 @@ TABELLEN_BEISPIELE_BIS=0
 das Modell findet die richtige Liste weiterhin, muss aber ohne Kenntnis der
 Werte auskommen.
 
+
 ## 🎛️ Voreinstellungen
 Dieselbe Anlage taugt für verschiedene Anwendungen, aber nicht mit denselben
 Einstellungen. Eine Voreinstellung bündelt, was zusammengehört, und steht
@@ -1760,6 +1753,7 @@ demselben Grund ist das Eingabefeld dafür aus der Seitenleiste entfernt.
 **Adressen und Schlüssel.** Wohin die Fragen gehen, ist Sache der
 Installation und steht in der `.env`.
 
+
 ## 📜 Prompts anpassen
 Zwei Vorlagen bestimmen, wonach gesucht und wie geantwortet wird:
 
@@ -1782,6 +1776,7 @@ nötigen Platzhalter wird deshalb abgelehnt.
 
 Die Vorlagen sind für Verwalter da, nicht für jeden Nutzer: eine unglückliche
 Formulierung wirkt auf jede Antwort, die danach gegeben wird.
+
 
 ## 🔁 Aus dem Betrieb lernen
 Nutzer fragen in ihren eigenen Wörtern. Die stehen in den Dokumenten oft
@@ -1893,6 +1888,7 @@ für das, was wirklich haussprachlich ist.
 **Nur geprüfte Zuordnungen eintragen.** Ein falscher Eintrag lenkt die Suche
 zuverlässig auf die falsche Stelle; die Antwort klingt dann plausibel und
 ist falsch, und das fällt schwerer auf als ein fehlender Eintrag.
+
 
 ## 🔗 HTTP-Schnittstelle
 Dieselbe Suche wie in der Oberfläche, ohne Browser — für eine Frage aus dem
@@ -2010,6 +2006,7 @@ mit TLS davor.
 
 ---
 
+
 ## DIG:IT-KMU
 Diese App entstand im Rahmen des Projekts : DIG:IT-KMU 
 
@@ -2018,3 +2015,4 @@ Das Projekt DIG:IT-KMU am Institut für Digital Engineering (IDEE) der Technisch
 https://digit.kmu.bayern
 
 ---
+

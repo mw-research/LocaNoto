@@ -2244,6 +2244,47 @@ pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
       f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
       f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
 
+# --- DIE LANDKARTE STIMMT MIT DEM CODE UEBEREIN ---
+#
+# Eine Uebersicht, die nur meistens stimmt, kostet mehr als sie bringt:
+# wer ihr glaubt, sucht an der falschen Stelle. landkarte.py liest sie
+# aus dem Code, und hier steht, woran sie sich halten muss.
+import landkarte as _lk
+
+_HIER = os.path.dirname(os.path.abspath(__file__))
+_karte = _lk.lies(_HIER)
+
+# 1. Jede Datei hat genau eine Schicht. Eine neue faellt damit auf,
+#    statt still aus der Uebersicht zu fallen -- der haeufigste Weg,
+#    wie so etwas veraltet.
+_ohne = sorted(n for n, i in _karte.items() if i["schicht"] == "?")
+pruef("jede Datei steht in genau einer Schicht der Landkarte",
+      not _ohne, _ohne)
+
+# 2. Keine Kante zeigt nach oben. Daran haengt die Wartbarkeit: wer
+#    paths.py aendert, muss nichts ueber die Oberflaeche wissen. Beim
+#    Aufschreiben war es einmal verletzt -- pipeline benutzte mcp, und
+#    mcp stand unter den Einstiegen. Der Code war richtig, die
+#    Einteilung falsch.
+_RANG = {"Grundlage": 0, "Bestand": 1, "Fachlogik": 2, "Einstiege": 3}
+_hoch = sorted(f"{n} -> {m}" for n, i in _karte.items() for m in i["nutzt"]
+               if _RANG[_karte[m]["schicht"]] > _RANG[i["schicht"]])
+pruef("keine Kante der Landkarte zeigt nach oben", not _hoch, _hoch)
+
+# 3. Jede Datei steht im README. Die Tabelle wird erzeugt; diese
+#    Pruefung stellt sicher, dass sie nach einer neuen Datei auch
+#    erneuert wurde.
+_liesmich = _datei("README.md")
+_fehlt_doku = sorted(n for n in _karte if f"`{n}.py`" not in _liesmich)
+pruef("jede Datei kommt in der Landkarte des README vor",
+      not _fehlt_doku, _fehlt_doku)
+
+# 4. Jede Datei sagt in einem Satz, was sie tut. Ohne Dateikopf bleibt
+#    die Zelle leer -- app.py war so eine, 2900 Zeilen ohne ein Wort
+#    darueber.
+_stumm = sorted(n for n, i in _karte.items() if not i["kopf"].strip())
+pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
+
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
