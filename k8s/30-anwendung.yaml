@@ -184,6 +184,10 @@ spec:
           image: locanoto:lokal
           command: ["uvicorn", "api:app",
                     "--host", "0.0.0.0", "--port", "8600"]
+          # Steht ein Ingress davor, der ein Praefix abschneidet, gehoert
+          # es in API_WURZELPFAD -- sonst laedt die Bedienoberflaeche
+          # unter /hilfe ihr Schema von der falschen Adresse. Der Wert
+          # kommt aus der ConfigMap; hier steht nur der Hinweis.
           envFrom:
             - configMapRef:
                 name: locanoto
