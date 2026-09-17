@@ -2271,6 +2271,19 @@ pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
       f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
       f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
 
+# --- DIE REGELN DES SYSTEMPROMPTS SIND DURCHNUMMERIERT ---
+#
+# Im mitgelieferten Prompt trugen "DATENBANKWERTE" und "CODE" beide die
+# 7, und eine 10 gab es nicht -- beim Anfuegen der letzten Regel wurde
+# die Nummer der vorletzten abgeschrieben.
+#
+# Ob ein Modell darueber stolpert, laesst sich hier nicht messen. Dass
+# eine durchnummerierte Liste zweimal dieselbe Nummer traegt, schon.
+_prompt = _datei("system_prompt.txt")
+_nummern = [int(m) for m in _re.findall(r"^(\d+)\.", _prompt, _re.M)]
+pruef("die Regeln des Systemprompts sind fortlaufend nummeriert",
+      _nummern == list(range(1, len(_nummern) + 1)), _nummern)
+
 # --- EIN DOKUMENT AUFNEHMEN ---
 #
 # Zum ersten Mal ausgefuehrt und nicht nur gelesen. Solange das in
