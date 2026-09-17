@@ -23,6 +23,7 @@ import re
 import paths
 import sicherheit
 import store
+import auth
 import aufnehmen
 from aufnehmen import (raum_sammlung, _alle_raum_sammlungen,
                        _gehoert_anderem_raum,
@@ -2245,6 +2246,58 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     _felder_leeren(_pwe, "alt", "neu1", "neu2")
                     time.sleep(3 if _bo.get("fehler") else 2)
                     st.rerun()
+
+    # --- EIGENE ZUGANGSTOKEN ---
+    #
+    # Bisher sah niemand ausser dem Verwalter, dass ueberhaupt ein Token
+    # auf seine Kennung ausgestellt ist. Ein Token traegt die Rechte
+    # seines Besitzers -- wer nicht weiss, dass eines existiert, kann
+    # auch nicht merken, dass es zu viele sind.
+    #
+    # Gezeigt wird nur, was einem gehoert: auth.liste() gibt alle
+    # zurueck, gefiltert wird auf die eigene Kennung, bevor etwas auf
+    # den Schirm kommt.
+    #
+    # Widerrufen ja, anlegen nein. Ein Widerruf nimmt nur weg, und das
+    # eigene Token wegzunehmen darf jeder. Das Anlegen bleibt beim
+    # Verwalter -- so haelt es create_token.py seit jeher auch.
+    _meine_token = [(_h, _e) for _h, _e in auth.liste()
+                    if _e.get("benutzer") == st.session_state["username"]]
+    if _meine_token:
+        with st.expander(f"\U0001f3ab Meine Zugangstoken "
+                         f"({len(_meine_token)})"):
+            st.caption(
+                "Ein Token gilt fuer die HTTP-Schnittstelle und traegt "
+                "deine Rechte. Den Wert selbst zeigt niemand mehr an — "
+                "gespeichert ist nur sein Hashwert. Was du nicht mehr "
+                "brauchst, widerrufe.")
+            for _h, _e in _meine_token:
+                _bis = _e.get("gueltig_bis")
+                _was = _e.get("bezeichnung") or "ohne Bezeichnung"
+                if _bis:
+                    _was += f" · bis {_bis[:10]}"
+                if not _e.get("gueltig", True):
+                    # Ohne gueltige Signatur: von Hand eingetragen oder
+                    # veraendert. Es gilt nicht -- und wird genau deshalb
+                    # gezeigt, statt verschwiegen.
+                    _was += " · **UNGÜLTIG**"
+                _t1, _t2 = st.columns([4, 1])
+                with _t1:
+                    st.markdown(f"`{_h[:8]}` · {_was}")
+                    st.caption(f"angelegt {_e.get('erstellt', '?')[:19]}")
+                with _t2:
+                    if st.button("🗑️", key=f"eig_token_{_h[:12]}",
+                                 help="Widerrufen"):
+                        # Der volle Hashwert und nicht sein Anfang:
+                        # auth.widerrufe trifft bei einem mehrdeutigen
+                        # Anfang absichtlich keinen.
+                        if auth.widerrufe(_h) == 1:
+                            st.info("Widerrufen.")
+                        else:
+                            st.error("Nicht widerrufen.")
+                        _leeren()
+                        time.sleep(1)
+                        st.rerun()
 
     verwaltung.zeichne(
         is_admin=is_admin,
