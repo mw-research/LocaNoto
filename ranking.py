@@ -345,7 +345,32 @@ class Bewerter:
     # --- Anzeige ---
 
     def beschreibung(self):
-        """Der Zustand von jetzt, fuer die Seitenleiste."""
+        """Der Zustand von jetzt, fuer die Seitenleiste.
+
+        Zwei Angaben, und der Unterschied ist die Frage aus dem Betrieb:
+        was GILT (ist ein Endpunkt eingerichtet, ist ein Ausfall
+        vermerkt) und was beim letzten Bewerten GESCHEHEN ist. Das erste
+        allein laesst offen, ob der Endpunkt je gerufen wurde -- gemeldet
+        wurde genau das: "laut Seitenleiste haengt der Reranker am
+        Endpunkt, aber dort entsteht keine Last".
+        """
+        return self._lage() + self._zuletzt()
+
+    def _zuletzt(self):
+        """Was der LETZTE Bewertungsaufruf tatsaechlich benutzt hat.
+
+        Das Feld gab es seit jeher -- gelesen hat es niemand.
+        """
+        if self._zuletzt_endpunkt is None:
+            return " | zuletzt: noch nicht bewertet"
+        if self._zuletzt_endpunkt:
+            return " | zuletzt: Endpunkt"
+        if self._modell is not None:
+            return " | zuletzt: Modell aus dem Image"
+        return " | zuletzt: nur Rangfolge-Fusion"
+
+    def _lage(self):
+        """Was gerade gilt -- ohne Aussage darueber, was geschehen ist."""
         import time
         if RERANKER_BASE_URL:
             if self._ausfall_zeit is None:

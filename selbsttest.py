@@ -2284,6 +2284,45 @@ _nummern = [int(m) for m in _re.findall(r"^(\d+)\.", _prompt, _re.M)]
 pruef("die Regeln des Systemprompts sind fortlaufend nummeriert",
       _nummern == list(range(1, len(_nummern) + 1)), _nummern)
 
+# --- DER PROMPT SAGT AUCH, WANN ETWAS BENUTZT WERDEN MUSS ---
+#
+# Gemeldet: die Antwort lautete "dazu steht nichts in der Unterlage",
+# waehrend die Fundstelle in ihrer eigenen Quellenliste stand. Die
+# Leitung war in Ordnung -- kontext() nimmt jeden Treffer --, aber der
+# Prompt kannte nur eine Richtung: drei Regeln bremsen gegen Erfindung,
+# keine sagt, dass ein passender Abschnitt benutzt werden MUSS. Bei
+# einem Bestand, in dem zwei Produkte dieselben Begriffe fuehren, faellt
+# die Antwort dann auf die sichere Seite.
+pruef("der Prompt verlangt, Gefundenes auch zu benutzen",
+      "GEFUNDENES ZAEHLT" in _prompt)
+
+# --- DER BEWERTER SAGT, WAS ZULETZT GESCHEHEN IST ---
+#
+# Die Seitenleiste zeigte, was GILT: Endpunkt eingerichtet, kein Ausfall
+# vermerkt. Nicht, was beim letzten Bewerten geschah. Gefragt wurde
+# genau das: "laut Seitenleiste haengt der Reranker am Endpunkt, aber
+# dort entsteht keine Last." Das Feld dafuer gab es seit jeher --
+# gelesen hat es niemand.
+import ranking as _rk
+
+_bw = _rk.Bewerter()
+pruef("vor der ersten Bewertung sagt er das auch",
+      "noch nicht bewertet" in _bw.beschreibung(), _bw.beschreibung())
+
+_bw._zuletzt_endpunkt = True
+pruef("nach einer Bewertung ueber den Endpunkt steht es da",
+      "zuletzt: Endpunkt" in _bw.beschreibung(), _bw.beschreibung())
+
+_bw._zuletzt_endpunkt = False
+pruef("und sonst steht da, was stattdessen entschieden hat",
+      "zuletzt: nur Rangfolge-Fusion" in _bw.beschreibung(),
+      _bw.beschreibung())
+
+_bw._modell = object()
+pruef("das Modell aus dem Image wird als solches genannt",
+      "zuletzt: Modell aus dem Image" in _bw.beschreibung(),
+      _bw.beschreibung())
+
 # --- EIN DOKUMENT AUFNEHMEN ---
 #
 # Zum ersten Mal ausgefuehrt und nicht nur gelesen. Solange das in
