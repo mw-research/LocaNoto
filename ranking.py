@@ -378,10 +378,20 @@ class Bewerter:
                 if self.startprobe:
                     stand += f" -- {self.startprobe}"
                 return stand
-            wieder = max(0, int(RERANKER_ERNEUT
-                                - (time.time() - self._ausfall_zeit)))
             ersatz = ("Modell aus dem Image" if RERANKER_RUECKFALL == "image"
                       and RERANKER_MODEL else "nur Rangfolge-Fusion")
+            # EINE LAUFENDE PROBE IST KEIN AUSFALL. Beim Start steht der
+            # Bewerter absichtlich auf "noch nicht bestaetigt", damit kein
+            # Containerstart auf einen kalten Modellserver wartet. Das als
+            # AUSGEFALLEN zu melden schickt jeden, der es liest, auf die
+            # Suche nach einem Fehler, den es nicht gibt -- so gemeldet
+            # worden, und fuenf Sekunden spaeter bewertete derselbe
+            # Bewerter ueber den Endpunkt.
+            if self.startprobe:
+                return (f"Endpunkt {_rerank_url()} -- Probe beim Start "
+                        f"laeuft noch, bis dahin {ersatz}")
+            wieder = max(0, int(RERANKER_ERNEUT
+                                - (time.time() - self._ausfall_zeit)))
             return (f"Endpunkt {_rerank_url()} AUSGEFALLEN "
                     f"({self._ausfall_grund}) -- vorlaeufig {ersatz}, "
                     f"naechster Versuch in {wieder} s")

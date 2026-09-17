@@ -2284,6 +2284,32 @@ _nummern = [int(m) for m in _re.findall(r"^(\d+)\.", _prompt, _re.M)]
 pruef("die Regeln des Systemprompts sind fortlaufend nummeriert",
       _nummern == list(range(1, len(_nummern) + 1)), _nummern)
 
+# --- EINE LAUFENDE PROBE IST KEIN AUSFALL ---
+#
+# Gemeldet: "Endpunkt ... AUSGEFALLEN (Probe laeuft noch)". Nichts war
+# ausgefallen -- die Startprobe war nur nicht zurueck, und kurz darauf
+# bewertete derselbe Bewerter ueber den Endpunkt. Wer das liest, sucht
+# einen Fehler, den es nicht gibt.
+import ranking as _rk
+
+_bw2 = _rk.Bewerter()
+_bw2._ausfall_zeit = 1.0
+_bw2._ausfall_grund = "Probe laeuft noch"
+_bw2.startprobe = "Probe beim Start laeuft"
+_alt_url = _rk.RERANKER_BASE_URL
+_rk.RERANKER_BASE_URL = "http://beispiel.invalid"
+try:
+    _waehrend = _bw2._lage()
+    _bw2.startprobe = None
+    _bw2._ausfall_grund = "ConnectError: keine Verbindung"
+    _danach = _bw2._lage()
+finally:
+    _rk.RERANKER_BASE_URL = _alt_url
+pruef("eine laufende Startprobe heisst nicht AUSGEFALLEN",
+      "AUSGEFALLEN" not in _waehrend and "Probe" in _waehrend, _waehrend)
+pruef("ein echter Ausfall heisst weiterhin so",
+      "AUSGEFALLEN" in _danach, _danach)
+
 # --- DER PROMPT SAGT AUCH, WANN ETWAS BENUTZT WERDEN MUSS ---
 #
 # Gemeldet: die Antwort lautete "dazu steht nichts in der Unterlage",
