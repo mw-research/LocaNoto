@@ -137,7 +137,10 @@ def beschreibungen(doc, dateiname, fortschritt=None):
             try:
                 text = vision.beschreibe(
                     roh, "Beschreibe, was diese Abbildung zeigt, und gib "
-                         "alle darin lesbaren Beschriftungen wieder.")
+                         "alle darin lesbaren Beschriftungen wieder. "
+                         "Formeln und Gleichungen vollstaendig "
+                         "uebernehmen -- mit Formelzeichen, Indizes, "
+                         "Exponenten und Einheiten.")
                 if text:
                     aus.append((nr + 1, text, "abbildung"))
             except Exception:
