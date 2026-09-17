@@ -119,6 +119,7 @@ Analysiere dieses Bild aus einem Dokument. Erstelle eine umfassende, neutrale un
 - Beschreibe bei Diagrammen, Graphen oder Schaubildern die Achsen, Werte, Trends und Kernaussagen.
 - Erfasse bei Tabellen die grundlegende Struktur und die wichtigsten Datenpunkte.
 - Beschreibe bei Fotos, Illustrationen oder Skizzen das zentrale Motiv und alle relevanten Details.
+- Gib Formeln und Gleichungen VOLLSTAENDIG wieder: jedes Formelzeichen, jeden Index, jeden Exponenten, jede Einheit. Nenne danach, wofuer die Formelzeichen stehen, soweit es im Bild steht. Eine Formel ist das, wonach in einem Regelwerk gesucht wird -- eine Beschreibung ihres Aussehens nuetzt niemandem.
 Übersetze den kompletten Informationsgehalt des Bildes so präzise in Textform, dass eine Person, die das Bild nicht sieht, keine einzige fachliche Information verpasst. Erfinde keine Informationen hinzu.
 """
 

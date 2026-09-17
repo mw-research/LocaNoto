@@ -2651,6 +2651,23 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
+# --- DIE BILDBESCHREIBUNG LIEST AUCH FORMELN ---
+#
+# Es gab einmal update_formulas.py, einen eigenen Lauf fuer Bilder mit
+# Formeln. Das Skript ist weg, und das war richtig -- die
+# Bildbeschreibung tut dasselbe beim Einlesen. Nur nannte ihre Aufgabe
+# Formeln mit keinem Wort: sie fragte nach Diagrammen, Achsen, Tabellen
+# und Fotos. Eine freigestellte Formel bekam damit eine Beschreibung
+# ihrer Geometrie statt ihres Inhalts, und in einem Regelwerksbestand
+# ist genau die Formel das, wonach jemand sucht.
+#
+# Zwei Wege, zwei Aufgaben: der Stapellauf und das, was beim Hochladen
+# mitkommt. Beide muessen es verlangen.
+for _datei_name in ("ingest_images.py", "bildtext.py"):
+    _q = _datei(_datei_name)
+    pruef(f"{_datei_name} verlangt Formeln",
+          "Formel" in _q and ("Gleichung" in _q or "Einheit" in _q))
+
 # --- EIN AUSGEFALLENER SUCHWEG VERSCHWINDET NICHT ---
 #
 # Im Betrieb lagen die Vektoren einer Installation mit 2560
