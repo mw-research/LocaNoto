@@ -1231,8 +1231,21 @@ def zeichne(*, is_admin,
                               else "Standard neben dem Code"))
 
             st.markdown("---")
+            # BEI EINGERICHTETEM OWNCLOUD IST DAS KEINE QUELLE.
+            #
+            # Gemeldet als "es laeuft immer noch alles im alten
+            # Ablagesystem". Es laeuft nichts Altes: der Abgleich HOLT
+            # die Dateien aus ownCloud hierher, und der Ingest liest
+            # ausschliesslich von der Platte. Dateien hier sind das Bild
+            # eines funktionierenden Abgleichs, nicht sein Gegenteil.
+            #
+            # "Werden gepflegt" stimmte dann aber nicht mehr: gepflegt
+            # wird in ownCloud, hier steht die Kopie.
+            _mit_cloud = owncloud.eingerichtet()
             _klassen = {
-                "quelle": "Quellen — werden gepflegt, nur gelesen",
+                "quelle": ("Quellen — Arbeitskopie; gepflegt wird in "
+                           "ownCloud" if _mit_cloud else
+                           "Quellen — werden gepflegt, nur gelesen"),
                 "nutzerdaten": "Nutzerdaten — müssen den Container "
                                "überleben",
                 "konfiguration": "Konfiguration — getrennt aufzubewahren",
@@ -1245,6 +1258,16 @@ def zeichne(*, is_admin,
                 st.code(chr(10).join(
                     f"{_b:<26} {_gr / 1e6:9.2f} MB {_n:>6} Dateien  {_p}"
                     for _b, _k, _p, _gr, _n in _zeilen), language="text")
+
+            if _mit_cloud:
+                st.caption(
+                    "Der Abgleich legt unter `dokumente` ab, was in "
+                    "ownCloud steht — der Ingest liest nur von der "
+                    "Platte, nie über das Netz. Dateien hier sind also "
+                    "kein alter Ablageweg, sondern die Arbeitskopie. "
+                    "Was von Hand hierher gelegt wird, bleibt liegen und "
+                    "wird eingelesen, taucht in ownCloud aber nie auf — "
+                    "und ist damit für alle anderen unsichtbar.")
 
             _modus = _verwaltungsstand()["journal"]
             if _modus.lower() != "wal":

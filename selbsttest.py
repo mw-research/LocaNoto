@@ -2255,6 +2255,26 @@ pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
       f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
       f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
 
+# --- DIE SPEICHERORTE SAGEN, WER OBEN STEHT ---
+#
+# Gemeldet als "es laeuft immer noch alles im alten Ablagesystem",
+# obwohl ownCloud lief. Es lief nichts Altes: der Abgleich holt die
+# Dateien nach data/dokumente, und der Ingest liest nur von der Platte.
+# Dateien dort sind das Bild eines funktionierenden Abgleichs.
+#
+# Irrefuehrend war die Beschriftung "werden gepflegt, nur gelesen" --
+# gepflegt wird bei eingerichtetem ownCloud eben dort und nicht hier.
+# Sie haengt jetzt an owncloud.eingerichtet(), und diese Pruefung haelt
+# fest, dass sie eine Bedingung hat und keine Konstante mehr ist.
+_vwq = _datei("verwaltung.py")
+pruef("die Quellen-Beschriftung kennt beide Faelle",
+      "gepflegt wird in " in _vwq
+      and "werden gepflegt, nur gelesen" in _vwq)
+pruef("und sie haengt an ownCloud",
+      "_mit_cloud = owncloud.eingerichtet()" in _vwq
+      and _vwq.index("_mit_cloud = owncloud.eingerichtet()")
+      < _vwq.index("Quellen — Arbeitskopie"))
+
 # --- DIE LEISTE IST WIRKLICH GRAU, SOLANGE EINE ANTWORT LAEUFT ---
 #
 # Gemeldet als "man kann waehrend einer Antwort wieder Sachen
