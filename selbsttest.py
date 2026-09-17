@@ -2284,6 +2284,105 @@ _nummern = [int(m) for m in _re.findall(r"^(\d+)\.", _prompt, _re.M)]
 pruef("die Regeln des Systemprompts sind fortlaufend nummeriert",
       _nummern == list(range(1, len(_nummern) + 1)), _nummern)
 
+# --- DIE ERSTE FRAGE NACH EINEM START BEKOMMT AUCH DIE RANGFOLGE ---
+#
+# _endpunkt_dran() prueft allein _ausfall_zeit, und lade_bewerter setzt
+# die VOR dem Start der Probe. Solange sie lief, fiel jeder Aufruf in
+# den elif-Zweig und lieferte None -- die ersten Fragen nach jedem
+# Neustart bekamen also die Fusionsreihenfolge, ohne dass etwas
+# fehlgeschlagen waere.
+#
+# Jetzt wird kurz gewartet, begrenzt, und nur solange die STARTPROBE
+# laeuft. Gemessen wird das Warten, nicht gelesen.
+import threading as _th
+import time as _zeit
+import ranking as _rk2
+
+_rk2.RERANKER_PROBE_WARTEN = 0.6
+# _endpunkt_dran() haengt auch an der Adresse. Im Testbestand steht
+# keine; ohne sie waere die Antwort immer False und die Pruefung
+# wertlos. Gerufen wird sie nicht -- die Probe ist hier ein eigener
+# Faden, der nur schlaeft.
+_rk2_url_vorher = _rk2.RERANKER_BASE_URL
+_rk2.RERANKER_BASE_URL = "http://beispiel.invalid"
+
+
+def _mit_probe(dauer, erfolg=True):
+    """Ein Bewerter, dessen Startprobe `dauer` Sekunden braucht."""
+    b = _rk2.Bewerter()
+    b._ausfall_zeit = _zeit.time() - 999
+    b._ausfall_grund = "Probe laeuft noch"
+    b.startprobe = "Probe beim Start laeuft"
+
+    def klopfen():
+        _zeit.sleep(dauer)
+        if erfolg:
+            b._ausfall_zeit = None
+            b._ausfall_grund = ""
+            b.startprobe = None
+
+    b._weck_faden = _th.Thread(target=klopfen, daemon=True)
+    b._weck_faden.start()
+    return b
+
+
+# 1. Kurze Probe: es wird gewartet, und danach ist der Endpunkt dran.
+_b1 = _mit_probe(0.2)
+_t0 = _zeit.time()
+_b1._probe_abwarten()
+_d1 = _zeit.time() - _t0
+pruef("die erste Bewertung wartet auf eine laufende Startprobe",
+      0.15 < _d1 < 0.6, f"{_d1:.2f}s")
+pruef("und geht danach ueber den Endpunkt",
+      _b1._endpunkt_dran(), _b1._lage())
+
+# 2. Lange Probe: das Warten ist begrenzt. Ein kalter Modellserver darf
+#    die Frage nicht dreissig Sekunden aufhalten -- genau dagegen war
+#    die Probe urspruenglich in den Hintergrund gelegt worden.
+_b2 = _mit_probe(5.0)
+_t0 = _zeit.time()
+_b2._probe_abwarten()
+_d2 = _zeit.time() - _t0
+pruef("laenger als eingestellt wird nicht gewartet",
+      0.5 < _d2 < 1.2, f"{_d2:.2f}s bei Grenze 0.6")
+pruef("und dann laeuft die Frage ueber die Fusion",
+      not _b2._endpunkt_dran())
+
+# 3. UND DER FALL, AN DEM SO ETWAS SONST SCHEITERT: bei einem echten
+#    Ausfall wartet niemand. Dort ist bereits bekannt, dass der Dienst
+#    nicht antwortet; zwei Sekunden je Frage waeren reine Wartezeit.
+_b3 = _mit_probe(5.0)
+_b3.startprobe = None                      # kein Start mehr, ein Ausfall
+_b3._ausfall_grund = "ConnectError: keine Verbindung"
+_t0 = _zeit.time()
+_b3._probe_abwarten()
+_d3 = _zeit.time() - _t0
+pruef("bei einem echten Ausfall wartet niemand", _d3 < 0.1, f"{_d3:.2f}s")
+
+# 4. Abschaltbar.
+_rk2.RERANKER_PROBE_WARTEN = 0
+_b4 = _mit_probe(5.0)
+_t0 = _zeit.time()
+_b4._probe_abwarten()
+pruef("mit 0 wird gar nicht gewartet", _zeit.time() - _t0 < 0.1)
+
+# UND DER BEWERTER BENUTZT ES AUCH. Ohne diese Pruefung koennte das
+# Warten tadellos sein und nie stattfinden -- die Gegenprobe "Aufruf
+# entfernen" lief genau deshalb einmal durch. Gesucht wird im
+# Syntaxbaum von __call__ und nicht im Text der Datei: ein Vorkommen im
+# Dateikopf waere sonst schon ein Beweis.
+_rk_baum = _ast.parse(_datei("ranking.py"))
+_bew_klasse = next(k for k in _rk_baum.body
+                   if isinstance(k, _ast.ClassDef) and k.name == "Bewerter")
+_ruf = next(k for k in _bew_klasse.body
+            if isinstance(k, _ast.FunctionDef) and k.name == "__call__")
+_gerufen = {_ast.unparse(k.func) for k in _ast.walk(_ruf)
+            if isinstance(k, _ast.Call)}
+pruef("und die Bewertung ruft das Warten auch auf",
+      "self._probe_abwarten" in _gerufen, sorted(_gerufen)[:6])
+_rk2.RERANKER_PROBE_WARTEN = 2.0
+_rk2.RERANKER_BASE_URL = _rk2_url_vorher
+
 # --- EINE LAUFENDE PROBE IST KEIN AUSFALL ---
 #
 # Gemeldet: "Endpunkt ... AUSGEFALLEN (Probe laeuft noch)". Nichts war

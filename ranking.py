@@ -225,6 +225,19 @@ RERANKER_RUECKFALL = (os.getenv("RERANKER_RUECKFALL", "").strip().lower()
 # einen Dienst, der gerade nicht da ist.
 RERANKER_ERNEUT = paths.env_float("RERANKER_ERNEUT", 60)
 
+# Wie lange die erste Bewertung nach dem Start auf die laufende Probe
+# wartet, bevor sie ohne sie auskommt.
+#
+# Ohne dieses Warten bekamen die ersten Fragen nach jedem Neustart die
+# Fusionsreihenfolge: die Sperre steht, bevor die Probe startet, und
+# faellt erst, wenn sie durchkommt. Gemessen braucht die Probe gegen
+# einen warmen Endpunkt 0,3 s -- zwei Sekunden reichen also weit, und
+# ein kalter Server kostet trotzdem nicht mehr als diese zwei.
+#
+# NUR beim Start. Waehrend einer echten Stoerung wartet niemand: dort
+# weiss man bereits, dass der Dienst nicht antwortet.
+RERANKER_PROBE_WARTEN = paths.env_float("RERANKER_PROBE_WARTEN", 2.0)
+
 
 class Bewerter:
     """Ein Bewerter, der nach einem Ausfall zum Endpunkt zurueckfindet.
@@ -253,6 +266,7 @@ class Bewerter:
         self._zuletzt_endpunkt = None   # True/False: hat der letzte Aufruf
                                         # den Endpunkt erreicht?
         self._weckt = False   # laeuft gerade ein Weckversuch?
+        self._weck_faden = None   # der Faden dazu, zum kurzen Abwarten
         self.startprobe = None
 
     # --- Entscheidungen ---
@@ -292,7 +306,10 @@ class Bewerter:
                 self._weckt = False
 
         self._weckt = True
-        threading.Thread(target=klopfen, daemon=True).start()
+        # Der Faden wird aufbewahrt, damit die erste Frage nach dem Start
+        # kurz auf ihn warten kann -- siehe _probe_abwarten.
+        self._weck_faden = threading.Thread(target=klopfen, daemon=True)
+        self._weck_faden.start()
 
     def _modell_holen(self):
         """Das CPU-Modell, einmal geladen. None, wenn es nicht ladbar ist."""
@@ -308,10 +325,32 @@ class Bewerter:
 
     # --- Aufruf ---
 
+    def _probe_abwarten(self):
+        """Kurz auf die Startprobe warten, falls sie noch laeuft.
+
+        Ohne das bekamen die ersten Fragen nach jedem Neustart die
+        Fusionsreihenfolge: _endpunkt_dran() prueft _ausfall_zeit, und
+        die wird VOR dem Start der Probe gesetzt. Nichts war
+        fehlgeschlagen -- man wusste nur noch nichts.
+
+        Nur beim Start, also solange startprobe steht. Nach einem echten
+        Ausfall wartet niemand: dort ist bereits bekannt, dass der Dienst
+        nicht antwortet, und zwei Sekunden je Frage waeren reine
+        Wartezeit.
+
+        Ohne die Sperre. klopfen() nimmt sie selbst -- wer mit ihr in der
+        Hand auf den Faden wartete, wartete auf sich selbst.
+        """
+        faden = self._weck_faden
+        if (self.startprobe and faden is not None and faden.is_alive()
+                and RERANKER_PROBE_WARTEN > 0):
+            faden.join(RERANKER_PROBE_WARTEN)
+
     def __call__(self, paare):
         """Bewertungen zu den Paaren -- oder None, wenn gerade keine zu
         haben sind. None heisst fuer rank(): Fusionsreihenfolge behalten."""
         import time
+        self._probe_abwarten()
         if self._endpunkt_dran():
             try:
                 werte = _api_bewerte(paare)
