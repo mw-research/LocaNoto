@@ -435,17 +435,17 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand_loeschen`, `api`, `app` +48 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `api`, `app`, `auth` +44 |
 | `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +12 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `ingest`, `ingest_images`, `pipeline` |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `ingest`, `ingest_images` +2 |
 | **Bestand** | | | |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `altbestand_loeschen`, `api`, `app`, `bestandsliste` +13 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `bestandsliste`, `ingest` +9 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `app`, `bestandsliste`, `budget` +9 |
-| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `api`, `app`, `benutzer` +19 |
-| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `ingest`, `ingest_images`, `owncloud` +8 |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `api`, `app`, `benutzer` +18 |
+| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `ingest`, `ingest_images`, `owncloud` +7 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
-| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `nachverschluesseln`, `selbsttest` +4 |
+| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
 | **Fachlogik** | | | |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
 | `owncloud.py` | Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `einrichten`, `ingest` +5 |
@@ -476,7 +476,7 @@ Dateien importieren sie.
 | `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
 | `selbsttest.py` | Stehen die Grundfunktionen? -- python selbsttest.py | `TOP_K` | — |
 | `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
-| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `altbestand_loeschen`, `app`, `selbsttest`, `verwaltung` |
+| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `app`, `selbsttest`, `verwaltung` |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `CHROMA_EINZELN`, `TOP_K` | — |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
@@ -484,21 +484,17 @@ Dateien importieren sie.
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
-| `umsortieren.py` | Den bestehenden Bestand in Raeume umsortieren -- ohne neu zu vektorisieren. | — | — |
 | `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `selbsttest` |
-| `nachverschluesseln.py` | Den vorhandenen Bestand nachtraeglich verschluesseln. | — | — |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
 | `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
-| `altbestand_loeschen.py` | Die alte gemeinsame Sammlung loeschen -- nach einer Gegenprobe. | — | — |
 | `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
-| `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | — |
 | `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
+| `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
 | `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
 | `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
 | `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
 | `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
 | `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
-| `migrate_db.py` | Einmaliger Umbau aus der Zeit vor den Raeumen. | — | — |
 
 ---
 
@@ -1527,6 +1523,7 @@ Jede Aufgabe kann ihren eigenen Server bekommen:
 | Antwort, Umformulierung | `CHAT_` | die eigentliche Antwort |
 | Vektorisierung | `EMBEDDING_` | Chunks und Suchanfragen |
 | Bildbeschreibung | `VISION_` | Abbildungen im Ingest |
+| Datenbankabfrage | `SQL_` | Formulieren der SELECT-Abfrage |
 | Chat-Benennung | `TITLE_` | Dateiname des Chats |
 
 Je Präfix stehen `_MODEL`, `_BASE_URL`, `_API_KEY` und `_API_VERSION` zur
@@ -1557,6 +1554,141 @@ Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
 > vorher löschen. Ohne das schlägt das Hinzufügen neuer Chunks mit einem
 > Dimensionsfehler fehl, und bereits vorhandene Treffer werden gegen die
 > falsche Vektorbasis bewertet.
+
+
+## 🗄️ Datenbank
+Ist eine Datenbank hinterlegt, erscheint in der Seitenleiste der Schalter
+**Datenbank einbeziehen**. Bei jeder Frage läuft dann zusätzlich:
+
+1. Das Sprachmodell bekommt das Datenbankschema und formuliert eine
+   `SELECT`-Abfrage — oder meldet, dass die Frage nichts mit der Datenbank
+   zu tun hat.
+2. Die Abfrage wird geprüft (siehe unten) und ausgeführt.
+3. Das Ergebnis geht als eigener Block in den Kontext, getrennt von den
+   Dokumenten-Abschnitten.
+
+Abfrage und Ergebnis stehen in der Antwort unter **Datenbankabfrage** — jede
+Auskunft ist damit nachvollziehbar.
+
+Das Schema kommt aus `INFORMATION_SCHEMA` und wird für eine Stunde
+zwischengespeichert. Es muss nicht gepflegt werden und bleibt automatisch
+aktuell; ändert sich die Struktur, ist sie spätestens nach einer Stunde
+berücksichtigt — ein Neustart des Containers wirkt sofort.
+
+Wie die Abfrage formuliert wird, steht in `sql_prompt.txt` — dieselbe
+Aufteilung wie bei `system_prompt.txt` und `search_prompt.txt`.
+
+### Einrichtung
+
+In der `.env`:
+
+```
+SQL_SERVER=sqlhost.firma.local
+SQL_USER=locanoto_ro
+SQL_PASS=...
+SQL_DB=Fachdaten
+```
+
+Bei großen Datenbanken lohnt `SQL_TABLES`, um nur die fachlich relevanten
+Tabellen an das Modell zu geben — das kürzt den Prompt und verbessert die
+Treffgenauigkeit.
+
+`SQL_HINWEIS` nimmt einen kurzen Freitext auf, der zusammen mit dem Schema an
+das Modell geht. Tabellen- und Spaltennamen allein sagen nicht, welche
+Tabelle den aktuellen Stand führt und welche Altdaten enthält, oder was ein
+Statuscode bedeutet — daran scheitern erzeugte Abfragen am häufigsten:
+
+```
+SQL_HINWEIS=Aktuelle Bestände stehen in dbo.V_Bestand_Aktuell. Die Tabelle
+ Bestand_Historie enthält Altdaten und ist für Fragen nach dem aktuellen
+ Stand nicht zu verwenden. Status 9 bedeutet ausgebucht.
+```
+
+Ohne `SQL_SERVER` bleibt die Funktion vollständig aus. Der Treiber wird dann
+nicht einmal geladen.
+
+### Sicherheit
+
+Eine vom Sprachmodell erzeugte Abfrage ist nicht vertrauenswürdig. Sie kann
+auf einem Missverständnis beruhen oder auf einer Anweisung, die jemand in ein
+Dokument geschrieben hat. Drei voneinander unabhängige Schranken greifen:
+
+| Schranke | Wirkung |
+|---|---|
+| **Nur-Lese-Konto** auf dem Server | hält auch dann, wenn die anderen versagen |
+| Prüfung in `sqldb.py` | nur eine einzelne `SELECT`- oder `WITH`-Anweisung; keine Kommentare, kein `SELECT … INTO`, keine Prozeduraufrufe |
+| `SQL_MAX_ROWS`, `SQL_TIMEOUT` | begrenzen Zeilenzahl und Laufzeit |
+
+**Das Datenbankkonto muss nur Leserechte haben** (`db_datareader`). Das ist
+die einzige Schranke, die sich nicht umgehen lässt, und sie lässt sich nur
+auf dem Server setzen — nicht in dieser Anwendung.
+
+Liegt die Datenbank auf einem **fremden Produktivsystem**, sollte das Konto
+zusätzlich nur auf die fachlich benötigten Tabellen oder — besser — auf
+eigens angelegte Sichten berechtigt sein. Eine Sicht begrenzt gleichzeitig,
+welche Spalten das Sprachmodell überhaupt zu sehen bekommt. Der Zugriff
+gehört mit dem Betreiber des Systems abgestimmt, bevor die Anwendung ihn
+nutzt.
+
+Eine abgelehnte Abfrage erreicht die Datenbank nicht; die Ablehnung wird in
+der Oberfläche angezeigt.
+
+### VPN
+
+Der Fall: die App läuft auf dem eigenen Server, weil dort die GPUs und die
+Modellserver stehen. Die Datenbank steht beim Kunden und ist nur über einen
+Tunnel erreichbar. Beides gleichzeitig heißt: **nur die Datenbankverbindung
+darf durch den Tunnel, alles andere nicht.** Wandert der gesamte Verkehr
+hinein, sind die Modellserver im eigenen Netz nicht mehr erreichbar.
+
+Daran scheitert der naheliegende Aufbau. Teilt sich die App den
+Netzwerk-Namensraum des Tunnel-Containers (`network_mode: "service:vpn"`),
+gilt dessen Routing für alles, was die App tut — schickt der Gegenserver ein
+`redirect-gateway`, läuft ab da jede Anfrage durch den Tunnel. Außerdem darf
+die App dann keine eigenen Ports mehr veröffentlichen; die `ports`-Sektion
+der `docker-compose.yaml` müsste entfernt werden, und das nächste Update
+holt sie zurück.
+
+Deshalb **Weiterleitung statt geteiltem Namensraum**: Der Beiwagen hält den
+Tunnel und bietet den Datenbank-Port in seinem eigenen Netz an. Die App
+behält ihr Netz, ihre Ports und ihren direkten Weg zu den Modellservern;
+durch den Tunnel geht nur die eine Verbindung, die dort hin soll.
+
+```
+SQL_SERVER=vpn
+SQL_PORT=1433
+```
+
+Vollständiges Beispiel — `docker-compose.override.yaml` und `vpn/Dockerfile`
+— als Kommentar am Ende der `docker-compose.yaml`.
+
+Zur `.ovpn` des Kunden:
+
+* Läuft der Tunnel auf **TCP 443**, damit ihn die eigene Organisation als
+  gewöhnlichen Web-Verkehr behandelt, muss das in der Konfiguration auch so
+  stehen: `proto tcp` und `remote <adresse> 443`. Eine Konfiguration mit
+  `proto udp` und einem anderen Port ist die alte und wird gefiltert.
+* `route-method exe` stammt aus dem Export des Windows-Clients. Im Container
+  ist die Anweisung wirkungslos und kann bleiben.
+* Schickt der Gegenserver ein `redirect-gateway`, betrifft das nur den
+  Beiwagen, nicht die App. Stört es dort:
+  `pull-filter ignore "redirect-gateway"`.
+
+Weiteres:
+
+* **Zertifikate, Schlüssel und Anmeldedaten gehören nicht in dieses
+  Repository.** `vpn/`, `*.key`, `*.pem`, `*.ovpn` und `auth.txt` stehen
+  deshalb in der `.gitignore`.
+* Überschneiden sich das eigene Netz und das Netz des Kunden — beide
+  `192.168.1.0/24` etwa —, ist die Datenbank nicht erreichbar, obwohl der
+  Tunnel steht. Beim Beiwagen fällt das weniger ins Gewicht als bei einem
+  Tunnel auf dem Host, weil nur sein eigenes Netz betroffen ist; die
+  Adressbereiche gehören trotzdem verglichen.
+* Prüfen, ob der Weiterleiter antwortet:
+
+```bash
+docker compose exec locanoto_bot python -c "import socket,os;socket.create_connection((os.getenv('SQL_SERVER'),int(os.getenv('SQL_PORT') or 1433)),10);print('erreichbar')"
+```
 
 
 ## 📊 Listen aus Tabellendateien

@@ -12,6 +12,9 @@ benutzt dieselbe.
 import streamlit as st
 import pymupdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import contextlib
+import functools
+import inspect
 import os
 import time
 from datetime import datetime
@@ -1460,10 +1463,74 @@ if _antwortet and not _auftrag:
     st.session_state["_laeuft"] = False
     _antwortet = False
 
+# --- DIE SPERRE GILT FUER DIE GANZE LEISTE ---
+#
+# Gemeldet als "man kann waehrend einer Antwort wieder Sachen
+# auswaehlen". Gesperrt waren bis dahin drei Dinge: die Chateingabe, der
+# Schalter "Verwaltung" und das Passwortfeld. Voreinstellung,
+# Raumauswahl, Dokumentauswahl, Chatwechsel, Hochladen und der ganze
+# Verwaltungsbereich waren bedienbar -- und ein Klick dort reisst die
+# laufende Antwort ab, weil Streamlit den Lauf abbricht und neu beginnt.
+#
+# Vierzig Aufrufe einzeln nachzutragen hiesse, einen zu vergessen, und
+# der vergessene ist genau der Abbruch. Also eine Stelle: fuer die Dauer
+# des Leistenblocks bekommen die Bedienelemente von st eine Huelle, die
+# disabled=True untergeschiebt. verwaltung.py zeichnet in denselben
+# Modul und ist damit mitgesperrt.
+_BEDIENELEMENTE = (
+    "button", "download_button", "form_submit_button", "link_button",
+    "selectbox", "multiselect", "slider", "select_slider", "checkbox",
+    "toggle", "radio", "number_input", "text_input", "text_area",
+    "date_input", "time_input", "color_picker", "file_uploader",
+    "camera_input", "data_editor", "pills", "segmented_control",
+    "feedback", "chat_input")
+
+
+@contextlib.contextmanager
+def _bedienung_gesperrt(ja, modul=None):
+    """Alle Bedienelemente von `modul` sind darin gesperrt.
+
+    Gehuellt wird nur, was `disabled` ueberhaupt kennt -- nachgesehen und
+    nicht angenommen. Ein Element ohne diesen Parameter bleibt
+    unberuehrt, statt mit TypeError abzustuerzen.
+
+    Das Zuruecksetzen steht im finally: st ist ein Modul und lebt laenger
+    als dieser Lauf. Eine Huelle, die nach einer Ausnahme haengenbleibt,
+    sperrte die Oberflaeche dauerhaft -- derselbe Fehler, den die
+    Selbstheilung der Sperre oben schon einmal kosten musste.
+    """
+    modul = modul if modul is not None else st
+    if not ja:
+        yield
+        return
+    vorher = {}
+    for _n in _BEDIENELEMENTE:
+        _f = getattr(modul, _n, None)
+        if _f is None:
+            continue
+        try:
+            if "disabled" not in inspect.signature(_f).parameters:
+                continue
+        except (TypeError, ValueError):
+            continue
+        vorher[_n] = _f
+
+        def _huelle(*a, _f=_f, **k):
+            k["disabled"] = True
+            return _f(*a, **k)
+
+        setattr(modul, _n, functools.wraps(_f)(_huelle))
+    try:
+        yield
+    finally:
+        for _n, _f in vorher.items():
+            setattr(modul, _n, _f)
+
+
 # --- SIDEBAR (UI) ---
-with st.sidebar:
+with st.sidebar, _bedienung_gesperrt(_antwortet):
     if _antwortet:
-        st.warning("Antwort laeuft. Die Bedienung wartet, bis sie "
+        st.warning("Antwort laeuft. Die Bedienung ist gesperrt, bis sie "
                    "fertig ist -- ein Klick jetzt wuerde sie abreissen.")
 
     # --- VOREINSTELLUNG ---

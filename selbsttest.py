@@ -819,6 +819,7 @@ pruef("und _p wird auch sonst nicht neu gebunden",
 # Schreibweise.
 _a2 = _quelle.index("_QUELLENMUSTER = re.compile(")
 import re as _re
+import subprocess as _sub
 import types as _types
 import quellticket as _qt
 # Die Funktion lebt im Streamlit-Skript und laesst sich nicht
@@ -1839,7 +1840,14 @@ sys.modules.pop("owncloud", None)
 # "gesperrt UND Auftrag vorhanden" und heilte sich nicht -- und der
 # naechste genauso.
 _pop = _app.find('_auftrag = st.session_state.pop("_auftrag"')
-_leiste2 = _app.rindex("with st.sidebar:")
+# Gesucht wird die with-Zeile der grossen Leiste, und zwar die ganze:
+# "with st.sidebar:" allein steht auch ueber der Anmeldemaske, und die
+# Ueberschrift "# --- SIDEBAR (UI) ---" ebenfalls -- diese Pruefung fiel
+# nach dem Umbau der Sperre still auf die falsche Stelle zurueck, tausend
+# Zeilen zu frueh. Dass diese Zeile so heisst, haelt die Pruefung
+# "der Leistenblock benutzt die Sperre" fest; aendert sie sich, faellt es
+# dort auf und nicht hier im Stillen.
+_leiste2 = _app.find("with st.sidebar, _bedienung_gesperrt")
 pruef("der Auftrag wird vor der Seitenleiste herausgenommen",
       0 < _pop < _leiste2, f"pop {_pop}, Leiste {_leiste2}")
 pruef("und nur an dieser einen Stelle",
@@ -2057,7 +2065,10 @@ _app = _datei("app.py")
 _ui = _app + _datei("verwaltung.py")
 
 _zustand = _app.find("_antwortet = bool(st.session_state")
-_leiste = _app.rindex("with st.sidebar:")
+# Dieselbe Zeile wie oben und aus demselben Grund: "with st.sidebar:"
+# steht auch ueber der Anmeldemaske, und rindex traf nach dem Umbau der
+# Sperre nicht mehr die grosse Leiste.
+_leiste = _app.find("with st.sidebar, _bedienung_gesperrt")
 pruef("es gibt einen Zustand fuer die laufende Antwort", _zustand > 0)
 pruef("und er steht VOR der Seitenleiste", 0 < _zustand < _leiste,
       f"Zustand {_zustand}, Leiste {_leiste}")
@@ -2244,6 +2255,81 @@ pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
       f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
       f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
 
+# --- DIE LEISTE IST WIRKLICH GRAU, SOLANGE EINE ANTWORT LAEUFT ---
+#
+# Gemeldet als "man kann waehrend einer Antwort wieder Sachen
+# auswaehlen". Gesperrt waren bis dahin drei Dinge -- Chateingabe,
+# Verwaltungsschalter, Passwortfeld -- und alles andere nicht. Ein Klick
+# auf die Raumauswahl reisst die laufende Antwort ab.
+#
+# app.py laesst sich hier nicht importieren, streamlit fehlt im
+# Testlauf. Also wird genau das Stueck aus dem Quelltext geholt und
+# gegen eine Attrappe ausgefuehrt: eine Verhaltenspruefung, keine
+# Textsuche.
+import contextlib as _ctx
+import functools as _ft
+
+_app_baum = _ast.parse(_datei("app.py"))
+_sperr_teile = [k for k in _app_baum.body
+                if (isinstance(k, _ast.Assign) and
+                    getattr(k.targets[0], "id", "") == "_BEDIENELEMENTE")
+                or (isinstance(k, _ast.FunctionDef) and
+                    k.name == "_bedienung_gesperrt")]
+pruef("die Sperre der Leiste steht an genau einer Stelle",
+      len(_sperr_teile) == 2, len(_sperr_teile))
+
+_sperr_raum = {"contextlib": _ctx, "functools": _ft, "inspect": _inspect,
+               "st": None}
+exec(compile(_ast.Module(body=_sperr_teile, type_ignores=[]),
+             "app.py", "exec"), _sperr_raum)
+_sperre = _sperr_raum["_bedienung_gesperrt"]
+
+
+def _attrappe():
+    """Ein Stellvertreter fuer st: zwei Elemente mit, eines ohne."""
+    m = _types.SimpleNamespace()
+    m.button = lambda text, disabled=False: ("button", disabled)
+    m.selectbox = lambda text, disabled=False: ("selectbox", disabled)
+    m.markdown = lambda text: ("markdown", None)      # kennt kein disabled
+    return m
+
+
+_m = _attrappe()
+_vorher = (_m.button, _m.selectbox, _m.markdown)
+with _sperre(True, _m):
+    _drin = (_m.button("x"), _m.selectbox("y"), _m.markdown("z"))
+pruef("in der Sperre ist jedes Bedienelement gesperrt",
+      _drin[0] == ("button", True) and _drin[1] == ("selectbox", True),
+      _drin)
+pruef("was disabled nicht kennt, bleibt unberuehrt",
+      _drin[2] == ("markdown", None) and _m.markdown is _vorher[2], _drin[2])
+pruef("nach der Sperre ist alles zurueckgesetzt",
+      (_m.button, _m.selectbox) == _vorher[:2],
+      (_m.button is _vorher[0], _m.selectbox is _vorher[1]))
+
+# Und der wichtigste Fall: eine Ausnahme mittendrin. st ist ein Modul und
+# lebt laenger als dieser Lauf -- eine haengengebliebene Huelle sperrte
+# die Oberflaeche dauerhaft, genau der Fehler, den die Selbstheilung der
+# Antwortsperre schon einmal gekostet hat.
+try:
+    with _sperre(True, _m):
+        raise RuntimeError("mittendrin")
+except RuntimeError:
+    pass
+pruef("auch nach einer Ausnahme ist die Sperre wieder weg",
+      (_m.button, _m.selectbox) == _vorher[:2], "haengengeblieben")
+
+# Ohne laufende Antwort aendert sie nichts.
+with _sperre(False, _m):
+    _offen = _m.button("x")
+pruef("ohne laufende Antwort ist nichts gesperrt",
+      _offen == ("button", False), _offen)
+
+# Und die Leiste benutzt sie auch. Ohne diese Pruefung koennte die
+# Huelle tadellos sein und nirgends stehen.
+pruef("der Leistenblock benutzt die Sperre",
+      "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
+
 # --- DIE LANDKARTE STIMMT MIT DEM CODE UEBEREIN ---
 #
 # Eine Uebersicht, die nur meistens stimmt, kostet mehr als sie bringt:
@@ -2284,6 +2370,46 @@ pruef("jede Datei kommt in der Landkarte des README vor",
 #    darueber.
 _stumm = sorted(n for n, i in _karte.items() if not i["kopf"].strip())
 pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
+
+# --- WAS DER CODE LIEST, STEHT IN DER VORLAGE ---
+#
+# Das SQL-Modul lag monatelang vollstaendig in der oeffentlichen Fassung
+# und war unauffindbar: 582 Zeilen, ein Schalter, der erst erscheint,
+# wenn vier Werte zusammenkommen -- und kein einziger SQL_-Eintrag in
+# .env.example. Ein Wert, den der Code liest und die Vorlage
+# verschweigt, existiert fuer den Betreiber nicht.
+#
+# Dasselbe galt fuer siebzehn weitere, darunter CHROMA_EINZELN, das die
+# Fehlermeldung von api.py ausdruecklich empfiehlt.
+#
+# Die eine echte Ausnahme setzt Kubernetes selbst, nicht der Betreiber.
+_NICHT_IN_DER_VORLAGE = {"KUBERNETES_SERVICE_HOST"}
+
+# Gesucht wird ein EINTRAG, nicht eine Erwaehnung: "NAME=" am
+# Zeilenanfang, auskommentiert erlaubt. Die erste Fassung suchte den
+# Namen irgendwo in der Datei -- und liess sich von der Erwaehnung im
+# Kommentar darueber taeuschen. Die Gegenprobe (SQL_SERVER= entfernen)
+# lief damit durch, obwohl der Eintrag weg war.
+_gelesen = {v for _i in _karte.values() for v in _i["umgebung"]}
+_eingetragen = set(_re.findall(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=",
+                               _datei(".env.example"), _re.M))
+_unsichtbar = sorted(_gelesen - _NICHT_IN_DER_VORLAGE - _eingetragen)
+pruef("jede Variable, die der Code liest, steht in .env.example",
+      not _unsichtbar, _unsichtbar)
+
+# UND SIE KOMMT IM CONTAINER AN. pruefe_env.py sieht beides seit jeher --
+# es hat die SQL-Luecke die ganze Zeit gedruckt, unter "stehen nicht in
+# .env.example", und ist mit Ausgang 0 zurueckgekommen. Ein Befund, der
+# den Lauf nicht anhaelt, ist ein Befund, den niemand liest. Hier zaehlt
+# der Ausgang.
+_pe = _sub.run([sys.executable, "pruefe_env.py", _HIER],
+               capture_output=True, text=True, encoding="utf-8",
+               errors="replace", cwd=_HIER)
+pruef("jede Variable erreicht auch den Container (pruefe_env.py)",
+      _pe.returncode == 0,
+      " | ".join(z.strip() for z in _pe.stdout.split(chr(10))
+                 if z.strip().startswith(">>>") or "gelesen in" in z)[:200])
+
 
 print()
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")

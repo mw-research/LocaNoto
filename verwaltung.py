@@ -875,9 +875,10 @@ def zeichne(*, is_admin,
                 st.warning(
                     f"In der alten, gemeinsamen Sammlung liegen noch "
                     f"{_alt_zahl:,} Abschnitte. Sie werden nicht mehr "
-                    f"durchsucht. `python umsortieren.py --pruefen` zeigt, "
-                    f"wohin sie gehören, `python umsortieren.py` verschiebt "
-                    f"sie — ohne neu zu vektorisieren.")
+                    f"durchsucht — die Suche fragt nur Raumsammlungen. "
+                    f"Die Dokumente in den gewünschten Raum legen und neu "
+                    f"einlesen; die alte Sammlung lässt sich danach unter "
+                    f"*Räume verwalten* leeren.")
 
     # --- OWNCLOUD ---
     #
