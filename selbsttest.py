@@ -1638,8 +1638,11 @@ pruef("und ein anderer Raum bekommt seinen eigenen Baum",
 
 # Und die Verdrahtung: der Upload muss diese Funktion benutzen und den
 # Pfad nicht wieder selbst zusammensetzen.
+# In beiden gesucht: der Upload ist seit dem Umzug in aufnehmen.py,
+# und ein Fundort ist keine Eigenschaft.
 pruef("der Upload benutzt sie",
-      "owncloud.ziel_pfad(raum, pdf_path)" in _datei("app.py"))
+      "owncloud.ziel_pfad(raum, pdf_path)"
+      in _datei("app.py") + _datei("aufnehmen.py"))
 
 # --- EINE TABELLE, GEFOLGT VON TEXT, GIBT KEINE DOPPELTE KENNUNG ---
 #
@@ -2224,7 +2227,20 @@ pruef("der Knopf arbeitet einen Stapel ab",
 
 # Jede Datei bekommt ihre eigene Meldung. "3 von 5 verarbeitet" sagt
 # nicht, WELCHE fehlt -- und genau danach wird gesucht.
-_block = _app[_knopf:_knopf + 3000]
+# Der Block reicht bis zur naechsten Ueberschrift und nicht 3000
+# Zeichen weit. Ein festes Fenster ist genau die Pruefung, die beim
+# naechsten Umbau bricht: als die Fortschrittszeile der Bilder in die
+# Oberflaeche zurueckkam, rutschte st.rerun() aus dem Fenster, und die
+# Pruefung meldete "kein Neuladen gefunden" fuer Code, der sich nicht
+# geaendert hatte.
+# Der Block reicht bis zur naechsten Ueberschrift und nicht 3000
+# Zeichen weit. Ein festes Fenster ist genau die Pruefung, die beim
+# naechsten Umbau bricht: als die Fortschrittszeile der Bilder in
+# die Oberflaeche zurueckkam, rutschte st.rerun() aus dem Fenster,
+# und die Pruefung meldete "kein Neuladen gefunden" fuer Code, der
+# sich gar nicht geaendert hatte.
+_blockende = _app.find(chr(10) + "    # --- ", _knopf)
+_block = _app[_knopf:_blockende if _blockende > 0 else _knopf + 4000]
 pruef("und meldet je Datei", "for _name, _n, _hinweis in _ergebnisse" in _block)
 
 # Und das Entscheidende: kein Neuladen, solange eine Datei nicht
@@ -2254,6 +2270,111 @@ pruef("die Budgetschwelle liegt ueber einer Stunde ununterbrochenen Fragens",
       _BUDGET_EINGESTELLT >= _JE_FRAGE * _PRO_STUNDE,
       f"{_BUDGET_EINGESTELLT} gegen {_JE_FRAGE * _PRO_STUNDE} "
       f"({_PRO_STUNDE} Fragen x {_JE_FRAGE})")
+
+# --- EIN DOKUMENT AUFNEHMEN ---
+#
+# Zum ersten Mal ausgefuehrt und nicht nur gelesen. Solange das in
+# app.py stand, war es nicht erreichbar -- app.py importiert streamlit,
+# das hier fehlt. Die teuerste Funktion der Anwendung war damit die
+# einzige, die nie gelaufen ist.
+#
+# Attrappe ist nur das Embedding. Sammlungen, Stichwortindex und
+# Rechtepruefung sind echt.
+import aufnehmen as _auf
+
+_auf.embed_batch = lambda client, texte, modell: [vek() for _ in texte]
+
+
+class _Hochgeladene:
+    """Name und Bytes -- mehr braucht die Funktion nicht."""
+
+    def __init__(self, name, text):
+        self.name = name
+        self._t = text.encode("utf-8")
+
+    def getvalue(self):
+        return self._t
+
+
+_TEXT = ("# Pruefplan\n\nDie Pruefristen fuer Druckbehaelter betragen "
+         "zwei Jahre und werden vom Betreiber veranlasst.\n")
+
+# 1. In den eigenen Raum -- das darf jeder, ohne Verwalterrolle.
+_auffrischungen = []
+_eigen = raeume.privat_kennung("markus")
+_n, _hinweis = _auf.process_uploaded_pdf(
+    _Hochgeladene("Pruefplan.md", _TEXT), _eigen,
+    benutzer_="markus", ist_verwalter=False,
+    nach_dem_schreiben=lambda: _auffrischungen.append(1))
+pruef("ein Dokument wird aufgenommen", _n > 0, (_n, _hinweis))
+pruef("und das Auffrischen wird gemeldet", _auffrischungen == [1])
+
+_sml = store.sammlung(raeume.sammlung(_eigen), anlegen=False)
+pruef("die Abschnitte liegen in der Sammlung des Raums",
+      _sml is not None and _sml.count() >= _n, _sml.count() if _sml else 0)
+_kw = keyword_index.search("Druckbehaelter", "markus", limit=5)
+pruef("und der Stichwortindex findet sie",
+      any(t["meta"]["file_name"] == "Pruefplan.md" for t in _kw),
+      [t["meta"]["file_name"] for t in _kw])
+
+# 2. Der allgemeine Raum ist fuer Verwalter. Das ist keine Kosmetik:
+#    der gemeinsame Bestand ist das, worauf sich alle verlassen.
+try:
+    _auf.process_uploaded_pdf(
+        _Hochgeladene("Fremd.md", _TEXT), raeume.ALLGEMEIN,
+        benutzer_="anna", ist_verwalter=False, streng=True)
+    _abgewiesen = False
+except _auf.KeinRecht:
+    _abgewiesen = True
+pruef("streng weist ab, wer nicht schreiben darf", _abgewiesen)
+
+# 3. Und ohne streng wird umgeleitet statt abgewiesen -- so verhaelt
+#    sich die Oberflaeche, wo man sieht, wo etwas gelandet ist.
+_vor_allg = store.sammlung(raeume.sammlung(raeume.ALLGEMEIN),
+                           anlegen=False).count()
+_n2, _ = _auf.process_uploaded_pdf(
+    _Hochgeladene("Umgeleitet.md", _TEXT), raeume.ALLGEMEIN,
+    benutzer_="anna", ist_verwalter=False)
+_nach_allg = store.sammlung(raeume.sammlung(raeume.ALLGEMEIN),
+                            anlegen=False).count()
+# Gefragt wird der Stichwortindex und nicht Chroma: er kennt den
+# Raum je Abschnitt, und er wird ohnehin mitgeschrieben. Eine
+# Annahme ueber die Rueckgabeform von Chroma weniger.
+_umg = keyword_index.search("Druckbehaelter", "anna", limit=20)
+_umg_raeume = {t["meta"]["raum"] for t in _umg
+               if t["meta"]["file_name"] == "Umgeleitet.md"}
+pruef("ohne streng wird in den eigenen Raum umgeleitet",
+      _n2 > 0 and _nach_allg == _vor_allg
+      and _umg_raeume == {raeume.privat_kennung("anna")},
+      (_n2, _vor_allg, _nach_allg, sorted(_umg_raeume)))
+
+# 4. Ein Verwalter darf in den allgemeinen Raum.
+_n3, _ = _auf.process_uploaded_pdf(
+    _Hochgeladene("Gemeinsam.md", _TEXT), raeume.ALLGEMEIN,
+    benutzer_="markus", ist_verwalter=True, streng=True)
+pruef("ein Verwalter darf in den allgemeinen Raum", _n3 > 0, _n3)
+
+# 5. Das Modul bleibt frei von der Oberflaeche. Genau das war der Grund
+#    fuer den Umzug -- kaeme streamlit zurueck, waere die Schnittstelle
+#    wieder ausgesperrt und dieser Test nicht mehr ausfuehrbar.
+_aufq = _datei("aufnehmen.py")
+# Gesucht wird der IMPORT und nicht das Wort: der Dateikopf
+# erklaert, warum das Modul streamlit nicht importiert, und liess
+# die erste Fassung dieser Pruefung an der Erklaerung scheitern.
+pruef("aufnehmen.py kennt keine Oberflaeche",
+      not _re.search(r"^\s*(import|from)\s+streamlit", _aufq, _re.M)
+      and not _re.search(r"(?<![A-Za-z_])st\.", _aufq))
+
+# 6. Und beide Eingaenge nehmen denselben Weg. Zwei Ingestwege, von
+#    denen einer nachgezogen wird und der andere nicht, waeren der
+#    Anfang davon, dass ein Dokument je nach Eingang anders im Bestand
+#    liegt.
+pruef("Oberflaeche und Schnittstelle nehmen denselben Weg",
+      "process_uploaded_pdf" in _datei("app.py")
+      and "aufnehmen.process_uploaded_pdf" in _datei("api.py"))
+pruef("und die Schnittstelle weist ab, statt umzuleiten",
+      "streng=True" in _datei("api.py")
+      and "status_code=403" in _datei("api.py"))
 
 # --- DIE SPEICHERORTE SAGEN, WER OBEN STEHT ---
 #

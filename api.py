@@ -21,7 +21,8 @@ Betrieb: uvicorn api:app --host 0.0.0.0 --port 8600
 import json
 import os
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import (Depends, FastAPI, File, Form, Header,
+                     HTTPException, Query, UploadFile)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,8 @@ import sqlpruefung
 import ranking
 import store
 import budget
+import aufnehmen
+import benutzer as benutzer_datei
 
 paths.bootstrap()
 
@@ -422,6 +425,87 @@ def rueckmeldung(eintrag: Rueckmeldung, kennung: str = Depends(benutzer)):
                             detail=f"Unbekannte Art. Erlaubt: "
                                    f"{', '.join(feedback.ARTEN)}")
     return {"status": "vermerkt"}
+
+
+# --- AUFNEHMEN ---
+#
+# Derselbe Weg wie in der Oberflaeche: aufnehmen.process_uploaded_pdf.
+# Nicht eine zweite Fassung davon -- zwei Ingestwege, von denen einer
+# nachgezogen wird und der andere nicht, waeren der Anfang davon, dass
+# ein Dokument je nach Eingang anders im Bestand liegt.
+#
+# Moeglich ist das ueberhaupt nur mit Chroma als Dienst. Ohne ihn
+# schrieben Oberflaeche und Schnittstelle in dieselben Dateien; die
+# Startsperre oben laesst die Schnittstelle dann gar nicht erst laufen.
+
+AUFNAHME_MAX_MB = paths.env_int("AUFNAHME_MAX_MB", 200)
+
+
+class _Hochgeladen:
+    """Was aufnehmen.py von einer Datei braucht: ihren Namen und Bytes.
+
+    Mehr benutzt die Funktion nicht -- gemessen, nicht angenommen. Genau
+    deshalb ist ein Upload aus dem Browser und einer aus einer
+    HTTP-Anfrage dort ununterscheidbar.
+    """
+
+    def __init__(self, name, inhalt):
+        self.name = name
+        self._inhalt = inhalt
+
+    def getvalue(self):
+        return self._inhalt
+
+
+@app.post("/aufnehmen")
+def aufnehmen_(datei: UploadFile = File(...),
+               raum: str = Form(...),
+               projekt: str = Form(""),
+               bilder: bool = Form(False),
+               kennung: str = Depends(benutzer)):
+    """Ein Dokument aufnehmen: ablegen, zerlegen, vektorisieren.
+
+    Ein Dokument je Anfrage. Ein Stapel in einer Anfrage haette einen
+    einzigen Ausgang fuer zweihundert Dateien; so bekommt jede ihren
+    eigenen. Der Aufruf dauert so lange wie das Einlesen -- bei einem
+    grossen Scan Minuten. Das Zeitlimit gehoert auf die Client-Seite.
+
+    Die Rolle kommt aus der signierten Benutzerdatei und nicht aus dem
+    Token: ein Token weist einen Nutzer aus, was er darf steht woanders.
+    Fuer den haeufigsten Fall ist das der Unterschied -- in den
+    allgemeinen Raum darf nur ein Verwalter schreiben.
+
+    403 statt einer stillen Umleitung: die Oberflaeche ersetzt einen
+    unerlaubten Raum durch den eigenen, weil man dort sieht, wo etwas
+    gelandet ist. Ueber HTTP waere dasselbe ein 200 fuer einen Stapel,
+    der vollstaendig woanders liegt.
+    """
+    inhalt = datei.file.read()
+    if len(inhalt) > AUFNAHME_MAX_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Groesser als {AUFNAHME_MAX_MB} MB "
+                   f"(AUFNAHME_MAX_MB).")
+    if not inhalt:
+        raise HTTPException(status_code=400, detail="Leere Datei.")
+
+    try:
+        anzahl, hinweis = aufnehmen.process_uploaded_pdf(
+            _Hochgeladen(datei.filename or "unbenannt", inhalt),
+            raum, projekt, bilder,
+            benutzer_=kennung,
+            ist_verwalter=benutzer_datei.ist_admin(kennung),
+            streng=True)
+    except aufnehmen.KeinRecht as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    # 200 auch bei null Abschnitten, und der Hinweis sagt warum. Ein
+    # Scan ohne Textebene ist kein Fehler der Anfrage -- sie ist
+    # angekommen, die Datei liegt ab, nur durchsuchbar ist sie nicht.
+    # Ein 4xx dafuer hiesse, der Aufrufer haette etwas falsch gemacht.
+    return {"datei": datei.filename, "raum": raum,
+            "abschnitte": anzahl, "durchsuchbar": bool(anzahl),
+            "hinweis": hinweis}
 
 
 @app.get("/voreinstellungen")
