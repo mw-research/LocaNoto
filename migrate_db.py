@@ -1,3 +1,9 @@
+"""Einmaliger Umbau aus der Zeit vor den Raeumen.
+
+Traegt access und owner in Abschnitte nach, die noch keine
+haben. Eine frisch aufgesetzte Installation braucht das nicht --
+sie schreibt beides von Anfang an.
+"""
 import os
 
 import paths

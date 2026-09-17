@@ -1,3 +1,13 @@
+"""Abbildungen aus PDFs beschreiben und durchsuchbar machen.
+
+Was ingest.py fuer den Text tut, tut diese Datei fuer die Bilder:
+sie schneidet sie aus, laesst sie vom Sehmodell beschreiben und
+legt die Beschreibung als Abschnitt ab -- mit Datei und Seite,
+damit die Fundstelle auf das Bild zeigt.
+
+Getrennt von ingest.py, weil es ein anderes Modell braucht und
+um ein Vielfaches laenger dauert. Wer keines hat, laesst es weg.
+"""
 import pymupdf
 import os
 import base64
