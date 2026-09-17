@@ -28,8 +28,7 @@ SCHICHT = {
         "app", "verwaltung", "api", "ingest", "ingest_images", "abgleich",
         "einrichten", "sicherung", "selbsttest", "lasttest", "spiegeln",
         "create_user", "create_token", "manage_users", "bestandsliste",
-        "umsortieren", "nachverschluesseln", "altbestand_loeschen",
-        "packe_umzug", "migrate_db", "rebuild_index", "raum_diagnose",
+        "packe_umzug", "rebuild_index", "raum_diagnose",
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env", "landkarte",
     ),
     "Fachlogik": (

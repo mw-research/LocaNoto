@@ -92,8 +92,8 @@ RAUM = raeume.sichere_kennung(
     os.getenv("INGEST_RAUM", "").strip()) or raeume.ALLGEMEIN
 collection = store.sammlung(raeume.sammlung(RAUM), anlegen=False)
 if collection is None:
-    print(f"Der Raum '{RAUM}' hat noch keine Sammlung. Erst Text einlesen "
-          f"(ingest.py) oder umsortieren.py laufen lassen.")
+    print(f"Der Raum '{RAUM}' hat noch keine Sammlung. Erst Text "
+          f"einlesen: INGEST_RAUM={RAUM} python ingest.py")
     raise SystemExit(1)
 print(f"Ziel: Raum '{RAUM}'")
 kw = keyword_index.connect()

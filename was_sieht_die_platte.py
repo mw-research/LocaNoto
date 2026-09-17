@@ -187,7 +187,9 @@ if chroma:
         else:
             zeile(was, klar > 0,
                   f"{verschl} verschluesselt, {klar} im Klartext.",
-                  "Nachholen: python nachverschluesseln.py" if klar else "")
+                  "Unerwartet: jeder neu geschriebene Abschnitt wird "
+                  "verschluesselt. Steht hier Klartext, war der Schluessel "
+                  "beim Einlesen nicht da." if klar else "")
 
     # Chromas EIGENE Volltextkopie. Sie enthaelt denselben Text noch
     # einmal -- verschluesselt, seit die Abschnitte es sind, aber alles

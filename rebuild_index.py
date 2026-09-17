@@ -26,8 +26,7 @@ for _kennung in raeume.liste():
         paare.append((_kennung, _sml))
 
 if not paare:
-    print("Keine Raum-Sammlungen gefunden. Erst umsortieren.py laufen "
-          "lassen.")
+    print("Keine Raum-Sammlungen gefunden. Erst einlesen: python ingest.py")
     raise SystemExit(1)
 
 for _k, _s in paare:
