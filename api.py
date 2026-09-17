@@ -53,6 +53,20 @@ if _schl_zustand == "unlesbar":
     raise SystemExit("Installationsschluessel nicht lesbar: "
                      + _schl_meldung)
 
+# Unter welchem Praefix die Schnittstelle von aussen steht.
+#
+# Im Cluster schneidet Traefik "/api" ab, bevor die Anfrage hier
+# ankommt. Die Routen stimmen damit -- die erzeugten Adressen nicht:
+# die Oberflaeche unter /hilfe holte ihr Schema von "/openapi.json"
+# statt "/api/openapi.json" und blieb leer, und "Try it out" schickte
+# an "/aufnehmen" statt "/api/aufnehmen". Die Schnittstelle war also da
+# und liess sich nicht ansehen.
+#
+# Als Umgebungsvariable und nicht als Startparameter: dieselbe
+# Einstellung gilt dann fuer Compose und fuer Kubernetes, und sie steht
+# dort, wo alle anderen auch stehen. Leer heisst: direkt erreichbar.
+API_WURZELPFAD = os.getenv("API_WURZELPFAD", "").strip().rstrip("/")
+
 app = FastAPI(
     title="LocaNoto",
     description=__doc__,
@@ -61,6 +75,7 @@ app = FastAPI(
     # knappste Dokumentation, die nicht veralten kann.
     docs_url="/hilfe",
     redoc_url=None,
+    root_path=API_WURZELPFAD,
 )
 
 # --- MEHRPROZESSBETRIEB ---

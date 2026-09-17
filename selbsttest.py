@@ -2648,6 +2648,20 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
+# --- DIE SCHNITTSTELLE LAESST SICH AUCH HINTER EINEM PRAEFIX ANSEHEN ---
+#
+# FastAPI liefert unter /hilfe eine bedienbare Oberflaeche -- die
+# knappste Dokumentation, die nicht veralten kann. Im Cluster steht sie
+# hinter /api, weil Traefik das Praefix abschneidet. Ohne root_path holt
+# die Seite ihr Schema von "/openapi.json" statt "/api/openapi.json" und
+# bleibt leer; "Try it out" schickt an die falsche Adresse. Die
+# Schnittstelle war da und liess sich nicht ansehen.
+_apiq = _datei("api.py")
+pruef("die Schnittstelle kennt ihren Wurzelpfad",
+      "API_WURZELPFAD" in _apiq and "root_path=API_WURZELPFAD" in _apiq)
+pruef("und die Bedienoberflaeche bleibt erreichbar",
+      'docs_url="/hilfe"' in _apiq)
+
 # --- DAS ABBILD SAGT, AUS WELCHEM STAND ES GEBAUT WURDE ---
 #
 # Ausgerollt wird der wandernde Kennzeichner, und aus dessen Digest kam
