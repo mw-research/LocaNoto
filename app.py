@@ -2587,6 +2587,26 @@ if _bestand > 0:
                                      user_query, sonden=search_queries,
                                      zahlen=zahlen)
 
+                # EIN AUSGEFALLENER SUCHWEG WIRD GENANNT.
+                #
+                # Eine Antwort ohne Vektorsuche sieht aus wie jede
+                # andere: der Stichwortindex traegt sie, formuliert
+                # sauber, mit richtigen Fundstellen. In einer
+                # Installation war die Vektorsuche monatelang tot --
+                # die Vektoren lagen mit 2560 Dimensionen, das Modell
+                # liefert 4096 -- und von aussen war nichts zu sehen.
+                if zahlen.get("vektorausfall"):
+                    st.error(
+                        "**Die Vektorsuche hat für "
+                        + ", ".join(f"`{_r}`" for _r
+                                    in sorted(zahlen["vektorausfall"]))
+                        + " nicht geantwortet.** Diese Antwort stützt "
+                          "sich allein auf die Stichwortsuche und ist "
+                          "damit schlechter, als sie sein müsste. "
+                          "Grund: "
+                        + "; ".join(sorted(
+                            set(zahlen["vektorausfall"].values()))))
+
                 if treffer:
                     verfahren = ("Reranker" if reranker is not None
                                  else "Rangfolge-Fusion")

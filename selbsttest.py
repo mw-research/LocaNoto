@@ -2651,6 +2651,68 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
+# --- EIN AUSGEFALLENER SUCHWEG VERSCHWINDET NICHT ---
+#
+# Im Betrieb lagen die Vektoren einer Installation mit 2560
+# Dimensionen, waehrend das Modell 4096 liefert. Jede Vektorabfrage warf
+# InvalidArgumentError -- und wurde von "except Exception: continue"
+# verschluckt. Die Antworten kamen weiter, getragen allein vom
+# Stichwortindex, sauber formuliert und mit richtigen Fundstellen. Von
+# aussen sah die Anlage gesund aus. Seit dem Umzug.
+#
+# Hier wird genau das erzeugt: eine Sammlung mit anderer Dimension als
+# die Anfrage. Die Suche darf weiterlaufen -- das war die richtige
+# Absicht -- aber nicht mehr schweigen.
+_falscher_raum = "dimensionsprobe"
+raeume.anlegen(_falscher_raum, "Dimensionsprobe", mitglieder=["markus"])
+_falsche_sml = store.sammlung(raeume.sammlung(_falscher_raum))
+_ANDERE_DIM = DIM * 2
+store.schreibe(_falsche_sml, ["fremd_p1_c0"],
+               documents=["Ein Abschnitt mit fremder Dimension."],
+               metadatas=[{"file_name": "Fremd.pdf", "page": 1,
+                           "raum": _falscher_raum, "type": "text"}],
+               embeddings=[[0.5] * _ANDERE_DIM])
+
+_treffer_d, _zahlen_d = pipeline.suche(
+    [(_falscher_raum, _falsche_sml)], FakeEmb(), "modell",
+    ["Dimension"], "markus", 5, bewerter=bewerter)
+
+pruef("ein Suchweg mit falscher Dimension wird gemeldet",
+      _falscher_raum in (_zahlen_d.get("vektorausfall") or {}),
+      _zahlen_d.get("vektorausfall"))
+pruef("und der Grund steht dabei",
+      "dimension" in str(_zahlen_d.get("vektorausfall", {})).lower(),
+      _zahlen_d.get("vektorausfall"))
+
+# Und die Suche laeuft trotzdem: ein Raum, der nicht antwortet, darf die
+# anderen nicht mitreissen. Das war und bleibt richtig.
+#
+# Gefragt wird ausdruecklich der bekannte Bestand und nicht "alles, was
+# markus sieht" -- der Probenraum von eben gehoert ihm auch, und die
+# Pruefung haette den Ausfall gemeldet, den sie selbst angelegt hat.
+_gesunde = [(raeume.ALLGEMEIN,
+             store.sammlung(raeume.sammlung(raeume.ALLGEMEIN),
+                            anlegen=False))]
+_treffer_ok, _zahlen_ok = pipeline.suche(
+    _gesunde, FakeEmb(), "modell",
+    ["Pruefristen Kessel"], "markus", 5, bewerter=bewerter)
+pruef("ein gesunder Bestand meldet keinen Ausfall",
+      not _zahlen_ok.get("vektorausfall"), _zahlen_ok.get("vektorausfall"))
+
+# DIE BESTANDSLISTE NENNT DIE DIMENSION. Sie wird vor und nach jedem
+# Rollout gefahren und zaehlte nur Abschnitte -- die Zahl stimmte an
+# jedem Punkt, waehrend die Vektoren unbrauchbar waren.
+import bestandsliste as _bl
+
+pruef("die Bestandsliste liest die Dimension einer Sammlung",
+      _bl._dimension(_falsche_sml) == _ANDERE_DIM,
+      _bl._dimension(_falsche_sml))
+pruef("und die des gewachsenen Bestands",
+      _bl._dimension(store.sammlung(raeume.sammlung(raeume.ALLGEMEIN),
+                                    anlegen=False)) == DIM)
+
+raeume.entfernen(_falscher_raum)
+
 # --- JEDER SIEHT NUR SEINE EIGENEN TOKEN ---
 #
 # Bisher sah niemand ausser dem Verwalter, dass ueberhaupt ein Token auf
