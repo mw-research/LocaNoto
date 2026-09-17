@@ -2651,6 +2651,64 @@ pruef("ohne laufende Antwort ist nichts gesperrt",
 pruef("der Leistenblock benutzt die Sperre",
       "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
+# --- JEDER SIEHT NUR SEINE EIGENEN TOKEN ---
+#
+# Bisher sah niemand ausser dem Verwalter, dass ueberhaupt ein Token auf
+# seine Kennung ausgestellt ist. Ein Token traegt die Rechte seines
+# Besitzers -- wer nicht weiss, dass eines existiert, kann auch nicht
+# merken, dass es zu viele sind.
+#
+# Die Anzeige steht in app.py und laeuft hier nicht. Die Eigenschaft,
+# an der sie haengt, schon: auth.liste() gibt ALLE zurueck, und die
+# Trennung ist der Filter darauf. Der wird mit echten Token
+# durchgespielt.
+import auth as _auth
+
+# Ausdruecklich in den Wegwerfbestand, wie bei den anderen auch. Der
+# Pfad entsteht beim Import aus paths.CONFIG_DIR und zeigt hier schon
+# richtig -- ihn trotzdem zu setzen kostet nichts und schliesst aus,
+# dass dieser Test je an echte Token kommt.
+_auth.TOKEN_FILE = os.path.join(paths.CONFIG_DIR, "tokens.json")
+
+_t_markus = _auth.erzeuge("markus", "Masseningest")
+_t_anna = _auth.erzeuge("anna", "Laptop")
+pruef("ein Token kommt genau einmal heraus",
+      isinstance(_t_markus, str) and _t_markus != _t_anna)
+pruef("und weist seinen Besitzer aus",
+      _auth.pruefe(_t_markus) == "markus"
+      and _auth.pruefe(_t_anna) == "anna")
+
+
+def _meine(wer):
+    """Derselbe Filter wie in der Oberflaeche."""
+    return [(h, e) for h, e in _auth.liste() if e.get("benutzer") == wer]
+
+
+pruef("jeder sieht nur seine eigenen",
+      [e["bezeichnung"] for _h, e in _meine("markus")] == ["Masseningest"]
+      and [e["bezeichnung"] for _h, e in _meine("anna")] == ["Laptop"],
+      [(h[:6], e.get("benutzer")) for h, e in _auth.liste()])
+
+# Und der Widerruf trifft genau eines. Der volle Hashwert wird
+# uebergeben und nicht sein Anfang: auth.widerrufe trifft bei einem
+# mehrdeutigen Anfang absichtlich keinen.
+_h_anna = _meine("anna")[0][0]
+pruef("ein Widerruf trifft genau eines", _auth.widerrufe(_h_anna) == 1)
+pruef("und danach gilt es nicht mehr", _auth.pruefe(_t_anna) is None)
+pruef("das fremde bleibt unberuehrt", _auth.pruefe(_t_markus) == "markus")
+_auth.widerrufe(_meine("markus")[0][0])
+
+# Die Verdrahtung: der Filter steht auch wirklich in der Oberflaeche,
+# und angelegt wird dort NICHT -- das bleibt beim Verwalter, wie schon
+# im Terminal.
+_appq = _datei("app.py")
+pruef("die Oberflaeche filtert auf die eigene Kennung",
+      'if _e.get("benutzer") == st.session_state["username"]' in _appq)
+# Ohne Klammer gesucht: eine blosse Referenz auf die Funktion liesse
+# sich anderswo aufrufen, und die erste Fassung dieser Pruefung suchte
+# den Aufruf. Die Gegenprobe kam prompt durch.
+pruef("und legt selbst keine an", "auth.erzeuge" not in _appq)
+
 # --- ZUGANGSTOKEN IN DER OBERFLAECHE ---
 #
 # Die Mechanik lag fertig in auth.py und wurde nur vom Terminal
