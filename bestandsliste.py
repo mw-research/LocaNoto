@@ -19,6 +19,29 @@ import sys
 import paths
 
 
+def _dimension(sammlung):
+    """Wie viele Zahlen ein Vektor dieser Sammlung hat. None, wenn leer.
+
+    Ohne Modellserver: gelesen wird ein einziger vorhandener Vektor.
+    Das ist die Angabe, die beim Umzug gefehlt hat -- die Abschnitte
+    kamen vollzaehlig an, und niemand fragte, ob sie zum Modell der
+    neuen Installation passen.
+    """
+    try:
+        res = sammlung.get(limit=1, include=["embeddings"])
+    except Exception:
+        return None
+    # KEIN Wahrheitswert auf dem Ergebnis: Chroma liefert ein
+    # numpy-Array, und dessen Wahrheitswert ist mehrdeutig. Die erste
+    # Fassung schrieb "(res.get(...) or [None])[0]" und warf genau
+    # daran -- und ein zu weiter Fangarm verschluckte es. Also derselbe
+    # Fehler, den dieser Umbau abstellt, im Umbau selbst.
+    e = res.get("embeddings")
+    if e is None or len(e) == 0:
+        return None
+    return len(e[0])
+
+
 def zaehle_ordner(pfad):
     """(Dateien, Bytes). (0, 0), wenn es ihn nicht gibt."""
     if not os.path.isdir(pfad):
@@ -50,6 +73,7 @@ def main():
         import store
         import raeume
         namen = sorted(n for n in store.namen() if n.startswith("raum_"))
+        masse = []
         if not namen:
             print("  (keine Sammlungen)")
         for name in namen:
@@ -66,8 +90,37 @@ def main():
                 bez = raeume.bezeichnung(kennung)
             except Exception:
                 pass
+            # DIE DIMENSION GEHOERT DANEBEN.
+            #
+            # Diese Liste wird vor und nach jedem Rollout gefahren und
+            # zaehlte Abschnitte. In einer Installation lagen sie mit
+            # 2560 Dimensionen, waehrend das Modell 4096 liefert: jede
+            # Vektorabfrage schlug fehl, die Antworten kamen weiter aus
+            # dem Stichwortindex, und die Zahl stimmte an jedem Punkt.
+            # Eine Zahl beweist, dass etwas liegt -- nicht, dass es
+            # passt.
+            masse.append((kennung, _dimension(sml)))
             print(f"  {kennung:<24} {n:>8}   {bez}")
         print(f"  {'SUMME':<24} {gesamt:>8}")
+
+        _dims = {d for _k, d in masse if d}
+        if _dims:
+            print("\nDimension der Vektoren je Raum")
+            for _k, _d in masse:
+                print(f"  {_k:<24} {_d if _d else '(leer)'}")
+            if len(_dims) > 1:
+                print("\n  >>> ACHTUNG: die Raeume haben VERSCHIEDENE "
+                      "Dimensionen.")
+                print("      Wer aus einem anderen Bestand uebernommen "
+                      "wurde, traegt die Vektoren")
+                print("      seines alten Modells. Fuer diese Raeume "
+                      "schlaegt JEDE Vektorabfrage")
+                print("      fehl -- die Suche laeuft dann allein ueber "
+                      "den Stichwortindex, und")
+                print("      von aussen sieht das aus wie eine normale "
+                      "Antwort.")
+                print("      Abhilfe: die betroffenen Dokumente neu "
+                      "einlesen.")
     except Exception as e:
         print(f"  Sammlungen nicht lesbar: {type(e).__name__}: {e}")
 

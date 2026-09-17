@@ -234,14 +234,29 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_,
     geliefert haette.
     """
     je_sonde = [[] for _ in vektoren]
+    ausfaelle = {}
     for raum, sml in paare_sammlungen:
         try:
             res = sml.query(query_embeddings=vektoren, n_results=breit,
                             where=filter_,
                             include=["documents", "metadatas", "distances"])
-        except Exception:
+        except Exception as e:
             # Ein Raum, dessen Sammlung gerade nicht antwortet, darf die
-            # Suche in den anderen nicht mitnehmen.
+            # Suche in den anderen nicht mitnehmen -- diese Absicht war
+            # richtig und bleibt.
+            #
+            # FALSCH WAR, dass es danach niemand erfuhr. In einer
+            # Installation lagen die Vektoren mit 2560 Dimensionen,
+            # waehrend das Modell 4096 liefert: jede Vektorabfrage warf,
+            # und die Antworten kamen weiter -- getragen allein vom
+            # Stichwortindex, sauber formuliert, mit richtigen
+            # Fundstellen. Von aussen sah die Anlage gesund aus. Seit
+            # dem Umzug.
+            #
+            # Ein voruebergehender Aussetzer und ein dauerhafter
+            # Strukturfehler sahen gleich aus, naemlich nach gar nichts.
+            # Jetzt wird gezaehlt.
+            ausfaelle[raum] = f"{type(e).__name__}: {e}"
             continue
         for i in range(len(vektoren)):
             # Aufschliessen, sobald die Treffer feststehen -- und nicht
@@ -259,7 +274,8 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_,
                 meta = dict(m or {})
                 meta["raum"] = raum
                 je_sonde[i].append((d, t, meta))
-    return [sorted(l, key=lambda x: x[0])[:breit] for l in je_sonde]
+    return ([sorted(l, key=lambda x: x[0])[:breit] for l in je_sonde],
+            ausfaelle)
 
 
 def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
@@ -272,6 +288,12 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     Rueckgabe: (treffer, zahlen). treffer ist eine Liste aus
     {"text", "meta"} in der Reihenfolge der Rangfolge; zahlen nennt
     Kandidaten und Ranglisten fuer die Anzeige.
+
+    zahlen["vektorausfall"] nennt die Raeume, deren Vektorsuche nicht
+    antworten konnte, samt Grund. Leer heisst: alle wurden gefragt. Das
+    steht dort, weil eine Antwort ohne Vektorsuche aussieht wie eine
+    gewoehnliche Antwort -- und in einer Installation monatelang genau
+    so aussah.
 
     Loest ValueError aus, wenn sich keine einzige Sonde vektorisieren
     laesst -- dann ist der Embedding-Endpunkt nicht erreichbar, und eine
@@ -333,9 +355,10 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     ranglisten = []
 
     # A. VEKTORSUCHE -- je Raum eine Abfrage, danach zusammengefuehrt
-    for i, liste_roh in enumerate(_vektortreffer(
-            paare_sammlungen, [v for _, v in paare], breit,
-            _where(dateien), benutzer)):
+    _vektorlisten, _vektorausfall = _vektortreffer(
+        paare_sammlungen, [v for _, v in paare], breit,
+        _where(dateien), benutzer)
+    for i, liste_roh in enumerate(_vektorlisten):
         probe = paare[i][0]
         liste = [{"text": t, "meta": m, "probe": probe}
                  for _d, t, m in liste_roh]
@@ -361,7 +384,10 @@ def suche(paare_sammlungen, embed_client, embed_modell, sonden_liste,
     _merke("stichwortsuche")
     zahlen = {"kandidaten": sum(len(l) for l in ranglisten),
               "ranglisten": len(ranglisten),
-              "zeiten": _zeiten}
+              "zeiten": _zeiten,
+              # Welche Raeume die Vektorsuche nicht beantworten konnte.
+              # Leer heisst: alle wurden gefragt.
+              "vektorausfall": _vektorausfall}
 
     if not ranglisten:
         return [], zahlen
