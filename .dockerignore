@@ -43,6 +43,11 @@ venv/
 __pycache__/
 *.pyc
 *.log
+# Auch die Ingest-Protokolle. Sie heissen log_*.txt -- so steht es in
+# .gitignore --, und "*.log" trifft sie nicht. Die Werkbank baut aus
+# einem sauberen Auszug und sah sie nie; ein LOKALER Bau haette sie
+# eingebacken, samt der Dokumentnamen, die darin protokolliert sind.
+log_*.txt
 *.tmp
 
 # Sicherungen. Sie landen erfahrungsgemaess im Repo-Ordner, weil man sie
