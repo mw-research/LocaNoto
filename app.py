@@ -25,6 +25,7 @@ import sicherheit
 import store
 import auth
 import aufnehmen
+import mcp
 from aufnehmen import (raum_sammlung, _alle_raum_sammlungen,
                        _gehoert_anderem_raum,
                        process_uploaded_pdf)
@@ -2408,6 +2409,53 @@ if _bestand > 0:
                                 gegeben.add(schluessel)
                                 st.rerun()
 
+            # --- ENTWUERFE, DIE AUF EINEN MENSCHEN WARTEN ---
+            #
+            # Ein Werkzeug, das etwas verschickt, wird nicht ausgefuehrt,
+            # sondern vorgelegt. Erst der Klick hier schickt es los.
+            # Welche Aufrufe das sind, entscheidet mcp.braucht_bestaetigung:
+            # ohne ausdrueckliche Freischaltung des Postfachs jeder.
+            for _ei, _entw in enumerate(msg.get("entwuerfe") or []):
+                _eschl = f"entw_{i}_{_ei}"
+                if _eschl in st.session_state.get("_gesendet", set()):
+                    st.success(f"Gesendet: {_entw['werkzeug']}")
+                    continue
+                with st.expander(
+                        f"\u270d\ufe0f Entwurf: {_entw['werkzeug']} "
+                        f"({_entw['server']}) — wartet auf dich",
+                        expanded=True):
+                    for _k, _w in (_entw.get("argumente") or {}).items():
+                        st.markdown(f"**{_k}**")
+                        st.code(str(_w), language="text")
+                    _s1, _s2 = st.columns(2)
+                    with _s1:
+                        if st.button("Senden", key=f"snd_{_eschl}",
+                                     use_container_width=True):
+                            _vb = mcp.verbinde(
+                                st.session_state.get("_postfach_kopf"))
+                            try:
+                                _erg = _vb[_entw["server"]].rufe(
+                                    _entw["werkzeug"], _entw["argumente"])
+                                st.session_state.setdefault(
+                                    "_gesendet", set()).add(_eschl)
+                                st.success(str(_erg)[:300])
+                            except Exception as e:
+                                st.error(f"{type(e).__name__}: {e}")
+                            finally:
+                                for _v in _vb.values():
+                                    try:
+                                        _v.schliesse()
+                                    except Exception:
+                                        pass
+                            time.sleep(1)
+                            st.rerun()
+                    with _s2:
+                        if st.button("Verwerfen", key=f"vrw_{_eschl}",
+                                     use_container_width=True):
+                            st.session_state.setdefault(
+                                "_gesendet", set()).add(_eschl)
+                            st.rerun()
+
             # --- QUELLEN DAUERHAFT ANZEIGEN ---
             if "sources" in msg and msg["sources"]:
                 st.markdown("---")
@@ -2759,13 +2807,47 @@ if _bestand > 0:
                     else:
                         st.write("Keine Chunks gefunden.")
 
+                # --- 3b. WERKZEUGE ---
+                #
+                # Ist ein Werkzeugserver eingerichtet, darf das Modell
+                # vor der Antwort nachschlagen -- etwa in einem
+                # Postfach. Ohne Server passiert hier nichts: kein
+                # Modellaufruf, keine Werkzeugliste, kein Zeitverlust.
+                #
+                # Die Anmeldedaten kommen aus dem Sitzungszustand und
+                # nur von dort. Sie stehen weder in der Konfiguration
+                # noch auf der Platte.
+                _system = pipeline.systemprompt(dynamic_context,
+                                                aktives_preset)
+                _zusatz, _entwuerfe = [], []
+                if mcp.eingerichtet():
+                    _wmelder = st.empty()
+                    _verb = mcp.verbinde(
+                        st.session_state.get("_postfach_kopf"))
+                    try:
+                        _zusatz, _entwuerfe = pipeline.werkzeuglauf(
+                            chat_client, chat_model, _system,
+                            st.session_state.messages, _verb,
+                            fortschritt=lambda t: _wmelder.caption(
+                                "\U0001f527 " + str(t)))
+                    except Exception as e:
+                        # Ein Postfach, das klemmt, darf die Frage nach
+                        # einem Dokument nicht mitnehmen.
+                        st.warning(f"Werkzeuge nicht verfügbar: "
+                                   f"{type(e).__name__}: {e}")
+                    finally:
+                        for _v in _verb.values():
+                            try:
+                                _v.schliesse()
+                            except Exception:
+                                pass
+                    _wmelder.empty()
+
                 # --- 4. ANTWORT ---
                 answer = _strom_zeichnen(
                     pipeline.antwort(
-                        chat_client, chat_model,
-                        pipeline.systemprompt(dynamic_context,
-                                              aktives_preset),
-                        st.session_state.messages),
+                        chat_client, chat_model, _system,
+                        st.session_state.messages, zusatz=_zusatz),
                     st.session_state.current_chat_id,
                     list(st.session_state.messages))
 
@@ -2779,6 +2861,10 @@ if _bestand > 0:
                     # sieht nicht, wonach gesucht wurde.
                     "sonden": search_queries,
                     "zahlen": zahlen,
+                    # Was verschickt haette werden koennen und nicht
+                    # ausgefuehrt wurde. Es haengt an der Nachricht,
+                    # damit es einen Neuaufbau der Seite ueberlebt.
+                    "entwuerfe": _entwuerfe,
                 })
                 save_chat(st.session_state.current_chat_id,
                           st.session_state.messages)
