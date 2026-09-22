@@ -1,16 +1,12 @@
 # Lizenzen der Abhängigkeiten
 
-Erzeugt aus `requirements.txt` gegen die Angaben von PyPI — abgefragt
-für **genau die gepinnte Fassung**, nicht für das, was zufällig
-installiert ist. Eine Aufstellung, die eine andere Fassung beschreibt
-als die im Abbild, ist keine.
+160 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
+gelten für die jeweils gepinnte Fassung.
 
-160 Pakete. **LocaNoto selbst steht unter AGPL-3.0** (siehe
-`LICENSE`) — aus dem Grund, der weiter unten steht.
+LocaNoto selbst steht unter AGPL-3.0 (siehe `LICENSE`).
 
-**Das ist eine technische Aufstellung, keine Rechtsauskunft.** Sie
-sagt, welche Lizenz ein Paket angibt, und gruppiert danach. Ob eine
-Kombination zulässig ist, entscheidet das nicht.
+Diese Aufstellung nennt die Lizenzangabe je Paket und gruppiert danach.
+Sie ist keine Rechtsauskunft.
 
 ## AGPL (starkes Copyleft) — 1
 
@@ -206,56 +202,40 @@ Kombination zulässig ist, entscheidet das nicht.
 
 ## Zwei Punkte, die eine Prüfung verdienen
 
-### pymupdf steht unter AGPL
+### pymupdf
 
-`pymupdf` ist dual lizenziert: **GNU AFFERO GPL 3.0** oder eine
-kommerzielle Lizenz von Artifex. Es trägt das Lesen von PDF, die
-Tabellenerkennung und die Seitendarstellung und wird in acht Dateien
-benutzt — es ist kein Beiwerk, das sich beiläufig austauschen ließe.
+`pymupdf` ist dual lizenziert: GNU Affero GPL 3.0 oder eine kommerzielle
+Lizenz von Artifex. Es wird in acht Dateien benutzt und trägt das Lesen
+von PDF, die Tabellenerkennung und die Seitendarstellung.
 
-Die AGPL unterscheidet sich von der GPL in genau dem Punkt, der hier
-zutrifft: sie erfasst auch die Bereitstellung **über ein Netz**. Wer
-eine Anwendung betreibt, die AGPL-Code einbindet, und sie anderen über
-das Netz zugänglich macht, löst die Pflichten der AGPL aus — auch ohne
-die Software weiterzugeben.
+Die AGPL erfasst auch die Bereitstellung über ein Netz: wer eine
+Anwendung mit AGPL-Bestandteilen über das Netz zugänglich macht, muss
+den Nutzern den Quelltext anbieten, auch ohne die Software
+weiterzugeben.
 
-Das betrifft diese Anlage doppelt: sie wird über Browser und
-HTTP-Schnittstelle bereitgestellt, und die betriebsspezifischen
-Fassungen liegen in nicht-öffentlichen Ablagen.
+LocaNoto wird über Browser und HTTP-Schnittstelle bereitgestellt und
+steht deshalb ebenfalls unter AGPL-3.0.
 
-**Entschieden wurde: LocaNoto steht selbst unter AGPL-3.0.** Damit ist
-die Angabe stimmig — wer die Anwendung nimmt, nimmt sie zu Bedingungen,
-unter denen sie auch laufen kann.
+Was daraus folgt:
 
-Was das bedeutet:
+* Wer LocaNoto verändert und das Ergebnis als Netzdienst anbietet, muss
+  den Quelltext seiner Fassung unter AGPL verfügbar machen.
+* Dokumente, Prompts, Glossar und Konfiguration sind davon nicht
+  betroffen. Sie sind Daten des Betreibers, kein Programmtext.
+* Für die Benutzung der Anwendung entstehen keine Pflichten.
 
-* Wer darauf aufbaut und das Ergebnis als Netzdienst anbietet, muss
-  seinen Quelltext ebenfalls unter AGPL verfügbar machen. Für ein
-  öffentlich gefördertes Vorhaben ist das der Sinn der Sache.
-* Es betrifft **nicht** die Dokumente, nicht die Prompts, nicht das
-  Glossar und keine Konfiguration. Das sind Daten des Betreibers, kein
-  Programmtext.
-* Wer die Anwendung nur benutzt, muss gar nichts offenlegen.
+### NVIDIA-Pakete in der CPU-Variante
 
-Die beiden anderen Wege wären gewesen: eine kommerzielle Lizenz bei
-Artifex, oder `pymupdf` durch eine freizügig lizenzierte Bibliothek zu
-ersetzen — technisch der teuerste, weil Tabellenerkennung und
-Seitendarstellung daran hängen.
-
-### Die CPU-Variante enthält weiterhin NVIDIA-Pakete
-
-Der Bau filtert für `NUR_CPU=1` alles heraus, was mit `nvidia-`
-beginnt, dazu `torch`, `torchvision` und `triton`. Drei Pakete tragen
-aber NVIDIA-Lizenzen, ohne so zu heißen:
+Der Bau filtert für `NUR_CPU=1` alles heraus, was mit `nvidia-` beginnt,
+dazu `torch`, `torchvision` und `triton`. Drei Pakete mit
+NVIDIA-Lizenzen tragen kein solches Präfix und bleiben deshalb auch in
+der schlanken Fassung enthalten:
 
 * `cuda-bindings`
 * `cuda-pathfinder`
 * `cuda-toolkit`
 
-Sie bleiben damit auch in der schlanken Fassung — und das ist die,
-die als öffentliches Abbild abrufbar ist. Wer die CPU-Variante baut,
-um proprietäre Bestandteile zu vermeiden, erreicht das derzeit nicht
-vollständig.
+Die schlanke Fassung ist die, die als öffentliches Abbild abrufbar ist.
 
 ---
 
@@ -265,6 +245,5 @@ vollständig.
 python lizenzen.py
 ```
 
-Fragt PyPI für jede gepinnte Fassung und schreibt diese Datei neu.
-Der Selbsttest besteht darauf, dass jedes gepinnte Paket hier
-vorkommt — ein neues fällt damit auf, statt still zu fehlen.
+Fragt PyPI für jede gepinnte Fassung ab und schreibt diese Datei neu.
+Der Selbsttest prüft, dass jedes gepinnte Paket hier aufgeführt ist.

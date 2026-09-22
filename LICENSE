@@ -1,22 +1,15 @@
-GNU AFFERO GENERAL PUBLIC LICENSE Version 3
-
-LocaNoto -- durchsucht Fachdokumente und beantwortet Fragen dazu.
+LocaNoto
 Copyright (C) 2026 Markus Wilhelm (mw-research)
 
+Lizenz: GNU Affero General Public License, Version 3 (AGPL-3.0).
+Der vollstaendige Lizenztext steht unten.
+
 Dieses Programm ist freie Software: Sie koennen es weitergeben und/oder
-veraendern unter den Bedingungen der GNU Affero General Public License,
-Version 3, wie von der Free Software Foundation veroeffentlicht.
+veraendern unter den Bedingungen der AGPL-3.0, wie von der Free Software
+Foundation veroeffentlicht. Die Weitergabe erfolgt ohne jede
+Gewaehrleistung.
 
-Die Weitergabe erfolgt in der Hoffnung, dass es nuetzlich ist, aber OHNE
-JEDE GEWAEHRLEISTUNG. Einzelheiten stehen im Lizenztext unten.
-
-WARUM AGPL UND NICHT MIT: diese Anwendung bindet pymupdf ein, das unter
-AGPL-3.0 steht und das Lesen von PDF, die Tabellenerkennung und die
-Seitendarstellung traegt. Eine MIT-Angabe auf einem Werk, das ohne
-AGPL-Code nicht laeuft, beschreibt etwas, das so nicht lauffaehig ist.
-
-Die vollstaendige Aufstellung aller Abhaengigkeiten samt Lizenzen steht
-in LIZENZEN.md.
+Abhaengigkeiten und deren Lizenzen: siehe LIZENZEN.md.
 
 --------------------------------------------------------------------
 
