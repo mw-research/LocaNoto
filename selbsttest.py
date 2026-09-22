@@ -63,8 +63,13 @@ if not _ablage.endswith(paths.CHROMA_DIR):
     sys.exit(2)
 
 ok = []
+gescheitert = []
+
+
 def pruef(was, bedingung, zusatz=""):
     ok.append(bool(bedingung))
+    if not bedingung:
+        gescheitert.append(f"{was}{'  ' + str(zusatz) if zusatz else ''}")
     print(f"  {'OK  ' if bedingung else 'FEHL'} {was}{'  ' + str(zusatz) if zusatz else ''}")
 
 def _fremd_scheitert(roh):
@@ -3023,6 +3028,13 @@ pruef("jede Variable erreicht auch den Container (pruefe_env.py)",
 
 
 print()
+# Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
+# "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein
+# Fehlschlag durchgerutscht.
+if gescheitert:
+    print(f"--- {len(gescheitert)} FEHLGESCHLAGEN ---")
+    for _g in gescheitert:
+        print(f"    {_g}")
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
 shutil.rmtree(tmp, ignore_errors=True)
 sys.exit(0 if all(ok) else 1)
