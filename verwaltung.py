@@ -33,6 +33,7 @@ import geheim
 import hintergrund
 import keyword_index
 import listenquellen
+import mcp
 import notzugang
 import owncloud
 import paths
@@ -502,6 +503,108 @@ def zeichne(*, is_admin,
                         _leeren()
                         time.sleep(1)
                         st.rerun()
+
+        # --- POSTFAECHER ---
+        #
+        # Ein Werkzeugserver stellt dem Modell Funktionen bereit, die es
+        # waehrend einer Antwort aufrufen kann. Eingerichtet wird hier
+        # statt in einer Datei von Hand.
+        with st.expander("📬 Postfächer (Werkzeugserver)"):
+            _pf = mcp.lies_konfiguration()
+            if not _pf:
+                st.caption("Kein Postfach eingerichtet. Ohne eines bleibt "
+                           "der Werkzeugkreis aus — keine Werkzeugliste, "
+                           "kein zusätzlicher Modellaufruf.")
+            for _name, _a in sorted(_pf.items()):
+                _art = "persönlich" if _a.get("persoenlich") else "Funktion"
+                _wie = ("antwortet selbständig" if _a.get("automatisch")
+                        else "legt Entwürfe vor")
+                _z1, _z2 = st.columns([4, 1])
+                with _z1:
+                    st.markdown(f"**{_name}** · {_art} · {_wie}")
+                    st.caption(
+                        f"{_a.get('url') or ' '.join(_a.get('befehl') or [])}"
+                        f" · Anmeldung: {mcp.anmeldeart(_name)}"
+                        + ("" if not _a.get("automatisch") else
+                           (" · mit Hinweis" if mcp.hinweis_an(_name)
+                            else " · OHNE Hinweis")))
+                with _z2:
+                    if st.button("🗑️", key=f"pf_weg_{_name}",
+                                 help="Entfernen", disabled=_antwortet):
+                        _ok, _m = mcp.entferne_postfach(_name)
+                        (st.info if _ok else st.error)(_m)
+                        _leeren()
+                        time.sleep(1)
+                        st.rerun()
+                if st.button("Werkzeuge abfragen", key=f"pf_test_{_name}",
+                             disabled=_antwortet):
+                    _v = mcp.verbinde(
+                        st.session_state.get("_postfach_koepfe"))
+                    try:
+                        _w = _v[_name].werkzeuge()
+                        st.success(f"{len(_w)} Werkzeuge")
+                        for _x in _w:
+                            _marke = ("**[SENDET]**"
+                                      if mcp.sendet(_name, _x.get("name"))
+                                      else "[liest]")
+                            st.markdown(f"- {_marke} `{_x.get('name')}` — "
+                                        f"{_x.get('description', '')[:90]}")
+                    except Exception as e:
+                        st.error(f"{type(e).__name__}: {e}")
+                    finally:
+                        for _vv in _v.values():
+                            try:
+                                _vv.schliesse()
+                            except Exception:
+                                pass
+                st.markdown("---")
+
+            # --- anlegen ---
+            _pk = "postfach_neu"
+            with st.form(f"postfach_{_feldschluessel(_pk, 'runde')}"):
+                st.markdown("**Neues Postfach**")
+                _v_wahl = st.selectbox(
+                    "Art des Servers", sorted(mcp.VORLAGEN),
+                    format_func=lambda v: mcp.VORLAGEN[v]["beschreibung"],
+                    key=_feldschluessel(_pk, "vorlage"))
+                _v_name = st.text_input(
+                    "Name", key=_feldschluessel(_pk, "name"),
+                    help="Erscheint im Werkzeugnamen, den das Modell sieht. "
+                         "Kurz und sprechend, etwa 'info' oder 'markus'.")
+                _v_ziel = st.text_input(
+                    "Adresse oder Befehl", key=_feldschluessel(_pk, "ziel"),
+                    help="Bei HTTP die Adresse des Servers, bei einem "
+                         "lokalen Prozess der Startbefehl.")
+                _v_pers = st.radio(
+                    "Postfach", ["persönlich", "Funktionspostfach"],
+                    key=_feldschluessel(_pk, "pers"),
+                    help="Ein persönliches Postfach antwortet nie "
+                         "selbständig — jede Nachricht wird vorgelegt.")
+                st.caption("Nur für Funktionspostfächer:")
+                _v_auto = st.checkbox(
+                    "darf selbständig antworten",
+                    key=_feldschluessel(_pk, "auto"))
+                _v_hin = st.checkbox(
+                    "Hinweis unter automatische Antworten setzen",
+                    value=True, key=_feldschluessel(_pk, "hin"))
+                _v_htext = st.text_input(
+                    "Text des Hinweises", key=_feldschluessel(_pk, "htext"),
+                    placeholder=mcp.HINWEIS_VORGABE)
+                _pf_ab = st.form_submit_button(
+                    "Anlegen", use_container_width=True, disabled=_antwortet)
+            if _pf_ab:
+                _pers = _v_pers == "persönlich"
+                _ok, _m = mcp.lege_an(
+                    _v_name, _v_wahl, _v_ziel, persoenlich=_pers,
+                    automatisch=bool(_v_auto),
+                    hinweis_anhaengen=bool(_v_hin),
+                    hinweis=(_v_htext or None))
+                (st.success if _ok else st.error)(_m)
+                if _ok:
+                    _felder_leeren(_pk)
+                    _leeren()
+                    time.sleep(1)
+                    st.rerun()
 
         with st.expander("🔐 Verschlüsselung"):
             st.caption(f"Zustand: **{geheim.beschreibung()}**")

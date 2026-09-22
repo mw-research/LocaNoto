@@ -2197,15 +2197,15 @@ pruef("es gibt einen wechselnden Feldschluessel",
       "def _feldschluessel(" in _app)
 pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 
-# Sechs Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
-# Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken.
-# Einmal abziehen fuer die Definition selbst.
+# Sieben Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
+# Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken,
+# Postfach. Einmal abziehen fuer die Definition selbst.
 #
 # Die Namen stehen hier und nicht nur die Zahl: schlaegt die Pruefung
 # fehl, soll sie sagen, WELCHES Formular fehlt, statt nur dass eines
 # fehlt.
 _aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
-pruef("sechs Formulare werden geleert", _aufrufe == 6, _aufrufe)
+pruef("sieben Formulare werden geleert", _aufrufe == 7, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
@@ -2865,6 +2865,45 @@ pruef("und die Bedienoberflaeche bleibt erreichbar",
 _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
+
+# --- ANMELDEDATEN GEHEN NUR AN IHR EIGENES POSTFACH ---
+#
+# verbinde() nahm frueher EINEN Kopf und gab ihn an jeden Server weiter.
+# Bei einem persoenlichen Postfach und mehreren Funktionspostfaechern
+# waere damit das Passwort des Nutzers an jeden eingerichteten Server
+# gegangen -- auch an die, mit denen er nichts zu tun hat.
+import json as _js0
+import mcp as _mcp0
+
+_mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_koepfe.json")
+_js0.dump({"persoenlich": {"transport": "http", "url": "http://x",
+                           "anmeldung": "basic"},
+           "info": {"transport": "http", "url": "http://y",
+                    "anmeldung": "keine"}},
+          io.open(_mcp0.KONFIG, "w", encoding="utf-8"))
+
+pruef("ein persoenliches Postfach verlangt eine Anmeldung",
+      _mcp0.braucht_anmeldung("persoenlich"))
+pruef("ein Funktionspostfach mit Dienstkonto nicht",
+      not _mcp0.braucht_anmeldung("info"))
+
+_kopf = _mcp0.kopf_fuer("persoenlich", "markus", "geheim")
+pruef("Benutzer und Passwort werden zu einem Basic-Kopf",
+      _kopf.get("Authorization", "").startswith("Basic "), _kopf)
+
+_vb0 = _mcp0.verbinde({"persoenlich": _kopf})
+pruef("der Kopf erreicht sein Postfach",
+      _vb0["persoenlich"].zusatz_kopf == _kopf)
+pruef("und KEIN anderes",
+      _vb0["info"].zusatz_kopf == {}, _vb0["info"].zusatz_kopf)
+
+# Und die Oberflaeche reicht eine Zuordnung durch, keinen einzelnen Kopf.
+pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
+      '_postfach_koepfe' in _datei("app.py")
+      and '_postfach_kopf"' not in _datei("app.py"))
+
+os.remove(_mcp0.KONFIG)
+_mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
 # --- DER HINWEIS UNTER AUTOMATISCHEN ANTWORTEN IST ABSCHALTBAR ---
 #

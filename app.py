@@ -2432,7 +2432,7 @@ if _bestand > 0:
                         if st.button("Senden", key=f"snd_{_eschl}",
                                      use_container_width=True):
                             _vb = mcp.verbinde(
-                                st.session_state.get("_postfach_kopf"))
+                                st.session_state.get("_postfach_koepfe"))
                             try:
                                 _erg = _vb[_entw["server"]].rufe(
                                     _entw["werkzeug"], _entw["argumente"])
@@ -2823,7 +2823,7 @@ if _bestand > 0:
                 if mcp.eingerichtet():
                     _wmelder = st.empty()
                     _verb = mcp.verbinde(
-                        st.session_state.get("_postfach_kopf"))
+                        st.session_state.get("_postfach_koepfe"))
                     try:
                         _zusatz, _entwuerfe = pipeline.werkzeuglauf(
                             chat_client, chat_model, _system,

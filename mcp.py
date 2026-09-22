@@ -39,6 +39,7 @@ ANMELDEDATEN STEHEN NICHT IN DIESER DATEI, wenn sie einem Menschen
 gehoeren. Sie werden je Aufruf mitgegeben und leben nur so lange wie
 die Sitzung -- siehe zusatz_kopf in verbinde().
 """
+import base64
 import json
 import os
 import subprocess
@@ -74,6 +75,85 @@ def lies_konfiguration():
     except (OSError, ValueError):
         return {}
     return daten if isinstance(daten, dict) else {}
+
+
+# --- VORLAGEN ---
+#
+# Damit ein Verwalter auswaehlt statt eine Datei zu schreiben. Jede
+# Vorlage setzt, was fuer diese Art Server ueblich ist; Name, Adresse
+# und die Regeln zum Senden kommen aus der Maske dazu.
+VORLAGEN = {
+    "exchange": {
+        "beschreibung": "Exchange/OWA über einen MCP-Server (intern)",
+        "angaben": {"transport": "http", "anmeldung": "basic",
+                    "textfeld": "body",
+                    "sendet": ["antwort_senden", "mail_senden"]},
+    },
+    "http": {
+        "beschreibung": "MCP-Server über HTTP",
+        "angaben": {"transport": "http", "anmeldung": "keine"},
+    },
+    "http_token": {
+        "beschreibung": "MCP-Server über HTTP, Anmeldung mit Token",
+        "angaben": {"transport": "http", "anmeldung": "bearer"},
+    },
+    "stdio": {
+        "beschreibung": "lokaler Prozess (stdio)",
+        "angaben": {"transport": "stdio", "anmeldung": "keine"},
+    },
+}
+
+
+def schreibe_konfiguration(daten):
+    """Schreibt mcp.json. Leer heisst: Datei weg, nichts eingerichtet."""
+    os.makedirs(os.path.dirname(KONFIG), exist_ok=True)
+    if not daten:
+        if os.path.exists(KONFIG):
+            os.remove(KONFIG)
+        return True, "Kein Postfach mehr eingerichtet."
+    with open(KONFIG, "w", encoding="utf-8") as f:
+        json.dump(daten, f, ensure_ascii=False, indent=1)
+    return True, f"{len(daten)} Postfach/Postfaecher eingerichtet."
+
+
+def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
+    """Ein Postfach aus einer Vorlage. Rueckgabe: (ok, Meldung).
+
+    ziel ist die Adresse (http) oder der Befehl (stdio).
+    """
+    name = str(name or "").strip()
+    if not name:
+        return False, "Kein Name angegeben."
+    if vorlage not in VORLAGEN:
+        return False, f"Unbekannte Vorlage: {vorlage}"
+    daten = lies_konfiguration()
+    if name in daten:
+        return False, f"'{name}' gibt es bereits."
+    angaben = dict(VORLAGEN[vorlage]["angaben"])
+    if angaben["transport"] == "stdio":
+        angaben["befehl"] = [t for t in str(ziel).split() if t]
+    else:
+        angaben["url"] = str(ziel).strip()
+        if not angaben["url"]:
+            return False, "Keine Adresse angegeben."
+    # Ein persoenliches Postfach antwortet NIE von selbst. Die
+    # Freischaltung gibt es nur fuer Funktionspostfaecher -- so war es
+    # besprochen, und so steht es hier.
+    angaben["persoenlich"] = bool(persoenlich)
+    if persoenlich:
+        weitere.pop("automatisch", None)
+    angaben.update({k: v for k, v in weitere.items() if v is not None})
+    daten[name] = angaben
+    return schreibe_konfiguration(daten)
+
+
+def entferne_postfach(name):
+    daten = lies_konfiguration()
+    if name not in daten:
+        return False, f"'{name}' ist nicht eingerichtet."
+    del daten[name]
+    schreibe_konfiguration(daten)
+    return True, f"'{name}' entfernt."
 
 
 class Fehler(Exception):
@@ -244,15 +324,56 @@ class Verbindung:
         self._bereit = False
 
 
-def verbinde(zusatz_kopf=None):
+ANMELDUNGEN = {
+    "keine": "keine Anmeldung -- der Server regelt es selbst",
+    "basic": "Benutzer und Passwort (Authorization: Basic)",
+    "bearer": "ein Token (Authorization: Bearer)",
+}
+
+
+def anmeldeart(server):
+    """Wie dieser Server die Anmeldedaten erwartet."""
+    art = str(_angaben(server).get("anmeldung") or "keine")
+    return art if art in ANMELDUNGEN else "keine"
+
+
+def braucht_anmeldung(server):
+    """Muss ein Mensch fuer diesen Server etwas eingeben?"""
+    return anmeldeart(server) != "keine"
+
+
+def kopf_fuer(server, benutzer="", geheimnis=""):
+    """Der Kopf, den die Anmeldedaten dieses Servers ergeben.
+
+    Gebaut wird er hier und nicht in der Oberflaeche: welche Form ein
+    Server erwartet, ist eine Eigenschaft des Servers, und sie steht in
+    seiner Konfiguration.
+    """
+    art = anmeldeart(server)
+    if art == "basic":
+        roh = f"{benutzer}:{geheimnis}".encode("utf-8")
+        return {"Authorization": "Basic "
+                + base64.b64encode(roh).decode("ascii")}
+    if art == "bearer":
+        return {"Authorization": f"Bearer {geheimnis}"}
+    return {}
+
+
+def verbinde(koepfe=None):
     """{name: Verbindung} fuer alles, was in der Konfiguration steht.
 
-    zusatz_kopf geht an JEDEN Server und ist der Weg, auf dem
-    sitzungsgebundene Anmeldedaten mitkommen -- sie stehen damit weder
-    in der Konfigurationsdatei noch auf der Platte, sondern nur im
+    koepfe ordnet JE SERVER einen zusaetzlichen Kopf zu -- {name: kopf}.
+    Auf diesem Weg kommen sitzungsgebundene Anmeldedaten mit: sie stehen
+    weder in der Konfigurationsdatei noch auf der Platte, sondern nur im
     Arbeitsspeicher dieser einen Sitzung.
+
+    JE SERVER und nicht fuer alle. Ein gemeinsamer Kopf ginge auch an
+    Postfaecher, mit denen der Nutzer nichts zu tun hat -- bei einem
+    persoenlichen Postfach waere das sein Passwort, verteilt an jeden
+    eingerichteten Server.
     """
-    return {name: Verbindung(name, angaben, zusatz_kopf)
+    koepfe = koepfe or {}
+    return {name: Verbindung(name, angaben, koepfe.get(name))
             for name, angaben in lies_konfiguration().items()}
 
 
