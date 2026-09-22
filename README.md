@@ -2241,7 +2241,8 @@ Zugriff auf ein Mailkonto.
 | `sendet` | Werkzeuge, die etwas verschicken. Ohne Liste greift eine Namensregel |
 | `textfeld` | Argument, in dem der Nachrichtentext steht |
 | `automatisch` | ob dieser Server ohne Rückfrage senden darf |
-| `hinweis` | Text, der einer automatisch erstellten Nachricht angehängt wird |
+| `hinweis_anhaengen` | ob automatisch erstellte Nachrichten einen Hinweis tragen. Ohne Angabe: ja |
+| `hinweis` | der Text dieses Hinweises. Ohne Angabe greift eine Vorgabe |
 
 Fehlt die Datei, ist nichts eingerichtet: es gibt keine Werkzeugliste
 und keinen zusätzlichen Modellaufruf.
@@ -2273,6 +2274,12 @@ erfüllt sind:
 3. ein Hinweistext ist hinterlegt oder die Vorgabe greift.
 
 Fällt eine davon aus, wird bestätigt.
+
+Ist `hinweis_anhaengen` auf `false` gesetzt, entfallen Bedingung 2 und 3:
+ohne Hinweis gibt es nichts anzuhängen. Bedingung 1 bleibt.
+
+**Ein bestätigter Entwurf trägt keinen Hinweis.** Er ist gelesen; der
+Hinweis gilt Nachrichten, die niemand gesehen hat.
 
 `MCP_TIMEOUT` begrenzt die Wartezeit je Aufruf (30 s), `MCP_RUNDEN` die
 Zahl der Werkzeugrunden je Antwort (4), `MCP_MAX_WERKZEUGE` die Zahl der

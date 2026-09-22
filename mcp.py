@@ -367,20 +367,24 @@ def textfeld(server, argumente):
 def darf_automatisch(server, werkzeug, argumente):
     """(ja, grund) -- darf dieses Werkzeug ohne Rueckfrage laufen?
 
-    Drei Bedingungen, und alle drei muessen erfuellt sein:
+    Erste Bedingung immer: der Betreiber hat es fuer dieses Postfach
+    freigeschaltet (automatisch).
 
-      1. Der Betreiber hat es fuer dieses Postfach freigeschaltet.
-      2. Es gibt ein Feld, in dem der Text steht.
-      3. Es gibt einen Hinweis, der hineingeschrieben werden kann.
+    Soll ein Hinweis unter die Nachricht (hinweis_anhaengen, Vorgabe
+    ja), kommen zwei weitere dazu: ein Feld, in dem der Text steht, und
+    ein Hinweistext, der hineingeschrieben werden kann. Ohne Hinweis
+    entfallen beide -- dann gibt es nichts anzuhaengen.
 
-    Faellt eine davon aus, wird bestaetigt. Das ist die Richtung, in
-    die ein Zweifel fallen muss: eine Nachricht zu viel zu bestaetigen
-    kostet einen Klick, eine zu wenig kostet eine Nachricht, die drau-
-    ssen ist.
+    Faellt eine Bedingung aus, wird bestaetigt. Das ist die Richtung,
+    in die ein Zweifel fallen muss: eine Nachricht zu viel zu
+    bestaetigen kostet einen Klick, eine zu wenig kostet eine
+    Nachricht, die draussen ist.
     """
     a = _angaben(server)
     if not a.get("automatisch"):
         return False, "fuer dieses Postfach nicht freigeschaltet"
+    if not hinweis_an(server):
+        return True, ""
     if not textfeld(server, argumente):
         return False, ("kein Textfeld gefunden -- der Hinweis liesse "
                        "sich nicht anhaengen")
@@ -401,6 +405,20 @@ def braucht_bestaetigung(server, werkzeug, argumente=None):
     return not ja
 
 
+def hinweis_an(server):
+    """Soll unter eine automatisch erzeugte Nachricht ein Hinweis?
+
+    Vorgabe ja. Wer nichts sagt, bekommt ihn -- abschalten ist eine
+    ausdrueckliche Handlung, denn ein Empfaenger, der nicht erfaehrt,
+    dass niemand die Nachricht gelesen hat, kann sie nicht einordnen.
+
+    Gilt nur fuer den automatischen Weg. Ein Entwurf, den ein Mensch
+    gelesen und freigegeben hat, bekommt keinen -- er ist gelesen.
+    """
+    a = _angaben(server)
+    return bool(a.get("hinweis_anhaengen", True))
+
+
 def mit_hinweis(server, argumente):
     """Argumente mit angehaengtem Hinweis. Unveraendert, wenn keiner geht.
 
@@ -408,6 +426,8 @@ def mit_hinweis(server, argumente):
     mit einer Fussnote beginnt, liest sich wie ein Formbrief, und der
     Empfaenger soll zuerst die Antwort sehen.
     """
+    if not hinweis_an(server):
+        return dict(argumente or {})
     feld = textfeld(server, argumente)
     if not feld:
         return dict(argumente or {})

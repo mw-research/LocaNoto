@@ -2861,6 +2861,54 @@ _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
 
+# --- DER HINWEIS UNTER AUTOMATISCHEN ANTWORTEN IST ABSCHALTBAR ---
+#
+# Vorgabe ist an: wer nichts sagt, bekommt ihn. Abschalten ist eine
+# ausdrueckliche Handlung -- ein Empfaenger, der nicht erfaehrt, dass
+# niemand die Nachricht gelesen hat, kann sie nicht einordnen.
+#
+# Ein bestaetigter Entwurf bekommt keinen: er ist gelesen.
+import json as _js
+import mcp as _mcp2
+
+_mcp2.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_probe.json")
+
+
+def _postfach(**angaben):
+    _js.dump({"pf": dict(angaben)},
+             io.open(_mcp2.KONFIG, "w", encoding="utf-8"))
+
+
+_arg = {"body": "Guten Tag"}
+
+_postfach(automatisch=True, sendet=["senden"], textfeld="body")
+pruef("ohne Angabe steht der Hinweis unter der Nachricht",
+      "--" in _mcp2.mit_hinweis("pf", _arg)["body"])
+pruef("und automatisch senden ist erlaubt",
+      _mcp2.darf_automatisch("pf", "senden", _arg)[0])
+
+_postfach(automatisch=True, sendet=["senden"], textfeld="body",
+          hinweis_anhaengen=False)
+pruef("abgeschaltet bleibt die Nachricht unveraendert",
+      _mcp2.mit_hinweis("pf", _arg)["body"] == "Guten Tag")
+pruef("und automatisch senden bleibt erlaubt",
+      _mcp2.darf_automatisch("pf", "senden", _arg)[0])
+
+# Die Richtung des Zweifels bleibt: ohne Freischaltung wird bestaetigt,
+# und mit Hinweis, aber ohne Textfeld, ebenfalls -- sonst ginge eine
+# Nachricht ohne den Hinweis hinaus, den der Betreiber verlangt hat.
+_postfach(automatisch=False, sendet=["senden"], textfeld="body",
+          hinweis_anhaengen=False)
+pruef("ohne Freischaltung wird weiterhin bestaetigt",
+      _mcp2.braucht_bestaetigung("pf", "senden", _arg))
+
+_postfach(automatisch=True, sendet=["senden"], hinweis_anhaengen=True)
+pruef("und mit Hinweis, aber ohne Textfeld, auch",
+      _mcp2.braucht_bestaetigung("pf", "senden", {"x": 1}))
+
+os.remove(_mcp2.KONFIG)
+_mcp2.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
+
 # --- DER QUELLENHINWEIS IST DER NACHWEIS, NICHT DAS SCHMUCKSTUECK ---
 #
 # Die Anwendung steht unter AGPL-3.0, weil pymupdf es tut und das Lesen
