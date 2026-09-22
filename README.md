@@ -2196,6 +2196,90 @@ mit TLS davor.
 ---
 
 
+## 🔌 Werkzeugserver (MCP)
+
+Ein Werkzeugserver nach dem Model-Context-Protocol stellt dem Modell
+Funktionen bereit, die es während einer Antwort aufrufen kann — etwa den
+Zugriff auf ein Mailkonto.
+
+> **Stand: vorbereitet, nicht angeschlossen.** `mcp.py` spricht das
+> Protokoll, `pipeline.werkzeuglauf` bindet Werkzeuge in eine Antwort
+> ein, und beides ist im Selbsttest geprüft. Der Antwortweg in `app.py`
+> und `api.py` ruft `werkzeuglauf` jedoch nicht auf, und es gibt keine
+> Oberfläche, über die ein Nutzer Anmeldedaten für ein Postfach
+> hinterlegt. Ein eingerichteter Server wird damit heute nicht benutzt.
+> Was unten steht, beschreibt die vorhandene Konfiguration und die
+> Prüfmöglichkeit.
+
+### Einrichten
+
+`config/mcp.json`, ein Eintrag je Server:
+
+```json
+{
+  "postfach": {
+    "transport": "http",
+    "url": "https://mcp.example.org/mcp",
+    "kopf": {"Authorization": "Bearer ..."},
+    "sendet": ["mail_senden", "antwort_senden"],
+    "textfeld": "body",
+    "automatisch": false,
+    "hinweis": "Automatisch erstellt, vor dem Versand nicht gelesen."
+  },
+  "lokal": {
+    "transport": "stdio",
+    "befehl": ["python", "-m", "irgendein_server"]
+  }
+}
+```
+
+| Feld | Bedeutung |
+|---|---|
+| `transport` | `http` (JSON-RPC über POST) oder `stdio` (Unterprozess) |
+| `url` / `befehl` | Adresse bzw. Startbefehl |
+| `kopf` | zusätzliche HTTP-Kopfzeilen |
+| `sendet` | Werkzeuge, die etwas verschicken. Ohne Liste greift eine Namensregel |
+| `textfeld` | Argument, in dem der Nachrichtentext steht |
+| `automatisch` | ob dieser Server ohne Rückfrage senden darf |
+| `hinweis` | Text, der einer automatisch erstellten Nachricht angehängt wird |
+
+Fehlt die Datei, ist nichts eingerichtet: es gibt keine Werkzeugliste
+und keinen zusätzlichen Modellaufruf.
+
+Anmeldedaten, die einem Menschen gehören, stehen **nicht** in dieser
+Datei. `mcp.verbinde(zusatz_kopf=...)` nimmt sie je Aufruf entgegen und
+reicht sie an jeden Server weiter; sie leben nur so lange wie die
+Sitzung.
+
+### Prüfen, was ein Server anbietet
+
+```bash
+python mcp.py
+```
+
+Baut die Verbindung auf, fragt die Werkzeugliste ab und gibt sie aus.
+Sendewerkzeuge sind mit `[SENDET]` gekennzeichnet, alle übrigen mit
+`[liest]`.
+
+### Senden
+
+Ein Werkzeug, das etwas verschickt, wird einem Menschen zur Bestätigung
+vorgelegt. Ohne Rückfrage läuft es nur, wenn **alle drei** Bedingungen
+erfüllt sind:
+
+1. `automatisch` ist für diesen Server gesetzt,
+2. ein Textfeld ist gefunden — sonst ließe sich der Hinweis nicht
+   anhängen,
+3. ein Hinweistext ist hinterlegt oder die Vorgabe greift.
+
+Fällt eine davon aus, wird bestätigt.
+
+`MCP_TIMEOUT` begrenzt die Wartezeit je Aufruf (30 s), `MCP_RUNDEN` die
+Zahl der Werkzeugrunden je Antwort (4), `MCP_MAX_WERKZEUGE` die Zahl der
+Werkzeuge, die an das Modell gehen (40).
+
+---
+
 ## DIG:IT-KMU
 Diese App entstand im Rahmen des Projekts : DIG:IT-KMU 
 
