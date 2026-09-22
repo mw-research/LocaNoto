@@ -450,22 +450,22 @@ Dateien importieren sie.
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
 | `owncloud.py` | Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `aufnehmen`, `einrichten` +6 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
+| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `api`, `app`, `pipeline`, `selbsttest` |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `pipeline`, `selbsttest` |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `selbsttest`, `tabellen`, `verwaltung` |
-| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +8 | `api`, `app`, `pipeline` |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `selbsttest` |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `api`, `app`, `selbsttest`, `verwaltung` |
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `app`, `selbsttest`, `verwaltung` |
 | `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `app`, `selbsttest`, `verwaltung` |
 | `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +7 | `app`, `selbsttest` |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `aufnehmen`, `ingest`, `ingest_images` |
-| `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `api`, `create_token` |
+| `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `api`, `app`, `create_token`, `selbsttest` +1 |
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `app`, `selbsttest`, `verwaltung` |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `app`, `bildtext` |
 | `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | — | `app`, `verwaltung` |
-| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `api`, `app`, `sqldb`, `tabellen` |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `selbsttest` |
+| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `api`, `app`, `sqldb`, `tabellen` |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
 | `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `verwaltung` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `selbsttest`, `verwaltung` |
@@ -474,11 +474,11 @@ Dateien importieren sie.
 | `quellticket.py` | Ein Ticket fuer genau eine Fundstelle, fuer kurze Zeit. | `QUELLE_TICKET_MINUTEN` | `app`, `selbsttest` |
 | `textutils.py` | Textbereinigung fuer den Ingest. | — | `app`, `aufnehmen`, `ingest`, `tables` |
 | **Einstiege** | | | |
-| `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
 | `selbsttest.py` | Stehen die Grundfunktionen? -- python selbsttest.py | `TOP_K` | — |
+| `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
 | `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
 | `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `app`, `selbsttest`, `verwaltung` |
-| `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `AUFNAHME_MAX_MB`, `CHROMA_EINZELN`, `TOP_K` | — |
+| `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
@@ -486,15 +486,16 @@ Dateien importieren sie.
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
 | `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `selbsttest` |
+| `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
 | `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
-| `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
 | `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
+| `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
 | `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
-| `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
 | `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
 | `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
 | `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
+| `lizenzen.py` | Die Lizenzen der Abhaengigkeiten -- gegen die GEPINNTEN Fassungen. | — | — |
 | `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
 
 ---

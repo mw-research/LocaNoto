@@ -29,7 +29,8 @@ SCHICHT = {
         "einrichten", "sicherung", "selbsttest", "lasttest", "spiegeln",
         "create_user", "create_token", "manage_users", "bestandsliste",
         "packe_umzug", "rebuild_index", "raum_diagnose",
-        "listen_diagnose", "was_sieht_die_platte", "pruefe_env", "landkarte",
+        "listen_diagnose", "was_sieht_die_platte", "pruefe_env",
+        "landkarte", "lizenzen",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",

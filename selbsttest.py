@@ -2847,6 +2847,21 @@ _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
 
+# --- JEDE ABHAENGIGKEIT STEHT IN DER LIZENZAUFSTELLUNG ---
+#
+# Eine Aufstellung, die jemand von Hand nachtraegt, ist nach der
+# naechsten Abhaengigkeit falsch, und niemand merkt es -- eine
+# Lizenzliste stuerzt nicht ab. Dieselbe Idee wie bei der Landkarte.
+#
+# Geprueft wird der PAKETNAME, nicht die Fassung: ein Versionssprung
+# aendert die Lizenz selten, ein neues Paket immer.
+_req = _datei("requirements.txt")
+_lz = _datei("LIZENZEN.md")
+_gepinnt = _re.findall(r"^([A-Za-z0-9._-]+)==", _req, _re.M)
+_fehlt_lizenz = sorted({p for p in _gepinnt if f"`{p}`" not in _lz})
+pruef("jede gepinnte Abhaengigkeit steht in LIZENZEN.md",
+      not _fehlt_lizenz, _fehlt_lizenz[:6])
+
 # --- DIE LANDKARTE STIMMT MIT DEM CODE UEBEREIN ---
 #
 # Eine Uebersicht, die nur meistens stimmt, kostet mehr als sie bringt:
