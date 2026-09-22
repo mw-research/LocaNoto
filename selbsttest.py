@@ -2339,6 +2339,12 @@ _d1 = _zeit.time() - _t0
 # join, nicht ueber die Genauigkeit der Uhr.
 pruef("die erste Bewertung wartet auf eine laufende Startprobe",
       0.15 < _d1 < 3.0, f"{_d1:.2f}s")
+# Fuer den ZUSTAND wird der Faden abgewartet, statt auf die Uhr zu
+# bauen: _probe_abwarten wartet hoechstens RERANKER_PROBE_WARTEN
+# Sekunden, und auf einer belasteten Maschine kommt der Probenfaden in
+# dieser Zeit womoeglich nicht zum Zug. Die Pruefung meldete dann einen
+# Fehlschlag, der keiner war -- etwa einmal in fuenfzehn Laeufen.
+_b1._weck_faden.join(10)
 pruef("und geht danach ueber den Endpunkt",
       _b1._endpunkt_dran(), _b1._lage())
 

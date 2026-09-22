@@ -99,10 +99,10 @@ trägt dessen Adresse ein. Das Profil sorgt dafür, dass die drei Dienste
 (ownCloud, MariaDB, Redis) nur mit dem Profil starten — wer sie nicht
 will, merkt nichts von ihnen.
 
-> **Warum ownCloud nicht im selben Abbild liegt:** zwei Programme in
-> einem Container heißt zwei Prozesse um PID 1, gemeinsame Protokolle,
-> und ein Update von LocaNoto risse ownCloud mit. Es ist trotzdem
-> dieselbe Installation: ein `compose`, ein Netz, ein Befehl.
+> ownCloud liegt in einem eigenen Abbild: getrennte Prozesse,
+> getrennte Protokolle, und ein Update von LocaNoto lässt ownCloud
+> unberührt. Es bleibt dieselbe Installation — ein `compose`, ein Netz,
+> ein Befehl.
 
 ### 3. Einrichten
 
@@ -245,9 +245,9 @@ kubectl apply -f k8s/40-zeitplan.yaml
 ```
 
 Der Abbildname in den Manifesten ist `locanoto:lokal` — ersetze ihn durch
-deinen. Die Manifeste setzen bewusst keine `imagePullPolicy`, damit ein
+deinen. Die Manifeste setzen keine `imagePullPolicy`; damit funktioniert ein
 lokal gebautes Abbild in einem Einzelknoten-Cluster (k3s, minikube,
-Docker Desktop) ohne Registry funktioniert.
+Docker Desktop) auch ohne Registry.
 
 ### Den Schlüssel sichern
 
@@ -265,18 +265,18 @@ Fehlermeldung.
 | `locanoto-konfig` | Nutzer, Räume, **Schlüssel** — alle Chats unlesbar |
 | `locanoto-daten` | Dokumente, Chats, Vektoren, Rückmeldungen |
 
-### Warum Chroma ein eigener Prozess im selben Pod ist
+### Chroma als Sidecar
 
-Chroma läuft als Sidecar und lauscht nur auf `127.0.0.1`. Nicht wegen der
-Skalierung, sondern weil sonst Oberfläche und Schnittstelle gleichzeitig
-in dieselben SQLite-Dateien schrieben — kein sauberer Fehler, sondern ein
+Chroma läuft als eigener Prozess im selben Pod und lauscht nur auf
+`127.0.0.1`. Ohne ihn schreiben Oberfläche und Schnittstelle gleichzeitig
+in dieselben SQLite-Dateien; das Ergebnis ist kein Fehler, sondern ein
 beschädigter Index. Als Dienst entscheidet Chroma, wer schreibt.
 `api.py` bricht deshalb beim Start ab, wenn kein `CHROMA_HOST` gesetzt
 ist.
 
-### Warum genau eine Instanz
+### Eine Instanz
 
-`replicas: 1`, und das ist kein Versäumnis: das Volume ist
+`replicas: 1`. Das Volume ist
 `ReadWriteOnce`, Streamlit hält den Sitzungszustand im Arbeitsspeicher,
 PID-Dateien gelten nur auf ihrem Rechner. Mehrere Instanzen bräuchten
 Stichwortindex und Sitzungszustand in einer Server-Datenbank — ein Umbau.
@@ -289,21 +289,17 @@ Fragen flach.
 
 ## 🗺️ Die Landkarte
 
-Gut sechzig Dateien. Dieser Abschnitt sagt, was jede davon tut,
-woher ihre Werte kommen und wohin sie liefert — damit man eine Änderung
-anfassen kann, ohne vorher alles gelesen zu haben.
+Gut sechzig Dateien. Dieser Abschnitt nennt für jede, was sie tut,
+welche Werte sie aus der `.env` liest und welche Dateien sie benutzen.
 
-**Er wird nicht gepflegt, sondern erzeugt.** Eine Übersicht, die jemand
-von Hand nachträgt, ist nach dem nächsten Modul falsch, und niemand
-merkt es, weil eine Beschreibung nicht abstürzt.
+Er wird erzeugt, nicht gepflegt:
 
 ```bash
 python landkarte.py              # die Übersicht
 python landkarte.py --tabelle    # die Tabelle unten
 ```
 
-Der Selbsttest besteht darauf, dass jede Datei hier vorkommt — eine neue
-fällt auf, statt still herauszufallen.
+Der Selbsttest prüft, dass jede Datei hier aufgeführt ist.
 
 ### Vier Schichten, und keine Kante zeigt nach oben
 
@@ -336,9 +332,9 @@ der nächsten Datei falsch.
 
 ### Der Weg einer Frage
 
-Derselbe für die Oberfläche und für die Schnittstelle — beide rufen
-`pipeline.py`, und das ist der Grund, warum eine Antwort über HTTP
-dieselbe ist wie eine im Browser.
+Derselbe für die Oberfläche und für die Schnittstelle: beide rufen
+`pipeline.py`. Eine Antwort über HTTP ist damit dieselbe wie im
+Browser.
 
 ```mermaid
 sequenceDiagram
@@ -361,11 +357,12 @@ sequenceDiagram
     P-->>U: Antwort + Fundstellen
 ```
 
-Zwei Dinge daran sind Absicht. **Die Rechtegrenze wird zweimal gezogen**,
-einmal je Suchweg — ein Suchweg ohne Filter wäre ein Leck, das niemand
-sähe, weil die Antwort ja richtig aussieht. Und **`ranking.py` fällt
-stufenweise zurück**: Endpunkt, sonst das Modell aus dem Abbild, sonst
-allein die Fusion. Keine dieser Stufen kann eine Antwort verhindern.
+**Die Rechtegrenze wird in beiden Suchwegen einzeln gezogen** — Vektor-
+und Stichwortsuche filtern jeweils selbst.
+
+**`ranking.py` fällt stufenweise zurück**: Endpunkt, sonst das Modell aus
+dem Abbild, sonst allein die Fusion. Keine dieser Stufen kann eine
+Antwort verhindern.
 
 ### Der Weg eines Dokuments
 
@@ -409,9 +406,9 @@ auch dort und nicht an drei Stellen.
 
 108 Einträge kann die `.env` haben. **96 davon werden an genau einer
 Stelle gelesen** — wer wissen will, was ein Wert bewirkt, findet genau
-eine Datei. Die zwölf Ausnahmen sind benannt und jede hat einen Grund:
+eine Datei. Die zwölf Ausnahmen:
 
-| Variable | gelesen in | warum zweimal |
+| Variable | gelesen in | Grund |
 |---|---|---|
 | `OPENAI_BASE_URL`, `OPENAI_API_KEY` | `llm`, `ranking` | der Rerank-Endpunkt darf ein anderer sein und fällt sonst hierauf zurück |
 | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `geheim`, `sicherheit` | `sicherheit` meldet, **woher** der Schlüssel kommt, ohne ihn zu benutzen |
@@ -532,8 +529,7 @@ Chatverschlüsselung, Rückmeldungen, der Abzug samt Einspielen ohne Modell
 — und die Landkarte, also dass jede Datei eine Schicht hat und keine
 Kante nach oben zeigt.
 
-Die Zahl der Prüfungen nennt der Lauf selbst. Sie steht bewusst nicht
-hier: eine Zahl im README ist eine Zusage, die niemand nachträgt.
+Die Zahl der Prüfungen nennt der Lauf selbst.
 
 ### Wenn etwas nicht geht
 
@@ -618,8 +614,8 @@ Der Baum gehört dem **Dienstkonto** und wird nach außen geteilt:
 /LocaNoto/privat/anna/        nur für anna
 ```
 
-Die Richtung ist Absicht und keine Bequemlichkeit. Ein Ordner im
-**eigenen** Bereich des Nutzers wäre für LocaNoto unsichtbar: WebDAV
+Ein Ordner im **eigenen** Bereich des Nutzers wäre für LocaNoto
+unsichtbar: WebDAV
 kennt nur den Bereich des angemeldeten Kontos, und weder ownCloud noch
 Nextcloud lassen einen Verwalter fremde Dateien darüber lesen. Ein
 persönlicher Raum, den die Anwendung nicht durchsuchen kann, wäre aber
@@ -893,10 +889,10 @@ Abzug. Ein Rechner ohne Grafikkarte kann eine Installation wiederherstellen.
 
 Gesichert wird **jede vorhandene Sammlung**, auch der allgemeine Raum, auch
 die persönlichen Räume und auch ein Altbestand von vor den Räumen.
-Ausgangspunkt sind die Sammlungen, nicht die Raumverwaltung — beim Bauen
-fiel im Test auf, dass ein Raum, der aus der Verwaltung genommen wurde
-(seine Sammlung bleibt absichtlich als Rückweg stehen), sonst still
-übergangen worden wäre und beim Einspielen einfach fehlte.
+Ausgangspunkt sind die Sammlungen, nicht die Raumverwaltung: ein Raum,
+der aus der Verwaltung genommen wurde, behält seine Sammlung als
+Rückweg. Über die Raumverwaltung allein bliebe er unberücksichtigt und
+fehlte beim Einspielen.
 
 Mitgesichert werden `raeume.json` und `owncloud.json`: ein Abzug ohne sie
 ließe die Abschnitte wiederherstellen, aber niemand wüsste mehr, wer sie
@@ -953,10 +949,10 @@ Angelegt und verwaltet werden Räume in der Seitenleiste unter **Räume
 verwalten** (nur Administratoren). Beim Upload wählt der Nutzer den Raum;
 vorgegeben ist der eigene, sodass niemand versehentlich etwas teilt.
 
-### Warum getrennte Sammlungen
+### Getrennte Sammlungen
 
-Vorher lag alles in einer Sammlung, und jede Suche hängte den Filter
-`access = shared ODER owner = ich` an. Das hat zwei Nachteile.
+Jeder Raum hat eine eigene Sammlung. Eine gemeinsame Sammlung mit dem
+Filter `access = shared ODER owner = ich` hätte zwei Nachteile.
 
 **Der Filter ist teuer.** Er trifft rund drei Viertel des Bestandes, und
 die Kandidatenliste muss erst aufgebaut werden. Gemessen an 60.000
@@ -1069,7 +1065,7 @@ solange der Nutzer erreichbar ist, und genau dann falsch, wenn er es
 nicht mehr ist. Jemand scheidet aus, fällt länger aus, und in seiner
 Ablage liegt das eine Angebot, das die Firma braucht.
 
-Der Weg hinein ist absichtlich unbequem:
+Der Weg hinein:
 
 1. Ein **Verwalter beantragt** den Zugang zu genau einem Raum, mit Grund.
 2. Ein Träger der Rolle **`notzugang` bestätigt** ihn — mit seiner
@@ -1379,7 +1375,7 @@ Der Text der Dokumente ist nicht verschlüsselt und kann es nicht sein: er
 muss durchsuchbar bleiben, und ChromaDB legt ihn neben dem Vektor ab. Dafür
 ist die Verschlüsselung des Datenträgers zuständig.
 
-### Warum ein Installationsschlüssel
+### Der Installationsschlüssel
 
 Die Alternative wäre ein aus dem Passwort abgeleiteter Schlüssel. Dann
 könnte auch ein Verwalter mit Serverzugang die Verläufe nicht lesen — aber:
@@ -1782,8 +1778,8 @@ In der Seitenleiste lässt sich darauf eingrenzen, und eine Voreinstellung
 kann Bereiche mitbringen: „Einkauf" nimmt dann die Lieferantenlisten,
 „Fertigung" die Auftragslisten.
 
-Der **Wurzelordner** bleibt in der `.env` (`TABELLEN_PFAD`) und ist bewusst
-nicht in der Oberfläche einstellbar: ein Textfeld, in das jemand
+Der **Wurzelordner** bleibt in der `.env` (`TABELLEN_PFAD`) und ist nicht
+in der Oberfläche einstellbar: ein Textfeld, in das jemand
 `/app/config` schreiben kann, machte die Token- und Passwortdatei zu einer
 abfragbaren Liste. Eine Voreinstellung wählt einen Bereich, keinen Pfad.
 
@@ -1875,7 +1871,7 @@ Voreinstellung über die Auswahl **Gilt für** im Prompt-Editor.
 
 Ohne angelegte Voreinstellungen erscheint die Auswahl nicht.
 
-### Was bewusst nicht enthalten ist
+### Nicht enthalten
 
 **Das Embedding-Modell.** Die Abschnitte im Bestand sind mit einem
 bestimmten Modell vektorisiert; ein anderes vergleicht Vektoren aus einem
@@ -2193,8 +2189,8 @@ einen SSH-Tunnel, nicht aus dem Netz.
 ssh -L 8600:127.0.0.1:8600 benutzer@server
 ```
 
-Das ist Absicht. Der Verkehr ist unverschlüsselt, das Token wäre sonst auf
-dem Draht mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
+Der Verkehr ist unverschlüsselt; das Token wäre sonst auf dem Draht
+mitlesbar. Für einen Zugriff von außen gehört ein Reverse Proxy
 mit TLS davor.
 
 ---
