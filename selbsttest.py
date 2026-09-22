@@ -2197,15 +2197,16 @@ pruef("es gibt einen wechselnden Feldschluessel",
       "def _feldschluessel(" in _app)
 pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 
-# Sieben Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
+# Acht Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
 # Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken,
-# Postfach. Einmal abziehen fuer die Definition selbst.
+# Postfach anlegen (Verwaltung), Postfach verbinden (Nutzer). Einmal
+# abziehen fuer die Definition selbst.
 #
 # Die Namen stehen hier und nicht nur die Zahl: schlaegt die Pruefung
 # fehl, soll sie sagen, WELCHES Formular fehlt, statt nur dass eines
 # fehlt.
 _aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
-pruef("sieben Formulare werden geleert", _aufrufe == 7, _aufrufe)
+pruef("acht Formulare werden geleert", _aufrufe == 8, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
@@ -2865,6 +2866,41 @@ pruef("und die Bedienoberflaeche bleibt erreichbar",
 _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
+
+# --- POSTFACH-ANMELDEDATEN UEBERLEBEN DAS ABMELDEN NICHT ---
+#
+# Sie liegen im Sitzungszustand und nirgends sonst: nicht geschrieben,
+# nicht protokolliert, nicht in der Konfiguration. Wer sich abmeldet,
+# weil er den Rechner verlaesst, laesst sie nicht zurueck.
+_appq3 = _datei("app.py")
+
+# Das TUPEL wird gelesen, nicht der Quelltext durchsucht: die
+# Zeichenkette steht auch in st.session_state.get("_postfach_koepfe"),
+# und die erste Fassung dieser Pruefung liess sich davon taeuschen --
+# die Gegenprobe lief durch, obwohl der Eintrag fehlte.
+_sk = next((k for k in _ast.parse(_appq3).body
+            if isinstance(k, _ast.Assign)
+            and getattr(k.targets[0], "id", "") == "SITZUNGSSCHLUESSEL"), None)
+_sk_namen = [e.value for e in getattr(_sk, "value", _ast.Tuple(elts=[])).elts
+             if isinstance(e, _ast.Constant)] if _sk else []
+pruef("die Postfach-Koepfe haengen an der Anmeldung",
+      "_postfach_koepfe" in _sk_namen, _sk_namen)
+
+# Gespeichert wird der fertige Kopf, nicht das Passwort. Was im
+# Arbeitsspeicher liegt, ist damit das, was ohnehin ueber die Leitung
+# geht -- und nicht zusaetzlich das Passwort im Klartext.
+pruef("gespeichert wird der Kopf, nicht das Passwort",
+      "_koepfe[_n] = _k" in _appq3 and "mcp.kopf_fuer(_n, _pf_u, _pf_g)" in _appq3)
+
+# Und sie landen nicht in der Konfiguration: schreibe_konfiguration
+# gehoert der Verwaltung, nicht der Nutzermaske.
+pruef("die Nutzermaske schreibt nichts auf die Platte",
+      "schreibe_konfiguration" not in _appq3)
+
+# Erst probieren, dann merken -- sonst faellt eine falsche Anmeldung
+# erst mitten in einer Antwort auf.
+pruef("eine Anmeldung wird vor dem Merken erprobt",
+      _appq3.index("_probe[_n].werkzeuge()") < _appq3.index("_koepfe[_n] = _k"))
 
 # --- ANMELDEDATEN GEHEN NUR AN IHR EIGENES POSTFACH ---
 #

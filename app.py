@@ -171,7 +171,11 @@ if "username" not in st.session_state:
 
 SITZUNGSSCHLUESSEL = ("username", "letzte_tat", "current_chat_id",
                       "messages", "last_loaded_chat", "chat_besitzer",
-                      "pdf_upload_nr", "listen_upload_nr")
+                      "pdf_upload_nr", "listen_upload_nr",
+                      # Die Postfach-Koepfe gehoeren zu DIESER Anmeldung
+                      # und zu keiner anderen. Wer sich abmeldet, weil er
+                      # den Rechner verlaesst, laesst sie nicht zurueck.
+                      "_postfach_koepfe")
 
 
 def beende_sitzung():
@@ -2246,6 +2250,90 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     _felder_leeren(_pwe, "alt", "neu1", "neu2")
                     time.sleep(3 if _bo.get("fehler") else 2)
                     st.rerun()
+
+    # --- MEINE POSTFAECHER ---
+    #
+    # Jeder verbindet seine eigenen. Die Anmeldedaten leben nur in
+    # dieser Sitzung: sie werden nicht geschrieben, nicht protokolliert
+    # und nicht in die Konfiguration uebernommen. Beim Abmelden sind sie
+    # weg -- dafuer steht "_postfach_koepfe" in SITZUNGSSCHLUESSEL.
+    #
+    # Gespeichert wird nicht Benutzer und Passwort, sondern der fertige
+    # Kopf. Was im Arbeitsspeicher liegt, ist damit das, was ohnehin
+    # ueber die Leitung geht.
+    _pf_alle = mcp.lies_konfiguration()
+    _pf_login = [n for n in sorted(_pf_alle) if mcp.braucht_anmeldung(n)]
+    if _pf_alle:
+        _koepfe = st.session_state.setdefault("_postfach_koepfe", {})
+        _offen = sum(1 for n in _pf_login if n not in _koepfe)
+        with st.expander(
+                "\U0001f4ec Meine Postfächer"
+                + (f" ({_offen} offen)" if _offen else "")):
+            if not _pf_login:
+                st.caption("Kein Postfach verlangt eine eigene Anmeldung — "
+                           "alle sind ohne dein Zutun erreichbar.")
+            for _n in _pf_login:
+                _ang = _pf_alle[_n]
+                _was = ("dein persönliches Postfach"
+                        if _ang.get("persoenlich") else "Funktionspostfach")
+                if _n in _koepfe:
+                    _s1, _s2 = st.columns([3, 1])
+                    with _s1:
+                        st.markdown(f"**{_n}** · {_was} · verbunden")
+                    with _s2:
+                        if st.button("Trennen", key=f"pfab_{_n}",
+                                     use_container_width=True):
+                            _koepfe.pop(_n, None)
+                            st.rerun()
+                    continue
+
+                with st.form(f"pfan_{_n}_{_feldschluessel('postfach', 'runde')}"):
+                    st.markdown(f"**{_n}** · {_was}")
+                    _art = mcp.anmeldeart(_n)
+                    if _art == "bearer":
+                        _pf_u = ""
+                        _pf_g = st.text_input(
+                            "Token", type="password",
+                            key=_feldschluessel("postfach", f"{_n}_tok"))
+                    else:
+                        _pf_u = st.text_input(
+                            "Benutzer",
+                            key=_feldschluessel("postfach", f"{_n}_ben"))
+                        _pf_g = st.text_input(
+                            "Passwort", type="password",
+                            key=_feldschluessel("postfach", f"{_n}_pw"))
+                    _pf_ok = st.form_submit_button(
+                        "Verbinden", use_container_width=True,
+                        disabled=_antwortet)
+                if _pf_ok:
+                    if not _pf_g:
+                        st.error("Bitte die Anmeldedaten eintragen.")
+                    else:
+                        _k = mcp.kopf_fuer(_n, _pf_u, _pf_g)
+                        # ERST PROBIEREN, dann merken. Sonst faellt eine
+                        # falsche Anmeldung erst bei der naechsten Frage
+                        # auf -- mitten in einer Antwort, die deswegen
+                        # schlechter ausfaellt.
+                        _probe = mcp.verbinde({_n: _k})
+                        try:
+                            _w = _probe[_n].werkzeuge()
+                            _koepfe[_n] = _k
+                            _felder_leeren("postfach")
+                            st.success(f"Verbunden. {len(_w)} Werkzeuge.")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Nicht verbunden: "
+                                     f"{type(e).__name__}: {e}")
+                        finally:
+                            for _v in _probe.values():
+                                try:
+                                    _v.schliesse()
+                                except Exception:
+                                    pass
+
+            st.caption("Die Anmeldedaten liegen nur in dieser Sitzung und "
+                       "verschwinden beim Abmelden.")
 
     # --- EIGENE ZUGANGSTOKEN ---
     #

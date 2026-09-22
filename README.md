@@ -2202,14 +2202,11 @@ Ein Werkzeugserver nach dem Model-Context-Protocol stellt dem Modell
 Funktionen bereit, die es während einer Antwort aufrufen kann — etwa den
 Zugriff auf ein Mailkonto.
 
-> **Stand: vorbereitet, nicht angeschlossen.** `mcp.py` spricht das
-> Protokoll, `pipeline.werkzeuglauf` bindet Werkzeuge in eine Antwort
-> ein, und beides ist im Selbsttest geprüft. Der Antwortweg in `app.py`
-> und `api.py` ruft `werkzeuglauf` jedoch nicht auf, und es gibt keine
-> Oberfläche, über die ein Nutzer Anmeldedaten für ein Postfach
-> hinterlegt. Ein eingerichteter Server wird damit heute nicht benutzt.
-> Was unten steht, beschreibt die vorhandene Konfiguration und die
-> Prüfmöglichkeit.
+> **Stand: angeschlossen, aber ohne Server.** Einrichtung, Anmeldung,
+> Werkzeugaufruf und der Entwurfsweg sind gebaut und im Selbsttest
+> geprüft. Was fehlt, ist ein Postfachserver, der das Protokoll spricht
+> — für Exchange also ein MCP-Server vor der EWS-Schnittstelle. Ohne
+> einen solchen bleibt der Werkzeugkreis aus.
 
 ### Einrichten
 
@@ -2247,10 +2244,36 @@ Zugriff auf ein Mailkonto.
 Fehlt die Datei, ist nichts eingerichtet: es gibt keine Werkzeugliste
 und keinen zusätzlichen Modellaufruf.
 
-Anmeldedaten, die einem Menschen gehören, stehen **nicht** in dieser
-Datei. `mcp.verbinde(zusatz_kopf=...)` nimmt sie je Aufruf entgegen und
-reicht sie an jeden Server weiter; sie leben nur so lange wie die
-Sitzung.
+### Einrichten in der Oberfläche
+
+Unter *Verwaltung → 📬 Postfächer* legt ein Verwalter sie an, ohne die
+Datei anzufassen. Vier Vorlagen setzen, was für die jeweilige Art Server
+üblich ist; aus der Maske kommen Name, Adresse, die Art des Postfachs und
+die Regeln zum Senden. *Werkzeuge abfragen* verbindet sich und listet
+auf, was der Server anbietet.
+
+**Ein persönliches Postfach antwortet nie selbständig.** Die
+Freischaltung gilt nur für Funktionspostfächer und wird beim Anlegen
+eines persönlichen verworfen.
+
+### Anmeldung durch den Nutzer
+
+Anmeldedaten, die einem Menschen gehören, stehen **nicht** in der
+Konfiguration. Jeder Nutzer verbindet seine Postfächer selbst — in der
+Seitenleiste unter *📬 Meine Postfächer*. `anmeldung` im Eintrag legt
+fest, was verlangt wird: Benutzer und Passwort (`basic`) oder ein Token
+(`bearer`).
+
+Die Daten liegen ausschließlich im Sitzungsspeicher, werden nicht
+geschrieben und nicht protokolliert, und verschwinden beim Abmelden.
+Gespeichert wird dabei nicht das Passwort, sondern der fertige
+Anmeldekopf — also das, was ohnehin über die Leitung geht.
+
+Jedes Postfach bekommt **nur seinen eigenen** Kopf. Eine Anmeldung geht
+damit nie an ein Postfach, für das sie nicht gedacht war.
+
+Eine Anmeldung wird vor dem Merken erprobt: schlägt sie fehl, sagt die
+Maske es sofort statt mitten in der nächsten Antwort.
 
 ### Prüfen, was ein Server anbietet
 
