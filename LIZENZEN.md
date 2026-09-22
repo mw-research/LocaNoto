@@ -5,7 +5,8 @@ für **genau die gepinnte Fassung**, nicht für das, was zufällig
 installiert ist. Eine Aufstellung, die eine andere Fassung beschreibt
 als die im Abbild, ist keine.
 
-160 Pakete. LocaNoto selbst steht unter MIT (siehe `LICENSE`).
+160 Pakete. **LocaNoto selbst steht unter AGPL-3.0** (siehe
+`LICENSE`) — aus dem Grund, der weiter unten steht.
 
 **Das ist eine technische Aufstellung, keine Rechtsauskunft.** Sie
 sagt, welche Lizenz ein Paket angibt, und gruppiert danach. Ob eine
@@ -222,16 +223,24 @@ Das betrifft diese Anlage doppelt: sie wird über Browser und
 HTTP-Schnittstelle bereitgestellt, und die betriebsspezifischen
 Fassungen liegen in nicht-öffentlichen Ablagen.
 
-Handlungsmöglichkeiten, ohne Wertung:
+**Entschieden wurde: LocaNoto steht selbst unter AGPL-3.0.** Damit ist
+die Angabe stimmig — wer die Anwendung nimmt, nimmt sie zu Bedingungen,
+unter denen sie auch laufen kann.
 
-* kommerzielle Lizenz bei Artifex erwerben,
-* die Anwendung selbst unter AGPL stellen statt unter MIT,
-* `pymupdf` durch eine freizügig lizenzierte Bibliothek ersetzen —
-  technisch der teuerste Weg, weil Tabellenerkennung und
-  Seitendarstellung daran hängen.
+Was das bedeutet:
 
-**Das ist eine Frage für die Rechtsseite der Hochschule, nicht für die
-Entwicklung.** Hier steht nur der Befund.
+* Wer darauf aufbaut und das Ergebnis als Netzdienst anbietet, muss
+  seinen Quelltext ebenfalls unter AGPL verfügbar machen. Für ein
+  öffentlich gefördertes Vorhaben ist das der Sinn der Sache.
+* Es betrifft **nicht** die Dokumente, nicht die Prompts, nicht das
+  Glossar und keine Konfiguration. Das sind Daten des Betreibers, kein
+  Programmtext.
+* Wer die Anwendung nur benutzt, muss gar nichts offenlegen.
+
+Die beiden anderen Wege wären gewesen: eine kommerzielle Lizenz bei
+Artifex, oder `pymupdf` durch eine freizügig lizenzierte Bibliothek zu
+ersetzen — technisch der teuerste, weil Tabellenerkennung und
+Seitendarstellung daran hängen.
 
 ### Die CPU-Variante enthält weiterhin NVIDIA-Pakete
 

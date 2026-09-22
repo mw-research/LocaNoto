@@ -2847,6 +2847,23 @@ _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
 
+# --- DER QUELLENHINWEIS IST DER NACHWEIS, NICHT DAS SCHMUCKSTUECK ---
+#
+# Die Anwendung steht unter AGPL-3.0, weil pymupdf es tut und das Lesen
+# von PDF traegt. Paragraph 13 der AGPL verlangt, dass Nutzer, die ueber
+# ein NETZ mit ihr arbeiten, an ihren Quelltext kommen -- und genau
+# diese Zeile in der Seitenleiste ist das Angebot dazu.
+#
+# Verschwindet sie bei einem Umbau, faellt es sonst niemandem auf: eine
+# fehlende Fusszeile stuerzt nicht ab.
+_lizenz = _datei("LICENSE")
+pruef("die Anwendung steht unter AGPL",
+      "AFFERO GENERAL PUBLIC LICENSE" in _lizenz and "MIT License" not in _lizenz)
+
+_appq2 = _datei("app.py")
+pruef("und die Oberflaeche bietet den Quelltext an",
+      "agpl-3.0" in _appq2 and "github.com/mw-research/LocaNoto" in _appq2)
+
 # --- JEDE ABHAENGIGKEIT STEHT IN DER LIZENZAUFSTELLUNG ---
 #
 # Eine Aufstellung, die jemand von Hand nachtraegt, ist nach der

@@ -1307,10 +1307,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             time.sleep(0.5)
             st.rerun()
             
-    st.markdown("---")
-    st.header("📚 Datenbank")
-    
-    # Alle verfügbaren Dokumente für den Filter sammeln
+    # Die Ueberschrift "Datenbank" stand hier ohne Inhalt: darunter
+    # kam sofort der Trennstrich und die naechste Ueberschrift. Ein
+    # Ueberbleibsel, in allen drei Fassungen.
     st.markdown("---")
     st.header("🎯 Dokumenten-Filter")
 
@@ -2326,6 +2325,22 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
                       value=_p["top_k"] or paths.env_int("TOP_K", 5),
                       key=f"topk_{aktives_preset}")
+
+    # --- QUELLE ---
+    #
+    # Die AGPL verlangt in Paragraph 13, dass Nutzer, die ueber ein
+    # NETZ mit dieser Anwendung arbeiten, an ihren Quelltext kommen.
+    # Ein Verweis genuegt dafuer, solange der laufende Stand der
+    # veroeffentlichte ist -- deshalb gehen die drei Fassungen im
+    # Gleichschritt.
+    #
+    # Das ist die einzige funktionale Aenderung, die die Umstellung
+    # von MIT auf AGPL mit sich bringt.
+    st.markdown("---")
+    st.caption(
+        "LocaNoto \u00b7 "
+        "[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html) \u00b7 "
+        "[Quelltext](https://github.com/mw-research/LocaNoto)")
 
 # --- CHAT & RETRIEVAL ---
 #
