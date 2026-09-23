@@ -164,3 +164,16 @@ xxhash==4.0.0
 yarl==1.24.5
 zipp==4.1.0
 zstandard==0.25.0
+# exchangelib traegt die direkte Exchange-Anbindung (postfach.py).
+# Ohne sie laeuft alles ausser den Postfaechern; das Modul laedt sie
+# erst beim ersten Zugriff. sspilib kommt unter Windows von selbst
+# dazu und steht deshalb nicht hier -- im Linux-Abbild gibt es sie nicht.
+cached-property==2.0.1
+defusedxml==0.7.1
+dnspython==2.8.0
+exchangelib==5.6.0
+isodate==0.7.2
+lxml==6.1.3
+pyspnego==0.12.2
+requests-ntlm==1.3.0
+tzlocal==5.4.4

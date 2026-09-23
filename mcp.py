@@ -16,9 +16,14 @@ Modul spricht mit dem Server und sonst nichts. Der Kreis -- Modell
 fragt, Werkzeug antwortet, Modell fragt weiter -- steht in pipeline.py,
 dort, wo auch die uebrigen Wege zur Antwort stehen.
 
-KEINE NEUE ABHAENGIGKEIT. MCP ist JSON-RPC 2.0; ueber HTTP genuegt
-httpx, das ohnehin im Abbild liegt, und ueber stdio ein Unterprozess.
-Ein SDK dafuer waere mehr Fremdcode als eigener.
+MCP SELBST BRINGT KEINE ABHAENGIGKEIT MIT. Es ist JSON-RPC 2.0; ueber
+HTTP genuegt httpx, das ohnehin im Abbild liegt, und ueber stdio ein
+Unterprozess. Ein SDK dafuer waere mehr Fremdcode als eigener.
+
+EIN TRANSPORT SPRICHT KEIN MCP: "exchange". Exchange spricht EWS, und
+LocaNoto spricht es direkt -- siehe postfach.py. verbinde() entscheidet,
+welche Klasse es wird; beide haben dieselben drei Methoden, und alles
+darueber unterscheidet sie nicht.
 
 Eingerichtet wird in config/mcp.json, nach demselben Muster, das auch
 andere Werkzeuge benutzen:
@@ -46,6 +51,7 @@ import subprocess
 import threading
 
 import paths
+import postfach
 
 KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
@@ -77,6 +83,15 @@ def lies_konfiguration():
     return daten if isinstance(daten, dict) else {}
 
 
+# Welche Werkzeuge eines Exchange-Postfachs etwas verschicken, steht
+# dort, wo sie stehen. Hier wird es UEBERNOMMEN und nicht abgeschrieben:
+# eine zweite Liste derselben Namen faellt beim ersten Umbenennen
+# auseinander, und sie faellt nach der sicheren Seite -- ein
+# Sendewerkzeug, das nicht mehr in der Liste steht, liefe ohne
+# Rueckfrage.
+_EXCHANGE_SENDET = postfach.SENDEWERKZEUGE
+
+
 # --- VORLAGEN ---
 #
 # Damit ein Verwalter auswaehlt statt eine Datei zu schreiben. Jede
@@ -84,10 +99,14 @@ def lies_konfiguration():
 # und die Regeln zum Senden kommen aus der Maske dazu.
 VORLAGEN = {
     "exchange": {
-        "beschreibung": "Exchange/OWA über einen MCP-Server (intern)",
-        "angaben": {"transport": "http", "anmeldung": "basic",
+        "beschreibung": "Exchange/Outlook — direkt, ohne weiteren Server",
+        # transport "exchange" geht nicht ueber JSON-RPC, sondern ueber
+        # postfach.py. Von hier an aufwaerts macht das keinen
+        # Unterschied: dieselben Werkzeugnamen, dieselbe Bestaetigung
+        # vor dem Senden, derselbe Hinweis.
+        "angaben": {"transport": "exchange", "anmeldung": "basic",
                     "textfeld": "body",
-                    "sendet": ["antwort_senden", "mail_senden"]},
+                    "sendet": list(_EXCHANGE_SENDET)},
     },
     "http": {
         "beschreibung": "MCP-Server über HTTP",
@@ -119,7 +138,8 @@ def schreibe_konfiguration(daten):
 def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     """Ein Postfach aus einer Vorlage. Rueckgabe: (ok, Meldung).
 
-    ziel ist die Adresse (http) oder der Befehl (stdio).
+    ziel ist die Adresse (http), der Befehl (stdio) oder der
+    Exchange-Server (exchange, darf leer bleiben).
     """
     name = str(name or "").strip()
     if not name:
@@ -132,6 +152,19 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     angaben = dict(VORLAGEN[vorlage]["angaben"])
     if angaben["transport"] == "stdio":
         angaben["befehl"] = [t for t in str(ziel).split() if t]
+    elif angaben["transport"] == "exchange":
+        # Leer heisst: exchangelib sucht den Server selbst. Das ist der
+        # bequeme Weg und deshalb erlaubt -- bei den uebrigen
+        # Transportarten gibt es nichts zu suchen, dort ist die Adresse
+        # Pflicht.
+        angaben["url"] = postfach.ews_adresse(ziel)
+        # Ein Funktionspostfach ohne eigene Adresse waere keines: es
+        # oeffnete das Postfach dessen, der sich gerade anmeldet. Jeder
+        # saehe dann seine eigene Post unter fremdem Namen, und eine
+        # automatische Antwort ginge aus dem falschen Postfach hinaus.
+        if not persoenlich and not str(weitere.get("postfach") or "").strip():
+            return False, ("Fuer ein Funktionspostfach die Mailadresse des "
+                           "Postfachs eintragen (z. B. info@firma.de).")
     else:
         angaben["url"] = str(ziel).strip()
         if not angaben["url"]:
@@ -373,8 +406,16 @@ def verbinde(koepfe=None):
     eingerichteten Server.
     """
     koepfe = koepfe or {}
-    return {name: Verbindung(name, angaben, koepfe.get(name))
-            for name, angaben in lies_konfiguration().items()}
+    aus = {}
+    for name, angaben in lies_konfiguration().items():
+        # Ein Exchange-Postfach spricht kein JSON-RPC. Welche Klasse es
+        # wird, entscheidet sich HIER und nur hier -- nach aussen haben
+        # beide dieselben drei Methoden, und alles darueber merkt vom
+        # Unterschied nichts.
+        bauart = (postfach.Postfach if (angaben.get("transport") or "http") == "exchange"
+                  else Verbindung)
+        aus[name] = bauart(name, angaben, koepfe.get(name))
+    return aus
 
 
 def eingerichtet():

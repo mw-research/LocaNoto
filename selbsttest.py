@@ -1385,6 +1385,30 @@ for zeile in sys.stdin:
 # Eine selbstgeschriebene Attrappe haette genau die Annahmen, die man
 # ohnehin hatte -- der Client hing anfangs bei
 # notifications/initialized, weil er blind eine Zeile las.
+# --- EXCHANGELIB WIRD ERST BEIM ZUGRIFF GELADEN ---
+#
+# Es wiegt mit lxml und allem Drum und Dran mehr als der Rest der
+# Anbindung. Eine Anlage ohne Postfach soll es nie laden.
+#
+# DIESE PRUEFUNG STEHT GANZ OBEN, vor jedem Import von mcp oder
+# postfach. Weiter unten konnte sie genau den Fall nicht melden, fuer
+# den sie da ist: mcp.py laedt postfach.py beim Start, und mit einem
+# exchangelib-Import oben endet der Selbsttest an einem ImportError,
+# bevor irgendeine Pruefung laeuft. Die Gegenprobe sah dann keinen
+# Fehlschlag, sondern einen Absturz -- und ein Absturz ist keine
+# Meldung. Gelesen wird ohnehin die Datei und nicht das Modul.
+import ast as _asti
+_pfb = _asti.parse(_datei("postfach.py"))
+_pf_oben = {_n.module or "" for _n in _pfb.body
+            if isinstance(_n, _asti.ImportFrom)}
+_pf_oben |= {_a.name for _n in _pfb.body if isinstance(_n, _asti.Import)
+             for _a in _n.names}
+pruef("postfach.py laedt exchangelib nicht beim Start",
+      not any(_m.startswith("exchangelib") for _m in _pf_oben),
+      sorted(_pf_oben))
+pruef("aber exchangelib steht in der Abhaengigkeitsliste",
+      "exchangelib==" in _datei("requirements.txt"))
+
 import mcp as _mcp
 
 pruef("ohne Konfiguration ist kein Server eingerichtet",
@@ -2937,6 +2961,123 @@ pruef("und KEIN anderes",
 pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
       '_postfach_koepfe' in _datei("app.py")
       and '_postfach_kopf"' not in _datei("app.py"))
+
+os.remove(_mcp0.KONFIG)
+_mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
+
+# --- EXCHANGE SPRICHT KEIN MCP, UND DAS DARF NIRGENDS AUFFALLEN ---
+#
+# Ein Exchange-Postfach laeuft nicht ueber JSON-RPC, sondern ueber
+# postfach.py im selben Prozess. Alles darueber -- Werkzeugliste,
+# Bestaetigung vor dem Senden, Hinweis, Anmeldung in der Sitzung --
+# unterscheidet die beiden Wege nicht. Diese Pruefungen halten das fest.
+import postfach as _pf0
+
+_mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_exchange.json")
+_js0.dump({"markus": {"transport": "exchange", "anmeldung": "basic",
+                      "url": "https://owa.test/EWS/Exchange.asmx",
+                      "persoenlich": True, "textfeld": "body",
+                      "sendet": list(_pf0.SENDEWERKZEUGE)},
+           "info": {"transport": "exchange", "anmeldung": "basic",
+                    "postfach": "info@test.de", "persoenlich": False,
+                    "automatisch": True, "textfeld": "body",
+                    "sendet": list(_pf0.SENDEWERKZEUGE)},
+           "irgendein": {"transport": "http", "url": "http://z",
+                         "anmeldung": "keine"}},
+          io.open(_mcp0.KONFIG, "w", encoding="utf-8"))
+
+_vb1 = _mcp0.verbinde({})
+pruef("ein Exchange-Postfach wird kein JSON-RPC-Server",
+      isinstance(_vb1["markus"], _pf0.Postfach),
+      type(_vb1["markus"]).__name__)
+pruef("ein MCP-Server bleibt einer",
+      isinstance(_vb1["irgendein"], _mcp0.Verbindung),
+      type(_vb1["irgendein"]).__name__)
+pruef("beide Bauarten haben dieselben drei Methoden",
+      all(callable(getattr(_vb1[_n], _m, None))
+          for _n in ("markus", "irgendein")
+          for _m in ("werkzeuge", "rufe", "schliesse")))
+
+# DIE WICHTIGSTE: jedes Werkzeug, das etwas verschickt, wird auch als
+# solches erkannt. Faellt eines heraus, laeuft es ohne Rueckfrage --
+# und eine verschickte Nachricht kommt nicht zurueck.
+_erkannt = {_w["name"] for _w in _pf0.WERKZEUGE
+            if _mcp0.sendet("markus", _w["name"])}
+pruef("genau die Sendewerkzeuge gelten als sendend",
+      _erkannt == set(_pf0.SENDEWERKZEUGE), sorted(_erkannt))
+
+_namen = {_w["name"] for _w in _pf0.WERKZEUGE}
+pruef("die Vorlage nennt nur Werkzeuge, die es wirklich gibt",
+      set(_mcp0.VORLAGEN["exchange"]["angaben"]["sendet"]) <= _namen,
+      sorted(set(_mcp0.VORLAGEN["exchange"]["angaben"]["sendet"]) - _namen))
+pruef("und sie nennt alle, die senden",
+      set(_mcp0.VORLAGEN["exchange"]["angaben"]["sendet"])
+      == set(_pf0.SENDEWERKZEUGE))
+
+# Der Hinweis unter einer automatischen Antwort braucht ein Feld, in
+# das er passt. Steht in der Vorlage ein Feld, das kein Sendewerkzeug
+# hat, faellt das automatische Antworten aus -- lautlos.
+_feld = _mcp0.VORLAGEN["exchange"]["angaben"]["textfeld"]
+_ohne_feld = sorted(_w["name"] for _w in _pf0.WERKZEUGE
+                    if _w["name"] in _pf0.SENDEWERKZEUGE
+                    and _feld not in (_w["schema"].get("properties") or {}))
+pruef("jedes Sendewerkzeug hat das Feld, in das der Hinweis kommt",
+      not _ohne_feld, _ohne_feld)
+
+# Gegenprobe am freigeschalteten Postfach: mit dem Feld laeuft es
+# durch, ohne das Feld wird bestaetigt statt gesendet.
+_ja1, _g1 = _mcp0.darf_automatisch("info", "mail_senden", {"body": "x"})
+pruef("mit Textfeld antwortet ein freigeschaltetes Postfach selbst", _ja1, _g1)
+_ja2, _g2 = _mcp0.darf_automatisch("info", "mail_senden", {"text": "x"})
+pruef("ohne Textfeld wird bestaetigt statt gesendet", not _ja2, _g2)
+pruef("ein persoenliches Postfach antwortet auch mit Feld nicht selbst",
+      not _mcp0.darf_automatisch("markus", "mail_senden", {"body": "x"})[0])
+
+# ANMELDEDATEN KOMMEN AUS DER SITZUNG UND SONST NIRGENDWOHER.
+_ohne_kopf = _pf0.Postfach("markus", {"transport": "exchange"})
+try:
+    _ohne_kopf._zugang()
+    _griff = "durchgelassen"
+except _pf0.Fehler:
+    _griff = "abgewiesen"
+pruef("ohne Anmeldung wird kein Postfach geoeffnet",
+      _griff == "abgewiesen", _griff)
+
+_mit_kopf = _pf0.Postfach("markus", {"transport": "exchange"},
+                          _mcp0.kopf_fuer("markus", "m@test.de", "geheim"))
+pruef("die Anmeldedaten stammen aus dem Kopf dieser Sitzung",
+      _mit_kopf._zugang() == ("m@test.de", "geheim"))
+
+# Eine Kurzkennung gehoert zu EINEM Postfach. Sonst ginge eine Antwort
+# mit den Daten des einen an den Bezug des anderen.
+_kz = _pf0._merke_kennung("markus", "AAAA")
+pruef("eine Kurzkennung loest im eigenen Postfach auf",
+      _pf0._lange_kennung("markus", _kz) == "AAAA")
+try:
+    _pf0._lange_kennung("info", _kz)
+    _fremd = "durchgelassen"
+except _pf0.Fehler:
+    _fremd = "abgewiesen"
+pruef("und in einem fremden nicht", _fremd == "abgewiesen", _fremd)
+
+# EIN FUNKTIONSPOSTFACH BRAUCHT SEINE EIGENE ADRESSE. Ohne sie oeffnet
+# es das Postfach dessen, der sich gerade anmeldet: jeder saehe seine
+# eigene Post unter fremdem Namen, und eine automatische Antwort ginge
+# aus dem falschen Postfach hinaus.
+_okA, _mA = _mcp0.lege_an("t_ohne", "exchange", "owa.test", persoenlich=False)
+pruef("ein Funktionspostfach ohne eigene Adresse wird abgewiesen",
+      not _okA, _mA)
+_okB, _mB = _mcp0.lege_an("t_mit", "exchange", "owa.test", persoenlich=False,
+                          postfach="info2@test.de")
+pruef("mit eigener Adresse wird es angelegt", _okB, _mB)
+pruef("der eingetragene Server wird zur EWS-Adresse ergaenzt",
+      _mcp0.lies_konfiguration()["t_mit"]["url"]
+      == "https://owa.test/EWS/Exchange.asmx",
+      _mcp0.lies_konfiguration()["t_mit"]["url"])
+# Ein persoenliches darf ohne Adresse -- dort ist die des Anmeldenden
+# die richtige.
+_okC, _mC = _mcp0.lege_an("t_pers", "exchange", "", persoenlich=True)
+pruef("ein persoenliches Postfach geht auch ohne beides", _okC, _mC)
 
 os.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")

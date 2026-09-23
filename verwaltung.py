@@ -522,9 +522,19 @@ def zeichne(*, is_admin,
                 _z1, _z2 = st.columns([4, 1])
                 with _z1:
                     st.markdown(f"**{_name}** · {_art} · {_wie}")
+                    # Bei Exchange darf die Adresse fehlen -- dann sucht
+                    # exchangelib den Server. Das steht hier, damit eine
+                    # leere Zeile nicht nach einem Einrichtungsfehler
+                    # aussieht.
+                    _ziel = (_a.get("url")
+                             or " ".join(_a.get("befehl") or [])
+                             or ("Server wird gesucht"
+                                 if _a.get("transport") == "exchange" else "—"))
                     st.caption(
-                        f"{_a.get('url') or ' '.join(_a.get('befehl') or [])}"
-                        f" · Anmeldung: {mcp.anmeldeart(_name)}"
+                        f"{_ziel}"
+                        + (f" · Postfach: {_a['postfach']}"
+                           if _a.get("postfach") else "")
+                        + f" · Anmeldung: {mcp.anmeldeart(_name)}"
                         + ("" if not _a.get("automatisch") else
                            (" · mit Hinweis" if mcp.hinweis_an(_name)
                             else " · OHNE Hinweis")))
@@ -548,7 +558,7 @@ def zeichne(*, is_admin,
                                       if mcp.sendet(_name, _x.get("name"))
                                       else "[liest]")
                             st.markdown(f"- {_marke} `{_x.get('name')}` — "
-                                        f"{_x.get('description', '')[:90]}")
+                                        f"{_x.get('beschreibung', '')[:90]}")
                     except Exception as e:
                         st.error(f"{type(e).__name__}: {e}")
                     finally:
@@ -573,13 +583,28 @@ def zeichne(*, is_admin,
                          "Kurz und sprechend, etwa 'info' oder 'markus'.")
                 _v_ziel = st.text_input(
                     "Adresse oder Befehl", key=_feldschluessel(_pk, "ziel"),
-                    help="Bei HTTP die Adresse des Servers, bei einem "
-                         "lokalen Prozess der Startbefehl.")
+                    help="Bei Exchange der Server, etwa `owa.firma.de` — "
+                         "den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. "
+                         "Leer lassen sucht den Server selbst. Bei HTTP die "
+                         "Adresse des Servers, bei einem lokalen Prozess "
+                         "der Startbefehl.")
                 _v_pers = st.radio(
                     "Postfach", ["persönlich", "Funktionspostfach"],
                     key=_feldschluessel(_pk, "pers"),
                     help="Ein persönliches Postfach antwortet nie "
                          "selbständig — jede Nachricht wird vorgelegt.")
+                # Nur bei Exchange gefuellt. Ohne diese Adresse oeffnet
+                # ein Funktionspostfach das Postfach dessen, der sich
+                # gerade anmeldet -- deshalb weist lege_an() es ab.
+                _v_adr = st.text_input(
+                    "Mailadresse des Postfachs (nur Exchange)",
+                    key=_feldschluessel(_pk, "adr"),
+                    placeholder="info@firma.de",
+                    help="Bei einem Funktionspostfach Pflicht. Bei einem "
+                         "persönlichen Postfach leer lassen — dann gilt "
+                         "die Adresse, mit der sich der Nutzer anmeldet. "
+                         "Jeder meldet sich mit seinen eigenen Daten an; "
+                         "Exchange entscheidet, wer hineindarf.")
                 st.caption("Nur für Funktionspostfächer:")
                 _v_auto = st.checkbox(
                     "darf selbständig antworten",
@@ -596,6 +621,7 @@ def zeichne(*, is_admin,
                 _pers = _v_pers == "persönlich"
                 _ok, _m = mcp.lege_an(
                     _v_name, _v_wahl, _v_ziel, persoenlich=_pers,
+                    postfach=((_v_adr or "").strip() or None),
                     automatisch=bool(_v_auto),
                     hinweis_anhaengen=bool(_v_hin),
                     hinweis=(_v_htext or None))

@@ -306,7 +306,7 @@ Der Selbsttest prüft, dass jede Datei hier aufgeführt ist.
 ```mermaid
 flowchart TB
     EIN["① EINSTIEGE — was man startet<br/><br/>app.py · verwaltung.py · api.py · ingest.py<br/>abgleich.py · einrichten.py · sicherung.py"]
-    FACH["② FACHLOGIK — der Weg zur Antwort<br/><br/>pipeline.py · ranking.py · mcp.py<br/>tabellen.py · owncloud.py · lesen.py · tables.py"]
+    FACH["② FACHLOGIK — der Weg zur Antwort<br/><br/>pipeline.py · ranking.py · mcp.py · postfach.py<br/>tabellen.py · owncloud.py · lesen.py · tables.py"]
     BEST["③ BESTAND — wo etwas liegt<br/><br/>store.py → Chroma · keyword_index.py → SQLite FTS5<br/>raeume.py · benutzer.py · raumschluessel.py · budget.py"]
     GRU["④ GRUNDLAGE — kennt nichts über sich<br/><br/>paths.py — .env und alle Pfade<br/>geheim.py · llm.py · embedding.py"]
     EIN --> FACH
@@ -397,6 +397,7 @@ auch dort und nicht an drei Stellen.
 | `python landkarte.py` | Diese Übersicht, aus dem Code gelesen |
 | `python lasttest.py` | Wie viele Leute gleichzeitig? |
 | `python mcp.py` | Was bietet ein angebundener Werkzeugserver an? |
+| `python postfach.py <name>` | Steht die Anmeldung an einem Exchange-Postfach? |
 | `python create_token.py` | Zugangstoken für die Schnittstelle |
 | `python raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? |
 | `python listen_diagnose.py` | Warum findet die Listenabfrage nichts? |
@@ -449,6 +450,7 @@ Dateien importieren sie.
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `api`, `app`, `pipeline`, `selbsttest` |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `pipeline`, `selbsttest` |
+| `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `selbsttest`, `tabellen`, `verwaltung` |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `selbsttest` |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `api`, `app`, `selbsttest`, `verwaltung` |
@@ -2196,19 +2198,82 @@ mit TLS davor.
 ---
 
 
-## 🔌 Werkzeugserver (MCP)
+## 📬 Postfächer und Werkzeugserver
 
-Ein Werkzeugserver nach dem Model-Context-Protocol stellt dem Modell
-Funktionen bereit, die es während einer Antwort aufrufen kann — etwa den
-Zugriff auf ein Mailkonto.
+Ein angebundenes Postfach macht dem Modell Nachrichten während einer
+Antwort zugänglich: *„Was hat Frau Meier geschrieben?"*, *„Fasse die
+letzten 24 Stunden zusammen"*, *„Antworte darauf"*. Zwei Wege führen
+dorthin.
 
-> **Stand: angeschlossen, aber ohne Server.** Einrichtung, Anmeldung,
-> Werkzeugaufruf und der Entwurfsweg sind gebaut und im Selbsttest
-> geprüft. Was fehlt, ist ein Postfachserver, der das Protokoll spricht
-> — für Exchange also ein MCP-Server vor der EWS-Schnittstelle. Ohne
-> einen solchen bleibt der Werkzeugkreis aus.
+| Weg | Wofür | Modul |
+|---|---|---|
+| **Exchange direkt** | Exchange/Outlook im Haus. Kein weiterer Dienst | `postfach.py` |
+| **MCP-Server** | alles andere, was das Model-Context-Protocol spricht | `mcp.py` |
 
-### Einrichten
+Von oben sehen beide gleich aus: dieselbe Werkzeugliste, dieselbe
+Bestätigung vor dem Senden, derselbe Hinweis, dieselbe Anmeldung in der
+Sitzung. Der Unterschied liegt allein im Transport — `verbinde()`
+entscheidet ihn anhand des Feldes `transport`.
+
+> **Stand.** Der Exchange-Weg ist gebaut und im Selbsttest geprüft;
+> geprüft wird gegen die Schnittstelle, nicht gegen einen laufenden
+> Exchange-Server. Der MCP-Weg ist gebaut und geprüft und wartet auf
+> einen Server, der das Protokoll spricht.
+
+### Exchange einrichten
+
+Drei Schritte, alle in der Oberfläche.
+
+**1. Verwaltung → 📬 Postfächer → Neues Postfach**
+
+| Feld | Eingabe |
+|---|---|
+| Art des Servers | *Exchange/Outlook — direkt, ohne weiteren Server* |
+| Name | kurz, erscheint im Werkzeugnamen: `markus`, `info` |
+| Adresse | `owa.firma.de` — den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. Leer gelassen sucht exchangelib den Server |
+| Postfach | persönlich oder Funktionspostfach |
+| Mailadresse des Postfachs | bei einem Funktionspostfach Pflicht (`info@firma.de`), bei einem persönlichen leer |
+
+**2. Jeder Nutzer meldet sich selbst an** — Seitenleiste, *📬 Meine
+Postfächer*: Mailadresse und Passwort. Die Anmeldung wird sofort erprobt.
+
+**3. Fragen.** Ab der nächsten Frage stehen die Werkzeuge bereit.
+
+Ein Funktionspostfach läuft über die Stellvertretung: jeder meldet sich
+mit **seinen eigenen** Daten an, und Exchange entscheidet, wer
+hineindarf. Ein gemeinsames Passwort gibt es nicht. Ohne eingetragene
+Mailadresse wird ein Funktionspostfach abgewiesen — es öffnete sonst das
+Postfach dessen, der sich gerade anmeldet.
+
+### Was das Modell an einem Exchange-Postfach tun kann
+
+| Werkzeug | |
+|---|---|
+| `mails_lesen` | Nachrichten heraussuchen — nach Absender, Text, Zeitraum, Ordner. Liefert Datum, Absender, Betreff und einen Textanfang |
+| `mail_volltext` | eine Nachricht vollständig, mit Empfängern und Kopien |
+| `mail_senden` | **sendet** — neue Nachricht |
+| `antwort_senden` | **sendet** — Antwort auf eine Nachricht, wahlweise an alle |
+
+Jede Nachricht der Übersicht trägt eine Kurzkennung. Sie steht für die
+EWS-Kennung, die über hundert Zeichen lang ist, und gilt nur für das
+Postfach, aus dem sie stammt. Nach einem Neustart ist sie unbekannt; die
+Nachricht wird dann erneut herausgesucht.
+
+`POSTFACH_HOLGRENZE` begrenzt, wie viele Nachrichten je Abfrage vom
+Server geholt werden (200), `POSTFACH_TEXTAUSZUG` die Länge des
+Textanfangs in der Übersicht (400 Zeichen), `POSTFACH_TIMEOUT` die
+Wartezeit je Zugriff (30 s).
+
+Prüfen, ob die Anmeldung steht — Mailadresse und Passwort werden abgefragt, nicht übergeben:
+
+```bash
+python postfach.py <name>
+```
+
+`exchangelib` trägt diesen Weg. Das Modul lädt die Bibliothek erst beim
+ersten Zugriff — eine Anlage ohne Postfach lädt sie nie.
+
+### MCP-Server einrichten
 
 `config/mcp.json`, ein Eintrag je Server:
 
@@ -2232,8 +2297,9 @@ Zugriff auf ein Mailkonto.
 
 | Feld | Bedeutung |
 |---|---|
-| `transport` | `http` (JSON-RPC über POST) oder `stdio` (Unterprozess) |
-| `url` / `befehl` | Adresse bzw. Startbefehl |
+| `transport` | `exchange` (EWS, direkt), `http` (JSON-RPC über POST) oder `stdio` (Unterprozess) |
+| `url` / `befehl` | Adresse bzw. Startbefehl. Bei `exchange` die EWS-Adresse; leer heißt: der Server wird gesucht |
+| `postfach` | nur bei `exchange`: die Mailadresse des Postfachs. Ohne Angabe die des Angemeldeten |
 | `kopf` | zusätzliche HTTP-Kopfzeilen |
 | `sendet` | Werkzeuge, die etwas verschicken. Ohne Liste greift eine Namensregel |
 | `textfeld` | Argument, in dem der Nachrichtentext steht |

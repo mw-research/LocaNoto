@@ -2296,8 +2296,14 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                             "Token", type="password",
                             key=_feldschluessel("postfach", f"{_n}_tok"))
                     else:
+                        # Exchange will die vollstaendige Mailadresse.
+                        # "Benutzer" laedt dort zum Kuerzel ein, und das
+                        # scheitert erst beim Verbinden.
+                        _ist_ex = _ang.get("transport") == "exchange"
                         _pf_u = st.text_input(
-                            "Benutzer",
+                            "Mailadresse" if _ist_ex else "Benutzer",
+                            placeholder=("vorname.nachname@firma.de"
+                                         if _ist_ex else ""),
                             key=_feldschluessel("postfach", f"{_n}_ben"))
                         _pf_g = st.text_input(
                             "Passwort", type="password",

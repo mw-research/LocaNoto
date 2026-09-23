@@ -1,6 +1,6 @@
 # Lizenzen der Abhängigkeiten
 
-160 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
+169 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
 gelten für die jeweils gepinnte Fassung.
 
 LocaNoto selbst steht unter AGPL-3.0 (siehe `LICENSE`).
@@ -56,15 +56,10 @@ Sie ist keine Rechtsauskunft.
 | `nvidia-nvjitlink` | 13.3.33 | ? |
 | `nvidia-nvshmem-cu13` | 3.4.5 | ? |
 
-## freizuegig (MIT/BSD/Apache/PSF/ISC) — 137
-
+## freizuegig (MIT/BSD/Apache/PSF/ISC) — 146
 | Paket | Fassung | Lizenz |
 |---|---|---|
-| `Jinja2` | 3.1.6 | BSD License |
-| `MarkupSafe` | 3.0.3 | BSD-3-Clause |
-| `PyPika` | 0.51.1 | Apache Software License |
-| `PyYAML` | 6.0.3 | MIT License |
-| `Pygments` | 2.20.0 | BSD-2-Clause |
+---
 | `accelerate` | 1.14.0 | Apache Software License |
 | `aiohappyeyeballs` | 2.7.1 | Python Software Foundation License |
 | `aiohttp` | 3.14.3 | Apache-2.0 AND MIT |
@@ -78,15 +73,19 @@ Sie ist keine Rechtsauskunft.
 | `bcrypt` | 5.0.0 | Apache Software License |
 | `blinker` | 1.9.0 | MIT License |
 | `build` | 1.5.0 | MIT |
+| `cached-property` | 2.0.1 | BSD License |
 | `charset-normalizer` | 3.5.0 | MIT |
 | `chromadb` | 1.5.9 | Apache Software License |
 | `click` | 8.4.2 | BSD-3-Clause |
 | `coloredlogs` | 15.0.1 | MIT License |
 | `cryptography` | 50.0.1 | Apache-2.0 OR BSD-3-Clause |
 | `cuda-pathfinder` | 1.6.0 | Apache-2.0 |
+| `defusedxml` | 0.7.1 | Python Software Foundation License |
 | `distro` | 1.9.0 | Apache Software License |
+| `dnspython` | 2.8.0 | ISC License (ISCL) |
 | `durationpy` | 0.10 | MIT |
 | `exceptiongroup` | 1.3.1 | MIT License |
+| `exchangelib` | 5.6.0 | BSD-2-Clause |
 | `fastapi` | 0.141.1 | MIT |
 | `fastuuid` | 0.14.0 | BSD License |
 | `filelock` | 3.32.2 | MIT License |
@@ -104,7 +103,9 @@ Sie ist keine Rechtsauskunft.
 | `idna` | 3.18 | BSD-3-Clause |
 | `importlib_metadata` | 8.9.0 | Apache-2.0 |
 | `importlib_resources` | 7.1.0 | Apache-2.0 |
+| `isodate` | 0.7.2 | BSD License |
 | `itsdangerous` | 2.2.0 | BSD License |
+| `Jinja2` | 3.1.6 | BSD License |
 | `jiter` | 0.16.0 | MIT |
 | `joblib` | 1.5.3 | BSD-3-Clause |
 | `jsonpatch` | 1.33 | BSD License |
@@ -117,7 +118,9 @@ Sie ist keine Rechtsauskunft.
 | `langchain-text-splitters` | 1.1.2 | MIT License |
 | `langsmith` | 0.10.18 | MIT |
 | `litellm` | 1.96.2 | MIT |
+| `lxml` | 6.1.3 | BSD-3-Clause |
 | `markdown-it-py` | 4.2.0 | MIT License |
+| `MarkupSafe` | 3.0.3 | BSD-3-Clause |
 | `mdurl` | 0.1.2 | MIT License |
 | `mmh3` | 5.2.1 | MIT License |
 | `mpmath` | 1.3.0 | BSD License |
@@ -148,15 +151,20 @@ Sie ist keine Rechtsauskunft.
 | `pydantic-settings` | 2.15.0 | MIT License |
 | `pydantic_core` | 2.46.4 | MIT |
 | `pydeck` | 0.9.3 | Apache License 2.0 |
+| `Pygments` | 2.20.0 | BSD-2-Clause |
+| `PyPika` | 0.51.1 | Apache Software License |
 | `pyproject_hooks` | 1.2.0 | MIT License |
+| `pyspnego` | 0.12.2 | MIT |
 | `python-dateutil` | 2.9.0.post0 | Apache Software License; BSD License |
 | `python-docx` | 1.2.0 | MIT License |
 | `python-dotenv` | 1.2.2 | BSD-3-Clause |
 | `python-multipart` | 0.0.32 | Apache Software License |
 | `pytz` | 2026.3.post1 | MIT License |
+| `PyYAML` | 6.0.3 | MIT License |
 | `referencing` | 0.37.0 | MIT |
 | `regex` | 2026.7.19 | Apache-2.0 AND CNRI-Python |
 | `requests` | 2.34.2 | Apache Software License |
+| `requests-ntlm` | 1.3.0 | ISC License (ISCL) |
 | `requests-oauthlib` | 2.0.0 | BSD License |
 | `requests-toolbelt` | 1.0.0 | Apache Software License |
 | `rich` | 15.0.0 | MIT License |
@@ -185,6 +193,7 @@ Sie ist keine Rechtsauskunft.
 | `typing-inspection` | 0.4.4 | MIT |
 | `typing_extensions` | 4.16.0 | PSF-2.0 |
 | `tzdata` | 2026.3 | Apache-2.0 |
+| `tzlocal` | 5.4.4 | MIT |
 | `urllib3` | 2.7.0 | MIT |
 | `uuid_utils` | 0.17.0 | BSD-3-Clause |
 | `uvicorn` | 0.52.2 | BSD-3-Clause |
@@ -197,8 +206,6 @@ Sie ist keine Rechtsauskunft.
 | `yarl` | 1.24.5 | Apache-2.0 |
 | `zipp` | 4.1.0 | MIT |
 | `zstandard` | 0.25.0 | BSD-3-Clause |
-
----
 
 ## Zwei Punkte, die eine Prüfung verdienen
 
