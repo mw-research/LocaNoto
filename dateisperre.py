@@ -16,6 +16,7 @@ benennt sie dann um. Der eigene Name ist noetig: bei einem festen Namen
 wie "users.json.neu" schreiben zwei Faeden in DIESELBE Zwischendatei.
 """
 import contextlib
+import functools
 import os
 import tempfile
 import threading
@@ -93,8 +94,31 @@ def gesperrt(pfad):
             tiefen[pfad] -= 1
 
 
+def unter_sperre(pfad):
+    """Dekorator: die Funktion laeuft vollstaendig unter gesperrt(...).
+
+    pfad ist eine Funktion und bekommt dieselben Argumente wie die
+    dekorierte. So gilt ein zur Laufzeit umgelenkter Pfad (Tests,
+    Umzug), und eine Datei je Benutzer laesst sich aus dem Argument
+    bilden:
+
+        @unter_sperre(lambda *_a, **_k: TOKEN_FILE)
+        @unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
+    """
+    def deko(f):
+        @functools.wraps(f)
+        def innen(*args, **kwargs):
+            with gesperrt(pfad(*args, **kwargs)):
+                return f(*args, **kwargs)
+        return innen
+    return deko
+
+
 def schreibe_atomar(pfad, text, modus=None):
     """Schreibt text nach pfad, ganz oder gar nicht.
+
+    text darf str oder bytes sein; str wird als UTF-8 mit "\\n" als
+    Zeilenende geschrieben, auf jedem Betriebssystem gleich.
 
     modus=0o600 fuer Dateien, die niemand ausser der Anwendung lesen
     soll. Die Zwischendatei entsteht bereits mit 0600; ohne modus
@@ -105,7 +129,11 @@ def schreibe_atomar(pfad, text, modus=None):
     fd, zwischen = tempfile.mkstemp(
         prefix=os.path.basename(pfad) + ".", suffix=".neu", dir=verzeichnis)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        if isinstance(text, bytes):
+            f = os.fdopen(fd, "wb")
+        else:
+            f = os.fdopen(fd, "w", encoding="utf-8", newline="\n")
+        with f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())

@@ -46,6 +46,7 @@ import json
 import os
 
 import geheim
+import dateisperre
 import paths
 
 DATEI = os.path.join(paths.CONFIG_DIR, "raumschluessel.json")
@@ -92,16 +93,8 @@ def _speichere(raeume_):
     inhalt = {"raeume": raeume_}
     daten = {"inhalt": inhalt,
              "signatur": geheim.signiere(geheim.kanonisch(inhalt))}
-    os.makedirs(os.path.dirname(DATEI), exist_ok=True)
-    vorlaeufig = DATEI + ".neu"
-    fd = os.open(vorlaeufig, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(daten, f, ensure_ascii=False, indent=1)
-    os.replace(vorlaeufig, DATEI)
-    try:
-        os.chmod(DATEI, 0o600)
-    except OSError:
-        pass
+    dateisperre.schreibe_atomar(
+        DATEI, json.dumps(daten, ensure_ascii=False, indent=1), 0o600)
 
 
 def schluessel(raum, anlegen=True):
@@ -116,22 +109,31 @@ def schluessel(raum, anlegen=True):
     if raum in _schluessel:
         return _schluessel[raum]
 
-    raeume_ = _lade()
-    verpackt = raeume_.get(raum)
-    if verpackt:
-        roh = geheim.entschluessele(base64.b64decode(verpackt),
-                                    zusatz=raum.encode("utf-8"))
-        if len(roh) != 32:
-            raise ValueError(f"Der Schluessel fuer '{raum}' ist unbrauchbar.")
-        _schluessel[raum] = roh
-        return roh
-
-    if not anlegen:
+    verpackt = _lade().get(raum)
+    if not verpackt and anlegen:
+        # Anlegen NUR unter der Sperre, und dort erneut lesen. Zwei Faeden,
+        # die zugleich einen neuen Raum beginnen, schrieben sonst jeder
+        # seinen Schluessel in den Stand, den er vorher gelesen hatte --
+        # der zweite loeschte den des ersten. Der erste verschluesselte
+        # trotzdem weiter mit seinem, aus dem Zwischenspeicher, und nach
+        # dem naechsten Neustart war davon nichts mehr lesbar.
+        with dateisperre.gesperrt(DATEI):
+            raeume_ = _lade()
+            verpackt = raeume_.get(raum)
+            if not verpackt:
+                roh = os.urandom(32)
+                raeume_[raum] = base64.b64encode(
+                    geheim.verschluessele(
+                        roh, zusatz=raum.encode("utf-8"))).decode("ascii")
+                _speichere(raeume_)
+                _schluessel[raum] = roh
+                return roh
+    if not verpackt:
         return None
-    roh = os.urandom(32)
-    raeume_[raum] = base64.b64encode(
-        geheim.verschluessele(roh, zusatz=raum.encode("utf-8"))).decode("ascii")
-    _speichere(raeume_)
+    roh = geheim.entschluessele(base64.b64decode(verpackt),
+                                zusatz=raum.encode("utf-8"))
+    if len(roh) != 32:
+        raise ValueError(f"Der Schluessel fuer '{raum}' ist unbrauchbar.")
     _schluessel[raum] = roh
     return roh
 
@@ -144,6 +146,7 @@ def bekannt():
         return []
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def entferne(raum):
     """Nimmt den Schluessel eines Raums heraus.
 

@@ -31,6 +31,7 @@ import secrets
 import time
 
 import geheim
+import dateisperre
 import paths
 
 INDEX = "verzeichnis"
@@ -73,11 +74,9 @@ def _index_lesen(benutzer):
 
 def _index_schreiben(benutzer, daten):
     roh = json.dumps(daten, ensure_ascii=False).encode("utf-8")
-    p = _index_pfad(benutzer)
-    vorlaeufig = p + ".neu"
-    with open(vorlaeufig, "wb") as f:
-        f.write(geheim.verschluessele(roh, _zusatz(benutzer, INDEX)))
-    os.replace(vorlaeufig, p)
+    dateisperre.schreibe_atomar(
+        _index_pfad(benutzer),
+        geheim.verschluessele(roh, _zusatz(benutzer, INDEX)))
 
 
 # --- ALTBESTAND ---
@@ -87,6 +86,7 @@ def _titel_aus_name(name):
     return name[:-5].replace("_", " ").strip() or "Chat"
 
 
+@dateisperre.unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
 def uebernimm_alt(benutzer):
     """Alte Chatdateien in das neue Format bringen. Anzahl der uebernommenen.
 
@@ -134,11 +134,9 @@ def _schreibe(benutzer, kennung, nachrichten, titel, geaendert=None):
     inhalt = {"titel": titel, "geaendert": geaendert or time.time(),
               "nachrichten": nachrichten}
     roh = json.dumps(inhalt, ensure_ascii=False).encode("utf-8")
-    p = os.path.join(ordner(benutzer), kennung)
-    vorlaeufig = p + ".neu"
-    with open(vorlaeufig, "wb") as f:
-        f.write(geheim.verschluessele(roh, _zusatz(benutzer, kennung)))
-    os.replace(vorlaeufig, p)
+    dateisperre.schreibe_atomar(
+        os.path.join(ordner(benutzer), kennung),
+        geheim.verschluessele(roh, _zusatz(benutzer, kennung)))
 
 
 def _lies(benutzer, kennung):
@@ -156,6 +154,7 @@ def _lies(benutzer, kennung):
     return daten if isinstance(daten, dict) else None
 
 
+@dateisperre.unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
 def liste(benutzer):
     """[(kennung, titel, geaendert)], neueste zuerst.
 
@@ -211,6 +210,7 @@ def titel(benutzer, kennung, rueckfall="Neuer Chat"):
             or rueckfall)
 
 
+@dateisperre.unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
 def speichere(benutzer, kennung, nachrichten, titel=None):
     """Schreibt den Verlauf und haelt das Verzeichnis nach."""
     index = _index_lesen(benutzer)
@@ -222,6 +222,7 @@ def speichere(benutzer, kennung, nachrichten, titel=None):
     _index_schreiben(benutzer, index)
 
 
+@dateisperre.unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
 def benenne(benutzer, kennung, neuer_titel):
     """Nur der Titel, ohne die Datei anzufassen.
 
@@ -236,6 +237,7 @@ def benenne(benutzer, kennung, neuer_titel):
     _index_schreiben(benutzer, index)
 
 
+@dateisperre.unter_sperre(lambda benutzer, *_a, **_k: _index_pfad(benutzer))
 def loesche(benutzer, kennung):
     """Verlauf und Verzeichniseintrag entfernen."""
     p = os.path.join(ordner(benutzer), kennung)

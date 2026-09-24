@@ -17,6 +17,7 @@ den diese Anwendung kennt, und deshalb wird er beim Speichern abgelehnt.
 """
 import os
 
+import dateisperre
 import paths
 import presets
 
@@ -123,15 +124,9 @@ def speichern(name, text, preset=None):
     if not ok:
         return False, meldung
     try:
-        os.makedirs(os.path.dirname(eigener_pfad(name, preset)),
-                    exist_ok=True)
         # Erst daneben schreiben, dann umbenennen: bricht der Vorgang ab,
         # steht die alte Fassung noch vollstaendig da.
-        ziel = eigener_pfad(name, preset)
-        vorlaeufig = ziel + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
-        os.replace(vorlaeufig, ziel)
+        dateisperre.schreibe_atomar(eigener_pfad(name, preset), text)
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     return True, "Gespeichert. Wirkt ab der naechsten Frage."

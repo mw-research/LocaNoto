@@ -37,6 +37,7 @@ import mcp
 import notzugang
 import owncloud
 import paths
+import dateisperre
 import pipeline
 import presets
 import prompts
@@ -1569,15 +1570,9 @@ def zeichne(*, is_admin,
 
             if st.button("Glossar speichern", use_container_width=True):
                 try:
-                    os.makedirs(os.path.dirname(paths.GLOSSAR_FILE),
-                                exist_ok=True)
                     # Erst daneben schreiben, dann umbenennen: bricht der
                     # Vorgang ab, steht die alte Datei noch vollstaendig da.
-                    vorlaeufig = paths.GLOSSAR_FILE + ".neu"
-                    with open(vorlaeufig, "w", encoding="utf-8",
-                              newline="\n") as f:
-                        f.write(neu)
-                    os.replace(vorlaeufig, paths.GLOSSAR_FILE)
+                    dateisperre.schreibe_atomar(paths.GLOSSAR_FILE, neu)
                     st.success("Gespeichert. Wirkt ab der naechsten Frage.")
                     time.sleep(1)
                     st.rerun()

@@ -34,6 +34,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import geheim
+import dateisperre
 import paths
 
 TOKEN_FILE = os.path.join(paths.CONFIG_DIR, "tokens.json")
@@ -114,17 +115,11 @@ def speichern(daten):
             _eintrag_daten(kennung, eintrag))
         fertig[kennung] = eintrag
 
-    vorlaeufig = TOKEN_FILE + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump(fertig, f, indent=2, ensure_ascii=False)
-    os.replace(vorlaeufig, TOKEN_FILE)
-    try:
-        os.chmod(TOKEN_FILE, 0o600)
-    except OSError:
-        # Auf manchen Dateisystemen nicht setzbar. Kein Grund abzubrechen.
-        pass
+    dateisperre.schreibe_atomar(
+        TOKEN_FILE, json.dumps(fertig, indent=2, ensure_ascii=False), 0o600)
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: TOKEN_FILE)
 def erzeuge(benutzer, bezeichnung="", tage=None):
     """Legt ein Token an und gibt es im Klartext zurueck -- einmalig.
 
@@ -197,6 +192,7 @@ def liste():
     return sorted(eintraege, key=lambda p: p[1].get("erstellt", ""))
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: TOKEN_FILE)
 def widerrufe(kennung):
     """Entfernt ein Token anhand des Anfangs seines Hashwerts.
 

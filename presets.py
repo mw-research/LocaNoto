@@ -34,6 +34,7 @@ import json
 import os
 import re
 
+import dateisperre
 import paths
 
 ORDNER = os.path.join(paths.CONFIG_DIR, "presets")
@@ -97,11 +98,9 @@ def speichern(name, werte):
     ziel = os.path.join(ORDNER, name)
     daten = {k: werte.get(k, v) for k, v in FELDER.items()}
     try:
-        os.makedirs(ziel, exist_ok=True)
-        vorlaeufig = os.path.join(ziel, "preset.json.neu")
-        with open(vorlaeufig, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(daten, f, indent=2, ensure_ascii=False)
-        os.replace(vorlaeufig, os.path.join(ziel, "preset.json"))
+        dateisperre.schreibe_atomar(
+            os.path.join(ziel, "preset.json"),
+            json.dumps(daten, indent=2, ensure_ascii=False))
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     return True, name

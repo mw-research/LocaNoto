@@ -58,6 +58,7 @@ import os
 import re
 
 import geheim
+import dateisperre
 import paths
 
 QUELLEN = os.path.join(paths.CONFIG_DIR, "listenquellen.json")
@@ -174,6 +175,7 @@ def liste():
     return lade()["quellen"]
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
 def speichere(quellen):
     """Schreibt die Quellen. (ok, meldung)."""
     sauber = []
@@ -204,11 +206,8 @@ def speichere(quellen):
     if geheim.verfuegbar():
         daten["signatur"] = geheim.signiere(geheim.kanonisch(sauber))
     try:
-        os.makedirs(os.path.dirname(QUELLEN), exist_ok=True)
-        vorlaeufig = QUELLEN + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8") as f:
-            json.dump(daten, f, indent=1, ensure_ascii=False)
-        os.replace(vorlaeufig, QUELLEN)
+        dateisperre.schreibe_atomar(
+            QUELLEN, json.dumps(daten, indent=1, ensure_ascii=False))
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     return True, f"{len(sauber)} Quelle(n) gespeichert."
@@ -387,6 +386,7 @@ def darf_setzen(raum, benutzer, ist_verwalter=False):
                    "eintragen.")
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
 def setze_raum(raum, pfad, benutzer="?", ist_verwalter=False):
     """Traegt die Quelle EINES Raums ein oder entfernt sie. (ok, meldung).
 

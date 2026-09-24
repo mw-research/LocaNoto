@@ -36,6 +36,7 @@ import hmac
 import json
 import os
 
+import dateisperre
 import paths
 
 SCHLUESSEL_DATEI = os.path.join(paths.CONFIG_DIR, "schluessel.key")
@@ -128,7 +129,9 @@ def schluessel():
         return _schluessel
 
     if not os.path.exists(SCHLUESSEL_DATEI):
-        return _erzeuge()
+        neu = _erzeuge()
+        if neu is not _SCHON_DA:
+            return neu
 
     try:
         with open(SCHLUESSEL_DATEI, "rb") as f:
@@ -167,30 +170,32 @@ def zustand():
     return "ok", beschreibung()
 
 
+_SCHON_DA = object()
+
+
 def _erzeuge():
     """Legt einen neuen Schluessel an. None, wenn das nicht geht.
 
     Nur beim ersten Start. Danach nie wieder: ein neuer Schluessel macht
     alles Bisherige unlesbar, und zwar ohne Fehlermeldung -- die Dateien
     sind ja noch da.
+
+    Unter der Sperre und mit erneutem Nachsehen: Anwendung und API starten
+    im selben Pod gleichzeitig. Ohne beides erzeugten beim ersten Start
+    beide einen Schluessel, auf der Platte bliebe einer, und der andere
+    Prozess verschluesselte bis zum Neustart mit einem, den es nicht mehr
+    gibt. _SCHON_DA heisst: ein anderer war schneller, lies seinen.
     """
     global _schluessel
-    roh = os.urandom(32)
     try:
-        os.makedirs(os.path.dirname(SCHLUESSEL_DATEI), exist_ok=True)
-        vorlaeufig = SCHLUESSEL_DATEI + ".neu"
-        # 0600 vor dem Schreiben, nicht danach: zwischen Anlegen und
-        # chmod liegt sonst ein Moment, in dem die Datei fuer alle lesbar
-        # ist.
-        fd = os.open(vorlaeufig, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(base64.urlsafe_b64encode(roh))
-        os.replace(vorlaeufig, SCHLUESSEL_DATEI)
-        try:
-            os.chmod(SCHLUESSEL_DATEI, 0o600)
-        except OSError:
-            # Auf Windows-Dateisystemen ohne POSIX-Rechte nicht moeglich.
-            pass
+        with dateisperre.gesperrt(SCHLUESSEL_DATEI):
+            if os.path.exists(SCHLUESSEL_DATEI):
+                return _SCHON_DA
+            roh = os.urandom(32)
+            # Die Zwischendatei entsteht mit 0600: es gibt keinen Moment,
+            # in dem der Schluessel fuer alle lesbar auf der Platte liegt.
+            dateisperre.schreibe_atomar(
+                SCHLUESSEL_DATEI, base64.urlsafe_b64encode(roh), 0o600)
     except OSError:
         return None
     _schluessel = roh

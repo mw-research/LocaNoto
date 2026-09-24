@@ -120,13 +120,7 @@ def _unter_sperre(f):
     loescht, was der erste eingetragen hat -- etwa den persoenlichen
     Raum eines eben angelegten Nutzers.
     """
-    import functools
-
-    @functools.wraps(f)
-    def innen(*args, **kwargs):
-        with dateisperre.gesperrt(DATEI):
-            return f(*args, **kwargs)
-    return innen
+    return dateisperre.unter_sperre(lambda *_a, **_k: DATEI)(f)
 
 
 # --- KENNUNGEN ---

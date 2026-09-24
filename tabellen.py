@@ -37,6 +37,7 @@ import os
 import re
 import sqlite3
 
+import dateisperre
 import paths
 import sqlpruefung
 
@@ -105,11 +106,7 @@ def setze_pfad(p):
     if not ok:
         return False, meldung
     try:
-        os.makedirs(paths.CONFIG_DIR, exist_ok=True)
-        vorlaeufig = PFAD_DATEI + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8", newline="\n") as f:
-            f.write((p or "").strip())
-        os.replace(vorlaeufig, PFAD_DATEI)
+        dateisperre.schreibe_atomar(PFAD_DATEI, (p or "").strip())
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     _zwischenspeicher.clear()
@@ -238,6 +235,7 @@ def _kopfzeilen():
         return {}
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: KOPF_DATEI)
 def setze_kopfzeile(datei, blatt, zeile):
     """Setzt die Kopfzeile eines Blattes von Hand. zeile=None loescht sie.
 
@@ -253,11 +251,8 @@ def setze_kopfzeile(datei, blatt, zeile):
     else:
         d[schluessel] = int(zeile)
     try:
-        os.makedirs(paths.CONFIG_DIR, exist_ok=True)
-        vorlaeufig = KOPF_DATEI + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8") as f:
-            json.dump(d, f, indent=1, ensure_ascii=False)
-        os.replace(vorlaeufig, KOPF_DATEI)
+        dateisperre.schreibe_atomar(
+            KOPF_DATEI, json.dumps(d, indent=1, ensure_ascii=False))
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     _zwischenspeicher.clear()
@@ -583,11 +578,11 @@ def baue_katalog():
     katalog = {"eintraege": [_verdecke(e) for e in eintraege],
                "fehler": fehler}
     try:
-        os.makedirs(os.path.dirname(KATALOG), exist_ok=True)
-        vorlaeufig = KATALOG + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8") as f:
-            json.dump(katalog, f, indent=1, ensure_ascii=False)
-        os.replace(vorlaeufig, KATALOG)
+        # Mehrere Stellen der Oberflaeche bauen den Katalog neu, auch
+        # gleichzeitig. Ein eigener Zwischenname verhindert, dass zwei
+        # Laeufe in dieselbe Zwischendatei schreiben.
+        dateisperre.schreibe_atomar(
+            KATALOG, json.dumps(katalog, indent=1, ensure_ascii=False))
     except OSError:
         pass
     return {"eintraege": eintraege, "fehler": fehler}, fehler

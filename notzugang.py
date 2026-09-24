@@ -43,6 +43,7 @@ import time
 
 import benutzer
 import geheim
+import dateisperre
 import paths
 import raeume
 
@@ -101,13 +102,10 @@ def _lade():
 
 
 def _speichere(inhalt):
-    os.makedirs(os.path.dirname(DATEI), exist_ok=True)
     daten = {"inhalt": inhalt,
              "signatur": geheim.signiere(geheim.kanonisch(inhalt))}
-    vorlaeufig = DATEI + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump(daten, f, ensure_ascii=False, indent=2)
-    os.replace(vorlaeufig, DATEI)
+    dateisperre.schreibe_atomar(
+        DATEI, json.dumps(daten, ensure_ascii=False, indent=2))
 
 
 def moeglich():
@@ -122,6 +120,7 @@ def moeglich():
 
 # --- BEANTRAGEN ---
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def beantrage(raum, von, grund):
     """Ein Verwalter beantragt Zugang zu einem persoenlichen Raum."""
     grund = (grund or "").strip()
@@ -159,6 +158,7 @@ def antraege():
 
 # --- BESTAETIGEN ---
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def bestaetige(raum, von, durch):
     """Der zweite Mensch bestaetigt. Erst hier entsteht der Zugang."""
     if not benutzer.hat_rolle(durch, "notzugang"):
@@ -184,6 +184,7 @@ def bestaetige(raum, von, durch):
     return True, f"Bestaetigt. Der Zugang gilt {STUNDEN} Stunden."
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def lehne_ab(raum, von, durch, grund=""):
     if not benutzer.hat_rolle(durch, "notzugang"):
         return False, "Nur die Rolle 'notzugang' kann ablehnen."
@@ -223,6 +224,7 @@ def offene():
     return sorted(_lade()["zugaenge"], key=lambda z: z.get("bis", 0))
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def schliesse(raum, von, durch="?"):
     """Beendet einen Zugang vor Ablauf."""
     daten = _lade()

@@ -57,6 +57,7 @@ from urllib.parse import quote, unquote, urlparse
 
 import requests
 
+import dateisperre
 import paths
 
 URL = os.getenv("OWNCLOUD_URL", "").strip().rstrip("/")
@@ -124,11 +125,8 @@ def zuordnung():
 
 def setze_zuordnung(neu):
     """Schreibt die Zuordnung. neu: {raum: ordner}."""
-    os.makedirs(os.path.dirname(ZUORDNUNG), exist_ok=True)
-    vorlaeufig = ZUORDNUNG + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump({"raeume": neu}, f, ensure_ascii=False, indent=2)
-    os.replace(vorlaeufig, ZUORDNUNG)
+    dateisperre.schreibe_atomar(
+        ZUORDNUNG, json.dumps({"raeume": neu}, ensure_ascii=False, indent=2))
 
 
 def ordner_fuer(raum):
@@ -210,12 +208,11 @@ def _stand_lesen(raum):
 
 
 def _stand_schreiben(raum, daten):
-    os.makedirs(STAENDE, exist_ok=True)
-    p = _stand_datei(raum)
-    vorlaeufig = p + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump(daten, f, ensure_ascii=False, indent=2)
-    os.replace(vorlaeufig, p)
+    # Oberflaeche und Zeitplan (spiegeln.py) koennen denselben Raum
+    # zugleich abgleichen. Mit festem Zwischennamen schrieben beide in
+    # DIESELBE Zwischendatei.
+    dateisperre.schreibe_atomar(
+        _stand_datei(raum), json.dumps(daten, ensure_ascii=False, indent=2))
 
 
 # --- WEBDAV ---
@@ -530,12 +527,10 @@ def gruppen_abgleich():
     behalten = set(zu.values())
     zusammen = {g: m for g, m in zusammen.items() if g in behalten}
 
-    os.makedirs(os.path.dirname(paths.GRUPPEN_DATEI), exist_ok=True)
-    vorlaeufig = paths.GRUPPEN_DATEI + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump({"aktualisiert": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                   "gruppen": zusammen}, f, ensure_ascii=False, indent=2)
-    os.replace(vorlaeufig, paths.GRUPPEN_DATEI)
+    dateisperre.schreibe_atomar(
+        paths.GRUPPEN_DATEI,
+        json.dumps({"aktualisiert": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "gruppen": zusammen}, ensure_ascii=False, indent=2))
 
     return {"gruppen": zusammen, "fehler": fehler, "geschrieben": True,
             "meldung": (str(len(gefunden)) + " Gruppen, "

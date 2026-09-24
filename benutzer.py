@@ -288,13 +288,7 @@ def _unter_sperre(f):
     drei Nutzer gleichzeitig anlegen: neun als angelegt gemeldet, einer in
     der Datei.
     """
-    import functools
-
-    @functools.wraps(f)
-    def innen(*args, **kwargs):
-        with dateisperre.gesperrt(_datei()):
-            return f(*args, **kwargs)
-    return innen
+    return dateisperre.unter_sperre(lambda *_a, **_k: _datei())(f)
 
 
 def _jetzt():

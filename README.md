@@ -433,25 +433,25 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `api`, `app`, `aufnehmen` +45 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `api`, `app`, `aufnehmen` +46 |
 | `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +12 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +11 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `aufnehmen`, `ingest` +3 |
 | **Bestand** | | | |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `api`, `app`, `bestandsliste` +10 |
 | `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `api`, `app`, `aufnehmen` +19 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
 | `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `ingest`, `ingest_images` +8 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
 | `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
 | **Fachlogik** | | | |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
 | `owncloud.py` | Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `aufnehmen`, `einrichten` +6 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `app`, `pipeline`, `postfach`, `selbsttest` +1 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
-| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `api`, `app`, `pipeline`, `selbsttest` |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `pipeline`, `selbsttest` |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `benutzer`, `raeume`, `selbsttest` |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
+| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `api`, `app`, `pipeline`, `selbsttest` |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `selbsttest`, `tabellen`, `verwaltung` |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `selbsttest` |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `api`, `app`, `selbsttest`, `verwaltung` |
@@ -463,9 +463,9 @@ Dateien importieren sie.
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `app`, `selbsttest`, `verwaltung` |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `app`, `bildtext` |
-| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | — | `app`, `verwaltung` |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `selbsttest` |
 | `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `api`, `app`, `sqldb`, `tabellen` |
+| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | — | `app`, `verwaltung` |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
 | `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `verwaltung` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `selbsttest`, `verwaltung` |

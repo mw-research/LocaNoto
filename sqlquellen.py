@@ -37,6 +37,7 @@ import json
 import os
 
 import geheim
+import dateisperre
 import paths
 
 QUELLEN = os.path.join(paths.CONFIG_DIR, "sqlquellen.json")
@@ -88,11 +89,8 @@ def _speichere(zugaenge):
     if geheim.verfuegbar():
         daten["signatur"] = geheim.signiere(geheim.kanonisch(zugaenge))
     try:
-        os.makedirs(os.path.dirname(QUELLEN), exist_ok=True)
-        vorlaeufig = QUELLEN + ".neu"
-        with open(vorlaeufig, "w", encoding="utf-8") as f:
-            json.dump(daten, f, indent=1, ensure_ascii=False)
-        os.replace(vorlaeufig, QUELLEN)
+        dateisperre.schreibe_atomar(
+            QUELLEN, json.dumps(daten, indent=1, ensure_ascii=False))
     except OSError as e:
         return False, f"Konnte nicht gespeichert werden: {e}"
     return True, "Gespeichert."
@@ -116,6 +114,7 @@ def darf_setzen(raum, benutzer, ist_verwalter=False):
                    "eintragen.")
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
 def setze(raum, angaben, benutzer="?", ist_verwalter=False):
     """Legt den Zugang eines Raums fest. (ok, meldung).
 

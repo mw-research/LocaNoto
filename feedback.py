@@ -41,6 +41,7 @@ import os
 from datetime import datetime, timezone
 
 import geheim
+import dateisperre
 import paths
 import raeume
 
@@ -75,6 +76,7 @@ def _quelle(q):
             "raum": raum or None}
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def notiere(art, benutzer, frage, sonden=(), zahlen=None, quellen=(),
             herkunft="oberflaeche"):
     """Haelt ein Ereignis fest. Scheitert nie lautstark.
@@ -195,6 +197,7 @@ def klartextzeilen():
     return offen
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def neu_verschluesseln():
     """Schreibt das Protokoll vollstaendig verschluesselt neu.
 
@@ -209,19 +212,19 @@ def neu_verschluesseln():
     eintraege = list(reversed(lese(grenze=10 ** 9)))
     if not eintraege:
         return True, 0
-    vorlaeufig = DATEI + ".neu"
     try:
-        with open(vorlaeufig, "w", encoding="utf-8") as f:
-            for e in eintraege:
-                roh = json.dumps(e, ensure_ascii=False).encode("utf-8")
-                f.write(base64.b64encode(
-                    geheim.verschluessele(roh)).decode("ascii") + "\n")
-        os.replace(vorlaeufig, DATEI)
+        zeilen = []
+        for e in eintraege:
+            roh = json.dumps(e, ensure_ascii=False).encode("utf-8")
+            zeilen.append(base64.b64encode(
+                geheim.verschluessele(roh)).decode("ascii") + "\n")
+        dateisperre.schreibe_atomar(DATEI, "".join(zeilen))
     except OSError:
         return False, 0
     return True, len(eintraege)
 
 
+@dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
 def archiviere():
     """Legt das Protokoll beiseite und beginnt ein neues.
 
