@@ -18,6 +18,7 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 | **Anbindung** | ownCloud für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
 | **Betrieb** | Docker Compose oder Kubernetes; der Container hält keinen Zustand |
 
+**Bedienen:** [HANDBUCH.md](HANDBUCH.md) — für Nutzer und Verwalter; in LocaNoto eingelesen, beantwortet die Anwendung damit Fragen zu ihrer eigenen Bedienung
 **Einrichten:** [mit Docker](#-einrichten-mit-docker) ·
 [auf Kubernetes](#-einrichten-auf-kubernetes)
 **Verstehen:** [die Landkarte](#-die-landkarte) — was welche Datei tut
@@ -1259,7 +1260,7 @@ lassen sich nicht schließen, nur eingrenzen:
 Administratoren sehen Dokumente in fremden Räumen ausschließlich im
 Verwaltungsbereich der Seitenleiste, und dort nur Raum und Dateiname — ein
 Löschrecht ist kein Leserecht. In Suche und Antworten fließen sie nie ein.
-Wer Administrator ist, legt `ADMIN_USERS` in der `.env` fest.
+Wer Administrator ist, steht als Rolle in der signierten Benutzerdatei — siehe [Benutzer und Rollen](#-benutzer-und-rollen).
 
 Siehe [Räume](#-räume) für die Einrichtung.
 

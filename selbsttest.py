@@ -3436,6 +3436,58 @@ for _wurzel_s, _ordner_s, _namen_s in os.walk(_HIER_S := os.path.dirname(
 pruef("keine Datei schreibt ueber eine Zwischendatei mit festem Namen",
       not _fest, _fest)
 
+# --- DAS HANDBUCH FOLGT DER OBERFLAECHE ---
+#
+# HANDBUCH.md wird in LocaNoto eingelesen, damit die Anwendung Fragen zu
+# ihrer eigenen Bedienung beantwortet. Ein Bereich, den es in der
+# Oberflaeche gibt und im Handbuch nicht, ist fuer diese Fragen
+# unsichtbar -- LocaNoto antwortet dann "steht nicht im Bestand".
+#
+# Gelesen werden die Bereichsnamen aus dem Code: jeder Aufklapper der
+# Verwaltung, jede Ueberschrift der Seitenleiste, jeder Aufklapper mit
+# festem Namen. Dynamische Namen (Raeume, Dateien) fallen heraus.
+import ast as _ast_h
+import re as _re_h
+_hb = _datei("HANDBUCH.md")
+
+
+def _hb_name(k):
+    if isinstance(k, _ast_h.Constant) and isinstance(k.value, str):
+        roh = k.value
+    elif isinstance(k, _ast_h.JoinedStr):
+        roh = "".join(t.value for t in k.values
+                      if isinstance(t, _ast_h.Constant))
+    elif isinstance(k, _ast_h.BinOp) and isinstance(k.left, _ast_h.Constant):
+        roh = k.left.value
+    else:
+        return ""
+    roh = roh.split("(")[0]
+    return _re_h.sub(r"^[^\w]+", "", roh).strip(" :-\u2014")
+
+
+_hb_fehlt = []
+for _hd, _arten in (("verwaltung.py", ("expander",)),
+                    ("app.py", ("expander", "header", "subheader"))):
+    for _k in _ast_h.walk(_ast_h.parse(_datei(_hd))):
+        if (isinstance(_k, _ast_h.Call)
+                and getattr(_k.func, "attr", "") in _arten and _k.args):
+            _n = _hb_name(_k.args[0])
+            if _n and _n not in _hb:
+                _hb_fehlt.append(f"{_hd}:{_k.lineno} {_n}")
+pruef("jeder Bereich der Oberflaeche steht im Handbuch", not _hb_fehlt,
+      _hb_fehlt)
+
+# Eingelesen wird es wie jedes Markdown: je Ueberschrift ein Abschnitt,
+# ab 1500 Zeichen weiter zerteilt. Ein zerteilter Abschnitt verliert
+# seine Ueberschrift -- und die Ueberschrift ist die Frage, ueber die er
+# gefunden wird.
+import lesen as _lesen_h
+_hb_ab = list(_lesen_h.abschnitte(os.path.join(_HIER_S, "HANDBUCH.md")))
+_hb_lang = [t for _n, t, x in _hb_ab if len(x) > 1500]
+pruef("jeder Abschnitt des Handbuchs bleibt beim Einlesen ein Stueck",
+      _hb_ab and not _hb_lang, _hb_lang)
+pruef("die README verweist auf das Handbuch", "HANDBUCH.md" in _datei("README.md"))
+
 import landkarte as _lk
 
 _HIER = os.path.dirname(os.path.abspath(__file__))
