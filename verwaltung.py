@@ -249,23 +249,33 @@ def zeichne(*, is_admin,
                 key="benutzer_wahl")
 
             if _wahl == "(neu anlegen)":
-                _name = st.text_input(
-                    "Kennung", key=_feldschluessel("benutzer_neu", "name"))
-                _rolle = st.selectbox(
-                    "Rolle", list(benutzer.ROLLEN),
-                    index=list(benutzer.ROLLEN).index("nutzer"),
-                    key=_feldschluessel("benutzer_neu", "rolle"),
-                    help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
-                _pw1 = st.text_input(
-                    f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
-                    type="password",
-                    key=_feldschluessel("benutzer_neu", "pw1"))
-                _pw2 = st.text_input(
-                    "Passwort wiederholen", type="password",
-                    key=_feldschluessel("benutzer_neu", "pw2"))
-                if st.button("Benutzer anlegen", use_container_width=True,
-                             disabled=not (_name.strip() and _pw1)):
-                    if _pw1 != _pw2:
+                # In einem Formular, damit alle Felder MIT dem Klick
+                # ankommen. Vorher hing der Knopf an "Passwort ausgefuellt"
+                # aus dem vorigen Durchlauf: wer das Passwort tippte und
+                # direkt klickte, traf einen noch gesperrten Knopf, und
+                # der Klick verpuffte ohne Meldung.
+                with st.form(
+                        f"benutzer_neu_{_feldschluessel('benutzer_neu', 'runde')}"):
+                    _name = st.text_input(
+                        "Kennung", key=_feldschluessel("benutzer_neu", "name"))
+                    _rolle = st.selectbox(
+                        "Rolle", list(benutzer.ROLLEN),
+                        index=list(benutzer.ROLLEN).index("nutzer"),
+                        key=_feldschluessel("benutzer_neu", "rolle"),
+                        help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
+                    _pw1 = st.text_input(
+                        f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+                        type="password",
+                        key=_feldschluessel("benutzer_neu", "pw1"))
+                    _pw2 = st.text_input(
+                        "Passwort wiederholen", type="password",
+                        key=_feldschluessel("benutzer_neu", "pw2"))
+                    _anlegen = st.form_submit_button(
+                        "Benutzer anlegen", use_container_width=True)
+                if _anlegen:
+                    if not (_name or "").strip() or not _pw1:
+                        st.error("Kennung und Passwort eintragen.")
+                    elif _pw1 != _pw2:
                         st.error("Die Eingaben stimmen nicht überein.")
                     else:
                         ok, meldung = benutzer.anlege(
@@ -315,13 +325,20 @@ def zeichne(*, is_admin,
                 # zwei Benutzer eine Runde, und das Umschalten auf den
                 # naechsten leerte das Feld des vorigen mit.
                 _pwb = f"benutzer_pw_{_wahl}"
-                _pw1 = st.text_input("Neues Passwort", type="password",
-                                     key=_feldschluessel(_pwb, "pw1"))
-                _pw2 = st.text_input("Wiederholen", type="password",
-                                     key=_feldschluessel(_pwb, "pw2"))
-                if st.button("Passwort setzen", use_container_width=True,
-                             disabled=not _pw1, key=f"benutzer_pws_{_wahl}"):
-                    if _pw1 != _pw2:
+                # Formular aus demselben Grund wie beim Anlegen: die
+                # Felder kommen mit dem Klick an, nicht einen Durchlauf
+                # spaeter.
+                with st.form(f"{_pwb}_{_feldschluessel(_pwb, 'runde')}"):
+                    _pw1 = st.text_input("Neues Passwort", type="password",
+                                         key=_feldschluessel(_pwb, "pw1"))
+                    _pw2 = st.text_input("Wiederholen", type="password",
+                                         key=_feldschluessel(_pwb, "pw2"))
+                    _pw_setzen = st.form_submit_button(
+                        "Passwort setzen", use_container_width=True)
+                if _pw_setzen:
+                    if not _pw1:
+                        st.error("Bitte ein Passwort eintragen.")
+                    elif _pw1 != _pw2:
                         st.error("Die Eingaben stimmen nicht überein.")
                     else:
                         ok, meldung = benutzer.passwort_setzen(

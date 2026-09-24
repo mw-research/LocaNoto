@@ -47,6 +47,7 @@ import time
 
 import bcrypt
 
+import dateisperre
 import geheim
 import paths
 
@@ -274,17 +275,26 @@ def _speichere(nutzer):
         "namensliste": geheim.signiere(geheim.kanonisch(sorted(rein))),
         "nutzer": rein,
     }
-    p = _datei()
-    os.makedirs(os.path.dirname(p), exist_ok=True)
-    vorlaeufig = p + ".neu"
-    fd = os.open(vorlaeufig, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(daten, f, ensure_ascii=False, indent=2)
-    os.replace(vorlaeufig, p)
-    try:
-        os.chmod(p, 0o600)
-    except OSError:
-        pass
+    dateisperre.schreibe_atomar(
+        _datei(), json.dumps(daten, ensure_ascii=False, indent=2), 0o600)
+
+
+def _unter_sperre(f):
+    """Lesen, Aendern und Schreiben der Benutzerdatei als ein Schritt.
+
+    Ohne Sperre verschluckt ein gleichzeitiger Schreiber, was der andere
+    geschrieben hat: beide lesen denselben Stand, beide schreiben ihren
+    zurueck, und der Letzte gewinnt. Gemessen mit drei Verwaltern, die je
+    drei Nutzer gleichzeitig anlegen: neun als angelegt gemeldet, einer in
+    der Datei.
+    """
+    import functools
+
+    @functools.wraps(f)
+    def innen(*args, **kwargs):
+        with dateisperre.gesperrt(_datei()):
+            return f(*args, **kwargs)
+    return innen
 
 
 def _jetzt():
@@ -301,6 +311,37 @@ def anlege(name, passwort, rolle="nutzer", von="?"):
     if len(passwort or "") < MIN_PASSWORT:
         return False, f"Das Passwort braucht mindestens {MIN_PASSWORT} Zeichen."
 
+    # Der Hash kostet rund 0,2 s und haengt nicht an der Datei. Er wird
+    # vor der Sperre gerechnet, damit andere Verwalter nicht so lange
+    # warten.
+    hashwert = bcrypt.hashpw(passwort.encode("utf-8"),
+                             bcrypt.gensalt()).decode("utf-8")
+    with dateisperre.gesperrt(_datei()):
+        ok, meldung = _anlege_gesperrt(name, hashwert, rolle, von)
+    if not ok:
+        return ok, meldung
+    protokolliere("angelegt", name, von, f"rolle={rolle}")
+
+    # Der eigene Raum entsteht mit dem Zugang, nicht erst mit dem ersten
+    # Upload. Wo "jeder weiss nur, was er wissen muss" gilt, ist der eigene
+    # Ablageort kein Zubehoer, sondern die Voraussetzung dafuer, ueberhaupt
+    # arbeiten zu koennen -- er soll nicht davon abhaengen, dass jemand die
+    # richtige Stelle in der Oberflaeche findet.
+    #
+    # Import in der Funktion: raeume braucht benutzer nicht, und umgekehrt
+    # soll das Anlegen eines Nutzers nicht an einer Importreihenfolge
+    # haengen.
+    try:
+        import raeume
+        raeume.sichere_anlage_privat(name)
+    except Exception as e:
+        protokolliere("hinweis", name, von, f"eigener Raum fehlt: {e}")
+
+    return True, meldung
+
+
+def _anlege_gesperrt(name, hashwert, rolle, von):
+    """Der Teil von anlege(), der unter der Sperre laufen muss."""
     nutzer, _z = lade()
     if name in nutzer:
         return False, f"'{name}' gibt es schon."
@@ -321,33 +362,16 @@ def anlege(name, passwort, rolle="nutzer", von="?"):
                        f"eine Kennung waehlen, die sich um mehr als ein "
                        f"Sonderzeichen unterscheidet.")
     nutzer[name] = {
-        "passwort": bcrypt.hashpw(passwort.encode("utf-8"),
-                                  bcrypt.gensalt()).decode("utf-8"),
+        "passwort": hashwert,
         "rolle": rolle,
         "angelegt": _jetzt(),
         "von": von,
     }
     _speichere(nutzer)
-    protokolliere("angelegt", name, von, f"rolle={rolle}")
-
-    # Der eigene Raum entsteht mit dem Zugang, nicht erst mit dem ersten
-    # Upload. Wo "jeder weiss nur, was er wissen muss" gilt, ist der eigene
-    # Ablageort kein Zubehoer, sondern die Voraussetzung dafuer, ueberhaupt
-    # arbeiten zu koennen -- er soll nicht davon abhaengen, dass jemand die
-    # richtige Stelle in der Oberflaeche findet.
-    #
-    # Import in der Funktion: raeume braucht benutzer nicht, und umgekehrt
-    # soll das Anlegen eines Nutzers nicht an einer Importreihenfolge
-    # haengen.
-    try:
-        import raeume
-        raeume.sichere_anlage_privat(name)
-    except Exception as e:
-        protokolliere("hinweis", name, von, f"eigener Raum fehlt: {e}")
-
     return True, f"'{name}' angelegt ({rolle})."
 
 
+@_unter_sperre
 def passwort_setzen(name, passwort, von="?"):
     name = (name or "").strip().lower()
     if len(passwort or "") < MIN_PASSWORT:
@@ -363,6 +387,7 @@ def passwort_setzen(name, passwort, von="?"):
     return True, f"Passwort von '{name}' geaendert."
 
 
+@_unter_sperre
 def rolle_setzen(name, rolle, von="?"):
     name = (name or "").strip().lower()
     if rolle not in ROLLEN:
@@ -382,6 +407,7 @@ def rolle_setzen(name, rolle, von="?"):
     return True, f"'{name}' ist jetzt {rolle}."
 
 
+@_unter_sperre
 def loesche(name, von="?"):
     name = (name or "").strip().lower()
     nutzer, _z = lade()
@@ -396,6 +422,7 @@ def loesche(name, von="?"):
                   f"bleiben bestehen und muessen getrennt entfernt werden.")
 
 
+@_unter_sperre
 def neu_signieren(von="?"):
     """Nimmt die Datei wie sie ist und signiert sie neu.
 
@@ -502,13 +529,17 @@ def pruefe_merkzettel(zettel):
 def protokolliere(aktion, ziel, von="?", hinweis=""):
     eintrag_ = {"zeit": _jetzt(), "aktion": aktion, "ziel": ziel,
                 "von": von, "hinweis": hinweis}
-    vorher = _letzte_kette()
-    eintrag_["kette"] = hashlib.sha256(
-        vorher.encode("utf-8") + geheim.kanonisch(eintrag_)).hexdigest()
+    # Unter der Sperre: zwei Eintraege, die gleichzeitig dasselbe
+    # "vorher" lesen, gabeln die Kette, und protokoll_pruefen() meldet
+    # dann eine Manipulation, die keine war.
     try:
-        os.makedirs(os.path.dirname(PROTOKOLL), exist_ok=True)
-        with open(PROTOKOLL, "a", encoding="utf-8") as f:
-            f.write(json.dumps(eintrag_, ensure_ascii=False) + "\n")
+        with dateisperre.gesperrt(PROTOKOLL):
+            vorher = _letzte_kette()
+            eintrag_["kette"] = hashlib.sha256(
+                vorher.encode("utf-8")
+                + geheim.kanonisch(eintrag_)).hexdigest()
+            with open(PROTOKOLL, "a", encoding="utf-8") as f:
+                f.write(json.dumps(eintrag_, ensure_ascii=False) + "\n")
     except OSError:
         pass
 

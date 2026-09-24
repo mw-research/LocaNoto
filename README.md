@@ -450,6 +450,7 @@ Dateien importieren sie.
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `api`, `app`, `pipeline`, `selbsttest` |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `pipeline`, `selbsttest` |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `benutzer`, `raeume`, `selbsttest` |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `selbsttest`, `tabellen`, `verwaltung` |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `selbsttest` |

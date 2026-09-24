@@ -49,6 +49,7 @@ import os
 import re
 import time
 
+import dateisperre
 import paths
 
 # Ab welchem Alter ein Gruppenstand nicht mehr gilt, in Minuten. 0 heisst:
@@ -104,14 +105,28 @@ def _lade():
 
 
 def _speichere(daten):
-    os.makedirs(os.path.dirname(DATEI), exist_ok=True)
-    vorlaeufig = DATEI + ".neu"
-    with open(vorlaeufig, "w", encoding="utf-8") as f:
-        json.dump(daten, f, ensure_ascii=False, indent=2)
     # Erst schreiben, dann umbenennen: ein Absturz mitten im Schreiben
     # hinterlaesst sonst eine halbe Datei, und dann ist kein Raum mehr
     # lesbar -- also auch keine Rechte mehr pruefbar.
-    os.replace(vorlaeufig, DATEI)
+    dateisperre.schreibe_atomar(
+        DATEI, json.dumps(daten, ensure_ascii=False, indent=2))
+
+
+def _unter_sperre(f):
+    """Lesen, Aendern und Schreiben der Raumdatei als ein Schritt.
+
+    Zwei Verwalter, die gleichzeitig Raeume bearbeiten oder Nutzer
+    anlegen, lesen sonst denselben Stand, und der zweite Schreiber
+    loescht, was der erste eingetragen hat -- etwa den persoenlichen
+    Raum eines eben angelegten Nutzers.
+    """
+    import functools
+
+    @functools.wraps(f)
+    def innen(*args, **kwargs):
+        with dateisperre.gesperrt(DATEI):
+            return f(*args, **kwargs)
+    return innen
 
 
 # --- KENNUNGEN ---
@@ -415,6 +430,7 @@ def darf_dateien_sehen(benutzer, kennung, ist_verwalter=False):
 
 # --- SCHREIBEN ---
 
+@_unter_sperre
 def anlegen(kennung, bezeichnung_, beschreibung="", mitglieder=None):
     """(ok, meldung). Legt keine Sammlung an -- das tut der erste Upload."""
     kennung = sichere_kennung(kennung)
@@ -441,16 +457,26 @@ def anlegen(kennung, bezeichnung_, beschreibung="", mitglieder=None):
 
 
 def sichere_anlage_privat(benutzer):
-    """Legt den persoenlichen Raum an, falls er fehlt. Gibt die Kennung."""
+    """Legt den persoenlichen Raum an, falls er fehlt. Gibt die Kennung.
+
+    Laeuft bei jedem Seitenaufbau. Deshalb zuerst ohne Sperre nachsehen:
+    im gewoehnlichen Fall ist der Raum da, und es gibt nichts zu
+    schreiben. Erst wenn er fehlt, wird gesperrt und UNTER der Sperre
+    erneut gelesen -- ein anderer Faden kann ihn inzwischen angelegt
+    oder die Datei anders geaendert haben.
+    """
     kennung = privat_kennung(benutzer)
-    daten = _lade()
-    if kennung not in daten["raeume"]:
-        daten["raeume"][kennung] = {
-            "bezeichnung": f"Privat ({benutzer})",
-            "beschreibung": "Nur fuer diesen Nutzer sichtbar.",
-            "mitglieder": [benutzer],
-        }
-        _speichere(daten)
+    if kennung in _lade()["raeume"]:
+        return kennung
+    with dateisperre.gesperrt(DATEI):
+        daten = _lade()
+        if kennung not in daten["raeume"]:
+            daten["raeume"][kennung] = {
+                "bezeichnung": f"Privat ({benutzer})",
+                "beschreibung": "Nur fuer diesen Nutzer sichtbar.",
+                "mitglieder": [benutzer],
+            }
+            _speichere(daten)
     return kennung
 
 
@@ -471,6 +497,7 @@ def _materialisiere(daten, kennung):
     return True
 
 
+@_unter_sperre
 def mitglieder_setzen(kennung, mitglieder):
     """Setzt die Mitglieder. "*" darin heisst: alle.
 
@@ -499,6 +526,7 @@ def fuer_alle_oeffnen(kennung):
     return mitglieder_setzen(kennung, ["*"])
 
 
+@_unter_sperre
 def beschriften(kennung, bezeichnung_=None, beschreibung=None):
     daten = _lade()
     if not _materialisiere(daten, kennung):
@@ -511,6 +539,7 @@ def beschriften(kennung, bezeichnung_=None, beschreibung=None):
     return True, "Gespeichert."
 
 
+@_unter_sperre
 def gruppe_setzen(kennung, gruppe):
     """Traegt die ownCloud-Gruppe eines Raums ein, oder loescht sie."""
     daten = _lade()
@@ -529,6 +558,7 @@ def gruppe_setzen(kennung, gruppe):
                   else f"Mitgliedschaft kommt jetzt aus '{gruppe}'.")
 
 
+@_unter_sperre
 def entfernen(kennung):
     """Nimmt den Raum aus der Verwaltung. Die Sammlung bleibt.
 

@@ -107,6 +107,88 @@ pruef("kollidierende Kennung abgewiesen",
 pruef("eigener Raum entsteht mit dem Zugang",
       raeume.privat_kennung("anna") in raeume.liste())
 
+# --- GLEICHZEITIG ANLEGEN VERLIERT NIEMANDEN ---
+#
+# Streamlit bedient alle Sitzungen in einem Prozess. Ohne Sperre lasen
+# gleichzeitige Verwalter denselben Stand der Benutzerdatei, und der
+# letzte Schreiber loeschte, was die anderen angelegt hatten -- bei drei
+# Verwaltern mit je drei Nutzern kamen von neun gemeldeten einer an.
+#
+# Gemessen in eigenen Dateien, damit die neun Zugaenge den uebrigen
+# Selbsttest nicht beruehren.
+import threading as _th_g
+_g_alt = (benutzer._datei, benutzer.PROTOKOLL, raeume.DATEI)
+_g_ord = os.path.join(tmp, "gleichzeitig")
+os.makedirs(_g_ord, exist_ok=True)
+benutzer._datei = lambda: os.path.join(_g_ord, "users.json")
+benutzer.PROTOKOLL = os.path.join(_g_ord, "benutzer.log")
+raeume.DATEI = os.path.join(_g_ord, "raeume.json")
+try:
+    benutzer.anlege("chef_g", "chefpasswort", "admin", von="test")
+    _g_fehler = []
+
+    def _g_lege(v, i):
+        try:
+            if not benutzer.anlege(f"{v}_g{i}", "geheim123", von=v)[0]:
+                _g_fehler.append(f"{v}_g{i}")
+        except Exception as e:
+            _g_fehler.append(f"{v}_g{i}: {type(e).__name__}: {e}")
+
+    _g_faeden = [_th_g.Thread(target=_g_lege, args=(v, i))
+                 for i in range(3) for v in ("anna", "bernd", "carla")]
+    for _f in _g_faeden:
+        _f.start()
+    for _f in _g_faeden:
+        _f.join()
+    _g_soll = {f"{v}_g{i}" for i in range(3) for v in ("anna", "bernd", "carla")}
+    _g_da = _g_soll & set(benutzer.namen())
+    pruef("gleichzeitig angelegt: jeder Aufruf gelingt", not _g_fehler, _g_fehler)
+    pruef("gleichzeitig angelegt: alle neun stehen in der Datei",
+          len(_g_da) == 9, f"{len(_g_da)}/9, fehlt: {sorted(_g_soll - _g_da)}")
+    pruef("gleichzeitig angelegt: die Datei ist gueltig signiert",
+          benutzer.zustand() == benutzer.SIGNIERT, benutzer.zustand())
+    _g_raum = {n for n in _g_soll
+               if raeume.privat_kennung(n) in raeume._lade()["raeume"]}
+    pruef("gleichzeitig angelegt: jeder hat seinen persoenlichen Raum",
+          len(_g_raum) == 9, sorted(_g_soll - _g_raum))
+    pruef("gleichzeitig angelegt: die Protokollkette bleibt ganz",
+          benutzer.protokoll_pruefen()[0], benutzer.protokoll_pruefen())
+    # Die Raumdatei EIGENS pruefen. Ueber anlege() allein kommen die
+    # Raum-Schreiber zeitversetzt an, weil die Benutzerdatei sie
+    # hintereinander stellt -- die Pruefung oben liefe dann auch mit
+    # ungesperrter Raumdatei durch. Hier schreiben zwanzig Faeden
+    # zugleich: zehn persoenliche Raeume, zehn gemeinsame.
+    _r_fehler = []
+
+    def _r_privat(i):
+        try:
+            raeume.sichere_anlage_privat(f"direkt_{i}")
+        except Exception as e:
+            _r_fehler.append(f"privat {i}: {type(e).__name__}: {e}")
+
+    def _r_raum(i):
+        try:
+            raeume.anlegen(f"gemein_{i}", f"Gemein {i}", "", ["chef_g"])
+        except Exception as e:
+            _r_fehler.append(f"raum {i}: {type(e).__name__}: {e}")
+
+    _r_faeden = ([_th_g.Thread(target=_r_privat, args=(i,)) for i in range(10)]
+                 + [_th_g.Thread(target=_r_raum, args=(i,)) for i in range(10)])
+    for _f in _r_faeden:
+        _f.start()
+    for _f in _r_faeden:
+        _f.join()
+    _r_bestand = raeume._lade()["raeume"]
+    _r_soll = ({raeume.privat_kennung(f"direkt_{i}") for i in range(10)}
+               | {raeume.sichere_kennung(f"gemein_{i}") for i in range(10)})
+    pruef("gleichzeitig in die Raumdatei: jeder Aufruf gelingt",
+          not _r_fehler, _r_fehler[:3])
+    pruef("gleichzeitig in die Raumdatei: alle zwanzig Raeume stehen darin",
+          _r_soll <= set(_r_bestand),
+          f"{len(_r_soll & set(_r_bestand))}/20")
+finally:
+    benutzer._datei, benutzer.PROTOKOLL, raeume.DATEI = _g_alt
+
 print("=== 2. Raeume ===")
 pruef("Raum anlegen", raeume.anlegen("Einkauf", "Einkauf", "", ["anna"])[0])
 pruef("anna sieht einkauf", "einkauf" in raeume.lesbar("anna"))
@@ -1257,6 +1339,24 @@ _datei = lambda n: io.open(os.path.join(
 # Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
 # wird in beiden gesucht -- ein Fundort ist keine Eigenschaft.
 _ui = _datei("app.py") + _datei("verwaltung.py")
+
+# --- BENUTZER ANLEGEN UND PASSWORT SETZEN SIND FORMULARE ---
+#
+# Ausserhalb eines Formulars kommt ein Feld erst beim Verlassen an. Der
+# Knopf "Benutzer anlegen" hing an "Passwort ausgefuellt" aus dem
+# vorigen Durchlauf: wer tippte und direkt klickte, traf einen noch
+# gesperrten Knopf, und der Klick verpuffte ohne Meldung.
+import ast as _ast_f
+_knoepfe = {}
+for _k in _ast_f.walk(_ast_f.parse(_datei("verwaltung.py"))):
+    if (isinstance(_k, _ast_f.Call) and _k.args
+            and isinstance(_k.args[0], _ast_f.Constant)
+            and _k.args[0].value in ("Benutzer anlegen", "Passwort setzen")):
+        _knoepfe[_k.args[0].value] = getattr(_k.func, "attr", "?")
+pruef("'Benutzer anlegen' ist ein Formularknopf",
+      _knoepfe.get("Benutzer anlegen") == "form_submit_button", _knoepfe)
+pruef("'Passwort setzen' ist ein Formularknopf",
+      _knoepfe.get("Passwort setzen") == "form_submit_button", _knoepfe)
 
 pruef("Ueberzogen wird von einer ValueError-Klausel NICHT gefangen",
       issubclass(budget.Ueberzogen, Exception)

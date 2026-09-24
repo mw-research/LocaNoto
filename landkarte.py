@@ -45,7 +45,8 @@ SCHICHT = {
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",
         "budget",
     ),
-    "Grundlage": ("paths", "geheim", "llm", "embedding"),
+    "Grundlage": ("paths", "geheim", "llm", "embedding",
+                  "dateisperre"),
 }
 
 
