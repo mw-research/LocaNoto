@@ -591,6 +591,13 @@ def zeichne(*, is_admin,
             _pk = "postfach_neu"
             with st.form(f"postfach_{_feldschluessel(_pk, 'runde')}"):
                 st.markdown("**Neues Postfach**")
+                st.caption(
+                    "Für die persönlichen Postfächer genügt **ein Eintrag "
+                    "für alle**, etwa mit dem Namen `postfach`: jeder "
+                    "Nutzer meldet sich darin unter „📬 Meine Postfächer“ "
+                    "mit seiner eigenen Mailadresse an. Jedes "
+                    "Funktionspostfach (info@, service@ …) bekommt einen "
+                    "eigenen Eintrag.")
                 _v_wahl = st.selectbox(
                     "Art des Servers", sorted(mcp.VORLAGEN),
                     format_func=lambda v: mcp.VORLAGEN[v]["beschreibung"],
@@ -598,7 +605,9 @@ def zeichne(*, is_admin,
                 _v_name = st.text_input(
                     "Name", key=_feldschluessel(_pk, "name"),
                     help="Erscheint im Werkzeugnamen, den das Modell sieht. "
-                         "Kurz und sprechend, etwa 'info' oder 'markus'.")
+                         "Kurz und sprechend: 'postfach' für den "
+                         "gemeinsamen Eintrag der persönlichen Postfächer, "
+                         "'info' für info@ und so weiter.")
                 _v_ziel = st.text_input(
                     "Adresse oder Befehl", key=_feldschluessel(_pk, "ziel"),
                     help="Bei Exchange der Server, etwa `owa.firma.de` — "
@@ -618,10 +627,10 @@ def zeichne(*, is_admin,
                     "Mailadresse des Postfachs (nur Exchange)",
                     key=_feldschluessel(_pk, "adr"),
                     placeholder="info@firma.de",
-                    help="Bei einem Funktionspostfach Pflicht. Bei einem "
-                         "persönlichen Postfach leer lassen — dann gilt "
-                         "die Adresse, mit der sich der Nutzer anmeldet. "
-                         "Jeder meldet sich mit seinen eigenen Daten an; "
+                    help="Bei einem Funktionspostfach Pflicht. Bei "
+                         "persönlichen Postfächern leer — dann gilt die "
+                         "Adresse, mit der sich der jeweilige Nutzer "
+                         "anmeldet, und ein Eintrag reicht für alle. "
                          "Exchange entscheidet, wer hineindarf.")
                 st.caption("Nur für Funktionspostfächer:")
                 _v_auto = st.checkbox(

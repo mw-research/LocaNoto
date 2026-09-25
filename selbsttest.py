@@ -3179,6 +3179,63 @@ pruef("der eingetragene Server wird zur EWS-Adresse ergaenzt",
 _okC, _mC = _mcp0.lege_an("t_pers", "exchange", "", persoenlich=True)
 pruef("ein persoenliches Postfach geht auch ohne beides", _okC, _mC)
 
+# EIN PERSOENLICHER EINTRAG DIENT ALLEN. Mit fester Adresse waere er das
+# Postfach einer einzigen Person, und alle anderen bekaemen von Exchange
+# eine Absage.
+_okD, _mD = _mcp0.lege_an("t_pers_fest", "exchange", "owa.test",
+                          persoenlich=True, postfach="chef@test.de")
+pruef("ein persoenlicher Eintrag mit fester Adresse wird abgewiesen",
+      not _okD, _mD)
+
+# Zwei Nutzer, derselbe Eintrag: jeder oeffnet sein eigenes Postfach,
+# und eine Kurzkennung aus dem einen loest im anderen nicht auf.
+_pA = _pf0.Postfach("postfach", {"transport": "exchange"},
+                    _mcp0.kopf_fuer("markus", "anna@test.de", "geheim1"))
+_pB = _pf0.Postfach("postfach", {"transport": "exchange"},
+                    _mcp0.kopf_fuer("markus", "bernd@test.de", "geheim2"))
+# In try: fehlt eine der Methoden, soll die Pruefung FALLEN und den
+# Grund nennen, statt den ganzen Lauf abzubrechen.
+try:
+    _adr = (_pA.adresse(), _pB.adresse())
+except Exception as e:
+    _adr = f"{type(e).__name__}: {e}"
+pruef("ein gemeinsamer Eintrag oeffnet je Nutzer dessen eigenes Postfach",
+      _adr == ("anna@test.de", "bernd@test.de"), _adr)
+try:
+    _kzA = _pf0._merke_kennung(_pA._bereich(), "ANNA-NACHRICHT")
+    try:
+        _pf0._lange_kennung(_pB._bereich(), _kzA)
+        _quer = "durchgelassen"
+    except _pf0.Fehler:
+        _quer = "abgewiesen"
+    _eigen = _pf0._lange_kennung(_pA._bereich(), _kzA) == "ANNA-NACHRICHT"
+except Exception as e:
+    _quer, _eigen = f"{type(e).__name__}: {e}", False
+pruef("eine Kurzkennung aus Annas Postfach loest in Bernds Sitzung nicht auf",
+      _quer == "abgewiesen" and _eigen, _quer)
+
+# "Meine Postfaecher" steht fuer JEDEN Nutzer da, auch bevor ein Postfach
+# eingerichtet ist. Hing der Aufklapper an "es gibt eines", sah ein Nutzer
+# von der Mailanbindung nichts -- sichtbar war nur die Einrichtung unter
+# "Verwaltung", und das las sich, als sei sie Verwaltern vorbehalten.
+_app_b = _ast.parse(_datei("app.py"))
+_eltern = {}
+for _k in _ast.walk(_app_b):
+    for _c in _ast.iter_child_nodes(_k):
+        _eltern[_c] = _k
+_mp_with = [k for k in _ast.walk(_app_b) if isinstance(k, _ast.With)
+            and any("Meine Postf" in _ast.unparse(i.context_expr)
+                    for i in k.items)]
+_mp_bedingt = []
+for _w in _mp_with:
+    _e = _eltern.get(_w)
+    while _e is not None:
+        if isinstance(_e, _ast.If) and "_pf_alle" in _ast.unparse(_e.test):
+            _mp_bedingt.append(_ast.unparse(_e.test))
+        _e = _eltern.get(_e)
+pruef("'Meine Postfaecher' erscheint auch ohne eingerichtetes Postfach",
+      _mp_with and not _mp_bedingt, _mp_bedingt or len(_mp_with))
+
 os.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 

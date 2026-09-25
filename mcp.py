@@ -165,6 +165,16 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
         if not persoenlich and not str(weitere.get("postfach") or "").strip():
             return False, ("Fuer ein Funktionspostfach die Mailadresse des "
                            "Postfachs eintragen (z. B. info@firma.de).")
+        # Umgekehrt: ein persoenlicher Eintrag gilt fuer ALLE Nutzer, jeder
+        # oeffnet darin sein eigenes Postfach. Mit fester Adresse waere es
+        # das Postfach einer einzigen Person, und alle anderen bekaemen von
+        # Exchange eine Absage -- das ist ein Funktionspostfach ohne
+        # selbstaendiges Antworten, und so wird es angelegt.
+        if persoenlich and str(weitere.get("postfach") or "").strip():
+            return False, ("Ein persoenlicher Eintrag bekommt keine feste "
+                           "Adresse: jeder Nutzer meldet sich darin mit "
+                           "seiner eigenen an. Fuer das Postfach einer "
+                           "bestimmten Person 'Funktionspostfach' waehlen.")
     else:
         angaben["url"] = str(ziel).strip()
         if not angaben["url"]:

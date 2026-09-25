@@ -208,9 +208,10 @@ kommen nur aus den Dokumenten; **Erneut verbinden** versucht es wieder.
 
 ### Wie verbinde ich mein Postfach mit LocaNoto?
 
-Hat ein Verwalter Postfächer eingerichtet, steht in der Seitenleiste
-**📬 Meine Postfächer**. Dort je Postfach Mailadresse und Passwort
-eintragen und **Verbinden**. LocaNoto prüft die Anmeldung sofort.
+In der Seitenleiste unter **📬 Meine Postfächer** je Postfach Mailadresse
+und Passwort eintragen und **Verbinden**. LocaNoto prüft die Anmeldung
+sofort. Steht dort „Noch kein Postfach eingerichtet", muss ein Verwalter
+den Exchange-Server einmal hinterlegen.
 
 Danach kann LocaNoto Mails einbeziehen, zum Beispiel:
 
@@ -452,10 +453,13 @@ stehen in der `README.md` unter „HTTP-Schnittstelle".
 
 ### Wie richte ich als Verwalter ein Postfach in LocaNoto ein?
 
-**🛠️ Verwaltung** → **📬 Postfächer (Werkzeugserver)** → **Neues Postfach**:
+Für die persönlichen Postfächer genügt **ein Eintrag für alle**: jeder
+Nutzer öffnet darin mit seiner eigenen Adresse sein eigenes Postfach. Jedes
+Funktionspostfach bekommt einen eigenen Eintrag. **🛠️ Verwaltung** →
+**📬 Postfächer (Werkzeugserver)** → **Neues Postfach**:
 
 1. **Art des Servers:** „Exchange/Outlook – direkt, ohne weiteren Server".
-2. **Name:** kurz, etwa `info` oder `markus`.
+2. **Name:** `postfach` für den gemeinsamen Eintrag, `info` für info@ usw.
 3. **Adresse oder Befehl:** der Exchange-Server, etwa `owa.firma.de`.
    Leer lassen sucht den Server selbst.
 4. **Postfach:** persönlich oder Funktionspostfach.

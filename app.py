@@ -2263,12 +2263,22 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # ueber die Leitung geht.
     _pf_alle = mcp.lies_konfiguration()
     _pf_login = [n for n in sorted(_pf_alle) if mcp.braucht_anmeldung(n)]
-    if _pf_alle:
-        _koepfe = st.session_state.setdefault("_postfach_koepfe", {})
-        _offen = sum(1 for n in _pf_login if n not in _koepfe)
-        with st.expander(
-                "\U0001f4ec Meine Postfächer"
-                + (f" ({_offen} offen)" if _offen else "")):
+    # IMMER sichtbar, auch ohne eingerichtetes Postfach. Fehlte der
+    # Bereich, sah ein Nutzer von der Mailanbindung nichts -- sichtbar
+    # war sie nur unter "Verwaltung", und das las sich, als sei sie den
+    # Verwaltern vorbehalten.
+    _koepfe = st.session_state.setdefault("_postfach_koepfe", {})
+    _offen = sum(1 for n in _pf_login if n not in _koepfe)
+    with st.expander(
+            "\U0001f4ec Meine Postfächer"
+            + (f" ({_offen} offen)" if _offen else "")):
+        if not _pf_alle:
+            st.caption(
+                "Noch kein Postfach eingerichtet. Ein Verwalter hinterlegt "
+                "unter 🛠️ Verwaltung → 📬 Postfächer einmal den "
+                "Exchange-Server; danach verbindest du hier dein eigenes "
+                "Postfach mit deiner Mailadresse.")
+        else:
             if not _pf_login:
                 st.caption("Kein Postfach verlangt eine eigene Anmeldung — "
                            "alle sind ohne dein Zutun erreichbar.")

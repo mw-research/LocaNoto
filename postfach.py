@@ -231,6 +231,32 @@ class Postfach:
             raise Fehler(f"{self.name}: Anmeldedaten unvollstaendig.")
         return benutzer, passwort
 
+    def adresse(self):
+        """Das Postfach, das diese Verbindung oeffnet.
+
+        Das eingetragene, sonst das des Anmeldenden. So laeuft ein
+        Funktionspostfach ueber die Stellvertretung -- jeder meldet sich
+        mit SEINEN Daten an, und Exchange entscheidet, ob er hineindarf.
+        Und ein persoenlicher Eintrag ohne Adresse dient allen Nutzern:
+        jeder oeffnet darin sein eigenes Postfach.
+        """
+        eingetragen = str(self.angaben.get("postfach") or "").strip()
+        adresse = eingetragen or self._zugang()[0]
+        if "@" not in adresse:
+            raise Fehler(
+                f"{self.name}: '{adresse}' ist keine Postfachadresse. "
+                f"Mit der vollstaendigen Mailadresse anmelden.")
+        return adresse
+
+    def _bereich(self):
+        """Wozu eine Kurzkennung gehoert: Eintrag UND Postfachadresse.
+
+        Der Eintrag allein reicht nicht. Einen persoenlichen Eintrag
+        teilen sich alle Nutzer; hinge die Kennung nur an seinem Namen,
+        loeste die Kennung aus Annas Postfach auch in Bernds Sitzung auf.
+        """
+        return f"{self.name}:{self.adresse().lower()}"
+
     def _verbindung(self):
         if self._konto is not None:
             return self._konto
@@ -245,16 +271,7 @@ class Postfach:
 
         benutzer, passwort = self._zugang()
         BaseProtocol.TIMEOUT = ZEITLIMIT
-        # Welches Postfach geoeffnet wird: das eingetragene, sonst das
-        # des Anmeldenden. So laeuft ein Funktionspostfach ueber die
-        # Stellvertretung -- jeder meldet sich mit SEINEN Daten an, und
-        # Exchange entscheidet, ob er hineindarf. Ein gemeinsames
-        # Passwort braucht es dafuer nicht.
-        adresse = str(self.angaben.get("postfach") or "").strip() or benutzer
-        if "@" not in adresse:
-            raise Fehler(
-                f"{self.name}: '{adresse}' ist keine Postfachadresse. "
-                f"Mit der vollstaendigen Mailadresse anmelden.")
+        adresse = self.adresse()
         zugang = Credentials(username=benutzer, password=passwort)
         url = ews_adresse(self.angaben.get("url"))
         try:
@@ -289,7 +306,10 @@ class Postfach:
             _ = konto.inbox.total_count
         except Exception as e:
             raise Fehler(f"{self.name}: {_kurz(e)}")
-        label = self.angaben.get("postfach") or self.name
+        # Die geoeffnete Adresse und nicht der Name des Eintrags: bei einem
+        # gemeinsamen Eintrag hiesse er fuer jeden Nutzer "postfach", und
+        # das Modell wuesste nicht, wessen Post es liest.
+        label = self.adresse()
         return [{"server": self.name, "name": w["name"],
                  "beschreibung": w["beschreibung"].format(label=label),
                  "schema": w["schema"]}
@@ -363,7 +383,7 @@ class Postfach:
                 continue
             if such and such not in f"{betreff}\n{text}".lower():
                 continue
-            kurz = _merke_kennung(self.name, m.id)
+            kurz = _merke_kennung(self._bereich(), m.id)
             zeilen.append(
                 f"[{kurz}] {_datum(getattr(m, 'datetime_received', None))} | "
                 f"von: {absender} | {betreff or '(ohne Betreff)'}"
@@ -379,7 +399,7 @@ class Postfach:
 
     def _volltext(self, a):
         konto = self._verbindung()
-        kennung = _lange_kennung(self.name, a.get("kennung"))
+        kennung = _lange_kennung(self._bereich(), a.get("kennung"))
         try:
             m = konto.inbox.get(id=kennung)
         except Exception:
@@ -429,7 +449,7 @@ class Postfach:
 
     def _antworten(self, a):
         konto = self._verbindung()
-        kennung = _lange_kennung(self.name, a.get("kennung"))
+        kennung = _lange_kennung(self._bereich(), a.get("kennung"))
         try:
             m = konto.inbox.get(id=kennung)
         except Exception as e:

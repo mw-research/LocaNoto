@@ -2224,20 +2224,21 @@ entscheidet ihn anhand des Feldes `transport`.
 
 ### Exchange einrichten
 
-Drei Schritte, alle in der Oberfläche.
+Drei Schritte, alle in der Oberfläche. Für die persönlichen Postfächer genügt **ein Eintrag für alle**: jeder Nutzer öffnet darin mit seiner eigenen Adresse sein eigenes Postfach. Jedes Funktionspostfach bekommt einen eigenen Eintrag.
 
 **1. Verwaltung → 📬 Postfächer → Neues Postfach**
 
 | Feld | Eingabe |
 |---|---|
 | Art des Servers | *Exchange/Outlook — direkt, ohne weiteren Server* |
-| Name | kurz, erscheint im Werkzeugnamen: `markus`, `info` |
+| Name | kurz, erscheint im Werkzeugnamen: `postfach` für den gemeinsamen persönlichen Eintrag, `info` für info@ |
 | Adresse | `owa.firma.de` — den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. Leer gelassen sucht exchangelib den Server |
 | Postfach | persönlich oder Funktionspostfach |
-| Mailadresse des Postfachs | bei einem Funktionspostfach Pflicht (`info@firma.de`), bei einem persönlichen leer |
+| Mailadresse des Postfachs | bei einem Funktionspostfach Pflicht (`info@firma.de`), bei einem persönlichen leer — ein persönlicher Eintrag mit fester Adresse wird abgewiesen |
 
 **2. Jeder Nutzer meldet sich selbst an** — Seitenleiste, *📬 Meine
 Postfächer*: Mailadresse und Passwort. Die Anmeldung wird sofort erprobt.
+Der Bereich steht für jeden Nutzer da; ist noch kein Postfach eingerichtet, sagt er das.
 
 **3. Fragen.** Ab der nächsten Frage stehen die Werkzeuge bereit.
 
