@@ -2949,6 +2949,23 @@ try:
     pruef("ein dauerhaft fehlendes Segment wird nach drei Versuchen gemeldet",
           _weg.abfragen == 3 and "segmentprobe" in _ausfall_w,
           (_weg.abfragen, _ausfall_w))
+
+    # Dasselbe beim Lesen der Dimension in der Bestandsliste. Sie ist die
+    # Pruefung vor und nach jedem Rollout; ohne Wiederholung stand eine
+    # frisch beschriebene Sammlung dort als leer -- im Selbsttest einmal
+    # als "und die des gewachsenen Bestands" aufgetreten.
+    class _SpaeteDimension(_SpaetesSegment):
+        def get(self, **kw):
+            self.abfragen += 1
+            if self.fehler:
+                raise self.fehler.pop(0)
+            return {"ids": ["x"], "embeddings": [[0.0] * 7]}
+
+    import bestandsliste as _bl_s
+    _sd = _SpaeteDimension(_segment_fehler())
+    _d_s = _bl_s._dimension(_sd)
+    pruef("die Bestandsliste liest die Dimension auch bei spaetem Segment",
+          _d_s == 7 and _sd.abfragen == 2, (_d_s, _sd.abfragen))
 finally:
     store.neu_verbinden = _echt_neu_verbinden
 

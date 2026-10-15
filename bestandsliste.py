@@ -27,8 +27,16 @@ def _dimension(sammlung):
     kamen vollzaehlig an, und niemand fragte, ob sie zum Modell der
     neuen Installation passen.
     """
+    # Ueber store.hole und nicht sammlung.get: eine Sammlung, in die
+    # gerade erst geschrieben wurde, hat ihr Vektorsegment vielleicht noch
+    # nicht abgelegt, und der erste Lesezugriff scheitert dann mit
+    # "Nothing found on disk". Ohne Wiederholung stuende sie hier als
+    # leer da -- an der Stelle, die nach einem Rollout entscheidet, ob
+    # der Bestand passt.
+    import store
     try:
-        res = sammlung.get(limit=1, include=["embeddings"])
+        res = store.hole(sammlung, name=getattr(sammlung, "name", None),
+                         limit=1, include=["embeddings"])
     except Exception:
         return None
     # KEIN Wahrheitswert auf dem Ergebnis: Chroma liefert ein
