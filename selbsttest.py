@@ -2874,6 +2874,77 @@ pruef("und die des gewachsenen Bestands",
 
 raeume.entfernen(_falscher_raum)
 
+# EIN NOCH NICHT ABGELEGTES SEGMENT IST KEIN AUSFALL. Chroma legt das
+# Vektorsegment einer frisch beschriebenen Sammlung verzoegert ab; wer
+# vorher fragt, bekommt "Nothing found on disk". Einmal ist das im
+# Selbsttest selbst aufgetreten -- als Ausfall des gesunden Bestands.
+# Im Betrieb trifft es den ersten Upload in einen neuen Raum.
+#
+# Nachgestellt mit einer Sammlung, deren erste Abfrage genau so
+# scheitert. Neu verbunden wird hier nicht wirklich: das prueft
+# Abschnitt 9, und ein echter Neuaufbau mitten im Lauf liesse die
+# Handles der Pruefungen danach veralten.
+from chromadb.errors import InternalError as _InternalError
+
+
+class _SpaetesSegment:
+    """Eine Sammlung, deren erste Abfragen mit den gegebenen Fehlern
+    scheitern. Danach antwortet sie leer."""
+
+    def __init__(self, *fehler):
+        self.fehler = list(fehler)
+        self.abfragen = 0
+
+    def query(self, **kw):
+        self.abfragen += 1
+        if self.fehler:
+            raise self.fehler.pop(0)
+        leer = [[] for _ in kw["query_embeddings"]]
+        return {"documents": leer, "metadatas": leer, "distances": leer}
+
+
+def _segment_fehler():
+    return _InternalError("Error executing plan: Internal error: Error "
+                          "creating hnsw segment reader: Nothing found "
+                          "on disk")
+
+
+_echt_neu_verbinden = store.neu_verbinden
+_neu_verbunden = []
+store.neu_verbinden = lambda: _neu_verbunden.append(1) or True
+try:
+    # Ein Raum ohne Sammlung: nach dem Neuverbinden findet store.frage
+    # keine frische und bleibt bei der nachgestellten.
+    _spaet = _SpaetesSegment(_segment_fehler())
+    _listen_s, _ausfall_s = pipeline._vektortreffer(
+        [("segmentprobe", _spaet)], [vek()], 5, None, "markus")
+    pruef("ein noch nicht abgelegtes Segment meldet keinen Ausfall",
+          not _ausfall_s, _ausfall_s)
+    pruef("sondern die Abfrage wird nach Neuverbinden wiederholt",
+          _spaet.abfragen == 2 and _neu_verbunden,
+          (_spaet.abfragen, len(_neu_verbunden)))
+
+    # Andere Fehler werden nicht wiederholt: eine falsche Dimension ist
+    # beim zweiten Mal genauso falsch und muss gemeldet werden.
+    _dim = _SpaetesSegment(_InternalError(
+        "Collection expecting embedding with dimension of 2560, got 4096"))
+    _listen_d2, _ausfall_d2 = pipeline._vektortreffer(
+        [("segmentprobe", _dim)], [vek()], 5, None, "markus")
+    pruef("ein anderer Fehler wird nicht wiederholt, sondern gemeldet",
+          _dim.abfragen == 1 and "segmentprobe" in _ausfall_d2,
+          (_dim.abfragen, _ausfall_d2))
+
+    # Und die Wiederholung hat ein Ende: bleibt das Segment weg, ist es
+    # doch ein Ausfall.
+    _weg = _SpaetesSegment(*[_segment_fehler() for _ in range(10)])
+    _listen_w, _ausfall_w = pipeline._vektortreffer(
+        [("segmentprobe", _weg)], [vek()], 5, None, "markus")
+    pruef("ein dauerhaft fehlendes Segment wird nach drei Versuchen gemeldet",
+          _weg.abfragen == 3 and "segmentprobe" in _ausfall_w,
+          (_weg.abfragen, _ausfall_w))
+finally:
+    store.neu_verbinden = _echt_neu_verbinden
+
 # --- JEDER SIEHT NUR SEINE EIGENEN TOKEN ---
 #
 # Bisher sah niemand ausser dem Verwalter, dass ueberhaupt ein Token auf

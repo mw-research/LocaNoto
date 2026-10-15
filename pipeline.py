@@ -237,9 +237,15 @@ def _vektortreffer(paare_sammlungen, vektoren, breit, filter_,
     ausfaelle = {}
     for raum, sml in paare_sammlungen:
         try:
-            res = sml.query(query_embeddings=vektoren, n_results=breit,
-                            where=filter_,
-                            include=["documents", "metadatas", "distances"])
+            # Ueber store.frage: ein Raum, in den gerade zum ersten Mal
+            # geschrieben wurde, hat sein Vektorsegment vielleicht noch
+            # nicht abgelegt. Das wird dort wiederholt und ist kein
+            # Ausfall; alles andere kommt hier an.
+            res = store.frage(sml, name=raeume.sammlung(raum),
+                              query_embeddings=vektoren, n_results=breit,
+                              where=filter_,
+                              include=["documents", "metadatas",
+                                       "distances"])
         except Exception as e:
             # Ein Raum, dessen Sammlung gerade nicht antwortet, darf die
             # Suche in den anderen nicht mitnehmen -- diese Absicht war

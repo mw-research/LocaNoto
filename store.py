@@ -169,10 +169,29 @@ def hole(sml, name=None, versuche=3, **kw):
     alte Handle weiterbenutzt; das geht meist, aber mit Namen ist es
     sauber.
     """
+    return _wiederholt("get", sml, name, versuche, kw)
+
+
+def frage(sml, name=None, versuche=3, **kw):
+    """sml.query(**kw) -- mit derselben Wiederholung wie hole().
+
+    Die Vektorsuche trifft denselben Fehlschlag, und zwar gerade dort, wo
+    er am meisten auffaellt: direkt nach dem ersten Hochladen in einen
+    neuen Raum. Ohne Wiederholung meldete die Suche dann einen Ausfall
+    der Vektorsuche, obwohl nur das Segment noch nicht abgelegt war.
+
+    Wiederholt wird NUR dieser Fehlschlag. Jeder andere Fehler -- eine
+    falsche Dimension, ein Server, der nicht antwortet -- geht sofort
+    weiter und wird von der Suche als Ausfall gemeldet.
+    """
+    return _wiederholt("query", sml, name, versuche, kw)
+
+
+def _wiederholt(methode, sml, name, versuche, kw):
     letzter = None
     for versuch in range(max(1, versuche)):
         try:
-            return sml.get(**kw)
+            return getattr(sml, methode)(**kw)
         except Exception as e:
             letzter = e
             if not _segment_fehlt(e):

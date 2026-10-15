@@ -926,6 +926,12 @@ wiederholt, und zwar mit neuem Client — derselbe scheitert wieder, auch
 nach einer Pause. Gemessen: vorher 2 Fehlschläge in 40 Läufen, danach 0
 in 50.
 
+Dieselbe Wiederholung gilt für die Vektorsuche. Ein Raum, in den gerade
+zum ersten Mal hochgeladen wurde, meldet deshalb keinen Ausfall der
+Vektorsuche, nur weil sein Segment noch nicht abgelegt ist. Jeder andere
+Fehler — etwa eine falsche Dimension — wird nicht wiederholt und
+weiterhin gemeldet.
+
 ---
 
 ### Vor der Weitergabe
