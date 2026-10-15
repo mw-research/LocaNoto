@@ -370,13 +370,15 @@ def zeichne(*, is_admin,
                                 _oc_bericht(_b, "Der Zugang")
                                 if any("gab es schon" in _s for _s
                                        in _b.get("schritte") or []):
-                                    # Sonst glaubt der Verwalter, die
-                                    # beiden Passwoerter seien jetzt
-                                    # gleich. Sie sind es nicht.
-                                    st.info("Das ownCloud-Konto gab es "
-                                            "bereits. Sein Passwort wurde "
-                                            "NICHT geaendert -- dort gilt "
-                                            "weiter das alte.")
+                                    # Das Konto bestand: das neue Passwort
+                                    # gilt dort nur, wenn LocaNoto es
+                                    # verwaltet. Sonst sagt die Meldung,
+                                    # dass weiter das alte gilt.
+                                    _ok_p, _m_p = owncloud.passwort_setzen(
+                                        _wahl, _pw1)
+                                    if _m_p:
+                                        (st.info if _ok_p
+                                         else st.warning)(_m_p)
                             _felder_leeren(_pwb, "pw1", "pw2")
                             time.sleep(3 if _b.get("fehler") else 1)
                             st.rerun()
@@ -393,7 +395,13 @@ def zeichne(*, is_admin,
                         _wahl, von=st.session_state["username"])
                     (st.success if ok else st.error)(meldung)
                     if ok:
-                        time.sleep(1)
+                        # Was in LocaNoto geloescht wird, verschwindet auch
+                        # in ownCloud -- das Konto, sofern LocaNoto es
+                        # verwaltet. Ein fremdes bleibt, und das wird gesagt.
+                        _ok_k, _m_k = owncloud.konto_loeschen(_wahl)
+                        if _m_k:
+                            (st.info if _ok_k else st.warning)(_m_k)
+                        time.sleep(3 if _m_k else 1)
                         st.rerun()
 
             # --- PROTOKOLL ---
@@ -1113,6 +1121,19 @@ def zeichne(*, is_admin,
                                 raeume.sammlung(_bearbeiten))
                             keyword_index.delete_document_by_raum(_bearbeiten)
                             (st.success if ok else st.error)(meldung)
+                            # Auch der ownCloud-Ordner des Raums wird
+                            # geleert, sonst holte der Abgleich alles
+                            # zurueck. Der Inhalt liegt im Papierkorb.
+                            _n_oc, _f_oc = owncloud.leere_raumordner(
+                                _bearbeiten)
+                            if _n_oc:
+                                st.info(f"{_n_oc} Eintraege aus dem "
+                                        f"ownCloud-Ordner in den Papierkorb.")
+                            if _f_oc:
+                                st.warning("In ownCloud nicht geloescht: "
+                                           + ", ".join(_f_oc[:5])
+                                           + " -- der naechste Abgleich holt "
+                                             "das zurueck.")
                             refresh_document_index()
                             time.sleep(1)
                             st.rerun()
@@ -1224,6 +1245,35 @@ def zeichne(*, is_admin,
             # vorhandene Ordner bleiben, Freigaben werden auf den Soll-
             # Stand gebracht, nicht ergaenzt.
             if owncloud.eingerichtet():
+                st.markdown("---")
+                st.markdown("**Konten**")
+                _verw = owncloud.verwaltete_konten()
+                _offen_k = [n for n in benutzer.namen()
+                            if n not in _verw and not owncloud.geschuetzt(n)]
+                st.caption(
+                    f"LocaNoto verwaltet {len(_verw)} ownCloud-Konten: es "
+                    f"löscht sie mit dem Benutzer und ändert ihr Passwort "
+                    f"mit. Konten, die es in ownCloud schon vorher gab, "
+                    f"bleiben unangetastet, bis sie hier übernommen werden. "
+                    f"Das Dienst- und Verwalterkonto ist immer ausgenommen.")
+                if _offen_k:
+                    st.caption("Nicht übernommen: "
+                               + ", ".join(_offen_k[:20])
+                               + (" …" if len(_offen_k) > 20 else ""))
+                    if st.button("Bestehende Konten übernehmen",
+                                 use_container_width=True,
+                                 help="Nur, wenn die ownCloud-Konten dieser "
+                                      "Benutzer LocaNoto gehören und nicht "
+                                      "auch anderweitig im Haus genutzt "
+                                      "werden."):
+                        with st.spinner("Frage ownCloud ab ..."):
+                            _dazu, _aus = owncloud.konten_uebernehmen(_offen_k)
+                        st.success(f"{len(_dazu)} Konten übernommen.")
+                        if _aus:
+                            st.caption("Nicht übernommen: " + ", ".join(_aus))
+                        time.sleep(2)
+                        st.rerun()
+
                 st.markdown("---")
                 st.markdown("**Ablage einrichten**")
                 st.caption(

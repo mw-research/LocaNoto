@@ -2055,7 +2055,10 @@ _app = _datei("app.py")
 # passt, prueft irgendwann das andere.
 _pwstelle = _ui.find("_wahl, _pw1, von=")
 pruef("es gibt das Passwortsetzen", _pwstelle > 0)
-_block = _ui[_pwstelle:_pwstelle + 2200]
+# Bis zum Loeschhaken darunter, nicht eine feste Zeichenzahl: ein
+# festes Fenster veraltet mit jeder Zeile, die der Abschnitt waechst.
+_pwende = _ui.find("wirklich löschen", _pwstelle)
+_block = _ui[_pwstelle:_pwende if _pwende > 0 else _pwstelle + 4000]
 pruef("danach wird die Ablage eingerichtet",
       "owncloud.richte_nutzer_ein(" in _block)
 
@@ -2070,8 +2073,12 @@ _na = _qu.split("def nutzer_anlegen(", 1)[1]
 _na = _na.split("def richte_nutzer_ein(", 1)[0]
 pruef("ein vorhandenes ownCloud-Konto bleibt unangetastet",
       "if nutzer_vorhanden(kennung):" in _na and "gab es schon" in _na)
-pruef("und der Verwalter erfaehrt, dass dort das alte Passwort gilt",
-      "NICHT geaendert" in _block)
+# Seit LocaNoto seine Konten kennt, aendert es deren Passwort mit; ein
+# fremdes Konto bleibt weiter unangetastet. Was davon zutraf, sagt die
+# Meldung aus owncloud.passwort_setzen -- die Maske muss sie zeigen.
+pruef("und der Verwalter erfaehrt, ob dort das alte Passwort gilt",
+      "owncloud.passwort_setzen(" in _block and "(_m_p)" in _block
+      and "gilt weiter das alte Passwort" in _qu)
 
 
 
@@ -3717,6 +3724,134 @@ pruef("Loeschen in der Oberflaeche loescht in ownCloud mit",
       and "owncloud.entferne(" in _fn_rumpf("_auch_in_owncloud"))
 pruef("Verschieben in der Oberflaeche verschiebt in ownCloud mit",
       "owncloud.verschiebe(" in _fn_rumpf("_verschiebe_datei"))
+
+# --- OWNCLOUD-KONTEN FOLGEN LOCANOTO, ABER NUR DIE EIGENEN ---
+#
+# Ein Benutzer, der in LocaNoto geloescht wird, verschwindet auch in
+# ownCloud; ein neues Passwort gilt auch dort. Aber nur fuer Konten, die
+# LocaNoto verwaltet: ein Konto, das es vorher gab, kann einem Menschen
+# gehoeren, der es fuer alles andere im Haus nutzt. Und nie das Dienst-
+# oder Verwalterkonto -- ein LocaNoto-Nutzer "admin" loeschte sonst das
+# Konto, mit dem LocaNoto selbst in ownCloud arbeitet.
+import owncloud as _ock
+
+# Gesichert ueber getattr: fehlt einem aelteren owncloud.py eines davon,
+# soll die Pruefung FALLEN und nicht den ganzen Lauf beenden.
+_ock_namen = ("URL", "BENUTZER", "PASSWORT", "ADMIN_BENUTZER", "KONTEN",
+              "_ocs_ruf", "_sitzung", "_eintraege")
+_ock_alt = {n: getattr(_ock, n, None) for n in _ock_namen}
+_ock.URL, _ock.BENUTZER, _ock.PASSWORT = "https://oc.test", "dienst", "x"
+_ock.ADMIN_BENUTZER = "admin"
+_ock.KONTEN = os.path.join(tmp, "owncloud_konten.json")
+_ocs_rufe = []
+_ocs_da = {"admin", "dienst", "fremd"}
+
+
+def _ocs_nach(methode, pfad, daten=None, app=None):
+    _ocs_rufe.append((methode, pfad, dict(daten or {})))
+    k = pfad.split("/", 1)[1] if pfad.startswith("users/") else ""
+    if methode == "GET" and k not in _ocs_da:
+        raise ValueError("ownCloud antwortete mit Status 998")
+    if methode == "POST":
+        _ocs_da.add(daten["userid"])
+    if methode == "DELETE":
+        _ocs_da.discard(k)
+    return {}
+
+
+_ock._ocs_ruf = _ocs_nach
+try:
+    _ock.nutzer_anlegen("neu_k", "passwort123")
+    pruef("ein von LocaNoto angelegtes Konto gilt als verwaltet",
+          _ock.verwaltet("neu_k"))
+    pruef("ein vorher vorhandenes nicht",
+          not _ock.verwaltet("fremd")
+          and _ock.nutzer_anlegen("fremd", "x" * 10)[1] == "gab es schon"
+          and not _ock.verwaltet("fremd"))
+
+    _ocs_rufe.clear()
+    _ok_k, _m_k = _ock.konto_loeschen("neu_k")
+    pruef("Benutzer loeschen loescht sein verwaltetes ownCloud-Konto mit",
+          _ok_k and ("DELETE", "users/neu_k", {}) in _ocs_rufe
+          and not _ock.verwaltet("neu_k"), _ocs_rufe)
+
+    _ocs_rufe.clear()
+    _ok_f, _m_f = _ock.konto_loeschen("fremd")
+    pruef("ein fremdes Konto bleibt, und das wird gesagt",
+          not _ok_f and not any(r[0] == "DELETE" for r in _ocs_rufe)
+          and "fremd" in _ocs_da, _m_f)
+
+    # Selbst in der Liste: das Verwalterkonto nie.
+    _ock._konten_aendern(dazu=["admin"])
+    _ocs_rufe.clear()
+    pruef("das ownCloud-Verwalterkonto wird nie geloescht",
+          not _ock.konto_loeschen("admin")[0]
+          and not any(r[0] == "DELETE" for r in _ocs_rufe)
+          and "admin" in _ocs_da, _ocs_rufe)
+
+    _ock.nutzer_anlegen("pw_k", "passwort123")
+    _ocs_rufe.clear()
+    pruef("ein neues Passwort gilt auch in ownCloud",
+          _ock.passwort_setzen("pw_k", "neues123")[0]
+          and ("PUT", "users/pw_k",
+               {"key": "password", "value": "neues123"}) in _ocs_rufe,
+          _ocs_rufe)
+    _ocs_rufe.clear()
+    pruef("bei einem fremden Konto nicht",
+          not _ock.passwort_setzen("fremd", "neues123")[0]
+          and not any(r[0] == "PUT" for r in _ocs_rufe))
+
+    _dazu_u, _aus_u = _ock.konten_uebernehmen(["fremd", "admin", "gibtsnicht"])
+    pruef("Uebernehmen vermerkt vorhandene Konten, nie das Dienstkonto",
+          _dazu_u == ["fremd"] and _ock.verwaltet("fremd")
+          and not _ock.verwaltet("admin"), (_dazu_u, _aus_u))
+
+    # Raumordner leeren: jeder Eintrag geht per DELETE in den Papierkorb,
+    # und der Stand des Abgleichs wird vergessen.
+    class _LeerSitzung:
+        rufe = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def delete(self, url, **k):
+            self.rufe.append(url)
+            return type("A", (), {"status_code": 204})()
+
+    _ls = _LeerSitzung()
+    _ock._sitzung = lambda: _ls
+    _ock._eintraege = lambda s, p: [("a.pdf", False, 1, "e", ""),
+                                    ("Projekt", True, 0, "e", "")]
+    _st_d = _ock._stand_datei("einkauf")
+    os.makedirs(os.path.dirname(_st_d), exist_ok=True)
+    io.open(_st_d, "w", encoding="utf-8").write('{"a.pdf": {}}')
+    _n_l, _f_l = _ock.leere_raumordner("einkauf")
+    _o_l = (_ock.ordner_fuer("einkauf") or _ock.raum_pfad("einkauf")).rstrip("/")
+    pruef("Daten loeschen leert auch den ownCloud-Ordner des Raums",
+          _n_l == 2 and not _f_l
+          and _ls.rufe == [_ock._url(f"{_o_l}/a.pdf"),
+                           _ock._url(f"{_o_l}/Projekt")]
+          and not os.path.exists(_st_d), (_n_l, _f_l, _ls.rufe))
+except Exception as e:
+    pruef("ownCloud-Konten und Raumordner lassen sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+finally:
+    for _n, _w in _ock_alt.items():
+        setattr(_ock, _n, _w)
+
+# Und die Oberflaeche ruft es an allen fuenf Stellen.
+_vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")
+pruef("Benutzer loeschen ruft das Loeschen in ownCloud",
+      "owncloud.konto_loeschen(_wahl)" in _vw_q)
+pruef("Passwort setzen und aendern ziehen ownCloud mit",
+      "owncloud.passwort_setzen(" in _vw_q
+      and "owncloud.passwort_setzen(_ich" in _ap_q)
+pruef("Daten loeschen und Raum leeren leeren den ownCloud-Ordner",
+      "owncloud.leere_raumordner(" in _vw_q
+      and "owncloud.leere_raumordner(_wahl_s)" in _ap_q)
 
 import landkarte as _lk
 

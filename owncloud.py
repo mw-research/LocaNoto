@@ -81,6 +81,13 @@ ZUORDNUNG = os.path.join(paths.CONFIG_DIR, "owncloud.json")
 # vollstaendigen Herunterladen.
 STAENDE = os.path.join(paths.DATA_DIR, "owncloud")
 
+# Die ownCloud-Konten, die LocaNoto verwaltet. Nur diese loescht LocaNoto
+# mit einem Benutzer mit, und nur bei diesen setzt es ein neues Passwort
+# auch dort. Ein Konto, das es vorher schon gab, kann einem Menschen
+# gehoeren, der es fuer alles andere im Haus benutzt; es zu loeschen
+# nahme ihm seine Dateien.
+KONTEN = os.path.join(paths.CONFIG_DIR, "owncloud_konten.json")
+
 DAV = "{DAV:}"
 
 
@@ -1021,6 +1028,145 @@ def nutzer_vorhanden(kennung):
         return False
 
 
+# --- VERWALTETE KONTEN ---
+
+def verwaltete_konten():
+    """Die Kennungen der Konten, die LocaNoto in ownCloud verwaltet."""
+    try:
+        with open(KONTEN, "r", encoding="utf-8") as f:
+            daten = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    return {str(k).lower() for k in (daten.get("konten") or [])}
+
+
+def _konten_aendern(dazu=(), weg=()):
+    with dateisperre.gesperrt(KONTEN):
+        k = (verwaltete_konten() | {str(x).lower() for x in dazu}) \
+            - {str(x).lower() for x in weg}
+        dateisperre.schreibe_atomar(
+            KONTEN, json.dumps({"konten": sorted(k)}, indent=1))
+
+
+def geschuetzt(kennung):
+    """Das Dienst- und das Verwalterkonto fasst LocaNoto nie an.
+
+    Heisst ein LocaNoto-Nutzer zufaellig wie eines von beiden -- "admin"
+    ist der naheliegende Fall --, loeschte das Loeschen dieses Nutzers
+    sonst das Konto, mit dem LocaNoto selbst in ownCloud arbeitet.
+    """
+    k = str(kennung or "").lower()
+    return k in {BENUTZER.lower(), ADMIN_BENUTZER.lower()} - {""}
+
+
+def verwaltet(kennung):
+    return (not geschuetzt(kennung)
+            and str(kennung or "").lower() in verwaltete_konten())
+
+
+def konten_uebernehmen(kennungen):
+    """Bestehende Konten als von LocaNoto verwaltet vermerken.
+
+    Fuer Installationen, in denen LocaNoto die Konten angelegt hat, bevor
+    es sich das merkte. Ausdruecklich ein Schritt des Verwalters: nur er
+    weiss, ob die Konten dieser ownCloud LocaNoto gehoeren oder dem Haus.
+    Rueckgabe: (uebernommen, uebersprungen) als Listen.
+    """
+    dazu, aus = [], []
+    for k in sorted({str(x).lower() for x in kennungen}):
+        if geschuetzt(k):
+            aus.append(f"{k} (Dienstkonto)")
+            continue
+        try:
+            if nutzer_vorhanden(k):
+                dazu.append(k)
+            else:
+                aus.append(f"{k} (kein Konto in ownCloud)")
+        except Exception as e:
+            aus.append(f"{k} ({type(e).__name__})")
+    if dazu:
+        _konten_aendern(dazu=dazu)
+    return dazu, aus
+
+
+def konto_loeschen(kennung):
+    """Loescht das ownCloud-Konto eines geloeschten Benutzers. (ok, meldung).
+
+    Nur ein verwaltetes Konto. Mit ihm gehen seine eigenen Dateien und
+    alle Freigaben an ihn. Der persoenliche Ordner im Bereich des
+    Dienstkontos bleibt -- so wie der persoenliche Raum in LocaNoto
+    bleibt, bis ein Verwalter ihn leert.
+    """
+    if not eingerichtet():
+        return True, ""
+    if geschuetzt(kennung):
+        return False, (f"'{kennung}' ist das Dienstkonto von LocaNoto in "
+                       f"ownCloud und wurde nicht geloescht.")
+    if not verwaltet(kennung):
+        return False, (f"Das ownCloud-Konto '{kennung}' wird nicht von "
+                       f"LocaNoto verwaltet und blieb bestehen. Uebernehmen "
+                       f"laesst es sich unter ownCloud -> Konten.")
+    try:
+        if nutzer_vorhanden(kennung):
+            _ocs_ruf("DELETE", f"users/{kennung}")
+    except Exception as e:
+        return False, f"ownCloud-Konto nicht geloescht ({type(e).__name__}: {e})."
+    _konten_aendern(weg=[kennung])
+    return True, f"Auch das ownCloud-Konto '{kennung}' ist geloescht."
+
+
+def passwort_setzen(kennung, passwort):
+    """Setzt das Passwort eines verwalteten Kontos. (ok, meldung)."""
+    if not eingerichtet():
+        return True, ""
+    if not verwaltet(kennung):
+        return False, ("In ownCloud gilt weiter das alte Passwort -- das "
+                       "Konto wird nicht von LocaNoto verwaltet.")
+    try:
+        _ocs_ruf("PUT", f"users/{kennung}",
+                 daten={"key": "password", "value": passwort})
+    except Exception as e:
+        # ownCloud hat eine eigene Passwortregel. Lehnt sie ab, steht der
+        # Grund in der Meldung.
+        return False, f"In ownCloud nicht geaendert ({type(e).__name__}: {e})."
+    return True, "Auch in ownCloud geaendert."
+
+
+def leere_raumordner(raum):
+    """Legt den Inhalt des ownCloud-Ordners eines Raums in den Papierkorb.
+
+    Fuer "Daten loeschen": ohne das holte der naechste Abgleich jede Datei
+    des Raums als neu zurueck. Der Ordner selbst und seine Freigaben
+    bleiben -- der Raum besteht ja weiter.
+
+    Rueckgabe: (anzahl, fehler).
+    """
+    if not eingerichtet():
+        return 0, []
+    ordner = ordner_fuer(raum) or raum_pfad(raum)
+    weg, fehler = 0, []
+    try:
+        with _sitzung() as s:
+            for name, _o, _g, _e, _d in _eintraege(s, ordner):
+                a = s.delete(_url(f"{ordner.rstrip('/')}/{name}"),
+                             timeout=TIMEOUT)
+                if a.status_code in (200, 204, 404):
+                    weg += 1
+                else:
+                    fehler.append(f"{name}: {a.status_code}")
+    except FileNotFoundError:
+        return 0, []
+    except requests.RequestException as e:
+        fehler.append(f"{type(e).__name__}")
+    # Der Stand des Abgleichs kennt die Dateien noch. Leer heisst: beim
+    # naechsten Lauf gibt es nichts zu entfernen und nichts zu holen.
+    try:
+        os.remove(_stand_datei(raum))
+    except OSError:
+        pass
+    return weg, fehler
+
+
 def nutzer_anlegen(kennung, passwort, anzeigename=""):
     """Legt einen ownCloud-Nutzer an. True, wenn er danach existiert.
 
@@ -1033,6 +1179,8 @@ def nutzer_anlegen(kennung, passwort, anzeigename=""):
     if anzeigename:
         daten["displayName"] = anzeigename
     _ocs_ruf("POST", "users", daten=daten)
+    # Ab hier gehoert das Konto LocaNoto: es loescht und aendert es mit.
+    _konten_aendern(dazu=[kennung])
     return True, "angelegt"
 
 

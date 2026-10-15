@@ -719,6 +719,22 @@ Datei liegt danach im ownCloud-Papierkorb –, verschoben über `MOVE`, ohne
 am Ziel zu überschreiben. Scheitert das, nennt die Meldung in der
 Oberfläche es.
 
+**Daten löschen** für einen ganzen Raum legt den Inhalt seines
+ownCloud-Ordners in den Papierkorb; Ordner und Freigaben bleiben, der Raum
+besteht weiter.
+
+**Konten.** `config/owncloud_konten.json` führt die ownCloud-Konten, die
+LocaNoto verwaltet: jedes, das es selbst anlegt, kommt hinzu. Nur bei
+diesen löscht LocaNoto das Konto mit dem Benutzer und setzt ein neues
+Passwort auch dort. Ein vorher vorhandenes Konto kann einem Menschen
+gehören, der es für alles andere im Haus nutzt; es bleibt, bis ein
+Verwalter es unter *ownCloud → Konten* mit **Bestehende Konten
+übernehmen** vermerkt. Das Dienst- und das Verwalterkonto
+(`OWNCLOUD_USER`, `OWNCLOUD_ADMIN_USER`) fasst LocaNoto nie an, auch
+wenn ein LocaNoto-Benutzer genauso heißt. Der persönliche Ordner im
+Bereich des Dienstkontos bleibt beim Löschen eines Benutzers, wie sein
+persönlicher Raum in LocaNoto.
+
 Dateinamen kommen vom Server und werden entschärft, bevor daraus ein Pfad
 wird: `../../etc/passwd` landet als `etc/passwd` im Zwischenspeicher des
 Raums und nicht daneben.

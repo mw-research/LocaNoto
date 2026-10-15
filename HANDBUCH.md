@@ -250,6 +250,10 @@ In der Seitenleiste **🔑 Passwort aendern**: **Bisheriges Passwort**,
 **Neues Passwort** (mindestens 8 Zeichen), **Wiederholen**, dann
 **Aendern**.
 
+Ist ownCloud angebunden, gilt das neue Passwort auch dort, sofern
+LocaNoto dein ownCloud-Konto verwaltet. Andernfalls sagt die Meldung, dass
+dort weiter das alte gilt.
+
 Passwort vergessen: ein Verwalter setzt ein neues. Das ändert sich danach
 am besten sofort selbst, damit niemand anders es kennt.
 
@@ -338,9 +342,11 @@ Unter **👥 Benutzer verwalten** den Benutzer bei **Bearbeiten** wählen:
   Benutzer ändert es danach am besten selbst,
 - **wirklich löschen** ankreuzen und **Benutzer löschen**.
 
-Beim Löschen bleiben Chatverlauf und persönlicher Raum bestehen. Die
-Dokumente entfernt ein Verwalter getrennt, unter den Dokumenten in fremden
-Räumen.
+Beim Löschen verschwindet auch das ownCloud-Konto des Benutzers, sofern
+LocaNoto es verwaltet. Chatverlauf und persönlicher Raum bleiben
+bestehen; die Dokumente entfernt ein Verwalter getrennt, unter den
+Dokumenten in fremden Räumen. Ein neues Passwort gilt bei einem
+verwalteten Konto auch in ownCloud.
 
 Jede Änderung steht im verketteten Benutzerprotokoll. Steht oben „Die
 Benutzerdatei wurde außerhalb der Anwendung geändert", passt eine Signatur
@@ -376,7 +382,8 @@ nimmt sie zurück.
 
 **Raum entfernen** nimmt den Raum aus der Verwaltung; die Dokumente bleiben
 erhalten. **Daten löschen** ist ein eigener Schritt: er entfernt die
-Abschnitte des Raums aus der Suche und verlangt vorher eine Bestätigung.
+Abschnitte des Raums aus der Suche, legt den Inhalt seines
+ownCloud-Ordners in den Papierkorb und verlangt vorher eine Bestätigung.
 Persönliche Räume haben genau einen Leser; Mitglieder lassen sich dort
 nicht eintragen.
 
@@ -576,8 +583,14 @@ Dokumente zusätzlich dort ab und kann Ordner und Gruppen übernehmen.
   als Raummitglieder.
 
 Was in LocaNoto gelöscht oder verschoben wird, löscht oder verschiebt
-LocaNoto auch in ownCloud; Gelöschtes liegt dort im Papierkorb. Einrichtung
-und Dienstkonto beschreibt die `README.md` unter „Dokumente aus ownCloud".
+LocaNoto auch in ownCloud; Gelöschtes liegt dort im Papierkorb.
+
+**Konten:** Benutzer löschen und Passwörter ändern wirken in ownCloud nur
+bei Konten, die LocaNoto verwaltet – also die es selbst angelegt hat. Ein
+Konto, das es vorher schon gab, bleibt unangetastet. **Bestehende Konten
+übernehmen** vermerkt vorhandene Konten einmalig als verwaltet; das
+Dienst- und Verwalterkonto ist immer ausgenommen. Einrichtung und
+Dienstkonto beschreibt die `README.md` unter „Dokumente aus ownCloud".
 
 ### Wie sichere ich LocaNoto als Verwalter?
 

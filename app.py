@@ -2184,6 +2184,14 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 ok, meldung = store.loesche(raeume.sammlung(_wahl_s))
                 keyword_index.delete_document_by_raum(_wahl_s)
                 (st.success if ok else st.error)(meldung)
+                # Auch der ownCloud-Ordner -- sonst holte der Abgleich den
+                # Inhalt zurueck. Ohne Dateinamen in der Meldung, wie
+                # ueberall im strengen Betrieb.
+                _n_oc, _f_oc = owncloud.leere_raumordner(_wahl_s)
+                if _f_oc:
+                    st.warning(f"{len(_f_oc)} Eintraege in ownCloud nicht "
+                               f"geloescht -- der naechste Abgleich holt "
+                               f"sie zurueck.")
                 refresh_document_index()
                 time.sleep(1)
                 st.rerun()
@@ -2289,9 +2297,12 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                                                              _ich)
                         if any("gab es schon" in _t for _t
                                in _bo.get("schritte") or []):
-                            st.info("In ownCloud gilt weiter das alte "
-                                    "Passwort -- das Konto gab es dort "
-                                    "schon.")
+                            # Das Konto bestand: mitgeaendert wird es nur,
+                            # wenn LocaNoto es verwaltet.
+                            _ok_p, _m_p = owncloud.passwort_setzen(_ich,
+                                                                   _neu1)
+                            if _m_p:
+                                (st.info if _ok_p else st.warning)(_m_p)
                     _felder_leeren(_pwe, "alt", "neu1", "neu2")
                     time.sleep(3 if _bo.get("fehler") else 2)
                     st.rerun()
