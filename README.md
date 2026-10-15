@@ -711,6 +711,14 @@ die Anwendung weiter aus Dokumenten, die es nicht mehr gibt — bei einer
 DSGVO-Betrachtung der Punkt, der zuerst auffällt. `--ohne-loeschen` setzt
 das für den ersten Lauf aus.
 
+**Löschen und Verschieben in LocaNoto ziehen ownCloud mit.** Wegen der
+Zeile „lokal fehlt, entfernt vorhanden" holte der Abgleich sonst jede in
+der Oberfläche gelöschte Datei als neu zurück, und eine verschobene
+landete wieder im alten Raum. Gelöscht wird über WebDAV `DELETE` – die
+Datei liegt danach im ownCloud-Papierkorb –, verschoben über `MOVE`, ohne
+am Ziel zu überschreiben. Scheitert das, nennt die Meldung in der
+Oberfläche es.
+
 Dateinamen kommen vom Server und werden entschärft, bevor daraus ein Pfad
 wird: `../../etc/passwd` landet als `etc/passwd` im Zwischenspeicher des
 Raums und nicht daneben.

@@ -404,6 +404,92 @@ def lege_ab(quelle, fern, ueberschreiben=False):
     return True, f"In ownCloud abgelegt: {fern}"
 
 
+# --- LOESCHEN UND VERSCHIEBEN ---
+#
+# Was in LocaNoto geloescht oder verschoben wird, geschieht in ownCloud
+# mit. Ohne das holte der naechste Abgleich die Datei zurueck: er
+# behandelt eine Datei, die in ownCloud liegt und lokal fehlt, als neu
+# (siehe plane()). Ein geloeschtes Dokument stand dann am Morgen wieder
+# in der Suche, und ein aus einem geteilten Raum herausgenommenes wieder
+# in dem geteilten Raum.
+#
+# Geloescht wird ueber WebDAV DELETE. ownCloud legt die Datei dabei in
+# seinen Papierkorb, solange die Papierkorb-App aktiv ist (Vorgabe); von
+# dort laesst sie sich wiederherstellen.
+
+def fern_pfad(raum, dateiname, lokal=""):
+    """Wo die ownCloud-Fassung dieser Datei liegt.
+
+    Mit lokalem Pfad dieselbe Abbildung wie beim Hochladen (ziel_pfad).
+    Ohne ihn -- die lokale Kopie fehlt -- hilft der Stand des Abgleichs:
+    er kennt den Pfad jeder geholten Datei. Gibt es dort genau einen
+    Eintrag dieses Namens, ist es der; sonst der Name direkt im Ordner
+    des Raums.
+    """
+    if lokal:
+        return ziel_pfad(raum, lokal)
+    wurzel = (ordner_fuer(raum) or raum_pfad(raum)).rstrip("/")
+    treffer = [rel for rel in _stand_lesen(raum)
+               if os.path.basename(rel) == dateiname]
+    rel = treffer[0] if len(treffer) == 1 else dateiname
+    return f"{wurzel}/{rel.lstrip('/')}"
+
+
+def entferne(raum, dateiname, lokal=""):
+    """Loescht die ownCloud-Fassung einer Datei dieses Raums.
+
+    (ok, meldung). Eine Datei, die dort nicht liegt, ist kein Fehler --
+    nicht jeder Raum hat einen ownCloud-Ordner, und nicht jede Datei kam
+    ueber ihn. Ein Fehler ist, wenn sie dort liegt und bleibt: dann holt
+    der naechste Abgleich sie zurueck, und das muss die Oberflaeche sagen.
+    """
+    if not eingerichtet():
+        return True, ""
+    fern = fern_pfad(raum, dateiname, lokal)
+    try:
+        with _sitzung() as s:
+            a = s.delete(_url(fern), timeout=TIMEOUT)
+    except requests.RequestException as e:
+        return False, f"In ownCloud nicht geloescht ({type(e).__name__})."
+    if a.status_code == 404:
+        return True, ""
+    if a.status_code in (200, 204):
+        return True, f"Auch in ownCloud geloescht: {fern}"
+    return False, f"In ownCloud nicht geloescht, ownCloud antwortete {a.status_code}."
+
+
+def verschiebe(von_raum, von_lokal, nach_raum, nach_lokal):
+    """Verschiebt die ownCloud-Fassung in den Ordner des Zielraums.
+
+    (ok, meldung). WebDAV MOVE, ohne zu ueberschreiben: liegt am Ziel
+    schon eine Datei dieses Namens, bleibt alles, wie es ist, und das
+    wird gesagt.
+    """
+    if not eingerichtet():
+        return True, ""
+    von = ziel_pfad(von_raum, von_lokal)
+    nach = ziel_pfad(nach_raum, nach_lokal)
+    if von == nach:
+        return True, ""
+    try:
+        ordner_anlegen(os.path.dirname(nach))
+        with _sitzung() as s:
+            a = s.request("MOVE", _url(von),
+                          headers={"Destination": _url(nach),
+                                   "Overwrite": "F"},
+                          timeout=TIMEOUT)
+    except requests.RequestException as e:
+        return False, f"In ownCloud nicht verschoben ({type(e).__name__})."
+    if a.status_code == 404:
+        return True, ""
+    if a.status_code in (201, 204):
+        return True, f"Auch in ownCloud verschoben: {nach}"
+    if a.status_code == 412:
+        return False, (f"In ownCloud nicht verschoben: am Ziel liegt schon "
+                       f"'{os.path.basename(nach)}'.")
+    return False, f"In ownCloud nicht verschoben, ownCloud antwortete {a.status_code}."
+
+
 # --- GRUPPEN ---
 #
 # Die Provisioning-Schnittstelle (OCS) statt WebDAV. Sie liefert JSON, wenn

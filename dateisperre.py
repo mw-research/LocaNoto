@@ -114,6 +114,29 @@ def unter_sperre(pfad):
     return deko
 
 
+def _ersetze(zwischen, pfad, versuche=40, pause=0.05):
+    """os.replace, unter Windows mit kurzem Warten.
+
+    Unter Windows laesst sich eine Datei nicht ersetzen, solange ein
+    anderer Faden sie zum Lesen offen hat -- os.replace wirft dann
+    PermissionError. Gemessen, nicht vermutet: so ging im Selbsttest bei
+    gleichzeitigem Anlegen gelegentlich ein persoenlicher Raum verloren,
+    weil ein Leser ohne Sperre die Raumdatei gerade offen hatte. Leser
+    halten eine Datei nur Millisekunden; danach geht es.
+
+    Unter Linux, also im Container, ersetzt os.replace auch geoeffnete
+    Dateien, und der erste Versuch gelingt immer.
+    """
+    for n in range(versuche):
+        try:
+            os.replace(zwischen, pfad)
+            return
+        except PermissionError:
+            if os.name != "nt" or n == versuche - 1:
+                raise
+            time.sleep(pause)
+
+
 def schreibe_atomar(pfad, text, modus=None):
     """Schreibt text nach pfad, ganz oder gar nicht.
 
@@ -147,7 +170,7 @@ def schreibe_atomar(pfad, text, modus=None):
             os.chmod(zwischen, modus_)
         except OSError:
             pass
-        os.replace(zwischen, pfad)
+        _ersetze(zwischen, pfad)
     except BaseException:
         try:
             os.remove(zwischen)

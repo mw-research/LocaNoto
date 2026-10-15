@@ -714,6 +714,14 @@ def _verschiebe_datei(filename, von_raum, nach_raum):
         os.replace(quelle, ziel)
     except OSError as e:
         return f" Die Datei liess sich nicht mitnehmen ({e})."
+    # ownCloud zieht mit. Sonst laege die Datei dort weiter im alten
+    # Raum, und dessen naechster Abgleich holte sie als neu zurueck --
+    # ein aus einem geteilten Raum herausgenommenes Dokument stuende
+    # wieder darin.
+    ok, m = owncloud.verschiebe(von_raum, quelle, nach_raum, ziel)
+    if not ok:
+        return (f" ACHTUNG: {m} Der naechste Abgleich holt die Datei in "
+                f"'{raeume.bezeichnung(von_raum)}' zurueck.")
     return ""
 
 
@@ -895,15 +903,52 @@ def loesche_dokument(filename, raum, kennung_statt_name=False):
         # brauchen den Namen, den es hier nicht gibt; beides holt der
         # naechste Aufbau nach: der Index entsteht aus den Sammlungen,
         # und eine Datei ohne Abschnitte faellt beim Aufraeumen weg.
+        # Der Name steht verdeckt in den Metadaten. Gebraucht wird er nur
+        # fuer ownCloud -- dort liegt die Datei unter ihrem Namen, und
+        # ohne ihn holte der Abgleich sie zurueck. Angezeigt wird er nicht.
+        _name = ""
+        try:
+            _m = sml.get(where={"datei_id": filename}, limit=1,
+                         include=["metadatas"]).get("metadatas") or []
+            _name = (store.metadaten_klartext(raum, _m)[0].get("file_name")
+                     or "") if _m else ""
+        except Exception:
+            _name = ""
         sml.delete(where={"datei_id": filename})
         refresh_document_index()
-        return True, (f"Eintrag {filename[:12]}... aus "
-                      f"'{raeume.bezeichnung(raum)}' entfernt.")
+        meldung = (f"Eintrag {filename[:12]}... aus "
+                   f"'{raeume.bezeichnung(raum)}' entfernt.")
+        if not _name:
+            return True, meldung
+        _ok, _m_oc = owncloud.entferne(raum, _name)
+        # Den Namen nicht in die Meldung: der Verwalter sieht hier
+        # bewusst nur die Kennung.
+        return True, meldung + ("" if _ok else
+                                " ACHTUNG: in ownCloud nicht geloescht -- der "
+                                "naechste Abgleich holt die Datei zurueck.")
+    # Den lokalen Pfad VOR dem Aufraeumen merken: danach ist die Datei
+    # weg, und ownCloud braucht ihn, um dieselbe Datei zu treffen.
+    _lokal = dokument_pfad(filename, raum)
     sml.delete(where=store.datei_filter(filename))
     keyword_index.delete_document(filename, raum=raum)
     remove_pdf_if_orphaned(filename, raum)
     refresh_document_index()
-    return True, f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
+    meldung = f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
+    return _auch_in_owncloud(raum, filename, _lokal, meldung)
+
+
+def _auch_in_owncloud(raum, filename, lokal, meldung):
+    """Haengt das Ergebnis in ownCloud an die Meldung. (ok, meldung).
+
+    ok bleibt True: in LocaNoto IST das Dokument weg. Was die Meldung
+    sagen muss, ist, dass es wiederkommt, wenn ownCloud nicht mitzog.
+    """
+    ok, m = owncloud.entferne(raum, filename, lokal)
+    if ok:
+        return True, meldung
+    return True, (meldung + f" ACHTUNG: {m} Der naechste Abgleich holt die "
+                  "Datei zurueck. Erneut loeschen oder in ownCloud von "
+                  "Hand entfernen.")
 
 
 def list_foreign_private_documents(current_user, notzugang_=()):

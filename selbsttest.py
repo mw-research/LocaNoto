@@ -3545,6 +3545,108 @@ pruef("jeder Abschnitt des Handbuchs bleibt beim Einlesen ein Stueck",
       _hb_ab and not _hb_lang, _hb_lang)
 pruef("die README verweist auf das Handbuch", "HANDBUCH.md" in _datei("README.md"))
 
+# --- WAS IN LOCANOTO GELOESCHT WIRD, BLEIBT GELOESCHT ---
+#
+# Geloescht wurde nur in LocaNoto; die Datei blieb in ownCloud liegen, und
+# der naechste Abgleich behandelte sie als neu -- sie stand am Morgen
+# wieder in der Suche. Beim Verschieben dasselbe: die Datei kam in den
+# alten Raum zurueck.
+#
+# Gemessen gegen eine nachgebaute WebDAV-Sitzung, die mitschreibt, was
+# LocaNoto schickt. Ein echtes ownCloud braucht es dafuer nicht.
+import owncloud as _ocl
+import raeume as _rl
+
+
+class _OcSitzung:
+    def __init__(self, antwort):
+        self.antwort, self.rufe = antwort, []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def _ruf(self, methode, url, **k):
+        self.rufe.append((methode, url, dict(k.get("headers") or {})))
+        return type("A", (), {"status_code": self.antwort})()
+
+    def delete(self, url, **k):
+        return self._ruf("DELETE", url, **k)
+
+    def request(self, methode, url, **k):
+        return self._ruf(methode, url, **k)
+
+
+_ocl_alt = (_ocl.URL, _ocl.BENUTZER, _ocl.PASSWORT, _ocl._sitzung,
+            _ocl.ordner_anlegen)
+_ocl.URL, _ocl.BENUTZER, _ocl.PASSWORT = "https://oc.test", "dienst", "x"
+_ocl.ordner_anlegen = lambda p: True
+try:
+    _lokal_l = os.path.join(_ocl.ablage(_rl.ALLGEMEIN), "Kessel",
+                            "Betriebsanweisung.pdf")
+    _s = _OcSitzung(204)
+    _ocl._sitzung = lambda: _s
+    _ok_l, _m_l = _ocl.entferne(_rl.ALLGEMEIN, "Betriebsanweisung.pdf",
+                                _lokal_l)
+    pruef("Loeschen trifft in ownCloud dieselbe Datei wie das Hochladen",
+          _ok_l and _s.rufe and _s.rufe[0][0] == "DELETE"
+          and _s.rufe[0][1] == _ocl._url(
+              _ocl.ziel_pfad(_rl.ALLGEMEIN, _lokal_l)),
+          _s.rufe)
+
+    _s = _OcSitzung(404)
+    _ocl._sitzung = lambda: _s
+    pruef("eine Datei, die in ownCloud nicht liegt, ist kein Fehler",
+          _ocl.entferne(_rl.ALLGEMEIN, "x.pdf", _lokal_l)[0])
+
+    _s = _OcSitzung(503)
+    _ocl._sitzung = lambda: _s
+    _ok_f, _m_f = _ocl.entferne(_rl.ALLGEMEIN, "x.pdf", _lokal_l)
+    pruef("ein gescheitertes Loeschen in ownCloud wird gemeldet, nicht "
+          "verschluckt", not _ok_f and "503" in _m_f, _m_f)
+
+    _von = os.path.join(_ocl.ablage(_rl.ALLGEMEIN), "Angebot.pdf")
+    _nach = os.path.join(_ocl.ablage("einkauf"), "Angebot.pdf")
+    _s = _OcSitzung(201)
+    _ocl._sitzung = lambda: _s
+    _ok_v, _m_v = _ocl.verschiebe(_rl.ALLGEMEIN, _von, "einkauf", _nach)
+    _h = _s.rufe[0][2] if _s.rufe else {}
+    pruef("Verschieben verschiebt in ownCloud mit, ohne zu ueberschreiben",
+          _ok_v and _s.rufe and _s.rufe[0][0] == "MOVE"
+          and _h.get("Destination") == _ocl._url(
+              _ocl.ziel_pfad("einkauf", _nach))
+          and _h.get("Overwrite") == "F", _s.rufe)
+except Exception as e:
+    # Fehlt eine der Funktionen, soll das als Fehlschlag dastehen und
+    # nicht den ganzen Lauf beenden.
+    pruef("Loeschen und Verschieben in ownCloud sind vorhanden", False,
+          f"{type(e).__name__}: {e}")
+finally:
+    (_ocl.URL, _ocl.BENUTZER, _ocl.PASSWORT, _ocl._sitzung,
+     _ocl.ordner_anlegen) = _ocl_alt
+
+# Und die Oberflaeche ruft es auch: Loeschen ueber den Namen, Loeschen
+# ueber die Kennung, Verschieben. Gelesen aus app.py, weil die Seite
+# selbst sich hier nicht starten laesst.
+_app_q = _datei("app.py")
+
+
+def _fn_rumpf(name):
+    for _k in _ast.parse(_app_q).body:
+        if isinstance(_k, _ast.FunctionDef) and _k.name == name:
+            return _ast.unparse(_k)
+    return ""
+
+
+pruef("Loeschen in der Oberflaeche loescht in ownCloud mit",
+      "_auch_in_owncloud(" in _fn_rumpf("loesche_dokument")
+      and "owncloud.entferne(" in _fn_rumpf("loesche_dokument")
+      and "owncloud.entferne(" in _fn_rumpf("_auch_in_owncloud"))
+pruef("Verschieben in der Oberflaeche verschiebt in ownCloud mit",
+      "owncloud.verschiebe(" in _fn_rumpf("_verschiebe_datei"))
+
 import landkarte as _lk
 
 _HIER = os.path.dirname(os.path.abspath(__file__))

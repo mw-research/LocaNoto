@@ -136,6 +136,11 @@ seinen Dateien. In Räumen, in die du schreiben darfst:
   um etwas aus dem persönlichen Raum mit einer Abteilung zu teilen,
 - **🗑️ Löschen** – entfernt die Datei samt ihren Abschnitten aus der Suche.
 
+Ist ownCloud angebunden, geschieht beides dort mit: gelöschte Dateien
+landen im ownCloud-Papierkorb, verschobene im Ordner des neuen Raums.
+Gelingt das nicht, sagt die Meldung es – dann käme die Datei mit dem
+nächsten Abgleich zurück.
+
 Steht dort „Nur lesen", darfst du in diesem Raum nichts ändern.
 
 ### Wie arbeite ich in LocaNoto mit Chats?
@@ -570,8 +575,9 @@ Dokumente zusätzlich dort ab und kann Ordner und Gruppen übernehmen.
 - **Mitgliedschaften jetzt nachziehen** – übernimmt die ownCloud-Gruppen
   als Raummitglieder.
 
-Einrichtung und Dienstkonto beschreibt die `README.md` unter „Dokumente aus
-ownCloud".
+Was in LocaNoto gelöscht oder verschoben wird, löscht oder verschiebt
+LocaNoto auch in ownCloud; Gelöschtes liegt dort im Papierkorb. Einrichtung
+und Dienstkonto beschreibt die `README.md` unter „Dokumente aus ownCloud".
 
 ### Wie sichere ich LocaNoto als Verwalter?
 
