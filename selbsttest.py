@@ -14,6 +14,15 @@ Rueckmeldungen und der Abzug samt Einspielen.
 """
 import io, json, os, random, shutil, sys, tempfile, types
 
+# Eine Meldung darf den Lauf nie beenden. Die Windows-Konsole kann nicht
+# jedes Zeichen ausgeben -- eine Ligatur aus der Texterkennung brachte
+# den Selbsttest dort zum Absturz, gerade als eine Pruefung anschlug und
+# ihren Fund nennen wollte. Nicht darstellbare Zeichen kommen als \u....
+try:
+    sys.stdout.reconfigure(errors="backslashreplace")
+except (AttributeError, ValueError):
+    pass
+
 # --- ISOLATION ERZWINGEN ---
 #
 # Ohne das schreibt dieser Test in die BETRIEBSDATENBANK. store.py
@@ -4120,6 +4129,35 @@ pruef("und der Bau prueft, dass sie im Abbild wirklich liest",
 pruef("Bilddateien gehoeren zu den Dokumenten, auch fuer Ingest und "
       "ownCloud", all(e in paths.DOKUMENT_ENDUNGEN
                       for e in (".tif", ".tiff", ".jpg", ".png")))
+# Das Aufraeumen des OCR-Texts aendert keine Ziffer -- das ist die
+# Bedingung, unter der es ueberhaupt stattfinden darf.
+import re as _re_o
+_proben_o = [
+    ("Der Druck-\nbeh\u00e4lter wird gepr\u00fcft.", "Druckbeh\u00e4lter"),
+    ("Ein- \nund Ausgang", "Ein- und Ausgang"),
+    ("nach DIN-\nNorm 13445", "DIN-Norm 13445"),
+    ("Seiten 13-\n45 bei 1,6 bar", "13-45 bei 1,6 bar"),
+    ("\ufb01nden der \ufb02ansche", "finden der flansche"),
+    ("in m\u00b2 und \u00bd Zoll, 2,5\u00adfach", "m\u00b2 und \u00bd Zoll, 2,5fach"),
+]
+_falsch_o = []
+for _ein, _soll in _proben_o:
+    try:
+        _aus = _ocr_t.aufraeumen(_ein)
+    except Exception as e:
+        _falsch_o.append((_ein, f"{type(e).__name__}: {e}"))
+        continue
+    if _soll not in _aus or _re_o.findall(r"\d", _ein) != _re_o.findall(r"\d", _aus):
+        _falsch_o.append((_ein, _aus))
+pruef("Aufraeumen fuegt Trennungen zusammen und aendert keine Ziffer",
+      not _falsch_o, _falsch_o)
+import inspect as _insp_o
+pruef("und die Texterkennung raeumt jede Seite so auf",
+      "aufraeumen(" in _insp_o.getsource(_ocr_t.lies))
+pruef("die Antwortvorlage warnt vor Werten aus gelesenen Scans",
+      'herkunft="texterkennung"' in _datei("system_prompt.txt")
+      and "GELESENE SCANS" in _datei("system_prompt.txt"))
+
 pruef("ingest.py liest gescannte Seiten ebenfalls",
       "ocr.ist_scan(page)" in _datei("ingest.py")
       and "ocr.oeffne(pdf_pfad)" in _datei("ingest.py"))

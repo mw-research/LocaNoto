@@ -108,14 +108,64 @@ def ist_scan(seite):
 
 
 def lies(seite):
-    """Der erkannte Text einer Seite. "" wenn nichts zu holen ist."""
+    """Der erkannte Text einer Seite, aufgeraeumt. "" wenn nichts zu holen ist."""
     if not verfuegbar()[0]:
         return ""
     try:
         tp = seite.get_textpage_ocr(language=SPRACHEN, dpi=DPI, full=True)
-        return (seite.get_text(textpage=tp) or "").strip()
+        return aufraeumen(seite.get_text(textpage=tp) or "")
     except Exception:
         return ""
+
+
+# --- AUFRAEUMEN ---
+#
+# Mechanisch und ohne Sprachmodell. Ein Modell, das nur den Text sieht,
+# kann nicht wissen, was auf der Seite steht: aus "13A45" machte es eine
+# plausible Normnummer, aus "1,6 bar" womoeglich "16 bar" -- und der
+# Fehler saehe danach aus wie ein Fakt, in der Quelle selbst.
+#
+# Hier wird deshalb nur geaendert, was sicher ist, und EINE Regel gilt
+# ohne Ausnahme: keine Ziffer aendert sich, keine kommt hinzu, keine
+# faellt weg. Unicode-Normalisierung (NFKC) ist aus demselben Grund
+# ausgeschlossen -- sie machte aus "m²" ein "m2".
+
+# Ligaturen, die Tesseract gelegentlich ausgibt. Nur diese, ausdruecklich.
+_LIGATUREN = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl",
+              "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st",
+              "ﬆ": "st"}
+
+# Woerter, vor denen ein Strich am Zeilenende ein Ergaenzungsstrich ist:
+# "Ein- und Ausgang" bleibt so, statt zu "Einund" zu werden.
+_BINDEWOERTER = ("und", "oder", "bis", "sowie", "bzw", "noch", "als")
+
+_TRENNUNG = re.compile(r"(\w)-[ \t]*\n[ \t]*(\w+)", re.UNICODE)
+
+
+def _verbinde(treffer):
+    vorn, wort = treffer.group(1), treffer.group(2)
+    if wort.lower().rstrip(".") in _BINDEWOERTER:
+        return f"{vorn}- {wort}"
+    # Kleinbuchstabe danach: ein am Zeilenende getrenntes Wort
+    # ("Druck-|behaelter"). Sonst -- Grossbuchstabe oder Ziffer -- ist
+    # der Strich Teil des Ausdrucks ("DIN-Norm", "13-45") und bleibt.
+    if wort[0].islower():
+        return f"{vorn}{wort}"
+    return f"{vorn}-{wort}"
+
+
+def aufraeumen(text):
+    """OCR-Text fuer Suche und Lesen glaetten, ohne Inhalt zu aendern."""
+    t = str(text or "")
+    for alt, neu in _LIGATUREN.items():
+        t = t.replace(alt, neu)
+    t = t.replace("­", "")              # weiches Trennzeichen
+    t = t.replace("\r\n", "\n").replace("\r", "\n")
+    t = _TRENNUNG.sub(_verbinde, t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r" *\n *", "\n", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
 
 
 _ZEICHEN = re.compile(r"[\w]", re.UNICODE)

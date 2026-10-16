@@ -1448,6 +1448,20 @@ damit kein Scan. Gescannte Seiten gehen zwei Stufen:
 | Texterkennung (`ocr.py`, Tesseract) | immer, auf jedem Weg | schnell, ohne Modellserver; Fehler sind sichtbar – eine unleserliche Stelle wird Zeichensalat und gilt dann als nicht gelesen |
 | Sehmodell (`bildtext.py`) | nur für Seiten, die die Texterkennung nicht las, und nur auf Wunsch: Knopf **Mit Sehmodell lesen**, Haken **Abbildungen und gescannte Seiten beschreiben**, `sehmodell=true` an der Schnittstelle | liest schlechte Scans und Handschrift besser; ein Modellaufruf je Seite; kann eine unleserliche Stelle plausibel ergänzen |
 
+Der erkannte Text wird mechanisch aufgeräumt, ohne Sprachmodell: am
+Zeilenende getrennte Wörter werden zusammengefügt („Druck-|behälter"),
+Ergänzungsstriche („Ein- und Ausgang") und Bindestriche („DIN-Norm")
+bleiben, Ligaturen und Leerraum werden vereinheitlicht. Keine Ziffer ändert
+sich; eine Unicode-Normalisierung findet deshalb nicht statt („m²" bliebe
+sonst nicht „m²"). Ein Sprachmodell, das nur den Text sieht, korrigiert
+hier bewusst nicht: aus einer verlesenen Normnummer machte es eine
+plausible, und der Fehler stünde dann als Fakt in der Quelle.
+
+Die mitgelieferte Antwortvorlage enthält dazu die Regel *GELESENE SCANS*:
+Werte aus solchen Abschnitten werden unverändert übernommen, mit Seite
+genannt und zur Prüfung an der Originalseite empfohlen. Wer unter
+`config/` eine eigene Fassung der Vorlage führt, übernimmt die Regel dort.
+
 Gelesene Seiten werden zerteilt wie jeder Text. Ihre Abschnitte tragen
 `quelle: ocr` oder `quelle: sehmodell`; unter einer Antwort steht dann
 *aus Texterkennung* oder *vom Sehmodell gelesen*, und das Sprachmodell
