@@ -74,10 +74,12 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      # Ein Fehlversuch. Ein Abgleich, der scheitert, scheitert meist aus
-      # einem Grund, den ein zweiter Versuch nicht behebt -- ownCloud
-      # nicht erreichbar, Anmeldung abgelehnt.
-      backoffLimit: 1
+      # Vier Wiederholungen. Der Lauf startet ueber kubectl exec, und das
+      # scheitert auch an Dingen, die beim naechsten Versuch weg sind --
+      # ein API-Server, der den Knoten gerade nicht erreicht. Ein
+      # Wiederholen kostet dabei nichts: geholt wird nur, was neu oder
+      # geaendert ist, und eingelesen nur, was fehlt.
+      backoffLimit: 4
       template:
         spec:
           serviceAccountName: locanoto-zeitplan
@@ -117,7 +119,10 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 1
+      # Aus demselben Grund wie beim Abgleich. Ein gescheiterter Abzug
+      # hinterlaesst nichts Halbes: sicherung.py schreibt erst unter
+      # vorlaeufigem Namen und benennt dann um.
+      backoffLimit: 4
       template:
         spec:
           serviceAccountName: locanoto-zeitplan
