@@ -32,6 +32,7 @@ from embedding import embed_batch
 from textutils import strip_boilerplate
 from tables import build_table_chunks, table_caption
 import lesen
+import ocr
 
 print("Starte Batch-Hintergrund-Vektorisierung...")
 
@@ -323,10 +324,12 @@ for pdf_pfad in dokumente:
         continue
 
     try:
-        doc = pymupdf.open(pdf_pfad)
+        # Bilddateien werden hier zu einem PDF -- siehe ocr.oeffne.
+        doc = ocr.oeffne(pdf_pfad)
         total_pages = len(doc)
         pending = []
         neu = 0
+        unlesbar = []
 
         for page_num in range(total_pages):
             # Seiten vor der zuletzt geschriebenen sind abgeschlossen. Der
@@ -340,49 +343,66 @@ for pdf_pfad in dokumente:
                           "access": "shared",
                           "owner": "system"}
 
-            # --- TABELLEN ISOLIEREN UND ANREICHERN ---
-            ueberschriften = []
-            tables = page.find_tables()
-            for i, table in enumerate(tables):
-                try:
-                    # Ueberschrift voranstellen und uebergrosse Tabellen
-                    # aufteilen -- siehe tables.py. Bleibt eine Tabelle unter
-                    # dem Limit, ist die Chunk-ID unveraendert.
-                    ueberschriften.append(
-                        table_caption(page, table, dateiname, page_num + 1))
-                    for suffix, chunk_text in build_table_chunks(
-                            page, table, dateiname, page_num + 1, i):
-                        chunk_id = f"{dateiname}_{suffix}"
+            # --- GESCANNTE SEITE ---
+            #
+            # Ohne Textebene liefern Tabellenerkennung und Textauszug
+            # nichts. Die Texterkennung liest die Seite; was sie nicht
+            # lesen kann, steht am Ende in der Ausgabe.
+            if ocr.ist_scan(page):
+                _ocr_text = ocr.lies(page)
+                if ocr.brauchbar(_ocr_text):
+                    for i, chunk in enumerate(
+                            text_splitter.split_text(_ocr_text)):
+                        chunk_id = f"{dateiname}_p{page_num+1}_ocr_{i}"
                         if chunk_id not in bekannt:
-                            pending.append((chunk_id, chunk_text,
-                                            dict(basis_meta, type="table")))
+                            pending.append((chunk_id, chunk, dict(
+                                basis_meta, type="text", quelle="ocr")))
+                else:
+                    unlesbar.append(page_num + 1)
+            else:
+                # --- TABELLEN ISOLIEREN UND ANREICHERN ---
+                ueberschriften = []
+                tables = page.find_tables()
+                for i, table in enumerate(tables):
+                    try:
+                        # Ueberschrift voranstellen und uebergrosse Tabellen
+                        # aufteilen -- siehe tables.py. Bleibt eine Tabelle unter
+                        # dem Limit, ist die Chunk-ID unveraendert.
+                        ueberschriften.append(
+                            table_caption(page, table, dateiname, page_num + 1))
+                        for suffix, chunk_text in build_table_chunks(
+                                page, table, dateiname, page_num + 1, i):
+                            chunk_id = f"{dateiname}_{suffix}"
+                            if chunk_id not in bekannt:
+                                pending.append((chunk_id, chunk_text,
+                                                dict(basis_meta, type="table")))
 
-                    page.add_redact_annot(pymupdf.Rect(table.bbox))
-                except Exception as e:
-                    print(f"   [!] Fehler bei Tabelle auf Seite {page_num+1}: {e}")
+                        page.add_redact_annot(pymupdf.Rect(table.bbox))
+                    except Exception as e:
+                        print(f"   [!] Fehler bei Tabelle auf Seite {page_num+1}: {e}")
 
-            # Schwärzungen anwenden
-            page.apply_redactions()
+                # Schwärzungen anwenden
+                page.apply_redactions()
 
-            # --- RESTLICHEN TEXT AUSLESEN ---
-            page_text = strip_boilerplate(page.get_text())
-            if page_text.strip():
-                for i, chunk in enumerate(text_splitter.split_text(page_text)):
-                    # Auf Anhangseiten bleibt nach dem Schwaerzen der Tabelle
-                    # oft nur die laufende Kopfzeile uebrig -- Normbezeichnung
-                    # und Tabellentitel, ohne einen einzigen Wert. Weil BM25
-                    # auf Laenge normalisiert, rankt so ein Chunk ueber der
-                    # Tabelle, die er benennt, und belegt deren Platz.
-                    #
-                    # Seit die Tabelle ihre Ueberschrift selbst traegt, steht
-                    # sein gesamter Inhalt bereits in dem Chunk, mit dem er
-                    # konkurriert. Er transportiert nichts Eigenes mehr.
-                    if ist_nur_ueberschrift(chunk, ueberschriften):
-                        continue
-                    chunk_id = f"{dateiname}_p{page_num+1}_c{i}"
-                    if chunk_id not in bekannt:
-                        pending.append((chunk_id, chunk,
-                                        dict(basis_meta, type="text")))
+                # --- RESTLICHEN TEXT AUSLESEN ---
+                page_text = strip_boilerplate(page.get_text())
+                if page_text.strip():
+                    for i, chunk in enumerate(text_splitter.split_text(page_text)):
+                        # Auf Anhangseiten bleibt nach dem Schwaerzen der Tabelle
+                        # oft nur die laufende Kopfzeile uebrig -- Normbezeichnung
+                        # und Tabellentitel, ohne einen einzigen Wert. Weil BM25
+                        # auf Laenge normalisiert, rankt so ein Chunk ueber der
+                        # Tabelle, die er benennt, und belegt deren Platz.
+                        #
+                        # Seit die Tabelle ihre Ueberschrift selbst traegt, steht
+                        # sein gesamter Inhalt bereits in dem Chunk, mit dem er
+                        # konkurriert. Er transportiert nichts Eigenes mehr.
+                        if ist_nur_ueberschrift(chunk, ueberschriften):
+                            continue
+                        chunk_id = f"{dateiname}_p{page_num+1}_c{i}"
+                        if chunk_id not in bekannt:
+                            pending.append((chunk_id, chunk,
+                                            dict(basis_meta, type="text")))
 
             # Regelmaessig wegschreiben, damit nach einem Abbruch nur die
             # letzten Seiten erneut verarbeitet werden muessen.
@@ -395,6 +415,14 @@ for pdf_pfad in dokumente:
 
         neu += flush(pending, dateiname)
         doc.close()
+
+        if unlesbar:
+            print(f"   [!] {len(unlesbar)} gescannte Seite(n) ohne lesbaren "
+                  f"Text: {unlesbar[:12]}"
+                  f"{' ...' if len(unlesbar) > 12 else ''}. Ueber die "
+                  f"Oberflaeche mit dem Sehmodell lesen."
+                  + ("" if ocr.verfuegbar()[0]
+                     else f" ({ocr.verfuegbar()[1]})"))
 
         if neu:
             print(f"✅ ABGESCHLOSSEN: '{dateiname}' -- {neu} neue Chunks.\n")

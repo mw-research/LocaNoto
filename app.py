@@ -1842,11 +1842,13 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # will, laedt einzeln -- das geht weiterhin.
     hochgeladen = st.file_uploader(
         "Dokumente hochladen", key=f"pdf_upload_{_pdf_nr}",
-        type=["pdf", "PDF", "docx", "md", "markdown", "txt"],
+        type=["pdf", "PDF", "docx", "md", "markdown", "txt",
+              "tif", "tiff", "TIF", "TIFF", "jpg", "jpeg", "JPG", "JPEG",
+              "png", "PNG"],
         accept_multiple_files=True,
-        help="PDF, Word, Markdown oder Text. Mehrere auf einmal moeglich; "
-             "Raum und Projekt gelten dann fuer alle. Wird vektorisiert "
-             "und durchsuchbar.")
+        help="PDF, Word, Markdown, Text oder ein Scan als TIFF, JPG, PNG. "
+             "Gescannte Seiten liest die Texterkennung. Mehrere auf einmal "
+             "moeglich; Raum und Projekt gelten dann fuer alle.")
     if hochgeladen:
         if len(hochgeladen) > 1:
             st.caption(f"{len(hochgeladen)} Dateien. Sie werden "
@@ -1900,8 +1902,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         _bilder = st.checkbox(
             "Abbildungen und gescannte Seiten beschreiben",
             value=False, key="upload_bilder",
-            help="Fuer PDFs ohne Textebene und fuer Schaubilder. "
-                 "Kostet einen Modellaufruf je Bild.")
+            help="Fuer Schaubilder in Textdokumenten und fuer gescannte "
+                 "Seiten, die die Texterkennung nicht lesen kann. Kostet "
+                 "einen Modellaufruf je Bild.")
         _pdfs = [d for d in hochgeladen if d.name.lower().endswith(".pdf")]
         if _bilder and _pdfs:
             # Die Schaetzung VOR der Zustimmung, und ueber den GANZEN
@@ -1919,9 +1922,15 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     _s += _ds
                     _a += _da
                 if _s or _a:
+                    # Gescannte Seiten liest zuerst die Texterkennung;
+                    # das Sehmodell bekommt nur die, an denen sie
+                    # scheitert. Die Zahl ist deshalb eine Obergrenze.
                     st.caption(
-                        f"\u2192 {_s} gescannte Seite(n), {_a} "
-                        f"Abbildung(en) -- {_s + _a} Modellaufrufe.")
+                        f"\u2192 {_a} Abbildung(en) -- {_a} Modellaufrufe."
+                        + (f" Dazu {_s} gescannte Seite(n): die liest "
+                           f"die Texterkennung, das Sehmodell nur die, die "
+                           f"sie nicht lesen kann (hoechstens {_s} "
+                           f"weitere Aufrufe)." if _s else ""))
                 else:
                     st.caption("\u2192 Nichts Bildliches gefunden.")
             except Exception as _e:
@@ -1941,20 +1950,29 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     f"Beschreibe Bilder ... Seite {nr}/{gesamt}")
 
             _ergebnisse = []
+            _scan_offen = []
             for _i, _datei in enumerate(hochgeladen, 1):
                 # Der Stand VOR der Datei und nicht danach: bei einem
                 # grossen Scan steht der Spinner minutenlang, und ohne
                 # den Namen daneben weiss niemand, ob es noch laeuft
                 # oder an welcher Stelle es haengt.
                 _stand.caption(f"{_i} von {len(hochgeladen)}: {_datei.name}")
+                _bericht = {}
                 with st.spinner(f"Verarbeite '{_datei.name}' ..."):
                     _n, _hinweis = process_uploaded_pdf(
                         _datei, ziel_raum, _projekt, _bilder,
                         benutzer_=st.session_state["username"],
                         ist_verwalter=is_admin(),
                         fortschritt=_bildstand,
-                        nach_dem_schreiben=refresh_document_index)
+                        nach_dem_schreiben=refresh_document_index,
+                        bericht=_bericht)
                 _ergebnisse.append((_datei.name, _n, _hinweis))
+                # Seiten, die die Texterkennung nicht las und das
+                # Sehmodell noch nicht versucht hat: die bietet der Knopf
+                # darunter an.
+                if (_bericht.get("unlesbar")
+                        and not _bericht.get("sehmodell")):
+                    _scan_offen.append(_datei.name)
             _stand.empty()
             refresh_document_index()
 
@@ -1973,7 +1991,13 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 if _hinweis:
                     st.warning(f"{_name}: {_hinweis}")
 
-            if _schlecht:
+            if _scan_offen:
+                st.session_state["_scan_offen"] = {
+                    "namen": _scan_offen, "raum": ziel_raum,
+                    "projekt": _projekt}
+            else:
+                st.session_state.pop("_scan_offen", None)
+            if _schlecht or _scan_offen:
                 # Kein Neuladen: die Dateien liegen jetzt auf der
                 # Platte, sind aber in keiner Sammlung. Wer hier ein
                 # gruenes "hinzugefuegt" sieht, sucht spaeter vergeblich
@@ -1984,14 +2008,61 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # Zeit, verdoppelt aber nichts: store.schreibe nimmt
                 # upsert, und die Kennungen sind aus Dateiname und Seite
                 # gebildet.
-                st.caption(f"{len(_schlecht)} von {len(_ergebnisse)} "
-                           f"liegen in der Ablage, aber kein Abschnitt "
-                           f"davon steht in der Suche. Behebe die Ursache "
-                           f"und lade sie erneut hoch.")
+                if _schlecht and not _scan_offen:
+                    st.caption(f"{len(_schlecht)} von {len(_ergebnisse)} "
+                               f"liegen in der Ablage, aber kein Abschnitt "
+                               f"davon steht in der Suche. Behebe die "
+                               f"Ursache und lade sie erneut hoch.")
             else:
                 st.session_state["pdf_upload_nr"] = _pdf_nr + 1
                 time.sleep(1)
                 st.rerun()
+
+        # --- ZWEITER DURCHGANG: DAS SEHMODELL ---
+        #
+        # Fuer die Seiten, an denen die Texterkennung gescheitert ist.
+        # Ein eigener Knopf und keine Selbstverstaendlichkeit: ein
+        # Modellaufruf je Seite, und wo das Modell nichts erkennt,
+        # schreibt es einen plausiblen Wert hin, der nicht dasteht. Die
+        # Fundstellen sind deshalb als "vom Sehmodell gelesen" markiert.
+        _offen_s = st.session_state.get("_scan_offen") or {}
+        _zu_lesen = [d for d in hochgeladen
+                     if d.name in (_offen_s.get("namen") or [])]
+        if _zu_lesen:
+            st.info(f"{len(_zu_lesen)} Datei(en) mit gescannten Seiten, die "
+                    f"die Texterkennung nicht lesen konnte.")
+            if st.button(f"\U0001f50d Mit Sehmodell lesen ({len(_zu_lesen)})",
+                         use_container_width=True,
+                         help="Ein Modellaufruf je Seite. Die Fundstellen "
+                              "werden als 'vom Sehmodell gelesen' "
+                              "gekennzeichnet."):
+                _sm_melder = st.empty()
+                _alle_gut = True
+                for _datei in _zu_lesen:
+                    _bericht = {}
+                    with st.spinner(f"Sehmodell liest '{_datei.name}' ..."):
+                        _n, _hinweis = process_uploaded_pdf(
+                            _datei, _offen_s["raum"],
+                            _offen_s.get("projekt", ""), False,
+                            benutzer_=st.session_state["username"],
+                            ist_verwalter=is_admin(),
+                            fortschritt=lambda nr, ges: _sm_melder.caption(
+                                f"Sehmodell ... Seite {nr}/{ges}"),
+                            nach_dem_schreiben=refresh_document_index,
+                            sehmodell=True, bericht=_bericht)
+                    if _bericht.get("unlesbar") or not _n:
+                        _alle_gut = False
+                        st.warning(f"{_datei.name}: {_hinweis}")
+                    else:
+                        st.success(f"'{_datei.name}' — {_n} Abschnitte "
+                                   f"durchsuchbar.")
+                _sm_melder.empty()
+                st.session_state.pop("_scan_offen", None)
+                refresh_document_index()
+                if _alle_gut:
+                    st.session_state["pdf_upload_nr"] = _pdf_nr + 1
+                    time.sleep(1)
+                    st.rerun()
 
     # --- LANGE LAEUFE ---
     #
@@ -2673,7 +2744,12 @@ if _bestand > 0:
                     _ziel = f"{i}-{_k}"
                     st.markdown(f'<div id="q{_ziel}"></div>',
                                 unsafe_allow_html=True)
-                    with st.expander(f"📄 {file_n} (Seite {page_n})",
+                    # Aus einem Scan gelesen? Dann steht es dabei --
+                    # Zahlen darin koennen falsch erkannt sein.
+                    _herk = {"ocr": " · aus Texterkennung",
+                             "sehmodell": " · vom Sehmodell gelesen"}.get(
+                        source.get("herkunft"), "")
+                    with st.expander(f"📄 {file_n} (Seite {page_n}){_herk}",
                                      expanded=(_gewuenscht == _ziel
                                                or _k == 0)):
                         for t in source["texts"]:

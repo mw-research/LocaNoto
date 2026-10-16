@@ -92,7 +92,6 @@ jobs:
           # Namen annimmt und der Organisationsname welche enthalten
           # kann.
           tags: |
-            ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}
             ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
           # Die Marken reisen MIT DEM ABBILD, nicht mit dem
           # Kennzeichner. Ausgerollt wird der wandernde Kennzeichner;
@@ -114,6 +113,24 @@ jobs:
             RERANKER_MODEL=${{ steps.variante.outputs.reranker }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Abgelegt ist bis hier NUR der feste Kennzeichner. Der wandernde,
+      # den der Cluster zieht, rueckt erst nach, wenn das Abbild seine
+      # Probe bestanden hat -- sonst zoege ein ungeplanter Neustart ein
+      # Abbild, dessen Texterkennung nicht liest.
+      #
+      # Die Probe liest eine erzeugte gescannte Seite mit den Sprachdaten,
+      # die das Dockerfile mitbringt. Fehlt ein Sprachpaket oder findet
+      # pymupdf Tesseract nicht, schlaegt sie fehl, und mit ihr der Bau.
+      - name: Texterkennung im Abbild pruefen
+        env:
+          ABBILD: ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
+        run: |
+          docker pull "$ABBILD"
+          docker run --rm "$ABBILD" python ocr.py --probe
+
+      - name: Wandernden Kennzeichner nachziehen
+        run: docker buildx imagetools create -t "ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}" "ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}"
 
       - name: Was danach zu tun ist
         run: |

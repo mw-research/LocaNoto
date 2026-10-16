@@ -113,18 +113,33 @@ steht unter **Dokumente** in der Seitenleiste.
 ### Wie lade ich ein Dokument in LocaNoto hoch?
 
 1. In der Seitenleiste **Dokumente hochladen** – PDF, Word (docx),
-   Markdown oder Text. Mehrere Dateien auf einmal gehen.
+   Markdown, Text oder ein Scan als TIFF, JPG oder PNG. Mehrere Dateien auf
+   einmal gehen.
 2. **Raum** wählen. Vorgegeben ist dein persönlicher Raum („Nur für dich
    sichtbar"), sodass nichts versehentlich geteilt wird.
 3. Optional ein **Projekt** angeben (nur im persönlichen Raum). Es sortiert
    und lässt sich später im Filter wählen.
 4. **Abbildungen und gescannte Seiten beschreiben** nur ankreuzen, wenn
-   Bilder oder Scans wichtig sind: es kostet einen Modellaufruf je Bild und
-   bei großen Scans Minuten. Die Zahl der Aufrufe steht vorher darunter.
+   Schaubilder wichtig sind: es kostet einen Modellaufruf je Bild. Gescannte
+   Seiten liest die Texterkennung auch ohne diesen Haken.
 5. **Hochladen & Vektorisieren**.
 
 Danach meldet LocaNoto je Datei, wie viele Abschnitte durchsuchbar sind.
-„wurde NICHT durchsuchbar" heißt fast immer: Scan ohne Textebene.
+
+### Wie lade ich einen Scan in LocaNoto hoch?
+
+Wie jedes andere Dokument. Seiten ohne Textebene – ein gescanntes PDF oder
+ein Bild als TIFF, JPG, PNG – liest die Texterkennung (Deutsch und
+Englisch) automatisch.
+
+Kann sie eine Seite nicht lesen, nennt die Meldung die Seitenzahlen, und
+darunter erscheint **🔍 Mit Sehmodell lesen**. Das Sehmodell liest schlechte
+Scans und Handschrift besser, braucht aber einen Modellaufruf je Seite.
+
+Unter einer Antwort steht bei solchen Fundstellen **aus Texterkennung**
+oder **vom Sehmodell gelesen**. Zahlen daraus – Prüfwerte, Maße, Fristen –
+an der Originalseite prüfen: die Texterkennung kann Ziffern verwechseln,
+und das Sehmodell kann eine unleserliche Stelle plausibel ergänzen.
 
 ### Wie verschiebe oder lösche ich ein Dokument in LocaNoto?
 
@@ -412,8 +427,9 @@ In den Raum **Allgemein** schreiben nur Verwalter. Drei Wege:
 - **Schnittstelle:** `POST /aufnehmen` mit dem Token eines Verwalters – für
   viele Dateien auf einmal, eine Datei je Aufruf.
 
-Bilder und Scans beschreibt der Upload nur auf Wunsch. Für den ganzen
-Bestand startet **🔄 Nachtragen und neu einlesen** → **Bilder nachtragen**
+Gescannte Seiten liest die Texterkennung auf allen drei Wegen; was sie
+nicht lesen kann, nennt `ingest.py` in seiner Ausgabe. Abbildungen
+beschreibt der Upload nur auf Wunsch. Für den ganzen Bestand startet **🔄 Nachtragen und neu einlesen** → **Bilder nachtragen**
 das als eigenen Vorgang; **Dokumente neu einlesen** liest den
 Dokumentenordner vollständig ein. Beide laufen weiter, wenn man die Seite
 verlässt, und überspringen bereits Verarbeitetes.
@@ -467,7 +483,7 @@ Jeder Aufruf trägt das Token im Kopf `X-LocaNoto-Token`.
 | `GET /status` | Modelle, Bestand, Listen, Voreinstellungen |
 | `GET /raeume`, `GET /dokumente` | was dieser Nutzer sehen darf |
 | `POST /frage` | Antwort mit Quellen, `?strom=1` laufend |
-| `POST /aufnehmen` | ein Dokument einliefern (Formular: `datei`, `raum`, optional `projekt`, `bilder`) |
+| `POST /aufnehmen` | ein Dokument einliefern (Formular: `datei`, `raum`, optional `projekt`, `bilder`, `sehmodell`) |
 | `POST /rueckmeldung` | 👍/👎 zu einer Antwort |
 | `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
 

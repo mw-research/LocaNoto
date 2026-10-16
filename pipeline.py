@@ -423,8 +423,12 @@ def kontext(treffer, bild_texte=(), bloecke=()):
     teile = []
     for eintrag in treffer:
         meta = eintrag["meta"]
-        teile.append('<chunk file="{}" page="{}">\n{}\n</chunk>'.format(
-            meta.get("file_name", "?"), meta.get("page", "?"),
+        # Ein gelesener Scan sagt dem Modell, dass er gelesen ist: Zahlen
+        # darin koennen falsch erkannt sein.
+        _h = {"ocr": ' herkunft="texterkennung"',
+              "sehmodell": ' herkunft="sehmodell"'}.get(meta.get("quelle"), "")
+        teile.append('<chunk file="{}" page="{}"{}>\n{}\n</chunk>'.format(
+            meta.get("file_name", "?"), meta.get("page", "?"), _h,
             eintrag["text"]))
     if not teile:
         teile.append("Keine relevanten Dokumenten-Abschnitte gefunden.")
@@ -594,13 +598,19 @@ def quellen(treffer):
     haette zu ihr eine der beiden Dateien gezeigt -- welche, entschied die
     Reihenfolge auf der Platte.
     """
-    gesammelt = {}
+    gesammelt, herkunft = {}, {}
     for eintrag in treffer:
         meta = eintrag["meta"]
         schluessel = (meta.get("raum") or "", meta.get("file_name", "?"),
                       meta.get("page", "?"))
         gesammelt.setdefault(schluessel, []).append(eintrag["text"])
-    return [{"file": datei, "page": seite, "raum": raum, "texts": texte}
+        # Woher der Text einer Seite stammt, wenn nicht aus ihrer
+        # Textebene: "ocr" oder "sehmodell". Der Leser soll sehen, wie
+        # verlaesslich eine Fundstelle ist.
+        if meta.get("quelle"):
+            herkunft.setdefault(schluessel, meta["quelle"])
+    return [{"file": datei, "page": seite, "raum": raum, "texts": texte,
+             "herkunft": herkunft.get((raum, datei, seite), "")}
             for (raum, datei, seite), texte in gesammelt.items()]
 
 

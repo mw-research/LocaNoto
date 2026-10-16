@@ -461,7 +461,9 @@ def env_float(name, standard):
 # Formate, die vektorisiert werden koennen. PDFs gehen ueber pymupdf mit
 # Seiten und Tabellenerkennung, alles andere ueber lesen.py mit
 # Abschnitten -- siehe dort, warum das getrennt bleibt.
-DOKUMENT_ENDUNGEN = (".pdf", ".docx", ".md", ".markdown", ".txt")
+DOKUMENT_ENDUNGEN = (".pdf", ".docx", ".md", ".markdown", ".txt",
+                     # Scans als Bild -- siehe ocr.py.
+                     ".tif", ".tiff", ".jpg", ".jpeg", ".png")
 
 
 def dokument_dateien(ordner=None, endungen=None):

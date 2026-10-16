@@ -102,8 +102,14 @@ def zaehle(doc):
     return seiten, abbildungen
 
 
-def beschreibungen(doc, dateiname, fortschritt=None):
+def beschreibungen(doc, dateiname, fortschritt=None, seiten=None,
+                   abbildungen=True):
     """[(seitennummer, text, art)] fuer alles Bildliche im Dokument.
+
+    seiten grenzt die gescannten Seiten ein, die das Sehmodell liest --
+    gedacht fuer die, an denen die Texterkennung (ocr.py) gescheitert
+    ist. None heisst alle, eine leere Menge keine. abbildungen=False
+    laesst die Abbildungen in Textseiten aus.
 
     art ist "seite" oder "abbildung" -- der Unterschied gehoert in die
     Beschreibung, weil er etwas ueber die Zuverlaessigkeit sagt: bei
@@ -122,6 +128,8 @@ def beschreibungen(doc, dateiname, fortschritt=None):
         if fortschritt:
             fortschritt(nr + 1, gesamt)
         if _wenig_text(seite):
+            if seiten is not None and (nr + 1) not in seiten:
+                continue
             try:
                 bild = seite.get_pixmap(dpi=SEITEN_DPI).tobytes("png")
                 text = vision.beschreibe(
@@ -132,6 +140,8 @@ def beschreibungen(doc, dateiname, fortschritt=None):
                     aus.append((nr + 1, text, "seite"))
             except Exception:
                 continue
+            continue
+        if not abbildungen:
             continue
         for roh, _b, _h in _bilder_der_seite(doc, seite):
             try:

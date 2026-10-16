@@ -38,7 +38,7 @@ SCHICHT = {
         "lesen", "tables", "textutils", "vision", "bildtext", "sqldb",
         "sqlpruefung", "sqlquellen", "chats", "feedback", "notzugang",
         "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
-        "postfach",
+        "postfach", "ocr",
         "auth", "sicherheit", "datentraeger",
     ),
     "Bestand": (

@@ -2380,18 +2380,36 @@ pruef("der Knopf arbeitet einen Stapel ab",
 # und die Pruefung meldete "kein Neuladen gefunden" fuer Code, der
 # sich gar nicht geaendert hatte.
 _blockende = _app.find(chr(10) + "    # --- ", _knopf)
+# Der zweite Durchgang mit dem Sehmodell ist ein eigener Knopf mit
+# eigenem Neuladen. Er gehoert nicht in dieses Fenster -- seine Regel
+# steht weiter unten als eigene Pruefung.
+_zweiter = _app.find("# --- ZWEITER DURCHGANG", _knopf)
+if 0 < _zweiter < (_blockende if _blockende > 0 else len(_app)):
+    _blockende = _zweiter
 _block = _app[_knopf:_blockende if _blockende > 0 else _knopf + 4000]
 pruef("und meldet je Datei", "for _name, _n, _hinweis in _ergebnisse" in _block)
 
 # Und das Entscheidende: kein Neuladen, solange eine Datei nicht
 # durchsuchbar wurde. Geprueft wird die REIHENFOLGE im Quelltext --
 # st.rerun() muss hinter dem else des Fehlerzweigs stehen.
-_fehlerzweig = _block.find("if _schlecht:")
+# Der Fehlerzweig haelt auch Dateien mit ungelesenen Scanseiten fest:
+# fuer sie steht darunter der Knopf zum Sehmodell, und der braucht die
+# Dateien noch im Feld.
+_fehlerzweig = _block.find("if _schlecht or _scan_offen:")
 _neuladen = _block.find("st.rerun()")
 pruef("bei einem Fehlschlag wird nicht neu geladen",
       0 < _fehlerzweig < _neuladen, f"if bei {_fehlerzweig}, rerun bei {_neuladen}")
 pruef("und genau einmal wird ueberhaupt neu geladen",
       _block.count("st.rerun()") == 1, _block.count("st.rerun()"))
+
+# Dieselbe Regel fuer den zweiten Durchgang: neu geladen wird nur, wenn
+# das Sehmodell jede angebotene Seite lesen konnte -- sonst waeren die
+# Meldungen dazu weg, bevor jemand sie liest.
+_zw = _app[_zweiter:_app.find(chr(10) + "    # --- ", _zweiter)] if _zweiter > 0 else ""
+pruef("der zweite Durchgang laedt nur neu, wenn alles gelesen wurde",
+      _zw and 0 < _zw.find("if _alle_gut:") < _zw.find("st.rerun()")
+      and _zw.count("st.rerun()") == 1,
+      (_zw.find("if _alle_gut:"), _zw.find("st.rerun()")))
 
 # --- DIE SCHWELLE MUSS UEBER EINER STUNDE HANDARBEIT LIEGEN ---
 #
@@ -3940,6 +3958,171 @@ pruef("'Meine Anweisung' steht fuer jeden Nutzer da",
       _mw_a and not _nur_vw, _nur_vw or len(_mw_a))
 pruef("Benutzer loeschen nimmt die Anweisung mit",
       "prompts.anweisung_loeschen(_wahl)" in _datei("verwaltung.py"))
+
+# --- GESCANNTE SEITEN WERDEN GELESEN ---
+#
+# Ein Scan hat keine Textebene; vorher endete er in "Kein Text gefunden".
+# Jetzt liest ihn die Texterkennung auf jedem Weg, und was sie nicht
+# lesen kann, wird genannt und dem Sehmodell angeboten.
+#
+# Tesseract selbst ist hier eine Attrappe -- ob es im Abbild wirklich
+# liest, prueft der Bau-Workflow mit "python ocr.py --probe". Echt ist
+# alles drumherum: die gescannte Seite, ihre Erkennung als Scan, das
+# Zerteilen, die Meldung, das Sehmodell als zweiter Durchgang, die
+# Bilddatei und die Quellenangabe.
+import ocr as _ocr_t
+import vision as _vis_t
+import pymupdf as _pm_t
+
+
+class _HochBytes:
+    def __init__(self, name, daten):
+        self.name, self._d = name, daten
+
+    def getvalue(self):
+        return self._d
+
+
+def _scan_pdf(seiten=1):
+    _d = _pm_t.open()
+    for _ in range(seiten):
+        _d.insert_pdf(_ocr_t.probe_dokument())
+    return _d.tobytes()
+
+
+def _quellen_in(raum, name):
+    _sml = store.sammlung(raeume.sammlung(raum), anlegen=False)
+    if _sml is None:
+        return []
+    _m = _sml.get(where=store.datei_filter(name),
+                  include=["metadatas"]).get("metadatas") or []
+    return [m.get("quelle") for m in _m]
+
+
+_scan_raum = raeume.privat_kennung("markus")
+_scan_namen = []
+_ocr_alt = (_ocr_t.lies, _vis_t.beschreibe)
+# Lang genug, dass eine Seite in mehrere Abschnitte zerfaellt.
+_lang = "Die Pruefristen fuer Druckbehaelter betragen zwei Jahre. " * 60
+
+pruef("eine Bildseite gilt als Scan, eine Titelseite nicht",
+      _ocr_t.ist_scan(_ocr_t.probe_dokument()[0])
+      and not _ocr_t.ist_scan(_pm_t.open().new_page()))
+pruef("Zeichensalat gilt nicht als gelesen",
+      not _ocr_t.brauchbar("|| -- ~~ :: ;; " * 10) and _ocr_t.brauchbar(_lang))
+try:
+    # 1. Texterkennung liest -- ohne jeden Schalter.
+    _ocr_t.lies = lambda seite: _lang
+    _b1 = {}
+    _scan_namen.append("scan_ocr.pdf")
+    _n1, _h1 = _auf.process_uploaded_pdf(
+        _HochBytes("scan_ocr.pdf", _scan_pdf(2)), _scan_raum,
+        benutzer_="markus", bericht=_b1)
+    pruef("eine gescannte Seite wird ohne Schalter gelesen",
+          _b1.get("ocr_seiten") == 2 and not _b1.get("unlesbar") and _n1 > 0,
+          (_n1, _b1, _h1))
+    pruef("eine lange gelesene Seite wird zerteilt, nicht abgeschnitten",
+          _n1 >= 4, _n1)
+    pruef("und ihre Abschnitte sind als Texterkennung gekennzeichnet",
+          set(_quellen_in(_scan_raum, "scan_ocr.pdf")) == {"ocr"},
+          set(_quellen_in(_scan_raum, "scan_ocr.pdf")))
+
+    # 2. Texterkennung liest nichts -- gemeldet, mit Seitenzahl.
+    _ocr_t.lies = lambda seite: ""
+    _b2 = {}
+    _scan_namen.append("scan_leer.pdf")
+    _n2, _h2 = _auf.process_uploaded_pdf(
+        _HochBytes("scan_leer.pdf", _scan_pdf(1)), _scan_raum,
+        benutzer_="markus", bericht=_b2)
+    pruef("eine unlesbare Seite wird genannt und dem Sehmodell angeboten",
+          _n2 == 0 and _b2.get("unlesbar") == [1]
+          and not _b2.get("sehmodell") and "Sehmodell" in _h2, (_b2, _h2))
+
+    # 3. Zweiter Durchgang: das Sehmodell liest genau diese Seite.
+    _vis_t.beschreibe = lambda daten, frage="": _lang
+    _b3 = {}
+    _n3s, _h3 = _auf.process_uploaded_pdf(
+        _HochBytes("scan_leer.pdf", _scan_pdf(1)), _scan_raum,
+        benutzer_="markus", sehmodell=True, bericht=_b3)
+    pruef("das Sehmodell liest, was die Texterkennung nicht las",
+          _n3s >= 2 and not _b3.get("unlesbar"), (_n3s, _b3, _h3))
+    pruef("und seine Abschnitte sind als Sehmodell gekennzeichnet",
+          set(_quellen_in(_scan_raum, "scan_leer.pdf")) == {"sehmodell"},
+          set(_quellen_in(_scan_raum, "scan_leer.pdf")))
+    pruef("der zweite Durchgang legt die Datei nicht noch einmal ab",
+          "Nicht in ownCloud" not in _h3, _h3)
+
+    # 4. Scheitert auch das Sehmodell, faellt die Seite nicht still weg.
+    def _kaputt(*a, **k):
+        raise RuntimeError("Modell nicht erreichbar")
+    _vis_t.beschreibe = _kaputt
+    _b4 = {}
+    _scan_namen.append("scan_weg.pdf")
+    _n4, _h4 = _auf.process_uploaded_pdf(
+        _HochBytes("scan_weg.pdf", _scan_pdf(1)), _scan_raum,
+        benutzer_="markus", sehmodell=True, bericht=_b4)
+    pruef("scheitert auch das Sehmodell, wird die Seite genannt",
+          _b4.get("unlesbar") == [1]
+          and "auch nicht mit dem Sehmodell" in _h4, (_b4, _h4))
+
+    # 5. Ein Scan als Bilddatei.
+    _ocr_t.lies = lambda seite: _lang
+    _png = _ocr_t.probe_dokument()[0].get_pixmap(dpi=100).tobytes("png")
+    _b5 = {}
+    _scan_namen.append("scan_bild.png")
+    _n5, _h5 = _auf.process_uploaded_pdf(
+        _HochBytes("scan_bild.png", _png), _scan_raum,
+        benutzer_="markus", bericht=_b5)
+    pruef("ein Scan als PNG wird angenommen und gelesen",
+          _n5 > 0 and _b5.get("ocr_seiten") == 1, (_n5, _b5, _h5))
+
+    # 6. Eine Seite ohne Bild ist kein Scan und wird nicht gemeldet.
+    _titel = _pm_t.open()
+    _titel.new_page().insert_text((60, 100), "Anhang A", fontsize=20)
+    _b6 = {}
+    _scan_namen.append("titel.pdf")
+    _auf.process_uploaded_pdf(_HochBytes("titel.pdf", _titel.tobytes()),
+                              _scan_raum, benutzer_="markus", bericht=_b6)
+    pruef("eine Titelseite gilt nicht als unlesbarer Scan",
+          _b6.get("unlesbar") == [], _b6)
+except Exception as e:
+    pruef("gescannte Seiten lassen sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+finally:
+    _ocr_t.lies, _vis_t.beschreibe = _ocr_alt
+    _sml_s = store.sammlung(raeume.sammlung(_scan_raum), anlegen=False)
+    for _nm in _scan_namen:
+        try:
+            if _sml_s is not None:
+                _sml_s.delete(where=store.datei_filter(_nm))
+            keyword_index.delete_document(_nm, raum=_scan_raum)
+        except Exception:
+            pass
+
+_q_t = pipeline.quellen([{"meta": {"file_name": "a.pdf", "page": 1,
+                                   "raum": "x", "quelle": "ocr"},
+                          "text": "t"}])
+pruef("die Quellenangabe nennt die Texterkennung",
+      _q_t and _q_t[0].get("herkunft") == "ocr", _q_t)
+pruef("und das Modell erfaehrt es im Kontext",
+      'herkunft="texterkennung"' in pipeline.kontext(
+          [{"meta": {"file_name": "a.pdf", "page": 1, "quelle": "ocr"},
+            "text": "t"}]))
+pruef("die Oberflaeche zeigt die Herkunft und bietet das Sehmodell an",
+      "aus Texterkennung" in _datei("app.py")
+      and "Mit Sehmodell lesen" in _datei("app.py")
+      and '"tiff"' in _datei("app.py"))
+pruef("das Abbild bringt Deutsch und Englisch fuer die Texterkennung mit",
+      "tesseract-ocr-deu" in _datei("Dockerfile")
+      and "tesseract-ocr-eng" in _datei("Dockerfile"))
+pruef("und der Bau prueft, dass sie im Abbild wirklich liest",
+      "ocr.py --probe" in _datei(".github/workflows/abbild.yml"))
+pruef("Bilddateien gehoeren zu den Dokumenten, auch fuer Ingest und "
+      "ownCloud", all(e in paths.DOKUMENT_ENDUNGEN
+                      for e in (".tif", ".tiff", ".jpg", ".png")))
+pruef("ingest.py liest gescannte Seiten ebenfalls",
+      "ocr.ist_scan(page)" in _datei("ingest.py")
+      and "ocr.oeffne(pdf_pfad)" in _datei("ingest.py"))
 
 import landkarte as _lk
 

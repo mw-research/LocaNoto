@@ -32,6 +32,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import keyword_index
 import lesen
 import llm
+import ocr
 import paths
 import raeume
 import store
@@ -106,11 +107,8 @@ def _speichern_chunks(chunks, metadatas, ids, raum,
         # "hinzugefuegt" -- die Datei lag danach auf der Platte, in
         # keiner Sammlung und in keiner Indexzeile. Auffallen konnte das
         # erst, wenn jemand danach suchte und nichts fand.
-        return 0, ("Kein Text gefunden. Bei einem PDF heisst das meist: "
-                   "es ist ein Scan ohne Textebene. Ein solches Dokument "
-                   "muss durch eine Texterkennung, bevor es durchsuchbar "
-                   "wird -- oder ueber ingest_images.py als Abbildung "
-                   "beschrieben werden.")
+        return 0, ("Kein Text gefunden -- auch die Texterkennung las "
+                   "nichts Brauchbares.")
     # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
     # HTTP-Anfrage an den Modellserver.
     embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
@@ -147,7 +145,8 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
                          bilder=False, *, benutzer_,
                          ist_verwalter=False, streng=False,
                          fortschritt=None,
-                         nach_dem_schreiben=None):
+                         nach_dem_schreiben=None,
+                         sehmodell=False, bericht=None):
     """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
     vektorisiert beides.
 
@@ -211,8 +210,19 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
                         f"Ablage und gehoert nicht zu diesem Raum. "
                         f"Gespeichert als '{dateiname}'.")
 
-    with open(pdf_path, "wb") as f:
-        f.write(uploaded_file.getvalue())
+    # Liegt dieselbe Datei schon da -- etwa beim zweiten Durchgang mit
+    # dem Sehmodell --, wird sie weder neu geschrieben noch erneut nach
+    # ownCloud gelegt. ownCloud wiese sie sonst mit "liegt dort schon"
+    # ab, und die Meldung saehe nach einem Fehler aus.
+    _inhalt = uploaded_file.getvalue()
+    try:
+        with open(pdf_path, "rb") as f:
+            _schon_da = f.read() == _inhalt
+    except OSError:
+        _schon_da = False
+    if not _schon_da:
+        with open(pdf_path, "wb") as f:
+            f.write(_inhalt)
 
     # UND nach ownCloud, wenn der Raum dort einen Ordner hat.
     #
@@ -226,7 +236,7 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     wolke_hinweis = ""
     try:
         import owncloud
-        if owncloud.eingerichtet():
+        if owncloud.eingerichtet() and not _schon_da:
             # Der Pfad RELATIV zur Ablage des Raums und nicht der
             # blosse Dateiname: sonst faellt der Projektordner weg und
             # in ownCloud liegt alles flach nebeneinander. Das Projekt
@@ -264,14 +274,43 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
                 ids.append(f"{dateiname}_p{nummer}_c{i}")
         _n, _h = _speichern_chunks(chunks, metadatas, ids, raum,
                                    nach_dem_schreiben)
+        if bericht is not None:
+            bericht.update({"unlesbar": [], "ocr_seiten": 0,
+                            "sehmodell": bool(sehmodell)})
         return _n, " ".join(
             x for x in (_h, name_hinweis, wolke_hinweis) if x)
 
-    doc = pymupdf.open(pdf_path)
+    # Bilddateien (TIFF, JPG, PNG) werden hier zu einem PDF; ab da gehen
+    # sie denselben Weg wie ein gescanntes PDF.
+    doc = ocr.oeffne(pdf_path)
+    unlesbar, ocr_seiten = [], 0
     
     
     for page_num in range(len(doc)):
         page = doc[page_num]
+
+        # --- 0. GESCANNTE SEITE ---
+        #
+        # Ein Foto einer Seite hat keine Textebene; Tabellenerkennung und
+        # Textauszug liefern dort nichts. Die Texterkennung liest sie.
+        # Was sie nicht lesen kann, wird gemerkt und unten dem Sehmodell
+        # angeboten -- oder gemeldet, nicht still uebergangen.
+        if ocr.ist_scan(page):
+            _ocr_text = ocr.lies(page)
+            if ocr.brauchbar(_ocr_text):
+                ocr_seiten += 1
+                for i, split in enumerate(
+                        text_splitter.split_text(_ocr_text)):
+                    chunks.append(split)
+                    metadatas.append({
+                        "file_name": dateiname, "page": page_num + 1,
+                        "raum": raum, "folder": projekt,
+                        "owner": benutzer_, "type": "text",
+                        "quelle": "ocr"})
+                    ids.append(f"{dateiname}_p{page_num+1}_ocr_{i}")
+            else:
+                unlesbar.append(page_num + 1)
+            continue
         
         # --- 1. TABELLEN EXTRAHIEREN ---
         # Gleiche Aufbereitung wie im Batch-Ingest (tables.py): die Zeile
@@ -327,11 +366,33 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     # Die Beschreibung ersetzt das Bild nicht, sie macht es
     # auffindbar.
     bild_hinweis = ""
-    if bilder:
+    # Das Sehmodell liest nur die Seiten, an denen die Texterkennung
+    # gescheitert ist. "Abbildungen beschreiben" schliesst das ein;
+    # sehmodell allein ist der zweite Durchgang fuer genau diese Seiten.
+    _mit_sehmodell = bool(bilder or sehmodell)
+    if bilder or (sehmodell and unlesbar):
         try:
             import bildtext
             for _seite, _text, _art in bildtext.beschreibungen(
-                    doc, dateiname, fortschritt):
+                    doc, dateiname, fortschritt,
+                    seiten=set(unlesbar) if _mit_sehmodell else set(),
+                    abbildungen=bool(bilder)):
+                if _art == "seite":
+                    # Eine abgeschriebene Seite ist Text wie jeder andere
+                    # und wird zerteilt -- als ein einziger Abschnitt
+                    # schnitte das Embedding eine lange Seite ab.
+                    for i, split in enumerate(
+                            text_splitter.split_text(_text)):
+                        chunks.append(split)
+                        metadatas.append({
+                            "file_name": dateiname, "page": _seite,
+                            "raum": raum, "folder": projekt,
+                            "owner": benutzer_, "type": "text",
+                            "quelle": "sehmodell"})
+                        ids.append(f"{dateiname}_p{_seite}_sehmodell_{i}")
+                    if _seite in unlesbar:
+                        unlesbar.remove(_seite)
+                    continue
                 chunks.append(_text)
                 metadatas.append({
                     "file_name": dateiname,
@@ -350,7 +411,28 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
         except Exception as e:
             bild_hinweis = f"Bilder nicht beschrieben: {e}"
 
+    # Was ungelesen bleibt, wird gesagt -- mit Seitenzahlen. Vorher fiel
+    # eine Seite, an der das Sehmodell scheiterte, still weg.
+    ocr_hinweis = ""
+    if unlesbar:
+        _liste = (", ".join(str(s) for s in unlesbar[:12])
+                  + (" ..." if len(unlesbar) > 12 else ""))
+        if _mit_sehmodell:
+            ocr_hinweis = (f"{len(unlesbar)} Seite(n) ohne lesbaren Text, "
+                           f"auch nicht mit dem Sehmodell: Seite {_liste}.")
+        else:
+            ocr_hinweis = (f"{len(unlesbar)} gescannte Seite(n), die die "
+                           f"Texterkennung nicht lesen konnte: Seite "
+                           f"{_liste}. Das Sehmodell kann sie lesen.")
+        _bereit, _grund = ocr.verfuegbar()
+        if not _bereit:
+            ocr_hinweis += f" Texterkennung nicht verfuegbar: {_grund}."
+    if bericht is not None:
+        bericht.update({"unlesbar": list(unlesbar), "ocr_seiten": ocr_seiten,
+                        "sehmodell": _mit_sehmodell})
+
     _n, _h = _speichern_chunks(chunks, metadatas, ids, raum,
                                nach_dem_schreiben)
     return _n, " ".join(
-        x for x in (_h, name_hinweis, wolke_hinweis, bild_hinweis) if x)
+        x for x in (_h, name_hinweis, wolke_hinweis, bild_hinweis,
+                    ocr_hinweis) if x)

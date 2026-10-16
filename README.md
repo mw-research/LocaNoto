@@ -434,15 +434,15 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `api`, `app`, `aufnehmen` +46 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +12 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `api`, `app`, `aufnehmen` +47 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +13 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +11 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `aufnehmen`, `ingest` +3 |
 | **Bestand** | | | |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `api`, `app`, `bestandsliste` +10 |
 | `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `api`, `app`, `aufnehmen` +19 |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
 | `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `ingest`, `ingest_images` +8 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
 | `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
@@ -459,14 +459,15 @@ Dateien importieren sie.
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `app`, `selbsttest`, `verwaltung` |
 | `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `app`, `selbsttest`, `verwaltung` |
 | `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +7 | `app`, `selbsttest` |
+| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `app`, `pipeline`, `selbsttest`, `verwaltung` |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `aufnehmen`, `ingest`, `ingest_images` |
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `api`, `app`, `create_token`, `selbsttest` +1 |
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `app`, `selbsttest`, `verwaltung` |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
-| `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `app`, `bildtext` |
+| `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MINDEST_TEXT`, `OCR_DPI`, `OCR_SPRACHEN` | `aufnehmen`, `ingest`, `selbsttest` |
+| `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `app`, `bildtext`, `selbsttest` |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `selbsttest` |
 | `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `api`, `app`, `sqldb`, `tabellen` |
-| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | — | `app`, `verwaltung` |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
 | `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `verwaltung` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `selbsttest`, `verwaltung` |
@@ -1431,8 +1432,33 @@ Schlüssel nicht im Dateisystem haben will, gibt ihn über
 
 
 ## 📄 Formate
-Vektorisiert werden PDF, Word (`docx`), Markdown (`md`, `markdown`) und
-einfacher Text (`txt`) — über den Upload wie über den Ingest.
+Vektorisiert werden PDF, Word (`docx`), Markdown (`md`, `markdown`),
+einfacher Text (`txt`) und Scans als Bild (`tif`, `tiff`, `jpg`, `jpeg`,
+`png`) — über den Upload, die Schnittstelle, den Ingest und den
+ownCloud-Abgleich.
+
+### Gescannte Seiten
+
+Eine Seite gilt als gescannt, wenn sie kaum Text hat und zur Hälfte oder
+mehr von einem Bild bedeckt ist. Eine Leerseite oder ein Titelblatt ist
+damit kein Scan. Gescannte Seiten gehen zwei Stufen:
+
+| Stufe | wann | Eigenschaften |
+|---|---|---|
+| Texterkennung (`ocr.py`, Tesseract) | immer, auf jedem Weg | schnell, ohne Modellserver; Fehler sind sichtbar – eine unleserliche Stelle wird Zeichensalat und gilt dann als nicht gelesen |
+| Sehmodell (`bildtext.py`) | nur für Seiten, die die Texterkennung nicht las, und nur auf Wunsch: Knopf **Mit Sehmodell lesen**, Haken **Abbildungen und gescannte Seiten beschreiben**, `sehmodell=true` an der Schnittstelle | liest schlechte Scans und Handschrift besser; ein Modellaufruf je Seite; kann eine unleserliche Stelle plausibel ergänzen |
+
+Gelesene Seiten werden zerteilt wie jeder Text. Ihre Abschnitte tragen
+`quelle: ocr` oder `quelle: sehmodell`; unter einer Antwort steht dann
+*aus Texterkennung* oder *vom Sehmodell gelesen*, und das Sprachmodell
+bekommt dieselbe Angabe im Kontext. Seiten, die keine Stufe lesen konnte,
+nennt die Meldung mit Seitenzahl.
+
+`OCR_SPRACHEN` (Vorgabe `deu+eng`) und `OCR_DPI` (300) stellen die
+Texterkennung ein; jede Sprache braucht ihr Paket im Abbild
+(`tesseract-ocr-deu`, `tesseract-ocr-eng`). `python ocr.py --probe` liest
+eine erzeugte Testseite; der Bau-Workflow führt das aus und zieht den
+wandernden Kennzeichner erst nach bestandener Probe nach.
 
 PDFs gehen den bisherigen Weg: Seiten, Tabellenerkennung über die Fläche,
 Entfernen laufender Kopfzeilen, Wiederaufsetzen ab der zuletzt
@@ -1999,7 +2025,8 @@ Minuten. Das Zeitlimit gehört auf die Client-Seite (`curl --max-time`).
 | Antwort | heißt |
 |---|---|
 | `200`, `durchsuchbar: true` | aufgenommen |
-| `200`, `durchsuchbar: false` | angekommen und abgelegt, aber kein Text gefunden — `hinweis` sagt warum, fast immer ein Scan ohne Textebene |
+| `200`, `durchsuchbar: false` | angekommen und abgelegt, aber kein Text gefunden — `hinweis` sagt warum |
+| `200`, `unlesbar: [3, 7]` | diese Seiten las die Texterkennung nicht; dieselbe Datei mit `sehmodell=true` erneut senden liest sie mit dem Sehmodell |
 | `401` | kein gültiges Token |
 | `403` | dieser Nutzer darf in diesen Raum nicht schreiben |
 | `413` | größer als `AUFNAHME_MAX_MB` |

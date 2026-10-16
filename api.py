@@ -481,6 +481,7 @@ def aufnehmen_(datei: UploadFile = File(...),
                raum: str = Form(...),
                projekt: str = Form(""),
                bilder: bool = Form(False),
+               sehmodell: bool = Form(False),
                kennung: str = Depends(benutzer)):
     """Ein Dokument aufnehmen: ablegen, zerlegen, vektorisieren.
 
@@ -508,13 +509,14 @@ def aufnehmen_(datei: UploadFile = File(...),
     if not inhalt:
         raise HTTPException(status_code=400, detail="Leere Datei.")
 
+    _bericht = {}
     try:
         anzahl, hinweis = aufnehmen.process_uploaded_pdf(
             _Hochgeladen(datei.filename or "unbenannt", inhalt),
             raum, projekt, bilder,
             benutzer_=kennung,
             ist_verwalter=benutzer_datei.ist_admin(kennung),
-            streng=True)
+            streng=True, sehmodell=sehmodell, bericht=_bericht)
     except aufnehmen.KeinRecht as e:
         raise HTTPException(status_code=403, detail=str(e))
 
@@ -522,8 +524,13 @@ def aufnehmen_(datei: UploadFile = File(...),
     # Scan ohne Textebene ist kein Fehler der Anfrage -- sie ist
     # angekommen, die Datei liegt ab, nur durchsuchbar ist sie nicht.
     # Ein 4xx dafuer hiesse, der Aufrufer haette etwas falsch gemacht.
+    # "unlesbar" nennt die Seiten, die weder Textebene noch Texterkennung
+    # hergaben. Dieselbe Datei mit sehmodell=true noch einmal senden
+    # liest genau diese mit dem Sehmodell nach.
     return {"datei": datei.filename, "raum": raum,
             "abschnitte": anzahl, "durchsuchbar": bool(anzahl),
+            "texterkennung_seiten": _bericht.get("ocr_seiten", 0),
+            "unlesbar": _bericht.get("unlesbar", []),
             "hinweis": hinweis}
 
 

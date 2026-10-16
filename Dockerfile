@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libmupdf-dev \
     tesseract-ocr \
+    tesseract-ocr-deu \
+    tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
