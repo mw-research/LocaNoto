@@ -398,6 +398,9 @@ def zeichne(*, is_admin,
                         # Was in LocaNoto geloescht wird, verschwindet auch
                         # in ownCloud -- das Konto, sofern LocaNoto es
                         # verwaltet. Ein fremdes bleibt, und das wird gesagt.
+                        # Die persoenliche Anweisung gehoert zum Zugang
+                        # und geht mit ihm.
+                        prompts.anweisung_loeschen(_wahl)
                         _ok_k, _m_k = owncloud.konto_loeschen(_wahl)
                         if _m_k:
                             (st.info if _ok_k else st.warning)(_m_k)

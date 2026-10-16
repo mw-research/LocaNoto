@@ -244,6 +244,20 @@ Nur ein Funktionspostfach kann ein Verwalter für selbständige Antworten
 freischalten. Solche Mails tragen dann in der Regel einen Hinweis, dass sie
 automatisch erstellt wurden.
 
+### Wie sage ich LocaNoto, wie es mir antworten soll?
+
+In der Seitenleiste unter **🗒️ Meine Anweisung** steht ein Textfeld für
+deine persönliche Anweisung, zum Beispiel: „Antworte knapp, mit Tabellen,
+und nenne immer die Norm." **Speichern** – sie gilt ab der nächsten Frage
+für alle deine Antworten, auch über die Schnittstelle. **Entfernen** nimmt
+sie wieder heraus.
+
+Die Anweisung verfeinert nur. Die Grundlagen – wie LocaNoto sucht, welche
+Regeln für Antworten gelten, etwa Quellen nennen und nichts erfinden –
+legt ein Verwalter in den Vorlagen fest, und sie gehen vor. Andere Nutzer
+sehen deine Anweisung nicht; sie liegt verschlüsselt. Höchstens 2000
+Zeichen.
+
 ### Wie ändere ich mein Passwort in LocaNoto?
 
 In der Seitenleiste **🔑 Passwort aendern**: **Bisheriges Passwort**,
@@ -551,6 +565,8 @@ Stelle. Woher die Einträge kommen: aus den „Fragen ohne Treffer" unter
 📝 Rueckmeldungen.
 
 ### Wie passe ich als Verwalter Prompts und Voreinstellungen in LocaNoto an?
+
+Die Vorlagen sind die Grundlage für alle; Nutzer verfeinern sie für sich unter **🗒️ Meine Anweisung**, ohne sie zu ändern.
 
 **📜 Prompts bearbeiten:** zwei Vorlagen – eine bildet aus der Frage die
 Suchanfragen, die andere legt fest, wie geantwortet wird. **Gilt fuer**

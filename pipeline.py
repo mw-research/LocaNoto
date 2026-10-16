@@ -439,13 +439,20 @@ def kontext(treffer, bild_texte=(), bloecke=()):
     return "\n\n".join(teile) + "\n\n"
 
 
-def systemprompt(kontexttext, preset=None):
-    """Vorlage mit Rolle und Kontext gefuellt."""
+def systemprompt(kontexttext, preset=None, benutzer=None):
+    """Vorlage mit Rolle und Kontext gefuellt.
+
+    benutzer haengt dessen persoenliche Anweisung an (prompts.anweisung).
+    Ohne ihn -- Werkzeuge, die keinen Menschen kennen -- bleibt es bei der
+    Vorlage.
+    """
+    import prompts
     rolle = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
-    return (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT, preset)
+    text = (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT, preset)
             .replace("{EXPERT_ROLE}", rolle)
             .replace("{GLOSSAR}", _glossarblock(preset))
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
+    return prompts.mit_anweisung(text, benutzer) if benutzer else text
 
 
 # Wie oft das Modell hoechstens nachschlagen darf, bevor es antworten

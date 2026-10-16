@@ -2328,16 +2328,16 @@ pruef("es gibt einen wechselnden Feldschluessel",
       "def _feldschluessel(" in _app)
 pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
 
-# Acht Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
+# Neun Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
 # Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken,
-# Postfach anlegen (Verwaltung), Postfach verbinden (Nutzer). Einmal
-# abziehen fuer die Definition selbst.
+# Postfach anlegen (Verwaltung), Postfach verbinden (Nutzer), eigene
+# Anweisung. Einmal abziehen fuer die Definition selbst.
 #
 # Die Namen stehen hier und nicht nur die Zahl: schlaegt die Pruefung
 # fehl, soll sie sagen, WELCHES Formular fehlt, statt nur dass eines
 # fehlt.
 _aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
-pruef("acht Formulare werden geleert", _aufrufe == 8, _aufrufe)
+pruef("neun Formulare werden geleert", _aufrufe == 9, _aufrufe)
 
 for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
     pruef(f"{_bereich} benutzt den wechselnden Schluessel",
@@ -3869,6 +3869,77 @@ pruef("Passwort setzen und aendern ziehen ownCloud mit",
 pruef("Daten loeschen und Raum leeren leeren den ownCloud-Ordner",
       "owncloud.leere_raumordner(" in _vw_q
       and "owncloud.leere_raumordner(_wahl_s)" in _ap_q)
+
+# --- DIE GRUNDLAGEN SETZT DER VERWALTER, DER NUTZER VERFEINERT ---
+#
+# Die Vorlagen wirken auf alle Antworten und bleiben beim Verwalter. Jeder
+# Nutzer kann eine persoenliche Anweisung hinterlegen, die an SEINE
+# Antworten angehaengt wird -- sie ergaenzt die Vorlage, ersetzt sie nicht.
+import prompts as _pr_a
+
+# In try: fehlt einem aelteren Stand die Anweisung, soll das als
+# Fehlschlag dastehen und nicht den ganzen Lauf beenden.
+try:
+  _pr_a.anweisung_loeschen("anna")
+  pruef("ohne Anweisung bleibt der Antwortprompt die Vorlage",
+        pipeline.systemprompt("KONTEXT", benutzer="anna")
+        == pipeline.systemprompt("KONTEXT"))
+  _ok_a, _m_a = _pr_a.anweisung_speichern("anna", "Antworte immer mit einer Tabelle.")
+  _sys_anna = pipeline.systemprompt("KONTEXT", benutzer="anna")
+  _sys_markus = pipeline.systemprompt("KONTEXT", benutzer="markus")
+  pruef("die Anweisung haengt an den eigenen Antworten",
+        _ok_a and "Antworte immer mit einer Tabelle." in _sys_anna, _m_a)
+  pruef("und die Vorlage samt Kontext steht davor, unveraendert",
+        _sys_anna.startswith(pipeline.systemprompt("KONTEXT").rstrip())
+        and "KONTEXT" in _sys_anna)
+  pruef("und sie sagt, dass die Regeln der Vorlage vorgehen",
+        "gelten die Regeln oben" in _sys_anna)
+  # Der ganze Satz und nicht ein Wort daraus: "Tabelle" steht schon in
+  # der Vorlage selbst, und die erste Fassung dieser Pruefung fiel daran.
+  pruef("die Anweisung eines anderen erscheint nicht",
+        "Antworte immer mit einer Tabelle." not in _sys_markus
+        and "Persoenliche Anweisung" not in _sys_markus)
+  with open(_pr_a._anweisung_pfad("anna"), "rb") as _f:
+      _roh_a = _f.read()
+  pruef("die Anweisung liegt verschluesselt",
+        b"Tabelle" not in _roh_a or not geheim.verfuegbar())
+  pruef("eine zu lange Anweisung wird abgewiesen",
+        not _pr_a.anweisung_speichern("anna", "x" * (_pr_a.ANWEISUNG_MAX + 1))[0]
+        and "Tabelle" in _pr_a.anweisung("anna"))
+  _pr_a.anweisung_speichern("anna", "")
+  pruef("leer speichern entfernt sie",
+        _pr_a.anweisung("anna") == ""
+        and not os.path.exists(_pr_a._anweisung_pfad("anna")))
+except Exception as e:
+  pruef("die persoenliche Anweisung laesst sich pruefen", False,
+        f"{type(e).__name__}: {e}")
+
+# Oberflaeche und Schnittstelle geben den Nutzer mit; der Bereich steht
+# fuer jeden da, nicht nur fuer Verwalter; und das Loeschen eines
+# Benutzers nimmt seine Anweisung mit.
+_ap_a, _api_a = _datei("app.py"), _datei("api.py")
+pruef("Oberflaeche und Schnittstelle haengen die Anweisung an",
+      'benutzer=st.session_state["username"])' in _ap_a
+      and "benutzer=kennung)" in _api_a)
+_app_ba = _ast.parse(_ap_a)
+_eltern_a = {}
+for _k in _ast.walk(_app_ba):
+    for _c in _ast.iter_child_nodes(_k):
+        _eltern_a[_c] = _k
+_mw_a = [k for k in _ast.walk(_app_ba) if isinstance(k, _ast.With)
+         and any("Meine Anweisung" in _ast.unparse(i.context_expr)
+                 for i in k.items)]
+_nur_vw = []
+for _w in _mw_a:
+    _e = _eltern_a.get(_w)
+    while _e is not None:
+        if isinstance(_e, _ast.If) and "is_admin" in _ast.unparse(_e.test):
+            _nur_vw.append(_ast.unparse(_e.test))
+        _e = _eltern_a.get(_e)
+pruef("'Meine Anweisung' steht fuer jeden Nutzer da",
+      _mw_a and not _nur_vw, _nur_vw or len(_mw_a))
+pruef("Benutzer loeschen nimmt die Anweisung mit",
+      "prompts.anweisung_loeschen(_wahl)" in _datei("verwaltung.py"))
 
 import landkarte as _lk
 

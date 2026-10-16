@@ -359,8 +359,12 @@ def _suchen(anfrage, kennung):
 
     nachrichten = list(anfrage.verlauf or []) + [
         {"role": "user", "content": anfrage.frage}]
+    # Dieselbe persoenliche Anweisung wie im Browser: eine Frage ueber die
+    # Schnittstelle soll nicht anders beantwortet werden als dieselbe
+    # Frage in der Oberflaeche.
     system = pipeline.systemprompt(
-        pipeline.kontext(treffer, bloecke=bloecke), anfrage.preset)
+        pipeline.kontext(treffer, bloecke=bloecke), anfrage.preset,
+        benutzer=kennung)
     return (sonden, hinweis, treffer, zahlen, nachrichten, system, modell,
             listen_auskunft)
 

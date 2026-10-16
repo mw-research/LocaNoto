@@ -1938,6 +1938,13 @@ nicht mehr — es antwortet dann aus dem, was es ohnehin zu wissen glaubt, mit
 erfundenen Fundstellen und ohne jede Fehlermeldung. Ein Speichern ohne die
 nötigen Platzhalter wird deshalb abgelehnt.
 
+**Persönliche Anweisung.** Jeder Nutzer verfeinert die Antworten für sich
+unter *🗒️ Meine Anweisung*: der Text wird an seinen Antwortprompt
+angehängt, mit dem Hinweis, dass die Regeln der Vorlage vorgehen. Er gilt auch
+für Fragen über die Schnittstelle, liegt verschlüsselt unter
+`data/anweisungen/` und geht beim Löschen des Benutzers mit. `ANWEISUNG_MAX_ZEICHEN`
+begrenzt die Länge (2000).
+
 Die Vorlagen sind für Verwalter da, nicht für jeden Nutzer: eine unglückliche
 Formulierung wirkt auf jede Antwort, die danach gegeben wird.
 

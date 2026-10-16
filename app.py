@@ -2307,6 +2307,42 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     time.sleep(3 if _bo.get("fehler") else 2)
                     st.rerun()
 
+    # --- MEINE ANWEISUNG ---
+    #
+    # Fuer jeden, nicht nur fuer Verwalter. Die Vorlagen selbst bleiben
+    # beim Verwalter -- sie wirken auf alle Antworten. Die Anweisung hier
+    # wirkt nur auf die eigenen und haengt an der Vorlage an, statt sie zu
+    # ersetzen.
+    with st.expander("\U0001f5d2\ufe0f Meine Anweisung"):
+        st.caption(
+            "Wie LocaNoto dir antworten soll, zum Beispiel: „Antworte "
+            "knapp, mit Tabellen, und nenne immer die Norm.“ Gilt für "
+            "alle deine Antworten, auch über die Schnittstelle. Die Regeln "
+            "des Hauses – Quellen nennen, nichts erfinden – gelten weiter.")
+        _anw = "anweisung"
+        with st.form(f"anweisung_{_feldschluessel(_anw, 'runde')}"):
+            _anw_text = st.text_area(
+                "Anweisung", value=prompts.anweisung(
+                    st.session_state["username"]),
+                max_chars=prompts.ANWEISUNG_MAX, height=140,
+                key=_feldschluessel(_anw, "text"),
+                label_visibility="collapsed")
+            _a1, _a2 = st.columns(2)
+            with _a1:
+                _anw_ok = st.form_submit_button(
+                    "Speichern", use_container_width=True)
+            with _a2:
+                _anw_weg = st.form_submit_button(
+                    "Entfernen", use_container_width=True)
+        if _anw_ok or _anw_weg:
+            _ok, _m = prompts.anweisung_speichern(
+                st.session_state["username"], "" if _anw_weg else _anw_text)
+            (st.success if _ok else st.error)(_m)
+            if _ok:
+                _felder_leeren(_anw, "text")
+                time.sleep(1)
+                st.rerun()
+
     # --- MEINE POSTFAECHER ---
     #
     # Jeder verbindet seine eigenen. Die Anmeldedaten leben nur in
@@ -2977,8 +3013,9 @@ if _bestand > 0:
                 # Die Anmeldedaten kommen aus dem Sitzungszustand und
                 # nur von dort. Sie stehen weder in der Konfiguration
                 # noch auf der Platte.
-                _system = pipeline.systemprompt(dynamic_context,
-                                                aktives_preset)
+                _system = pipeline.systemprompt(
+                    dynamic_context, aktives_preset,
+                    benutzer=st.session_state["username"])
                 _zusatz, _entwuerfe = [], []
                 if mcp.eingerichtet():
                     _wmelder = st.empty()
