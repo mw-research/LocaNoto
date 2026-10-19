@@ -485,9 +485,10 @@ Jeder Aufruf trägt das Token im Kopf `X-LocaNoto-Token`.
 | `POST /frage` | Antwort mit Quellen, `?strom=1` laufend |
 | `POST /aufnehmen` | ein Dokument einliefern (Formular: `datei`, `raum`, optional `projekt`, `bilder`, `sehmodell`) |
 | `POST /rueckmeldung` | 👍/👎 zu einer Antwort |
+| `DELETE /dokumente?raum=…&datei=…` | ein Dokument löschen, wie mit 🗑️ in der Oberfläche |
 | `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
 
-Gesucht wird nur in den Räumen des Token-Besitzers. `/aufnehmen` antwortet
+Gesucht wird nur in den Räumen des Token-Besitzers; löschen darf er nur, wo er es auch in der Oberfläche dürfte (sonst `403`). `/aufnehmen` antwortet
 mit `403`, wenn der Nutzer in den Raum nicht schreiben darf, und mit `413`,
 wenn die Datei zu groß ist. Die Schnittstelle ist nur vom Server selbst
 erreichbar; von außen gehört ein Reverse Proxy mit TLS davor. Beispiele

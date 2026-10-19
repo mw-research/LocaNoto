@@ -28,7 +28,8 @@ import aufnehmen
 import mcp
 from aufnehmen import (raum_sammlung, _alle_raum_sammlungen,
                        _gehoert_anderem_raum,
-                       process_uploaded_pdf)
+                       process_uploaded_pdf, dokument_pfad,
+                       entferne_dokument, NichtGefunden)
 import keyword_index
 import listenquellen
 import quellticket
@@ -725,58 +726,6 @@ def _verschiebe_datei(filename, von_raum, nach_raum):
     return ""
 
 
-def fremde_ordner(eigener_raum):
-    """Die Ablageordner ALLER anderen Raeume.
-
-    Dorthin darf keine Suche nach einem Dateinamen greifen. Zwei Raeume
-    duerfen dieselbe 'Angebot.pdf' fuehren, und welche davon gemeint ist,
-    entscheidet der Raum -- nicht die Reihenfolge, in der os.walk sie
-    findet.
-    """
-    return [paths.raum_ordner(k) for k in raeume.liste()
-            if k != eigener_raum]
-
-
-def dokument_pfad(filename, raum):
-    """Der Pfad zu einem Dokument AUS SICHT eines Raums.
-
-    Erst im eigenen Ordner, dann im gemeinsamen Wurzelbereich -- dort
-    liegen die Dateien aus der Zeit vor den Raeumen. Die Ordner der
-    anderen Raeume bleiben aussen vor.
-    """
-    return paths.finde_dokument(filename, bevorzugt=paths.raum_ordner(raum),
-                                ausser=fremde_ordner(raum)) or ""
-
-
-def remove_pdf_if_orphaned(filename, raum=None):
-    """Loescht die Datei von der Platte -- aber nur, wenn kein Abschnitt
-    mehr auf sie zeigt.
-
-    Alle Raeume teilen sich DOCS_DIR. Wird die Datei bedingungslos
-    entfernt, verliert ein gleichnamiges Dokument in einem anderen Raum
-    seine Quellenansicht.
-
-    raum sagt, WESSEN Datei gemeint ist. Ohne ihn wurde nur
-    DOCS_DIR/<name> geloescht -- alles in einem Sachgebiets- oder
-    Raumordner blieb liegen, und der Bestand wuchs mit Dateien, auf die
-    kein Abschnitt mehr zeigte.
-    """
-    for _raum, sml in _alle_raum_sammlungen():
-        try:
-            if sml.get(where=store.datei_filter(filename),
-                       include=[])["ids"]:
-                return False
-        except Exception:
-            # Lieber die Datei behalten als sie einem Raum wegnehmen,
-            # dessen Sammlung gerade nicht antwortet.
-            return False
-    file_path = (dokument_pfad(filename, raum) if raum
-                 else os.path.join(DOCS_DIR, filename))
-    if file_path and os.path.exists(file_path):
-        os.remove(file_path)
-    return True
-
-
 _QUELLENMUSTER = re.compile(
     r"\[([^\[\]]{1,120}?),\s*(?:Seite|S\.)\s*(\d+)\]")
 
@@ -888,67 +837,20 @@ def _loeschfreigabe(kennung, zahl, key):
 
 
 def loesche_dokument(filename, raum, kennung_statt_name=False):
-    """Loescht ein Dokument aus genau einem Raum.
+    """Loescht ein Dokument aus genau einem Raum. (ok, meldung).
 
-    Der Raum ist nicht optional. Ohne ihn traefe der Loeschbefehl jeden
-    Abschnitt dieses Dateinamens -- auch die in anderen Raeumen, auf die
-    der Loeschende gar keinen Zugriff hat.
+    Der Weg selbst steht in aufnehmen.entferne_dokument -- derselbe, den
+    die Schnittstelle unter DELETE /dokumente nimmt. Die Rechte prueft
+    hier die Oberflaeche: sie zeigt den Knopf nur, wo geloescht werden
+    darf.
     """
-    sml = raum_sammlung(raum, anlegen=False)
-    if sml is None:
-        return False, "Der Raum hat keine Daten."
-    if kennung_statt_name:
-        # Der Verwalter hat nur die Kennung, nicht den Namen -- das ist
-        # der Sinn. Geloescht wird ueber sie. Stichwortindex und Datei
-        # brauchen den Namen, den es hier nicht gibt; beides holt der
-        # naechste Aufbau nach: der Index entsteht aus den Sammlungen,
-        # und eine Datei ohne Abschnitte faellt beim Aufraeumen weg.
-        # Der Name steht verdeckt in den Metadaten. Gebraucht wird er nur
-        # fuer ownCloud -- dort liegt die Datei unter ihrem Namen, und
-        # ohne ihn holte der Abgleich sie zurueck. Angezeigt wird er nicht.
-        _name = ""
-        try:
-            _m = sml.get(where={"datei_id": filename}, limit=1,
-                         include=["metadatas"]).get("metadatas") or []
-            _name = (store.metadaten_klartext(raum, _m)[0].get("file_name")
-                     or "") if _m else ""
-        except Exception:
-            _name = ""
-        sml.delete(where={"datei_id": filename})
-        refresh_document_index()
-        meldung = (f"Eintrag {filename[:12]}... aus "
-                   f"'{raeume.bezeichnung(raum)}' entfernt.")
-        if not _name:
-            return True, meldung
-        _ok, _m_oc = owncloud.entferne(raum, _name)
-        # Den Namen nicht in die Meldung: der Verwalter sieht hier
-        # bewusst nur die Kennung.
-        return True, meldung + ("" if _ok else
-                                " ACHTUNG: in ownCloud nicht geloescht -- der "
-                                "naechste Abgleich holt die Datei zurueck.")
-    # Den lokalen Pfad VOR dem Aufraeumen merken: danach ist die Datei
-    # weg, und ownCloud braucht ihn, um dieselbe Datei zu treffen.
-    _lokal = dokument_pfad(filename, raum)
-    sml.delete(where=store.datei_filter(filename))
-    keyword_index.delete_document(filename, raum=raum)
-    remove_pdf_if_orphaned(filename, raum)
+    try:
+        meldung, _bericht = entferne_dokument(
+            filename, raum, kennung_statt_name=kennung_statt_name)
+    except NichtGefunden as e:
+        return False, str(e)
     refresh_document_index()
-    meldung = f"'{filename}' aus '{raeume.bezeichnung(raum)}' entfernt."
-    return _auch_in_owncloud(raum, filename, _lokal, meldung)
-
-
-def _auch_in_owncloud(raum, filename, lokal, meldung):
-    """Haengt das Ergebnis in ownCloud an die Meldung. (ok, meldung).
-
-    ok bleibt True: in LocaNoto IST das Dokument weg. Was die Meldung
-    sagen muss, ist, dass es wiederkommt, wenn ownCloud nicht mitzog.
-    """
-    ok, m = owncloud.entferne(raum, filename, lokal)
-    if ok:
-        return True, meldung
-    return True, (meldung + f" ACHTUNG: {m} Der naechste Abgleich holt die "
-                  "Datei zurueck. Erneut loeschen oder in ownCloud von "
-                  "Hand entfernen.")
+    return True, meldung
 
 
 def list_foreign_private_documents(current_user, notzugang_=()):

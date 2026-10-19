@@ -40,6 +40,7 @@ import ranking
 import store
 import budget
 import aufnehmen
+import notzugang
 import benutzer as benutzer_datei
 
 paths.bootstrap()
@@ -532,6 +533,34 @@ def aufnehmen_(datei: UploadFile = File(...),
             "texterkennung_seiten": _bericht.get("ocr_seiten", 0),
             "unlesbar": _bericht.get("unlesbar", []),
             "hinweis": hinweis}
+
+
+@app.delete("/dokumente")
+def dokument_loeschen(raum: str, datei: str,
+                      kennung: str = Depends(benutzer)):
+    """Ein Dokument aus einem Raum loeschen -- wie der Knopf in der Oberflaeche.
+
+    Derselbe Weg: Abschnitte aus Vektor- und Stichwortindex, die lokale
+    Datei, und in ownCloud in den Papierkorb, damit der Abgleich sie
+    nicht zurueckholt.
+
+    403, wenn dieser Nutzer in dem Raum nicht loeschen darf -- dieselbe
+    Regel wie in der Oberflaeche, aus der signierten Benutzerdatei und
+    nicht aus dem Token. 404, wenn die Datei dort nicht liegt; gefragt
+    wird danach erst, wenn das Recht feststeht.
+    """
+    try:
+        meldung, bericht = aufnehmen.entferne_dokument(
+            datei, raum, benutzer_=kennung,
+            ist_verwalter=benutzer_datei.ist_admin(kennung),
+            notzugang=notzugang.raeume_fuer(kennung))
+    except aufnehmen.KeinRecht as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except aufnehmen.NichtGefunden as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"datei": datei, "raum": raum,
+            "abschnitte": bericht["abschnitte"],
+            "owncloud": bericht["owncloud"], "hinweis": meldung}
 
 
 @app.get("/voreinstellungen")

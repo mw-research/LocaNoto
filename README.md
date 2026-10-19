@@ -2226,7 +2226,38 @@ curl -N -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" -H "Content-Type: application/jso
 | `GET /voreinstellungen` | vorhandene Voreinstellungen und was sie setzen |
 | `POST /frage` | Antwort mit Quellen; `?strom=1` für laufende Ausgabe |
 | `POST /rueckmeldung` | `daumen_hoch` oder `daumen_runter` zu einer Antwort |
+| `DELETE /dokumente` | ein Dokument aus einem Raum löschen, wie in der Oberfläche |
 | `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
+
+### Dokumente löschen
+
+```bash
+curl -s -X DELETE -G -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" --data-urlencode "raum=einkauf" --data-urlencode "datei=Betriebsanweisung.pdf" http://127.0.0.1:8600/dokumente
+```
+
+```json
+{"datei": "Betriebsanweisung.pdf", "raum": "einkauf", "abschnitte": 47,
+ "owncloud": "mitgeloescht", "hinweis": "'Betriebsanweisung.pdf' aus 'Einkauf' entfernt."}
+```
+
+Derselbe Weg wie **🗑️ Löschen** in der Oberfläche — beide rufen
+`aufnehmen.entferne_dokument`: Abschnitte aus Vektor- und Stichwortindex,
+die lokale Datei und, wenn eingerichtet, die Datei in ownCloud (in den
+Papierkorb, sonst holte der Abgleich sie zurück).
+
+| Antwort | heißt |
+|---|---|
+| `200` | gelöscht; `abschnitte` nennt die Zahl, `owncloud` ist `mitgeloescht`, `nicht betroffen` oder `fehlgeschlagen` |
+| `401` | kein gültiges Token |
+| `403` | dieser Nutzer darf in diesem Raum nicht löschen — dieselbe Regel wie in der Oberfläche |
+| `404` | die Datei liegt nicht in diesem Raum |
+
+Das Recht wird **vor** der Datei geprüft: wer in einem Raum nicht löschen
+darf, bekommt `403`, auch für eine Datei, die es dort nicht gibt — die
+Antwort verrät nicht, was in einem fremden Raum liegt. `owncloud:
+fehlgeschlagen` heißt: in LocaNoto gelöscht, in ownCloud nicht; dann holt
+der nächste Abgleich die Datei zurück. Die Dokumentenliste der Oberfläche
+zeigt die Löschung nach spätestens einer Minute.
 
 Im Rumpf von `/frage` sind `top_k`, `dateien`, `sachgebiete`, `raeume` und
 `verlauf` optional — dieselben Einschränkungen wie die Filter in der Seitenleiste.

@@ -3762,10 +3762,94 @@ def _fn_rumpf(name):
     return ""
 
 
+# Der Loeschweg steht in aufnehmen.entferne_dokument; die Oberflaeche und
+# die Schnittstelle rufen ihn beide.
+_auf_q = _datei("aufnehmen.py")
+_ent_q = ""
+for _k in _ast.parse(_auf_q).body:
+    if isinstance(_k, _ast.FunctionDef) and _k.name == "entferne_dokument":
+        _ent_q = _ast.unparse(_k)
 pruef("Loeschen in der Oberflaeche loescht in ownCloud mit",
-      "_auch_in_owncloud(" in _fn_rumpf("loesche_dokument")
-      and "owncloud.entferne(" in _fn_rumpf("loesche_dokument")
-      and "owncloud.entferne(" in _fn_rumpf("_auch_in_owncloud"))
+      "entferne_dokument(" in _fn_rumpf("loesche_dokument")
+      and _ent_q.count("owncloud.entferne(") == 2, _ent_q.count("owncloud.entferne("))
+
+# --- LOESCHEN UEBER DIE SCHNITTSTELLE ---
+#
+# DELETE /dokumente nimmt denselben Weg wie der Knopf. Geprueft wird der
+# Weg selbst, mit echter Sammlung und echtem Stichwortindex; die
+# Schnittstelle uebersetzt nur noch die Ausnahmen in 403 und 404.
+_lp_raum = raeume.privat_kennung("markus")
+_lp_name = "loesch_probe.md"
+_lp_text = ("# Loeschprobe\n\nDie Pruefristen fuer Abscheider betragen "
+            "fuenf Jahre und stehen nur in diesem Dokument.\n")
+try:
+    _auf.process_uploaded_pdf(_Hochgeladene(_lp_name, _lp_text), _lp_raum,
+                              benutzer_="markus")
+    _lp_sml = store.sammlung(raeume.sammlung(_lp_raum), anlegen=False)
+    _lp_vorher = len(_lp_sml.get(where=store.datei_filter(_lp_name),
+                                 include=[])["ids"])
+
+    def _lp_im_index():
+        return [t for t in keyword_index.search(
+                    "Abscheider", "markus", limit=20, raeume=[_lp_raum])
+                if (t.get("meta") or {}).get("file_name") == _lp_name]
+    _lp_kw_vorher = len(_lp_im_index())
+
+    # 1. Ein anderer Nutzer darf in markus' Raum nicht loeschen -- und
+    #    erfaehrt dabei nicht, ob es die Datei gibt.
+    try:
+        _auf.entferne_dokument(_lp_name, _lp_raum, benutzer_="anna")
+        _lp_fremd = "geloescht"
+    except _auf.KeinRecht:
+        _lp_fremd = "403"
+    try:
+        _auf.entferne_dokument("gibt_es_nicht.pdf", _lp_raum,
+                               benutzer_="anna")
+        _lp_fremd2 = "?"
+    except _auf.KeinRecht:
+        _lp_fremd2 = "403"
+    except _auf.NichtGefunden:
+        _lp_fremd2 = "404 -- verraet, was dort liegt"
+    pruef("ein fremder Nutzer bekommt 403, auch fuer eine Datei, die es "
+          "nicht gibt", _lp_fremd == "403" and _lp_fremd2 == "403",
+          (_lp_fremd, _lp_fremd2))
+
+    # 2. Der Besitzer, eine Datei, die es nicht gibt: 404 statt "entfernt".
+    try:
+        _auf.entferne_dokument("gibt_es_nicht.pdf", _lp_raum,
+                               benutzer_="markus")
+        _lp_nicht = "entfernt gemeldet"
+    except _auf.NichtGefunden:
+        _lp_nicht = "404"
+    pruef("eine Datei, die nicht im Raum liegt, ergibt 404",
+          _lp_nicht == "404", _lp_nicht)
+
+    # 3. Der Besitzer loescht.
+    _lp_meld, _lp_ber = _auf.entferne_dokument(_lp_name, _lp_raum,
+                                               benutzer_="markus")
+    _lp_nachher = len(_lp_sml.get(where=store.datei_filter(_lp_name),
+                                  include=[])["ids"])
+    _lp_kw = _lp_im_index()
+    pruef("der Besitzer loescht: alle Abschnitte weg, Zahl gemeldet",
+          _lp_vorher > 0 and _lp_nachher == 0
+          and _lp_ber["abschnitte"] == _lp_vorher,
+          (_lp_vorher, _lp_nachher, _lp_ber))
+    # Vorher MUSS die Suche es finden -- sonst bewiese "danach nicht
+    # gefunden" nichts.
+    pruef("und aus dem Stichwortindex ebenso",
+          _lp_kw_vorher > 0 and not _lp_kw, (_lp_kw_vorher, len(_lp_kw)))
+    pruef("ohne ownCloud ist ownCloud nicht betroffen",
+          _lp_ber["owncloud"] == "nicht betroffen", _lp_ber)
+except Exception as e:
+    pruef("das Loeschen ueber den gemeinsamen Weg laesst sich pruefen",
+          False, f"{type(e).__name__}: {e}")
+
+_api_q = _datei("api.py")
+pruef("die Schnittstelle hat DELETE /dokumente auf dem gemeinsamen Weg",
+      '@app.delete("/dokumente")' in _api_q
+      and "aufnehmen.entferne_dokument(" in _api_q
+      and "benutzer_=kennung" in _api_q[_api_q.find('@app.delete("/dokumente")'):]
+      and "status_code=403" in _api_q and "status_code=404" in _api_q)
 pruef("Verschieben in der Oberflaeche verschiebt in ownCloud mit",
       "owncloud.verschiebe(" in _fn_rumpf("_verschiebe_datei"))
 
