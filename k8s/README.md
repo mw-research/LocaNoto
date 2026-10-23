@@ -81,6 +81,25 @@ kubectl exec -it deploy/locanoto -c app -- python create_user.py
 kubectl apply -f k8s/40-zeitplan.yaml
 ```
 
+## Dateiablage: OpenCloud
+
+`97-opencloud.yaml` stellt OpenCloud in denselben Namensraum — ein
+Dienst in Go, ohne Datenbank, ein Volume. Ablauf und Fallstricke stehen
+im Kopf der Datei; die drei Schritte, die zählen:
+
+```bash
+kubectl apply -f k8s/97-opencloud.yaml
+# App-Token für LocaNoto -- das Passwort nimmt OpenCloud dafür nicht:
+kubectl exec deploy/opencloud -- opencloud auth-app create --user-name=admin --expiration=87600h
+# OWNCLOUD_URL=http://opencloud:9200, OWNCLOUD_USER=admin,
+# OWNCLOUD_PASSWORT=<Token> ins Secret, LocaNoto neu starten, dann:
+kubectl exec -it deploy/locanoto -- python einrichten.py
+```
+
+Der Pod muss seine eigene öffentliche Adresse erreichen: OpenCloud
+schickt hochgeladene Inhalte intern dorthin. Die Prüfung dafür steht in
+der Datei.
+
 Der Abbildname in den Manifesten ist `locanoto:lokal`. Ersetze ihn durch
 deinen; die Manifeste setzen bewusst keine `imagePullPolicy`, damit ein
 lokal gebautes Abbild in einem Einzelknoten-Cluster (k3s, minikube, Docker

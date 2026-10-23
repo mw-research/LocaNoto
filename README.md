@@ -15,7 +15,7 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 | **Listen** | `xlsx` und `csv` werden nicht vektorisiert, sondern bei jeder Frage frisch gelesen |
 | **Rechte** | Räume mit Mitgliedschaft; jeder Nutzer hat einen eigenen |
 | **Vertraulich** | Chatverläufe und Anhänge verschlüsselt, Benutzerdatei signiert |
-| **Anbindung** | ownCloud für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
+| **Anbindung** | OpenCloud (oder oCIS, ownCloud, Nextcloud) für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
 | **Betrieb** | Docker Compose oder Kubernetes; der Container hält keinen Zustand |
 
 **Bedienen:** [HANDBUCH.md](HANDBUCH.md) — für Nutzer und Verwalter; in LocaNoto eingelesen, beantwortet die Anwendung damit Fragen zu ihrer eigenen Bedienung
@@ -58,15 +58,15 @@ EMBEDDING_MODEL=qwen3-embedding:8b           # vektorisiert
 ADMIN_USERS=markus                           # erster Verwalter, klein
 ```
 
-Für das mitgelieferte ownCloud kommen sechs dazu:
+Für das mitgelieferte OpenCloud kommen fünf dazu. Das Token entsteht
+erst, wenn OpenCloud läuft (Schritt 2):
 
 ```ini
-OWNCLOUD_URL=http://owncloud:8080
+OWNCLOUD_ADMIN_PASSWORT=EIN-STARKES-PASSWORT  # Anmeldung in OpenCloud
+OWNCLOUD_URL=https://opencloud:9200
 OWNCLOUD_USER=admin
-OWNCLOUD_PASSWORT=EIN-STARKES-PASSWORT
-OWNCLOUD_ADMIN_USER=admin
-OWNCLOUD_ADMIN_PASSWORT=EIN-STARKES-PASSWORT
-OWNCLOUD_DB_PASSWORT=EIN-ANDERES-PASSWORT
+OWNCLOUD_PASSWORT=DAS-APP-TOKEN               # nicht das Passwort
+OWNCLOUD_TLS_PRUEFEN=0                        # selbst ausgestelltes Zertifikat
 ```
 
 Und auf einem Server gehören Bestand und Konfiguration auf persistenten
@@ -95,13 +95,22 @@ docker compose --profile owncloud up -d
 Der erste Build lädt das Reranker-Modell in das Abbild (rund 2 GB);
 danach braucht der Start dafür keinen Netzzugang mehr.
 
-Wer ein eigenes ownCloud im Haus hat, lässt `--profile owncloud` weg und
-trägt dessen Adresse ein. Das Profil sorgt dafür, dass die drei Dienste
-(ownCloud, MariaDB, Redis) nur mit dem Profil starten — wer sie nicht
-will, merkt nichts von ihnen.
+Dann das App-Token, mit dem LocaNoto sich bei OpenCloud anmeldet —
+OpenCloud nimmt dafür nicht das Passwort:
 
-> ownCloud liegt in einem eigenen Abbild: getrennte Prozesse,
-> getrennte Protokolle, und ein Update von LocaNoto lässt ownCloud
+```bash
+docker compose exec opencloud opencloud auth-app create --user-name=admin --expiration=87600h
+```
+
+Das Token als `OWNCLOUD_PASSWORT` in die `.env`, dann
+`docker compose up -d locanoto_bot`.
+
+Wer eine eigene Ablage im Haus hat, lässt `--profile owncloud` weg und
+trägt deren Adresse ein. Das Profil sorgt dafür, dass OpenCloud nur mit
+dem Profil startet — wer es nicht will, merkt nichts davon.
+
+> OpenCloud liegt in einem eigenen Abbild: getrennte Prozesse,
+> getrennte Protokolle, und ein Update von LocaNoto lässt die Ablage
 > unberührt. Es bleibt dieselbe Installation — ein `compose`, ein Netz,
 > ein Befehl.
 
@@ -111,8 +120,8 @@ will, merkt nichts von ihnen.
 docker compose exec locanoto_bot python einrichten.py
 ```
 
-Ein Lauf, der sagt, was er tut: er wartet, bis ownCloud sich selbst
-eingerichtet hat — beim allerersten Start dauert das ein paar Minuten —,
+Ein Lauf, der sagt, was er tut: er wartet, bis die Ablage antwortet —
+und nennt den Befehl für das App-Token, falls sie die Anmeldung ablehnt —,
 erzeugt den Installationsschlüssel, legt den **ersten Verwalter in
 beiden Systemen** an, baut den Ordnerbaum samt Freigaben und zeigt zum
 Schluss die Sicherheitslage mit dem, was noch offen ist.
@@ -448,7 +457,7 @@ Dateien importieren sie.
 | `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
 | **Fachlogik** | | | |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
-| `owncloud.py` | Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `aufnehmen`, `einrichten` +6 |
+| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +4 | `abgleich`, `app`, `aufnehmen`, `einrichten` +6 |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `app`, `pipeline`, `postfach`, `selbsttest` +1 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `api`, `app`, `raum_diagnose`, `selbsttest` +1 |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
@@ -606,7 +615,12 @@ Arbeiter neben der Anwendung — etwas anderes als ein Knopf.
 
 
 ## ☁️ Dokumente aus ownCloud
-**LocaNoto steht vorn, ownCloud liegt dahinter.** Wer hier einen Zugang
+**LocaNoto steht vorn, die Ablage liegt dahinter.** „ownCloud" steht hier
+für jede der vier, die LocaNoto anspricht: **OpenCloud** (empfohlen, und
+die mitgelieferte), oCIS, ownCloud 10 und Nextcloud. Dateien und
+Freigaben gehen bei allen gleich über WebDAV und OCS. Nutzer und Gruppen
+führen OpenCloud und oCIS über die Graph-Schnittstelle, die anderen über
+OCS; welche Art Server es ist, erkennt LocaNoto selbst. Wer hier einen Zugang
 anlegt, bekommt ihn dort auch; wer hier einen Raum anlegt, bekommt dort
 einen Ordner samt Freigabe. Niemand muss in ownCloud etwas einrichten,
 und niemand muss dort etwas von Räumen wissen.
@@ -636,8 +650,29 @@ nichts.
 
 Einzurichten in der `.env`: `OWNCLOUD_URL` (die **Wurzel** der
 Installation, nicht der WebDAV-Pfad), `OWNCLOUD_USER`,
-`OWNCLOUD_PASSWORT`. Bei aktiver Zwei-Faktor-Anmeldung braucht es ein
-**App-Passwort**, nicht das Anmeldepasswort.
+`OWNCLOUD_PASSWORT`. Bei OpenCloud und oCIS ist das ein **App-Token**,
+nicht das Anmeldepasswort — die Anmeldung mit Passwort ist dort für
+Programme abgeschaltet:
+
+```bash
+opencloud auth-app create --user-name=admin --expiration=87600h
+```
+
+Bei ownCloud und Nextcloud braucht es ein App-Passwort, sobald die
+Zwei-Faktor-Anmeldung an ist.
+
+**Kennungen.** OpenCloud und oCIS nehmen nur Kennungen an, die mit einem
+Buchstaben oder Unterstrich beginnen und aus a–z, 0–9, Punkt, Strich und
+Unterstrich bestehen — also `mueller`, nicht `müller`. LocaNoto selbst
+erlaubt mehr; für eine solche Kennung sagt es beim Anlegen, dass das
+Konto in der Ablage nicht entstehen konnte.
+
+**Neue Ablage.** Passwörter lassen sich nicht mitnehmen. Ein Konto, das
+es in der Ablage noch nicht gibt, entsteht deshalb beim nächsten
+Passwortsetzen in LocaNoto, mit diesem Passwort. Die vorhandenen
+Dokumente bringt `python spiegeln.py` hinüber; es schreibt dabei den
+Stand des Abgleichs neu, sodass der nächste nächtliche Lauf nichts für
+entfallen hält.
 
 | Was | Welches Recht |
 |---|---|

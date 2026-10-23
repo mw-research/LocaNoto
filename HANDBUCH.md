@@ -280,8 +280,9 @@ In der Seitenleiste **🔑 Passwort aendern**: **Bisheriges Passwort**,
 **Aendern**.
 
 Ist ownCloud angebunden, gilt das neue Passwort auch dort, sofern
-LocaNoto dein ownCloud-Konto verwaltet. Andernfalls sagt die Meldung, dass
-dort weiter das alte gilt.
+LocaNoto dein ownCloud-Konto verwaltet. Gibt es dort noch kein Konto für
+dich, entsteht es jetzt, mit diesem Passwort. Gehört das Konto dort
+jemand anderem, sagt die Meldung, dass dort weiter das alte gilt.
 
 Passwort vergessen: ein Verwalter setzt ein neues. Das ändert sich danach
 am besten sofort selbst, damit niemand anders es kennt.
@@ -602,8 +603,9 @@ Eine Formulierung im Prompt wirkt auf jede folgende Antwort; nach einer
 
 ### Wie binde ich als Verwalter ownCloud an LocaNoto an?
 
-Ist ownCloud in der `.env` eingerichtet, legt LocaNoto hochgeladene
-Dokumente zusätzlich dort ab und kann Ordner und Gruppen übernehmen.
+„ownCloud" heißt hier die Dateiablage, auch OpenCloud. Ist sie in der
+`.env` eingerichtet, legt LocaNoto hochgeladene Dokumente zusätzlich dort
+ab und kann Ordner und Gruppen übernehmen.
 **🛠️ Verwaltung** → **☁️ ownCloud**:
 
 - **Zuordnung speichern** – ordnet einem Raum einen ownCloud-Ordner zu.
@@ -622,7 +624,8 @@ LocaNoto auch in ownCloud; Gelöschtes liegt dort im Papierkorb.
 bei Konten, die LocaNoto verwaltet – also die es selbst angelegt hat. Ein
 Konto, das es vorher schon gab, bleibt unangetastet. **Bestehende Konten
 übernehmen** vermerkt vorhandene Konten einmalig als verwaltet; das
-Dienst- und Verwalterkonto ist immer ausgenommen. Einrichtung und
+Dienst- und Verwalterkonto ist immer ausgenommen. Fehlt ein Konto in der
+Ablage, entsteht es beim nächsten Passwortsetzen. Einrichtung und
 Dienstkonto beschreibt die `README.md` unter „Dokumente aus ownCloud".
 
 ### Wie sichere ich LocaNoto als Verwalter?

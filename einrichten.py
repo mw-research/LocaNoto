@@ -5,6 +5,9 @@ Gedacht fuer den ersten Start einer frischen Installation:
     docker compose --profile owncloud up -d
     docker compose exec -T locanoto_bot python einrichten.py
 
+Bei OpenCloud braucht LocaNoto dafuer ein App-Token als
+OWNCLOUD_PASSWORT. Fehlt es, nennt Schritt 1 den Befehl, der es erzeugt.
+
 Der Reihe nach:
 
     1. Warten, bis ownCloud antwortet. Beim ersten Start richtet es sich
@@ -64,6 +67,15 @@ def warte_auf_owncloud(sekunden=300):
             if ok:
                 sagt(f"  Erreichbar nach {time.time() - t0:.0f}s: {meldung}")
                 return True
+            if "Anmeldung abgelehnt" in meldung:
+                # Erreichbar, aber abgewiesen: Warten aendert daran nichts.
+                sagt(f"  {meldung}")
+                sagt("  Bei OpenCloud entsteht das App-Token mit:")
+                sagt(f"      {_token_befehl(owncloud.ADMIN_BENUTZER)}")
+                sagt("  Das Token als OWNCLOUD_PASSWORT eintragen (und als")
+                sagt("  OWNCLOUD_ADMIN_PASSWORT, falls gesetzt), LocaNoto neu")
+                sagt("  starten und diesen Lauf wiederholen.")
+                return False
             letzter = meldung
         except Exception as e:
             letzter = f"{type(e).__name__}: {e}"
@@ -327,6 +339,15 @@ def _vorspann():
     if _in_kubernetes():
         return f"kubectl -n {_namensraum()} exec -it deploy/locanoto --"
     return "docker compose exec locanoto_bot"
+
+
+def _token_befehl(konto):
+    """Der Befehl, der in OpenCloud ein App-Token fuer konto erzeugt."""
+    rest = (f"opencloud auth-app create --user-name={konto or 'admin'} "
+            f"--expiration=87600h")
+    if _in_kubernetes():
+        return f"kubectl -n {_namensraum()} exec deploy/opencloud -- {rest}"
+    return f"docker compose exec opencloud {rest}"
 
 
 def _hat_verwalter():

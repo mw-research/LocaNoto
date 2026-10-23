@@ -3866,10 +3866,14 @@ import owncloud as _ock
 # Gesichert ueber getattr: fehlt einem aelteren owncloud.py eines davon,
 # soll die Pruefung FALLEN und nicht den ganzen Lauf beenden.
 _ock_namen = ("URL", "BENUTZER", "PASSWORT", "ADMIN_BENUTZER", "KONTEN",
-              "_ocs_ruf", "_sitzung", "_eintraege")
+              "_ocs_ruf", "_sitzung", "_eintraege", "_GRAPH", "_graph",
+              "requests")
 _ock_alt = {n: getattr(_ock, n, None) for n in _ock_namen}
 _ock.URL, _ock.BENUTZER, _ock.PASSWORT = "https://oc.test", "dienst", "x"
 _ock.ADMIN_BENUTZER = "admin"
+# Ein ownCloud 10: Nutzer ueber OCS. Fest eingetragen, damit niemand
+# im Netz nachsieht.
+_ock._GRAPH = {"https://oc.test": False}
 _ock.KONTEN = os.path.join(tmp, "owncloud_konten.json")
 _ocs_rufe = []
 _ocs_da = {"admin", "dienst", "fremd"}
@@ -3969,6 +3973,199 @@ except Exception as e:
 finally:
     for _n, _w in _ock_alt.items():
         setattr(_ock, _n, _w)
+
+# --- OPENCLOUD UND OCIS: NUTZER UND GRUPPEN UEBER GRAPH ---
+#
+# Dort gibt es /ocs/v1.php/cloud nicht mehr. Dateien und Freigaben gehen
+# wie bisher; Nutzer und Gruppen ueber /graph/v1.0. Welche Art Server
+# dahinter steht, sieht ist_graph() an /graph/v1.0/me nach.
+_ock_alt = {n: getattr(_ock, n, None) for n in _ock_namen}
+_ock.URL, _ock.BENUTZER, _ock.PASSWORT = "https://oc2.test", "dienst", "x"
+_ock.ADMIN_BENUTZER = "admin"
+_ock.KONTEN = os.path.join(tmp, "owncloud_konten_graph.json")
+_gr_rufe, _gr_da = [], {"admin", "dienst", "fremd"}
+_ocs_rufe.clear()
+
+
+def _graph_nach(methode, pfad, daten=None, params=None):
+    _gr_rufe.append((methode, pfad, daten, params))
+    k = pfad.split("/", 1)[1] if pfad.startswith("users/") else ""
+    if methode == "GET" and pfad.startswith("users/"):
+        return {"id": "x"} if k in _gr_da else None
+    if methode == "POST" and pfad == "users":
+        _gr_da.add(daten["onPremisesSamAccountName"])
+    if methode == "DELETE":
+        _gr_da.discard(k)
+    if methode == "GET" and pfad.startswith("groups/"):
+        if pfad != "groups/Abteilung%20Einkauf":
+            return None
+        return {"members": [{"onPremisesSamAccountName": "Anna"},
+                            {"onPremisesSamAccountName": "bernd"}]}
+    return {}
+
+
+try:
+    _ock._GRAPH = {"https://oc2.test": True}
+    _ock._graph = _graph_nach
+    # Ruft ein Stand ohne Graph doch OCS, soll das auffallen und nicht
+    # ins Netz gehen.
+    _ock._ocs_ruf = _ocs_nach
+    _ock.nutzer_anlegen("neu_g", "passwort123")
+    pruef("OpenCloud: ein Konto entsteht ueber Graph, mit Anzeigename",
+          ("POST", "users", {"onPremisesSamAccountName": "neu_g",
+                             "displayName": "neu_g",
+                             "passwordProfile": {"password": "passwort123"}},
+           None) in _gr_rufe
+          and _ock.verwaltet("neu_g") and not _ocs_rufe, _gr_rufe)
+
+    _gr_rufe.clear()
+    try:
+        _ock.nutzer_anlegen("müller", "passwort123")
+        _gr_um = "kein Fehler"
+    except ValueError as e:
+        _gr_um = str(e)
+    pruef("OpenCloud: eine Kennung mit Umlaut wird vorher und "
+          "verstaendlich abgelehnt",
+          "Umlaute" in _gr_um
+          and not any(r[0] == "POST" for r in _gr_rufe), (_gr_um, _gr_rufe))
+
+    _gr_rufe.clear()
+    pruef("OpenCloud: ein neues Passwort ueber Graph",
+          _ock.passwort_setzen("neu_g", "neues123")[0]
+          and ("PATCH", "users/neu_g",
+               {"passwordProfile": {"password": "neues123"}}, None)
+          in _gr_rufe, _gr_rufe)
+
+    # Nach einem Umzug gibt es die Konten in der neuen Ablage nicht --
+    # Passwoerter lassen sich nicht mitnehmen. Das naechste Passwort legt
+    # das Konto an.
+    _gr_rufe.clear()
+    _ok_u, _m_u = _ock.passwort_setzen("umzug_g", "neues123")
+    pruef("ein Passwort fuer ein fehlendes Konto legt es an",
+          _ok_u and "umzug_g" in _gr_da and _ock.verwaltet("umzug_g"),
+          (_m_u, _gr_rufe))
+    _gr_rufe.clear()
+    pruef("ein vorhandenes fremdes bleibt dabei unangetastet",
+          not _ock.passwort_setzen("fremd", "neues123")[0]
+          and not any(r[0] in ("PATCH", "POST") for r in _gr_rufe),
+          _gr_rufe)
+    _gr_da.discard("dienst")
+    _gr_rufe.clear()
+    pruef("und das Dienstkonto entsteht so nie",
+          not _ock.passwort_setzen("dienst", "neues123")[0]
+          and not any(r[0] == "POST" for r in _gr_rufe), _gr_rufe)
+
+    _gr_rufe.clear()
+    pruef("OpenCloud: Benutzer loeschen loescht das Konto ueber Graph",
+          _ock.konto_loeschen("neu_g")[0]
+          and ("DELETE", "users/neu_g", None, None) in _gr_rufe
+          and "neu_g" not in _gr_da, _gr_rufe)
+
+    pruef("OpenCloud: Gruppenmitglieder ueber Graph, klein geschrieben",
+          _ock.mitglieder("Abteilung Einkauf") == ["anna", "bernd"],
+          _gr_rufe[-1:])
+    try:
+        _ock.mitglieder("Gibtsnicht")
+        _gr_fehlt = "kein Fehler"
+    except ValueError as e:
+        _gr_fehlt = str(e)
+    pruef("eine fehlende Gruppe ist ein Fehler, keine leere Gruppe",
+          "gibt es nicht" in _gr_fehlt, _gr_fehlt)
+    pruef("und nichts davon ging an OCS", not _ocs_rufe, _ocs_rufe)
+except Exception as e:
+    pruef("Graph-Anbindung laesst sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+finally:
+    for _n, _w in _ock_alt.items():
+        setattr(_ock, _n, _w)
+
+# Die Erkennung selbst, mit einer nachgestellten Antwort auf
+# /graph/v1.0/me.
+_ock_alt = {n: getattr(_ock, n, None) for n in _ock_namen}
+
+
+def _erkenne(code, inhalt):
+    class _A:
+        status_code = code
+        ok = code < 400
+        text = inhalt
+
+        def json(self):
+            return json.loads(inhalt)
+
+        def raise_for_status(self):
+            raise RuntimeError(str(code))
+
+    class _S:
+        auth = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, url, **k):
+            return _A()
+
+    _ock.requests = types.SimpleNamespace(Session=_S)
+    _ock.URL = f"https://erkennung{code}{len(inhalt)}.test"
+    _ock._GRAPH = {}
+    try:
+        return _ock.ist_graph()
+    except Exception as e:
+        return type(e).__name__
+    finally:
+        _ock.requests = _ock_alt["requests"]
+
+
+try:
+    pruef("OpenCloud und oCIS werden erkannt",
+          _erkenne(200, '{"id": "6d87", "displayName": "Admin"}') is True)
+    pruef("ownCloud 10 (Anmeldeseite statt JSON) und Nextcloud (404) nicht",
+          _erkenne(200, "<html>Anmelden</html>") is False
+          and _erkenne(404, "") is False)
+    pruef("eine abgelehnte Anmeldung ist ein Fehler und wird nicht gemerkt",
+          _erkenne(401, "") == "PermissionError"
+          and _ock.URL not in (_ock._GRAPH or {}))
+finally:
+    for _n, _w in _ock_alt.items():
+        setattr(_ock, _n, _w)
+
+# Jede Verbindung zur Ablage entsteht an EINER Stelle, und dort wird das
+# Zertifikat geprueft -- abschaltbar nur ausdruecklich, fuer das
+# mitgelieferte OpenCloud.
+_oc_q = _datei("owncloud.py")
+pruef("alle Verbindungen zur Ablage laufen ueber eine Stelle",
+      _oc_q.count("requests.Session()") == 1 and "_neue_sitzung" in _oc_q)
+pruef("das Zertifikat wird geprueft, solange niemand es abschaltet",
+      getattr(_ock, "TLS_PRUEFEN", None) is True
+      and "s.verify = TLS_PRUEFEN" in _oc_q)
+
+# Die mitgelieferte Ablage ist OpenCloud: kein PHP, keine Datenbank.
+_dc_q = _datei("docker-compose.yaml")
+_k8s_oc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "k8s")
+pruef("Compose bringt OpenCloud mit, nicht mehr ownCloud 10",
+      "opencloudeu/opencloud:" in _dc_q and "owncloud/server" not in _dc_q
+      and "mariadb" not in _dc_q.lower())
+# Innen und aussen derselbe Port, sonst endet jedes Ablegen mit 500.
+pruef("OpenCloud lauscht innen auf dem Port seiner eigenen Adresse",
+      '"${OWNCLOUD_PORT:-9200}:${OWNCLOUD_PORT:-9200}"' in _dc_q
+      and "PROXY_HTTP_ADDR=0.0.0.0:${OWNCLOUD_PORT:-9200}" in _dc_q)
+pruef("die k8s-Vorlage ist OpenCloud, die fuer ownCloud 10 ist weg",
+      os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml"))
+      and not os.path.exists(os.path.join(_k8s_oc, "97-owncloud.yaml")))
+if os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml")):
+    _k97 = io.open(os.path.join(_k8s_oc, "97-opencloud.yaml"),
+                   encoding="utf-8").read()
+    # Die interne /data-Adresse bricht das Hochladen im Browser.
+    pruef("die Vorlage legt /data nicht auf eine interne Adresse",
+          "GATEWAY_FRONTEND_PUBLIC_URL\n" not in _k97
+          and "name: GATEWAY_FRONTEND_PUBLIC_URL" not in _k97)
+    pruef("und haelt die erzeugten Schluessel auf dem Volume",
+          "mountPath: /etc/opencloud" in _k97 and "subPath: config" in _k97)
+pruef("einrichten.py nennt bei abgelehnter Anmeldung den Token-Befehl",
+      "opencloud auth-app create" in _datei("einrichten.py"))
 
 # Und die Oberflaeche ruft es an allen fuenf Stellen.
 _vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")

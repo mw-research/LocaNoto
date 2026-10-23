@@ -158,12 +158,15 @@ x-umgebung: &umgebung
   - LOCANOTO_KONFIG=/app/config
   - LOCANOTO_INDEX=${LOCANOTO_INDEX:-/app/data}
   - LOCANOTO_STICHWORTINDEX=${LOCANOTO_STICHWORTINDEX:-}
-  # Dokumente aus ownCloud oder Nextcloud. Bei aktiver
-  # Zwei-Faktor-Anmeldung ein App-Passwort, nicht das Anmeldepasswort.
+  # Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud. Bei
+  # OpenCloud und oCIS ein App-Token, nicht das Anmeldepasswort.
   - OWNCLOUD_URL=${OWNCLOUD_URL:-}
   - OWNCLOUD_USER=${OWNCLOUD_USER:-}
   - OWNCLOUD_PASSWORT=${OWNCLOUD_PASSWORT:-}
   - OWNCLOUD_TIMEOUT=${OWNCLOUD_TIMEOUT:-}
+  # 0 nur fuer das mitgelieferte OpenCloud mit selbst ausgestelltem
+  # Zertifikat.
+  - OWNCLOUD_TLS_PRUEFEN=${OWNCLOUD_TLS_PRUEFEN:-}
   # Die Gruppenabfrage verlangt in ownCloud Verwalterrechte; das
   # Holen der Dateien nicht. Deshalb getrennt setzbar.
   - OWNCLOUD_ADMIN_USER=${OWNCLOUD_ADMIN_USER:-}
@@ -335,106 +338,69 @@ services:
 # Vektordatenbank muesste allerdings neu eingelesen werden -- wer sie
 # ebenfalls persistent haben will, gibt dem Volume einen Treiber auf
 # Blockspeicher, nicht auf ein Netzlaufwerk.
-  # --- OWNCLOUD, MITGELIEFERT ---
+  # --- OPENCLOUD, MITGELIEFERT ---
   #
   # Ein eigener Dienst und NICHT im selben Abbild. Zwei Programme in einem
   # Container heisst zwei Prozesse um PID 1, gemeinsame Protokolle, und
-  # ein Update von LocaNoto risse ownCloud mit. Es ist trotzdem dieselbe
+  # ein Update von LocaNoto risse die Ablage mit. Es ist trotzdem dieselbe
   # Installation: ein compose, ein Netz, ein Befehl.
   #
   #   docker compose --profile owncloud up -d
+  #   docker compose exec opencloud opencloud auth-app create \
+  #     --user-name=admin --expiration=87600h
+  #   (das Token als OWNCLOUD_PASSWORT in die .env, dann)
+  #   docker compose up -d locanoto_bot
   #   docker compose exec -T locanoto_bot python einrichten.py
   #
-  # Das Profil heisst, dass diese Dienste NUR mit --profile starten. Wer
-  # ein vorhandenes ownCloud im Haus hat, laesst es weg und traegt in die
-  # .env dessen Adresse ein -- daran aendert sich nichts.
-  owncloud:
+  # OpenCloud ist ein einzelner Dienst in Go, ohne Datenbank. Das Profil
+  # heisst weiter "owncloud", damit vorhandene Befehle gelten. Wer eine
+  # Ablage im Haus hat, laesst es weg und traegt deren Adresse ein.
+  opencloud:
     profiles: ["owncloud"]
-    image: owncloud/server:10.15
-    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud
+    image: opencloudeu/opencloud:7.2.4
+    container_name: ${CONTAINER_NAME:-locanoto_app}_opencloud
     restart: unless-stopped
+    # init legt beim ersten Start die Konfiguration an. Danach bricht es
+    # mit "config file already exists" ab und aendert nichts.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        opencloud init --insecure true -q
+        --admin-password "$$IDM_ADMIN_PASSWORD" || true;
+        exec opencloud server
+    # Innen und aussen derselbe Port: OpenCloud schickt hochgeladene
+    # Inhalte intern an seine eigene oeffentliche Adresse. Liegt die
+    # aussen auf einem anderen Port als innen, endet jedes Ablegen mit 500.
     ports:
-      - "${OWNCLOUD_PORT:-8080}:8080"
-    depends_on:
-      owncloud_db:
-        condition: service_healthy
-      owncloud_redis:
-        condition: service_healthy
+      - "${OWNCLOUD_PORT:-9200}:${OWNCLOUD_PORT:-9200}"
     environment:
-      # Die Adresse, unter der ownCloud sich selbst sieht. Stimmt sie
-      # nicht, laufen Anmeldung und Freigaben in Weiterleitungen, die ins
-      # Leere zeigen -- der haeufigste Fehlgriff beim ersten Aufsetzen.
-      - OWNCLOUD_DOMAIN=${OWNCLOUD_DOMAIN:-localhost:8080}
-      - OWNCLOUD_TRUSTED_DOMAINS=${OWNCLOUD_TRUSTED_DOMAINS:-localhost,127.0.0.1,owncloud}
-      - OWNCLOUD_DB_TYPE=mysql
-      - OWNCLOUD_DB_NAME=owncloud
-      - OWNCLOUD_DB_USERNAME=owncloud
-      - OWNCLOUD_DB_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
-      - OWNCLOUD_DB_HOST=owncloud_db
-      - OWNCLOUD_ADMIN_USERNAME=${OWNCLOUD_ADMIN_USER:-admin}
+      # Die Adresse, unter der Menschen OpenCloud oeffnen. https ist
+      # Pflicht -- die Anmeldung startet sonst nicht. Mitgeliefert ist ein
+      # selbst ausgestelltes Zertifikat.
+      - OC_URL=https://${OWNCLOUD_DOMAIN:-localhost:9200}
+      - OC_INSECURE=true
+      - PROXY_HTTP_ADDR=0.0.0.0:${OWNCLOUD_PORT:-9200}
       # KEIN ${...:?...}: Compose loest die ganze Datei auf, auch ohne
       # --profile. Eine Pflichtvariable hier legte JEDEN compose-Befehl
-      # lahm -- auch 'up -d' einer Installation, die ownCloud gar nicht
-      # benutzt. Genau das ist beim Einbauen passiert.
-      #
-      # Leer laesst das Einrichten von ownCloud fehlschlagen, und zwar
-      # nur bei dem, der das Profil wirklich startet. Das ist die
-      # richtige Stelle fuer diesen Fehler.
-      - OWNCLOUD_ADMIN_PASSWORD=${OWNCLOUD_ADMIN_PASSWORT:-}
-      - OWNCLOUD_MYSQL_UTF8MB4=true
-      - OWNCLOUD_REDIS_ENABLED=true
-      - OWNCLOUD_REDIS_HOST=owncloud_redis
-    healthcheck:
-      test: ["CMD", "/usr/bin/healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      # lahm. Leer startet OpenCloud mit einem zufaelligen Passwort, das
+      # niemand kennt -- der Fehler zeigt sich dort, wo er hingehoert.
+      - IDM_ADMIN_PASSWORD=${OWNCLOUD_ADMIN_PASSWORT:-}
     volumes:
-      # Auf den persistenten Speicher, wie alles andere auch. Hier liegen
-      # die Dateien der Nutzer -- LocaNoto verschluesselt sie nicht und
-      # kann es nicht: ownCloud muss sie ausliefern. Der Datentraeger
-      # gehoert also verschluesselt, siehe README.
-      - ${OWNCLOUD_PFAD:-./data/owncloud}:/mnt/data
-
-  owncloud_db:
-    profiles: ["owncloud"]
-    image: mariadb:10.11
-    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud_db
-    restart: unless-stopped
-    command: ["--max-allowed-packet=128M", "--innodb-log-file-size=64M"]
-    environment:
-      - MARIADB_ROOT_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
-      - MARIADB_USER=owncloud
-      - MARIADB_PASSWORD=${OWNCLOUD_DB_PASSWORT:-owncloud}
-      - MARIADB_DATABASE=owncloud
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - owncloud_db:/var/lib/mysql
-
-  owncloud_redis:
-    profiles: ["owncloud"]
-    image: redis:7-alpine
-    container_name: ${CONTAINER_NAME:-locanoto_app}_owncloud_redis
-    restart: unless-stopped
-    command: ["--databases", "1"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - owncloud_redis:/data
-
+      # Die beim ersten Start erzeugten internen Schluessel. Gehen sie
+      # verloren, passen sie nicht mehr zu den Konten -- gehoert in die
+      # Sicherung.
+      - opencloud_config:/etc/opencloud
+      # Dateien und Konten. LocaNoto verschluesselt sie nicht und kann es
+      # nicht: OpenCloud muss sie ausliefern. Der Datentraeger gehoert
+      # also verschluesselt, siehe README. Ein Pfad statt des Volumes
+      # muss dem Nutzer 1000 gehoeren (chown -R 1000:1000).
+      - ${OWNCLOUD_PFAD:-opencloud_daten}:/var/lib/opencloud
 
 volumes:
   locanoto_index:
 
-  owncloud_db:
-  owncloud_redis:
+  opencloud_config:
+  opencloud_daten:
 # --- DER INSTALLATIONSSCHLUESSEL ALS SECRET ---
 #
 # LOCANOTO_SCHLUESSEL in der .env sieht dichter aus, als es ist: die .env

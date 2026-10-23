@@ -1,4 +1,10 @@
-"""Dokumente aus ownCloud oder Nextcloud holen -- je Raum ein Ordner.
+"""Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner.
+
+"ownCloud" steht in diesem Modul fuer alle vier. Dateien und Freigaben
+gehen ueberall gleich (WebDAV, OCS-Freigaben). Nur Nutzer und Gruppen
+nicht: OpenCloud und oCIS fuehren sie ueber die Graph-Schnittstelle,
+ownCloud 10 und Nextcloud ueber OCS. Welche Art Server dahinter steht,
+sieht ist_graph() einmal nach.
 
 Warum ueberhaupt: Dokumente in die Oberflaeche hochzuladen heisst, sie
 zweimal zu pflegen. Die Abteilung hat ihre Handbuecher schon irgendwo
@@ -64,6 +70,11 @@ URL = os.getenv("OWNCLOUD_URL", "").strip().rstrip("/")
 BENUTZER = os.getenv("OWNCLOUD_USER", "").strip()
 PASSWORT = os.getenv("OWNCLOUD_PASSWORT", "")
 TIMEOUT = paths.env_float("OWNCLOUD_TIMEOUT", 30)
+
+# Das Zertifikat der Ablage pruefen. Abschalten nur fuer das mitgelieferte
+# OpenCloud im selben Compose-Netz: es bringt ein selbst ausgestelltes
+# Zertifikat mit, und der Weg dorthin verlaesst den Rechner nicht.
+TLS_PRUEFEN = os.getenv("OWNCLOUD_TLS_PRUEFEN", "1").strip() != "0"
 
 # Die Gruppenabfrage laeuft ueber die Provisioning-Schnittstelle und
 # verlangt dort Verwalterrechte -- fuer das Holen der Dateien genuegt Lesen.
@@ -224,10 +235,16 @@ def _stand_schreiben(raum, daten):
 
 # --- WEBDAV ---
 
-def _sitzung():
+def _neue_sitzung(auth):
+    """Jede Verbindung zur Ablage entsteht hier -- mit derselben Pruefung."""
     s = requests.Session()
-    s.auth = (BENUTZER, PASSWORT)
+    s.auth = auth
+    s.verify = TLS_PRUEFEN
     return s
+
+
+def _sitzung():
+    return _neue_sitzung((BENUTZER, PASSWORT))
 
 
 _PROPFIND = ('<?xml version="1.0"?>'
@@ -251,9 +268,10 @@ def pruefe():
     except requests.RequestException as e:
         return False, f"Nicht erreichbar: {e}"
     if a.status_code == 401:
-        return False, ("Anmeldung abgelehnt. Bei aktiver "
-                       "Zwei-Faktor-Anmeldung braucht es ein "
-                       "App-Passwort, nicht das Anmeldepasswort.")
+        return False, ("Anmeldung abgelehnt. OpenCloud und oCIS nehmen "
+                       "ein App-Token an, nicht das Anmeldepasswort; "
+                       "ebenso ownCloud und Nextcloud bei aktiver "
+                       "Zwei-Faktor-Anmeldung.")
     if a.status_code == 404:
         return False, ("Kein WebDAV unter dieser Adresse. Erwartet wird die "
                        "Wurzel der Installation, etwa "
@@ -507,9 +525,7 @@ def _ocs(pfad, sitzung=None):
     """Ein OCS-Aufruf. Gibt den Inhalt von ocs.data zurueck."""
     url = URL + "/ocs/v1.php/cloud/" + str(pfad).lstrip("/")
     eigene = sitzung is None
-    s = sitzung or requests.Session()
-    if eigene:
-        s.auth = (ADMIN_BENUTZER, ADMIN_PASSWORT)
+    s = sitzung or _neue_sitzung((ADMIN_BENUTZER, ADMIN_PASSWORT))
     try:
         a = s.get(url, params={"format": "json"},
                   headers={"OCS-APIRequest": "true"}, timeout=TIMEOUT)
@@ -539,6 +555,10 @@ def _ocs(pfad, sitzung=None):
 
 def gruppen():
     """Die Gruppennamen der Installation, sortiert."""
+    if ist_graph():
+        return sorted(str(g.get("displayName") or "")
+                      for g in (_graph("GET", "groups") or {}).get("value", [])
+                      if g.get("displayName"))
     return sorted(_ocs("groups").get("groups") or [])
 
 
@@ -556,6 +576,8 @@ def _kennungen(daten):
 
 def mitglieder(gruppe):
     """Die Kennungen einer Gruppe."""
+    if ist_graph():
+        return _graph_mitglieder(gruppe)
     return _kennungen(_ocs("groups/" + quote(str(gruppe))))
 
 
@@ -593,14 +615,16 @@ def gruppen_abgleich():
                 "meldung": "Keine Gruppe zugeordnet."}
 
     gefunden, fehler = {}, []
-    with requests.Session() as s:
-        s.auth = (ADMIN_BENUTZER, ADMIN_PASSWORT)
+    with _neue_sitzung((ADMIN_BENUTZER, ADMIN_PASSWORT)) as s:
         for raum, gruppe in sorted(zu.items()):
             if gruppe in gefunden:
                 continue  # zwei Raeume, dieselbe Gruppe
             try:
-                gefunden[gruppe] = _kennungen(
-                    _ocs("groups/" + quote(str(gruppe)), sitzung=s))
+                if ist_graph():
+                    gefunden[gruppe] = _graph_mitglieder(gruppe)
+                else:
+                    gefunden[gruppe] = _kennungen(
+                        _ocs("groups/" + quote(str(gruppe)), sitzung=s))
             except (requests.RequestException, PermissionError,
                     ValueError) as e:
                 fehler.append({"gruppe": gruppe, "raum": raum,
@@ -819,8 +843,7 @@ def _ocs_ruf(methode, pfad, daten=None, app=None):
         url = f"{URL}/ocs/v1.php/apps/{app}/api/v1/{str(pfad).lstrip('/')}"
     else:
         url = f"{URL}/ocs/v1.php/cloud/{str(pfad).lstrip('/')}"
-    with requests.Session() as s:
-        s.auth = (ADMIN_BENUTZER, ADMIN_PASSWORT)
+    with _neue_sitzung((ADMIN_BENUTZER, ADMIN_PASSWORT)) as s:
         a = s.request(methode, url, params={"format": "json"},
                       data=daten or None,
                       headers={"OCS-APIRequest": "true"}, timeout=TIMEOUT)
@@ -844,6 +867,78 @@ def _ocs_ruf(methode, pfad, daten=None, app=None):
                          + (f": {meta.get('message')}"
                             if meta.get("message") else ""))
     return umschlag.get("data") or {}
+
+
+# --- GRAPH (OpenCloud, oCIS) ---
+#
+# Dort gibt es /ocs/v1.php/cloud nicht mehr -- Nutzer und Gruppen stehen
+# unter /graph/v1.0. Angemeldet wird mit einem App-Token als Passwort; die
+# Anmeldung mit dem echten Passwort ist dort fuer den Betrieb abgeschaltet.
+
+# Welche Art Server unter einer Adresse steht, je URL gemerkt. Nur eine
+# Antwort wird gemerkt, kein Fehler: ein Server, der gerade startet, soll
+# beim naechsten Mal noch einmal gefragt werden.
+_GRAPH = {}
+
+# Kennungen, die OpenCloud und oCIS annehmen: Anfang Buchstabe oder
+# Unterstrich, danach Buchstaben, Ziffern, Punkt, Strich, Unterstrich.
+# LocaNoto selbst erlaubt mehr (Umlaute, Ziffer vorn) -- solche Konten
+# lehnt der Server ab, und das soll vorher und verstaendlich gesagt sein.
+_GRAPH_KENNUNG = re.compile(r"[a-z_][a-z0-9_.-]*")
+
+
+def ist_graph():
+    """True bei OpenCloud und oCIS, False bei ownCloud 10 und Nextcloud."""
+    if URL not in _GRAPH:
+        with _neue_sitzung((ADMIN_BENUTZER, ADMIN_PASSWORT)) as s:
+            a = s.get(f"{URL}/graph/v1.0/me", timeout=TIMEOUT)
+        if a.status_code == 401:
+            raise PermissionError("Anmeldung abgelehnt.")
+        if a.status_code == 404:
+            _GRAPH[URL] = False
+        elif a.ok:
+            # ownCloud 10 leitet unbekannte Pfade auf eine Anmeldeseite
+            # um: 200, aber HTML.
+            try:
+                _GRAPH[URL] = "id" in a.json()
+            except ValueError:
+                _GRAPH[URL] = False
+        else:
+            a.raise_for_status()
+    return _GRAPH[URL]
+
+
+def _graph(methode, pfad, daten=None, params=None):
+    """Ein Graph-Aufruf als Verwalter. dict, {} ohne Inhalt, None bei 404."""
+    with _neue_sitzung((ADMIN_BENUTZER, ADMIN_PASSWORT)) as s:
+        a = s.request(methode, f"{URL}/graph/v1.0/{str(pfad).lstrip('/')}",
+                      json=daten, params=params, timeout=TIMEOUT)
+    if a.status_code == 404:
+        return None
+    if a.status_code in (401, 403):
+        raise PermissionError(
+            "Nicht berechtigt. Nutzer und Gruppen verwalten verlangt ein "
+            "Konto mit Verwalterrechten -- siehe OWNCLOUD_ADMIN_USER.")
+    if not a.ok:
+        try:
+            grund = a.json()["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            grund = a.text[:200]
+        raise ValueError(f"Antwort {a.status_code}: {grund}")
+    if not a.content:
+        return {}
+    return a.json()
+
+
+def _graph_mitglieder(gruppe):
+    """Die Kennungen einer Gruppe, klein geschrieben."""
+    daten = _graph("GET", "groups/" + quote(str(gruppe), safe=""),
+                   params={"$expand": "members"})
+    if daten is None:
+        raise ValueError(f"Die Gruppe '{gruppe}' gibt es nicht.")
+    return sorted({str(m.get("onPremisesSamAccountName") or "").lower()
+                   for m in daten.get("members") or []}
+                  - {""})
 
 
 # --- PFADE ---
@@ -1021,6 +1116,9 @@ def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
 # --- NUTZER ---
 
 def nutzer_vorhanden(kennung):
+    if ist_graph():
+        return _graph("GET", "users/" + quote(str(kennung), safe="")) \
+            is not None
     try:
         _ocs_ruf("GET", f"users/{kennung}")
         return True
@@ -1108,7 +1206,10 @@ def konto_loeschen(kennung):
                        f"laesst es sich unter ownCloud -> Konten.")
     try:
         if nutzer_vorhanden(kennung):
-            _ocs_ruf("DELETE", f"users/{kennung}")
+            if ist_graph():
+                _graph("DELETE", "users/" + quote(str(kennung), safe=""))
+            else:
+                _ocs_ruf("DELETE", f"users/{kennung}")
     except Exception as e:
         return False, f"ownCloud-Konto nicht geloescht ({type(e).__name__}: {e})."
     _konten_aendern(weg=[kennung])
@@ -1119,12 +1220,23 @@ def passwort_setzen(kennung, passwort):
     """Setzt das Passwort eines verwalteten Kontos. (ok, meldung)."""
     if not eingerichtet():
         return True, ""
-    if not verwaltet(kennung):
-        return False, ("In ownCloud gilt weiter das alte Passwort -- das "
-                       "Konto wird nicht von LocaNoto verwaltet.")
     try:
-        _ocs_ruf("PUT", f"users/{kennung}",
-                 daten={"key": "password", "value": passwort})
+        # Kein Konto dort: nach einem Umzug in eine neue Ablage der
+        # Normalfall, denn Passwoerter lassen sich nicht mitnehmen. Dann
+        # entsteht es jetzt, mit diesem Passwort -- niemandem wird dabei
+        # etwas weggenommen.
+        if not geschuetzt(kennung) and not nutzer_vorhanden(kennung):
+            nutzer_anlegen(kennung, passwort)
+            return True, "In ownCloud neu angelegt, mit diesem Passwort."
+        if not verwaltet(kennung):
+            return False, ("In ownCloud gilt weiter das alte Passwort -- "
+                           "das Konto wird nicht von LocaNoto verwaltet.")
+        if ist_graph():
+            _graph("PATCH", "users/" + quote(str(kennung), safe=""),
+                   daten={"passwordProfile": {"password": passwort}})
+        else:
+            _ocs_ruf("PUT", f"users/{kennung}",
+                     daten={"key": "password", "value": passwort})
     except Exception as e:
         # ownCloud hat eine eigene Passwortregel. Lehnt sie ab, steht der
         # Grund in der Meldung.
@@ -1175,10 +1287,23 @@ def nutzer_anlegen(kennung, passwort, anzeigename=""):
     """
     if nutzer_vorhanden(kennung):
         return False, "gab es schon"
-    daten = {"userid": kennung, "password": passwort}
-    if anzeigename:
-        daten["displayName"] = anzeigename
-    _ocs_ruf("POST", "users", daten=daten)
+    if ist_graph():
+        if not _GRAPH_KENNUNG.fullmatch(str(kennung)):
+            raise ValueError(
+                f"'{kennung}' nehmen OpenCloud und oCIS nicht als Kennung "
+                f"an: sie muss mit einem Buchstaben beginnen und darf nur "
+                f"a-z, 0-9, Punkt, Strich und Unterstrich enthalten, "
+                f"keine Umlaute.")
+        # Der Anzeigename ist dort Pflicht.
+        _graph("POST", "users", daten={
+            "onPremisesSamAccountName": kennung,
+            "displayName": anzeigename or kennung,
+            "passwordProfile": {"password": passwort}})
+    else:
+        daten = {"userid": kennung, "password": passwort}
+        if anzeigename:
+            daten["displayName"] = anzeigename
+        _ocs_ruf("POST", "users", daten=daten)
     # Ab hier gehoert das Konto LocaNoto: es loescht und aendert es mit.
     _konten_aendern(dazu=[kennung])
     return True, "angelegt"

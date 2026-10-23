@@ -1,0 +1,249 @@
+# --- OPENCLOUD IM SELBEN NAMENSRAUM ---
+#
+# Die Dateiablage neben LocaNoto: OpenCloud, ein einzelner Dienst in Go,
+# ohne Datenbank und ohne PHP. Zusammen mit 95/96 und danach
+# einrichten.py OHNE --ohne-owncloud -- dann laeuft die vollstaendige
+# Einrichtungsroutine: warten, Schluessel, erster Verwalter in BEIDEN
+# Systemen, Ordnerbaum samt Freigaben.
+#
+# OpenCloud ist ein Ableger von oCIS (ownCloud Infinite Scale) unter
+# Apache-2.0. LocaNoto spricht beide gleich an. Die Vorlage nimmt
+# OpenCloud, weil die oCIS-Abbilder unter einer Lizenz stehen, die
+# kommerzielle Nutzung einschliesslich Betrieb fuer Dritte ausschliesst.
+#
+# ANZUPASSEN, ueberall wo BITTE-EINTRAGEN steht:
+#
+#   * der Namensraum
+#   * die oeffentliche Adresse (zweimal: OC_URL und der Ingress)
+#   * die Ingress-Klasse und das TLS-Secret
+#   * das Verwalterpasswort im Secret
+#
+# ABLAUF
+#
+#   kubectl apply -f k8s/97-opencloud.yaml
+#   kubectl -n NAMENSRAUM rollout status deploy/opencloud
+#
+#   # App-Token fuer das Verwalterkonto -- LocaNoto meldet sich damit an.
+#   # Das Anmeldepasswort nimmt OpenCloud fuer WebDAV und Graph nicht an.
+#   kubectl -n NAMENSRAUM exec deploy/opencloud -- \
+#     opencloud auth-app create --user-name=admin --expiration=87600h
+#
+#   # In die Geheimnisse von LocaNoto:
+#   #   OWNCLOUD_URL=http://opencloud:9200
+#   #   OWNCLOUD_USER=admin
+#   #   OWNCLOUD_PASSWORT=<das Token>
+#   # LocaNoto neu starten, dann:
+#   kubectl -n NAMENSRAUM exec -it deploy/locanoto -- python einrichten.py
+#
+# Das Token gilt zehn Jahre und nur fuer dieses Konto. Ein neues Token
+# entsteht mit demselben Befehl; die alten listet
+# "opencloud auth-app list --user-name=admin".
+#
+# DER PUNKT, AN DEM ES SONST STILL SCHIEFGEHT
+#
+# OpenCloud schickt beim Hochladen den Inhalt intern an seine EIGENE
+# oeffentliche Adresse (OC_URL + /data). Kann der Pod diese Adresse
+# nicht erreichen, ist der Ordner da, die Anmeldung geht -- und jedes
+# Ablegen endet mit 500. Vor dem ersten Einrichten pruefen:
+#
+#   kubectl -n NAMENSRAUM exec deploy/locanoto -- python -c \
+#     "import requests; print(requests.get('https://BITTE-EINTRAGEN/status.php', timeout=10).status_code)"
+#
+# 200 ist richtig. Gefragt wird aus dem LocaNoto-Pod, weil dort Python
+# sicher vorhanden ist; der Weg ist derselbe wie aus dem OpenCloud-Pod.
+#
+# Antwortet das nicht, muss der Cluster die eigene Ingress-Adresse von
+# innen aufloesen und erreichen koennen. Die Adresse fuer /data auf den
+# internen Dienst zu legen (GATEWAY_FRONTEND_PUBLIC_URL) hilft NICHT:
+# dann geht das Ablegen ueber WebDAV, aber das Hochladen im Browser
+# bekommt eine interne Adresse zurueck und scheitert.
+#
+# SPEICHER
+#
+# Ein Volume, zwei Unterordner:
+#
+#   config/  /etc/opencloud      die beim ersten Start erzeugten internen
+#                                Schluessel. Gehen sie verloren, passen
+#                                sie nicht mehr zu den Konten in daten/ --
+#                                die Ablage startet, aber niemand kommt
+#                                hinein. Gehoert in die Sicherung.
+#   daten/   /var/lib/opencloud  Dateien, Konten, Suchindex
+#
+# Blockspeicher (ReadWriteOnce), keine Dateifreigabe: unter daten/ liegen
+# ein Verzeichnisdienst und ein Suchindex, die sich auf Dateisperren
+# verlassen. LocaNoto verschluesselt die Dateien NICHT und kann es nicht
+# -- OpenCloud muss sie ausliefern. Der Datentraeger gehoert also
+# verschluesselt.
+#
+# WEM DER BAUM GEHOERT
+#
+# LocaNoto legt den Ordnerbaum im Bereich seines DIENSTKONTOS an
+# (OWNCLOUD_USER) und gibt die Ordner an die jeweiligen Nutzer frei. Der
+# Eigentuemer sieht alles, was ihm gehoert, auch privat/<kennung>/. Das
+# laesst sich nicht wegkonfigurieren: das Konto muss jeden Raum lesen
+# koennen, sonst gaebe es nichts einzulesen. Ein Verwalter in OpenCloud
+# ist deshalb eine Vertrauensrolle, genau wie der Zugang zum Server.
+#
+# KENNUNGEN. OpenCloud nimmt nur Kennungen an, die mit einem Buchstaben
+# oder Unterstrich beginnen und aus a-z, 0-9, Punkt, Strich, Unterstrich
+# bestehen. LocaNoto erlaubt mehr; fuer "mueller" statt "müller" sorgt
+# man also beim Anlegen. Sonst meldet LocaNoto, dass das Konto in der
+# Ablage nicht angelegt werden konnte.
+#
+# EIN GEAENDERTES PASSWORT IM SECRET REICHT NICHT
+#
+# IDM_ADMIN_PASSWORD gilt nur beim allerersten Start, wenn daten/ leer
+# ist. Danach steht das Passwort im Verzeichnisdienst und wird in der
+# Oberflaeche von OpenCloud geaendert.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opencloud-geheim
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: opencloud
+stringData:
+  IDM_ADMIN_PASSWORD: BITTE-EINTRAGEN
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opencloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: opencloud
+spec:
+  accessModes: ["ReadWriteOnce"]
+  # storageClassName: BITTE-EINTRAGEN   # Blockspeicher, siehe oben
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opencloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: opencloud
+spec:
+  selector:
+    app: opencloud
+  ports:
+    - port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opencloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: opencloud
+spec:
+  replicas: 1
+  # Ein Volume, ein Pod: beim Ausrollen muss der alte erst weg.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: opencloud
+  template:
+    metadata:
+      labels:
+        app: opencloud
+    spec:
+      securityContext:
+        # Das Abbild laeuft als Nutzer 1000; ohne fsGroup darf er auf ein
+        # frisches Volume nicht schreiben.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: opencloud
+          image: opencloudeu/opencloud:7.2.4
+          # init legt beim ersten Start config/opencloud.yaml an. Danach
+          # bricht es mit "config file already exists" ab und aendert
+          # nichts -- deshalb "|| true".
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              opencloud init --insecure false -q
+              --admin-password "$IDM_ADMIN_PASSWORD" || true;
+              exec opencloud server
+          env:
+            # Die Adresse, unter der Menschen OpenCloud oeffnen. Muss https
+            # sein: die Anmeldung (OpenID Connect) verweigert sonst den
+            # Start.
+            - name: OC_URL
+              value: https://BITTE-EINTRAGEN
+            # TLS endet am Ingress; im Cluster spricht der Dienst http.
+            # LocaNoto erreicht ihn so unter http://opencloud:9200.
+            - name: PROXY_TLS
+              value: "false"
+            - name: IDM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opencloud-geheim
+                  key: IDM_ADMIN_PASSWORD
+          ports:
+            - containerPort: 9200
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /status.php
+              port: 9200
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /status.php
+              port: 9200
+            periodSeconds: 20
+          volumeMounts:
+            - name: speicher
+              mountPath: /etc/opencloud
+              subPath: config
+            - name: speicher
+              mountPath: /var/lib/opencloud
+              subPath: daten
+      volumes:
+        - name: speicher
+          persistentVolumeClaim:
+            claimName: opencloud
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opencloud
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: opencloud
+  # Je nach Ingress-Controller: grosse Dateien zulassen, etwa bei nginx
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  # annotations:
+spec:
+  ingressClassName: BITTE-EINTRAGEN
+  rules:
+    - host: BITTE-EINTRAGEN
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opencloud
+                port:
+                  number: 9200
+  # Nicht optional: ohne https startet die Anmeldung von OpenCloud nicht.
+  tls:
+    - hosts:
+        - BITTE-EINTRAGEN
+      secretName: BITTE-EINTRAGEN
