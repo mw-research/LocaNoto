@@ -464,14 +464,19 @@ class Datei:
 WEB_ORDNER = "Suchergebnisse"
 
 
-def webseite_aufnehmen(titel, adresse, text, raum, *, anfrage="",
-                       benutzer_, ist_verwalter=False):
-    """Ein Treffer der Websuche wird ein Dokument des Raums.
+def webseite_aufnehmen(titel, adresse, text, *, anfrage="", benutzer_):
+    """Ein Treffer der Websuche wird ein Dokument im EIGENEN Raum.
+
+    Immer im eigenen, und das entscheidet diese Funktion, nicht die
+    Oberflaeche: ein Klick auf "uebernehmen" soll keinen geteilten Raum
+    fuellen koennen. In einen Abteilungsraum oder den allgemeinen kommt
+    ein Treffer nur, wenn ihn jemand bewusst dorthin verschiebt.
 
     Als Markdown mit Quelle und Abrufdatum oben, in den Ordner
-    Suchergebnisse -- und dann derselbe Weg wie ein Upload: Rechte,
-    Einlesen, Ablage. Rueckgabe: (abschnitte, hinweis, dateiname).
+    Suchergebnisse -- und dann derselbe Weg wie ein Upload: Einlesen,
+    Ablage. Rueckgabe: (abschnitte, hinweis, dateiname).
     """
+    raum = raeume.sichere_anlage_privat(benutzer_)
     from datetime import datetime
     from urllib.parse import urlsplit
     host = urlsplit(adresse).hostname or "netz"
@@ -486,7 +491,7 @@ def webseite_aufnehmen(titel, adresse, text, raum, *, anfrage="",
               + (text or "").strip() + "\n")
     n, hinweis = process_uploaded_pdf(
         Datei(name, inhalt.encode("utf-8")), raum, WEB_ORDNER,
-        benutzer_=benutzer_, ist_verwalter=ist_verwalter, streng=True)
+        benutzer_=benutzer_, streng=True)
     return n, hinweis, name
 
 

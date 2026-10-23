@@ -581,16 +581,19 @@ def webtreffer(zusatz, server):
     for m in zusatz or []:
         if m.get("role") != "tool" or m.get("tool_call_id") not in rufe:
             continue
-        text = m.get("content") or ""
-        kopf = re.match(r'WEBSUCHE "(.*?)"', text)
-        for nr, titel, adresse, inhalt in _WEBTREFFER.findall(text):
-            if adresse in gesehen:
-                continue
-            gesehen.add(adresse)
-            aus.append({"nr": f"W{nr}", "titel": titel.strip(),
-                        "adresse": adresse, "text": inhalt.strip(),
-                        "anfrage": kopf.group(1) if kopf else ""})
+        for t in webtreffer_aus_text(m.get("content") or ""):
+            if t["adresse"] not in gesehen:
+                gesehen.add(t["adresse"])
+                aus.append(t)
     return aus
+
+
+def webtreffer_aus_text(text):
+    """Die Treffer eines Suchergebnisses (websuche.als_text)."""
+    kopf = re.match(r'WEBSUCHE "(.*?)"', text or "")
+    return [{"nr": f"W{nr}", "titel": titel.strip(), "adresse": adresse,
+             "text": inhalt.strip(), "anfrage": kopf.group(1) if kopf else ""}
+            for nr, titel, adresse, inhalt in _WEBTREFFER.findall(text or "")]
 
 
 def antwort(client, modell, system, nachrichten, verlauf_anzahl=20,

@@ -1183,6 +1183,43 @@ def _bedienung_gesperrt(ja, modul=None):
 
 
 # --- SIDEBAR (UI) ---
+def _web_uebernehmen(treffer):
+    """Treffer der Websuche als Dokumente in den eigenen Raum.
+
+    Die ganze Seite, nicht nur der Auszug, den die Liste zeigt; geht das
+    nicht, bleibt der Auszug. Wohin, entscheidet aufnehmen: immer der
+    eigene Raum.
+    """
+    _wvb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
+                        - mcp.websuche_server())
+    try:
+        for _w in treffer:
+            _wtext = _w["text"]
+            for _wv in _wvb.values():
+                try:
+                    _ganz = _wv.rufe("seite_lesen",
+                                     {"adresse": _w["adresse"]})
+                    _wtext = _ganz.split("\n\n", 1)[-1]
+                    break
+                except Exception:
+                    continue
+            try:
+                _wn, _wh, _wname = aufnehmen.webseite_aufnehmen(
+                    _w["titel"], _w["adresse"], _wtext,
+                    anfrage=_w.get("anfrage", ""),
+                    benutzer_=st.session_state["username"])
+                (st.success if _wn else st.warning)(f"{_wname}: {_wh}")
+            except Exception as e:
+                st.error(f"{_w['titel']}: {type(e).__name__}: {e}")
+    finally:
+        for _wv in _wvb.values():
+            try:
+                _wv.schliesse()
+            except Exception:
+                pass
+    refresh_document_index()
+
+
 with st.sidebar, _bedienung_gesperrt(_antwortet):
     if _antwortet:
         st.warning("Antwort laeuft. Die Bedienung ist gesperrt, bis sie "
@@ -2545,6 +2582,57 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
 _bestand = _zahl_abschnitte(st.session_state["username"],
                             tuple(meine_raeume))
 if _bestand > 0:
+    # --- QUELLEN IM NETZ SUCHEN ---
+    #
+    # Wie bei NotebookLM: ein Thema, eine Trefferliste, anhaken,
+    # uebernehmen -- ohne dass eine Antwort entsteht. Hier braucht es
+    # keine Freigabe am Raum: den Suchbegriff tippt der Nutzer selbst,
+    # das Modell formuliert nichts aus den Abschnitten eines Raums.
+    # Uebernommen wird immer in den eigenen Raum.
+    if _web_server:
+        with st.expander("🌐 Quellen im Netz suchen"):
+            with st.form("quellen_suche"):
+                _qs_anfrage = st.text_input(
+                    "Thema", placeholder="Stichworte, z. B. DIN EN 1090 "
+                                         "Ausführungsklassen",
+                    help="Geht an Suchmaschinen. Stichworte, keine "
+                         "Namen oder Zahlen aus internen Unterlagen.")
+                _qs_los = st.form_submit_button("Suchen",
+                                                disabled=_antwortet)
+            if _qs_los and (_qs_anfrage or "").strip():
+                _qs_vb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
+                                      - _web_server)
+                try:
+                    with st.spinner("Suche ..."):
+                        _qs_text = next(iter(_qs_vb.values())).rufe(
+                            "web_suchen", {"anfrage": _qs_anfrage,
+                                           "anzahl": 10, "lesen": 0})
+                    st.session_state["_quellen"] = \
+                        pipeline.webtreffer_aus_text(_qs_text)
+                except Exception as e:
+                    st.error(f"Suche nicht möglich: {type(e).__name__}: {e}")
+                finally:
+                    for _v in _qs_vb.values():
+                        try:
+                            _v.schliesse()
+                        except Exception:
+                            pass
+            _qs = st.session_state.get("_quellen") or []
+            if _qs:
+                _qs_wahl = []
+                for _qk, _q in enumerate(_qs):
+                    if st.checkbox(f"**{_q['titel']}**",
+                                   key=f"qs_{_q['adresse']}"):
+                        _qs_wahl.append(_q)
+                    st.caption(f"{_q['adresse']}  \n{_q['text'][:300]}")
+                st.caption("Übernommen wird in deinen eigenen Raum, Ordner "
+                           "Suchergebnisse. Von dort verschiebst du, was "
+                           "in einen geteilten Raum gehört.")
+                if _qs_wahl and st.button(
+                        f"{len(_qs_wahl)} in meinen Raum übernehmen",
+                        key="qs_ueb", disabled=_antwortet):
+                    _web_uebernehmen(_qs_wahl)
+
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             # Angehaengte Bilder vor dem Text, so wie der Nutzer sie
@@ -2711,9 +2799,9 @@ if _bestand > 0:
             # --- AUS DEM NETZ ---
             #
             # Getrennt von den Dokumenten und mit Haekchen: was bleiben
-            # soll, wird ein Dokument im Raum -- im Ordner Suchergebnisse,
-            # mit Quelle und Abrufdatum, und folgt danach den Rechten
-            # des Raums wie jeder Upload.
+            # soll, wird ein Dokument im EIGENEN Raum -- im Ordner
+            # Suchergebnisse, mit Quelle und Abrufdatum. In einen
+            # geteilten Raum nur durch Verschieben.
             if msg.get("web"):
                 st.markdown("🌐 **Aus dem Netz:**")
                 _web_wahl = []
@@ -2724,57 +2812,10 @@ if _bestand > 0:
                     if st.checkbox(f"[{_w['nr']}] übernehmen",
                                    key=f"web_{i}_{_wk}"):
                         _web_wahl.append(_w)
-                if _web_wahl:
-                    _web_ziele = raeume.schreibbar(
-                        st.session_state["username"], is_admin())
-                    _mein_w = raeume.privat_kennung(
-                        st.session_state["username"])
-                    _web_ziel = st.selectbox(
-                        "In den Raum", _web_ziele,
-                        index=(_web_ziele.index(_mein_w)
-                               if _mein_w in _web_ziele else 0),
-                        format_func=raeume.bezeichnung,
-                        key=f"webziel_{i}")
-                    if st.button(f"{len(_web_wahl)} übernehmen",
-                                 key=f"webueb_{i}", disabled=_antwortet):
-                        _wvb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
-                                            - mcp.websuche_server())
-                        try:
-                            for _w in _web_wahl:
-                                # Die ganze Seite, nicht nur der Auszug,
-                                # den das Modell sah. Geht das nicht,
-                                # bleibt der Auszug.
-                                _wtext = _w["text"]
-                                for _wv in _wvb.values():
-                                    try:
-                                        _ganz = _wv.rufe(
-                                            "seite_lesen",
-                                            {"adresse": _w["adresse"]})
-                                        _wtext = _ganz.split("\n\n", 1)[-1]
-                                        break
-                                    except Exception:
-                                        continue
-                                try:
-                                    _wn, _wh, _wname = \
-                                        aufnehmen.webseite_aufnehmen(
-                                            _w["titel"], _w["adresse"],
-                                            _wtext, _web_ziel,
-                                            anfrage=_w.get("anfrage", ""),
-                                            benutzer_=st.session_state[
-                                                "username"],
-                                            ist_verwalter=is_admin())
-                                    (st.success if _wn else st.warning)(
-                                        f"{_wname}: {_wh}")
-                                except Exception as e:
-                                    st.error(f"{_w['titel']}: "
-                                             f"{type(e).__name__}: {e}")
-                        finally:
-                            for _wv in _wvb.values():
-                                try:
-                                    _wv.schliesse()
-                                except Exception:
-                                    pass
-                        refresh_document_index()
+                if _web_wahl and st.button(
+                        f"{len(_web_wahl)} in meinen Raum übernehmen",
+                        key=f"webueb_{i}", disabled=_antwortet):
+                    _web_uebernehmen(_web_wahl)
 
     eingabe = st.chat_input(
         "Frage an die Datenbank -- Bilder koennen angehaengt werden ...",

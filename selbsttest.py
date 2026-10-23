@@ -4288,12 +4288,11 @@ try:
           and "websuche" in _mcp_w.verbinde())
     _mcp_w.entferne_postfach("websuche")
 
-    # Uebernehmen: ein Dokument im Raum, mit Quelle oben.
+    # Uebernehmen: ein Dokument im EIGENEN Raum, mit Quelle oben.
     _ws_n, _ws_h, _ws_name = _auf.webseite_aufnehmen(
         "Druckbehaelter Normen", "https://normen.example/druck",
         "Die Pruefung von Druckbehaeltern regelt die Betriebssicherheit.",
-        raeume.privat_kennung("markus"), anfrage="druckbehaelter pruefung",
-        benutzer_="markus")
+        anfrage="druckbehaelter pruefung", benutzer_="markus")
     _ws_pfad = _auf.dokument_pfad(_ws_name, raeume.privat_kennung("markus"))
     _ws_inh = (io.open(_ws_pfad, encoding="utf-8").read()
                if os.path.exists(_ws_pfad) else "")
@@ -4302,18 +4301,65 @@ try:
           and "- Quelle: https://normen.example/druck" in _ws_inh
           and "- Suchbegriff: druckbehaelter pruefung" in _ws_inh,
           (_ws_n, _ws_h, _ws_pfad))
+    # Kein Raum waehlbar, auch nicht fuer Verwalter: ein Klick soll keinen
+    # geteilten Raum fuellen. Dorthin nur durch Verschieben.
+    import inspect as _insp
+    pruef("uebernommen wird immer in den eigenen Raum -- kein Raum waehlbar",
+          not {"raum", "ist_verwalter"}
+          & set(_insp.signature(_auf.webseite_aufnehmen).parameters))
+    _ws_n2, _, _ws_name2 = _auf.webseite_aufnehmen(
+        "Anna Treffer", "https://anna.example/x", "Inhalt fuer Anna.",
+        benutzer_="anna")
+    _ws_pfad2 = _auf.dokument_pfad(_ws_name2, raeume.privat_kennung("anna"))
+    pruef("auch fuer jeden anderen Nutzer in dessen eigenen",
+          _ws_n2 > 0 and os.path.exists(_ws_pfad2)
+          and not os.path.exists(_auf.dokument_pfad(_ws_name2,
+                                                    raeume.ALLGEMEIN)))
+
+    # Quellensuche: mehr Treffer, noch keine ganzen Seiten.
+    class _WsA:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [
+                {"url": f"https://93.184.215.{n}/s", "title": f"T{n}",
+                 "content": "x"} for n in range(1, 13)]}
+
+    class _WsC:
+        abrufe = 0
+
+        def get(self, *a, **k):
+            return _WsA()
+
+        def stream(self, *a, **k):
+            _WsC.abrufe += 1
+            raise RuntimeError("nicht abrufen")
+
+    _ws_alt_s = _ws.SEARXNG
+    _ws.SEARXNG = "http://searxng.test"
     try:
-        _auf.webseite_aufnehmen("x", "https://x.example", "y",
-                                raeume.ALLGEMEIN, benutzer_="anna")
-        _ws_recht = False
-    except _auf.KeinRecht:
-        _ws_recht = True
-    pruef("und nur in einen Raum, in den der Nutzer schreiben darf",
-          _ws_recht)
+        _ws_q, _ws_l = _ws.suchen("thema", client=_WsC(), anzahl=10,
+                                  lesen=0)
+        _ws_l50 = _ws.suchen("thema", client=_WsC(), anzahl=50,
+                             lesen=0)[1]
+    finally:
+        _ws.SEARXNG = _ws_alt_s
+    pruef("die Quellensuche liefert bis zu zehn Treffer, ohne Seiten zu laden",
+          len(_ws_l) == 10 and len(_ws_l50) == 10 and _WsC.abrufe == 0,
+          (len(_ws_l), len(_ws_l50), _WsC.abrufe))
+    pruef("und ihr Ergebnis liest sich als Trefferliste",
+          [t["nr"] for t in pipeline.webtreffer_aus_text(
+              _ws.als_text("thema", _ws_l[:2]))] == ["W1", "W2"])
 except Exception as e:
     pruef("Websuche laesst sich pruefen", False, f"{type(e).__name__}: {e}")
 
 _app_q = _datei("app.py")
+pruef("die Oberflaeche bietet beim Uebernehmen keinen Raum an",
+      "webziel_" not in _app_q and "in meinen Raum übernehmen" in _app_q)
+pruef("es gibt die Quellensuche ohne Antwort",
+      "Quellen im Netz suchen" in _app_q
+      and '"anzahl": 10, "lesen": 0' in _app_q)
 pruef("die Oberflaeche verbindet die Websuche nur, wenn sie frei ist",
       "ohne=(() if _web_frei else _web_server)" in _app_q
       and "raeume.websuche_erlaubt(r)" in _app_q)

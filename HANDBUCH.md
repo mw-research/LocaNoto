@@ -270,9 +270,21 @@ Verwalter die Websuche erst erlauben; sonst nennt die Seitenleiste die
 Räume, die es nicht tun. Dann oben nur freigegebene Räume wählen.
 
 Treffer stehen unter der Antwort als **🌐 Aus dem Netz** mit [W1], [W2]
-… – getrennt von den Dokumenten. Was du behalten willst, hakst du an,
-wählst einen Raum und klickst **übernehmen**: die Seite wird ein
-Dokument im Ordner *Suchergebnisse*, mit Quelle und Abrufdatum.
+… – getrennt von den Dokumenten. Was du behalten willst, hakst du an und
+klickst **in meinen Raum übernehmen**.
+
+### Wie sammle ich mit LocaNoto Quellen aus dem Internet?
+
+Über dem Chat **🌐 Quellen im Netz suchen** aufklappen, ein Thema in
+Stichworten eingeben, **Suchen**. Es kommt eine Liste mit bis zu zehn
+Treffern, ohne Antwort. Anhaken, was du behalten willst, dann **in meinen
+Raum übernehmen**. Den Suchbegriff tippst du selbst; er geht an
+Suchmaschinen, also keine internen Namen oder Zahlen.
+
+Übernommenes landet **immer in deinem eigenen Raum**, Ordner
+*Suchergebnisse*, als Dokument mit Quelle und Abrufdatum. Gehört etwas in
+einen geteilten Raum, verschiebst du es dorthin – so füllt kein Klick
+einen gemeinsamen Raum.
 
 ### Wie sage ich LocaNoto, wie es mir antworten soll?
 

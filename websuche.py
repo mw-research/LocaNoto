@@ -197,8 +197,14 @@ def _punkte(anfrage, t, rang):
     return (im_titel * 2.0 + im_text) / len(woerter) * 10 - rang * 0.1
 
 
-def suchen(anfrage, client=None):
-    """[{titel, adresse, ausschnitt, text}] -- je Gastgeber der beste."""
+def suchen(anfrage, client=None, anzahl=None, lesen=None):
+    """[{titel, adresse, ausschnitt, text}] -- je Gastgeber der beste.
+
+    anzahl und lesen ueberschreiben die Vorgaben, in Grenzen: die
+    Quellensuche will mehr Treffer und noch keine ganzen Seiten.
+    """
+    anzahl = max(1, min(10, int(anzahl or TREFFER)))
+    lesen = max(0, min(5, LESEN if lesen is None else int(lesen)))
     import httpx
     anfrage = " ".join(str(anfrage or "").split())[:MAX_ANFRAGE]
     if len(anfrage) < 2:
@@ -245,9 +251,9 @@ def suchen(anfrage, client=None):
                 continue
             gesehen.add(host)
             auswahl.append(t)
-            if len(auswahl) >= TREFFER:
+            if len(auswahl) >= anzahl:
                 break
-        for t in auswahl[:max(0, LESEN)]:
+        for t in auswahl[:lesen]:
             try:
                 t["adresse"], t["text"] = abrufen(t["adresse"], AUSZUG * 2,
                                                   client=client)
@@ -288,9 +294,14 @@ WERKZEUGE = [
                      "nur allgemeine Stichworte, keine Namen, Zahlen oder "
                      "Inhalte aus den Dokumenten."),
      "inputSchema": {"type": "object",
-                     "properties": {"anfrage": {
-                         "type": "string",
-                         "description": "Stichworte, hoechstens 200 Zeichen"}},
+                     "properties": {
+                         "anfrage": {"type": "string",
+                                     "description": "Stichworte, hoechstens "
+                                                    "200 Zeichen"},
+                         "anzahl": {"type": "integer",
+                                    "description": "Treffer, 1 bis 10"},
+                         "lesen": {"type": "integer",
+                                   "description": "davon ganz lesen, 0 bis 5"}},
                      "required": ["anfrage"]}},
     {"name": "seite_lesen",
      "description": ("Liest eine Webseite oder ein PDF aus dem Netz ganz. "
@@ -306,7 +317,9 @@ def werkzeug(name, argumente):
     """(text, ist_fehler)."""
     try:
         if name == "web_suchen":
-            anfrage, treffer = suchen(argumente.get("anfrage"))
+            anfrage, treffer = suchen(argumente.get("anfrage"),
+                                      anzahl=argumente.get("anzahl"),
+                                      lesen=argumente.get("lesen"))
             return als_text(anfrage, treffer), False
         if name == "seite_lesen":
             adresse, text = abrufen(str(argumente.get("adresse") or ""))

@@ -2558,12 +2558,21 @@ Räume, die es nicht tun. Eingeschaltet wird ohne Rückfrage gesucht.
 
 **Übernehmen.** Treffer stehen unter der Antwort getrennt von den
 Dokumenten, als **🌐 Aus dem Netz** mit `[W1]`, `[W2]` … Angehakt und
-**übernommen** wird ein Treffer ein Dokument im gewählten Raum: die ganze
-Seite als Markdown im Ordner `Suchergebnisse/`, mit Quelle, Abrufdatum
-und Suchbegriff oben. Danach gilt für ihn, was für jeden Upload gilt —
-Rechte des Raums, Einlesen, Ablage. Übernommene Seiten sind Kopien
-fremder Texte; ob das im Einzelfall erlaubt ist, entscheidet, wer sie
-übernimmt.
+**übernommen** wird ein Treffer ein Dokument im **eigenen Raum** des
+Nutzers: die ganze Seite als Markdown im Ordner `Suchergebnisse/`, mit
+Quelle, Abrufdatum und Suchbegriff oben. Einen anderen Raum gibt es dabei
+nicht, auch nicht für Verwalter — das entscheidet `aufnehmen.py`, nicht
+die Oberfläche. In einen geteilten Raum kommt ein Treffer nur durch
+Verschieben; so füllt kein Klick einen gemeinsamen Raum. Übernommene
+Seiten sind Kopien fremder Texte; ob das im Einzelfall erlaubt ist,
+entscheidet, wer sie übernimmt.
+
+**Quellen sammeln ohne Antwort.** Über dem Chat steht **🌐 Quellen im
+Netz suchen**, wie bei NotebookLM: ein Thema, eine Liste mit bis zu zehn
+Treffern, anhaken, übernehmen. Die Seiten werden erst beim Übernehmen
+ganz gelesen. Hier braucht es keine Freigabe am Raum: den Suchbegriff
+tippt der Nutzer selbst, das Modell formuliert nichts aus den
+Abschnitten eines Raums. Es genügt ein eingerichteter Websuche-Server.
 
 **Gegen Umwege ins eigene Netz.** Jede Adresse muss auf eine öffentliche
 IP zeigen — auch nach jeder Weiterleitung, nicht nur beim ersten Aufruf.
