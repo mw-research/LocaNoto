@@ -16,9 +16,16 @@
 #   * der Namensraum
 #   * die oeffentliche Adresse (zweimal: OC_URL und der Ingress)
 #   * die Ingress-Klasse und das TLS-Secret
-#   * das Verwalterpasswort im Secret
 #
 # ABLAUF
+#
+#   # Das Verwalterpasswort als eigenes Secret, NICHT in dieser Datei:
+#   # kubectl apply schriebe es im Klartext in die Annotation
+#   # last-applied-configuration.
+#   read -rs PW
+#   printf %s "$PW" | kubectl -n NAMENSRAUM create secret generic \
+#     opencloud-geheim --from-file=IDM_ADMIN_PASSWORD=/dev/stdin
+#   unset PW
 #
 #   kubectl apply -f k8s/97-opencloud.yaml
 #   kubectl -n NAMENSRAUM rollout status deploy/opencloud
@@ -52,8 +59,16 @@
 # 200 ist richtig. Gefragt wird aus dem LocaNoto-Pod, weil dort Python
 # sicher vorhanden ist; der Weg ist derselbe wie aus dem OpenCloud-Pod.
 #
-# Antwortet das nicht, muss der Cluster die eigene Ingress-Adresse von
-# innen aufloesen und erreichen koennen. Die Adresse fuer /data auf den
+# Die eigentliche Probe ist ein Ablegen ueber LocaNoto -- 201 ist
+# richtig, 500 heisst: der Weg zurueck fehlt.
+#
+#   kubectl -n NAMENSRAUM exec deploy/locanoto -- python -c "import os,requests;u=os.environ['OWNCLOUD_URL']+'/remote.php/dav/files/'+os.environ['OWNCLOUD_USER']+'/probe.txt';a=(os.environ['OWNCLOUD_USER'],os.environ['OWNCLOUD_PASSWORT']);print(requests.put(u,data=b'x',auth=a).status_code, requests.delete(u,auth=a).status_code)"
+#
+# Antwortet das nicht, muss der Pod die eigene Ingress-Adresse
+# erreichen. Ohne Aenderung am ganzen Cluster geht das mit hostAliases
+# im OpenCloud-Pod: die oeffentliche Adresse zeigt dort auf die
+# ClusterIP des Ingress-Controllers, der das Zertifikat per SNI richtig
+# ausliefert (siehe hostAliases unten). Die Adresse fuer /data auf den
 # internen Dienst zu legen (GATEWAY_FRONTEND_PUBLIC_URL) hilft NICHT:
 # dann geht das Ablegen ueber WebDAV, aber das Hochladen im Browser
 # bekommt eine interne Adresse zurueck und scheitert.
@@ -95,16 +110,6 @@
 # IDM_ADMIN_PASSWORD gilt nur beim allerersten Start, wenn daten/ leer
 # ist. Danach steht das Passwort im Verzeichnisdienst und wird in der
 # Oberflaeche von OpenCloud geaendert.
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: opencloud-geheim
-  namespace: BITTE-EINTRAGEN
-  labels:
-    app: opencloud
-stringData:
-  IDM_ADMIN_PASSWORD: BITTE-EINTRAGEN
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -160,6 +165,30 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+      # Nur wenn der Pod die eigene oeffentliche Adresse nicht erreicht,
+      # siehe Kopf der Datei. Die IP ist die ClusterIP des
+      # Ingress-Controllers (kubectl get svc -A | grep -i -e traefik -e ingress).
+      # hostAliases:
+      #   - ip: BITTE-EINTRAGEN
+      #     hostnames: ["BITTE-EINTRAGEN"]
+      # Unterordner per subPath legt Kubernetes als root an, und nicht
+      # jeder Speicher (etwa hostPath) beachtet fsGroup. Ohne das endet
+      # der erste Start mit "permission denied".
+      initContainers:
+        - name: rechte
+          image: opencloudeu/opencloud:7.2.4
+          command: ["chown", "-R", "1000:1000",
+                    "/etc/opencloud", "/var/lib/opencloud"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: speicher
+              mountPath: /etc/opencloud
+              subPath: config
+            - name: speicher
+              mountPath: /var/lib/opencloud
+              subPath: daten
       containers:
         - name: opencloud
           image: opencloudeu/opencloud:7.2.4
@@ -228,6 +257,8 @@ metadata:
     app: opencloud
   # Je nach Ingress-Controller: grosse Dateien zulassen, etwa bei nginx
   #   nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  # bei Traefik nur https:
+  #   traefik.ingress.kubernetes.io/router.entrypoints: websecure
   # annotations:
 spec:
   ingressClassName: BITTE-EINTRAGEN

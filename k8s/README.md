@@ -88,6 +88,8 @@ Dienst in Go, ohne Datenbank, ein Volume. Ablauf und Fallstricke stehen
 im Kopf der Datei; die drei Schritte, die zählen:
 
 ```bash
+# Verwalterpasswort als eigenes Secret, nie in der YAML:
+read -rs PW; printf %s "$PW" | kubectl create secret generic opencloud-geheim --from-file=IDM_ADMIN_PASSWORD=/dev/stdin; unset PW
 kubectl apply -f k8s/97-opencloud.yaml
 # App-Token für LocaNoto -- das Passwort nimmt OpenCloud dafür nicht:
 kubectl exec deploy/opencloud -- opencloud auth-app create --user-name=admin --expiration=87600h

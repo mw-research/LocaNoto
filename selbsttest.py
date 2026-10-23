@@ -4164,6 +4164,12 @@ if os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml")):
           and "name: GATEWAY_FRONTEND_PUBLIC_URL" not in _k97)
     pruef("und haelt die erzeugten Schluessel auf dem Volume",
           "mountPath: /etc/opencloud" in _k97 and "subPath: config" in _k97)
+    # kubectl apply schriebe ein Passwort aus der Datei im Klartext in
+    # die Annotation last-applied-configuration.
+    pruef("die Vorlage enthaelt kein Secret mit Passwort",
+          "kind: Secret" not in _k97 and "--from-file=IDM_ADMIN_PASSWORD" in _k97)
+    pruef("und richtet die Rechte der Unterordner vor dem Start",
+          "initContainers:" in _k97 and '"chown", "-R", "1000:1000"' in _k97)
 pruef("einrichten.py nennt bei abgelehnter Anmeldung den Token-Befehl",
       "opencloud auth-app create" in _datei("einrichten.py"))
 
