@@ -4173,6 +4173,32 @@ if os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml")):
 pruef("einrichten.py nennt bei abgelehnter Anmeldung den Token-Befehl",
       "opencloud auth-app create" in _datei("einrichten.py"))
 
+# Der Vergleich mit einer alten ownCloud-10-Ablage findet, was LocaNoto
+# nie geholt hat, und von fremden Konten nur Zahlen.
+try:
+    import altbestand as _ab
+    _ab_alt = os.path.join(tmp, "ab_alt", "files")
+    for _rel, _inh in (("admin/files/LocaNoto/allgemein/a.pdf", "aa"),
+                       ("admin/files/LocaNoto/allgemein/b.xlsx", "bbb"),
+                       ("admin/files/Sonstiges/c.pdf", "c"),
+                       ("bernd/files/geheim.docx", "dddd")):
+        _p = os.path.join(_ab_alt, *_rel.split("/"))
+        os.makedirs(os.path.dirname(_p), exist_ok=True)
+        io.open(_p, "w", encoding="utf-8").write(_inh)
+    _ab_b = _ab.vergleiche(os.path.join(_ab_alt, "admin", "files"), {
+        "wurzeln": ["LocaNoto/allgemein"],
+        "dateien": {"LocaNoto/allgemein/a.pdf": {"groesse": 2},
+                    "LocaNoto/allgemein/neu.pdf": {"groesse": 1}}})
+    pruef("altbestand findet, was LocaNoto nie geholt hat",
+          _ab_b["gleich"] == 1
+          and _ab_b["fehlt_im_baum"] == ["LocaNoto/allgemein/b.xlsx"]
+          and _ab_b["fehlt_ausserhalb"] == ["Sonstiges/c.pdf"]
+          and _ab_b["nur_lokal"] == ["LocaNoto/allgemein/neu.pdf"], _ab_b)
+    pruef("und von fremden Konten nur Anzahl und Groesse",
+          _ab.andere_konten(_ab_alt, "admin") == {"bernd": (1, 4)})
+except Exception as e:
+    pruef("altbestand laesst sich pruefen", False, f"{type(e).__name__}: {e}")
+
 # Und die Oberflaeche ruft es an allen fuenf Stellen.
 _vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")
 pruef("Benutzer loeschen ruft das Loeschen in ownCloud",
