@@ -18,6 +18,7 @@ Oberflaeche.
 """
 import json
 import os
+import re
 import time
 
 import paths
@@ -555,6 +556,41 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                            "content": (ergebnis or "")[:8000]})
 
     return zusatz, entwuerfe
+
+
+_WEBTREFFER = re.compile(
+    r"^\[W(\d+)\] (.*?)\nAdresse: (\S+)\n(.*?)(?=\n\n\[W\d+\] |\Z)",
+    re.S | re.M)
+
+
+def webtreffer(zusatz, server):
+    """Die Treffer der Websuche aus dem Werkzeugkreis, fuer die Quellen.
+
+    [{nr, titel, adresse, text, anfrage}] -- je Adresse einmal. Gelesen
+    wird das Ergebnis, das auch das Modell bekam (websuche.als_text),
+    damit die Quellen zeigen, worauf die Antwort wirklich steht.
+    """
+    import mcp
+    rufe = set()
+    for m in zusatz or []:
+        for r in m.get("tool_calls") or []:
+            s, name = mcp.teile_namen(r["function"]["name"])
+            if s in server and name == "web_suchen":
+                rufe.add(r["id"])
+    aus, gesehen = [], set()
+    for m in zusatz or []:
+        if m.get("role") != "tool" or m.get("tool_call_id") not in rufe:
+            continue
+        text = m.get("content") or ""
+        kopf = re.match(r'WEBSUCHE "(.*?)"', text)
+        for nr, titel, adresse, inhalt in _WEBTREFFER.findall(text):
+            if adresse in gesehen:
+                continue
+            gesehen.add(adresse)
+            aus.append({"nr": f"W{nr}", "titel": titel.strip(),
+                        "adresse": adresse, "text": inhalt.strip(),
+                        "anfrage": kopf.group(1) if kopf else ""})
+    return aus
 
 
 def antwort(client, modell, system, nachrichten, verlauf_anzahl=20,

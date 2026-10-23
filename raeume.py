@@ -552,6 +552,36 @@ def gruppe_setzen(kennung, gruppe):
                   else f"Mitgliedschaft kommt jetzt aus '{gruppe}'.")
 
 
+def websuche_erlaubt(kennung):
+    """Darf neben den Dokumenten dieses Raums im Netz gesucht werden?
+
+    Im eigenen Raum entscheidet der Nutzer -- es sind seine Unterlagen.
+    In einem geteilten Raum der Verwalter: das Modell formuliert den
+    Suchbegriff mit den Abschnitten dieses Raums im Kontext, und was
+    davon in einen Suchbegriff geraet, geht an Suchmaschinen.
+    """
+    if ist_privat(kennung):
+        return True
+    return bool((liste().get(kennung) or {}).get("websuche"))
+
+
+@_unter_sperre
+def websuche_setzen(kennung, an):
+    """Erlaubt die Websuche neben einem geteilten Raum, oder sperrt sie."""
+    daten = _lade()
+    if not _materialisiere(daten, kennung):
+        return False, "Unbekannter Raum."
+    if ist_privat(kennung):
+        return False, ("Im eigenen Raum schaltet der Nutzer die Websuche "
+                       "selbst ein.")
+    if an:
+        daten["raeume"][kennung]["websuche"] = True
+    else:
+        daten["raeume"][kennung].pop("websuche", None)
+    _speichere(daten)
+    return True, "Websuche erlaubt." if an else "Websuche gesperrt."
+
+
 @_unter_sperre
 def entfernen(kennung):
     """Nimmt den Raum aus der Verwaltung. Die Sammlung bleibt.

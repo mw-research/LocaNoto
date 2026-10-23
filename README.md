@@ -449,9 +449,9 @@ Dateien importieren sie.
 | `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +11 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `aufnehmen`, `ingest` +3 |
 | **Bestand** | | | |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `api`, `app` +20 |
 | `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `api`, `app`, `bestandsliste` +10 |
-| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `api`, `app` +20 |
 | `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `ingest`, `ingest_images` +8 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
 | `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
@@ -492,6 +492,7 @@ Dateien importieren sie.
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
+| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_LESEN`, `WEBSUCHE_PORT`, `WEBSUCHE_PRO_MINUTE` +4 | `selbsttest` |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
 | `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
@@ -2465,7 +2466,7 @@ und keinen zusätzlichen Modellaufruf.
 ### Einrichten in der Oberfläche
 
 Unter *Verwaltung → 📬 Postfächer* legt ein Verwalter sie an, ohne die
-Datei anzufassen. Vier Vorlagen setzen, was für die jeweilige Art Server
+Datei anzufassen. Fünf Vorlagen setzen, was für die jeweilige Art Server
 üblich ist; aus der Maske kommen Name, Adresse, die Art des Postfachs und
 die Regeln zum Senden. *Werkzeuge abfragen* verbindet sich und listet
 auf, was der Server anbietet.
@@ -2525,6 +2526,57 @@ Hinweis gilt Nachrichten, die niemand gesehen hat.
 `MCP_TIMEOUT` begrenzt die Wartezeit je Aufruf (30 s), `MCP_RUNDEN` die
 Zahl der Werkzeugrunden je Antwort (4), `MCP_MAX_WERKZEUGE` die Zahl der
 Werkzeuge, die an das Modell gehen (40).
+
+## 🌐 Websuche
+
+Wenn die Dokumente nicht reichen, darf das Modell im Netz nachsehen —
+**auf Wunsch**, und nur dort, wo es erlaubt ist.
+
+**Was hinausgeht: der Suchbegriff, und nur er.** Er geht an ein SearXNG
+im eigenen Haus und von dort an Suchmaschinen, von der Adresse des
+Servers und ohne Nutzerkennung. Dokumente, Chats und Anmeldedaten kennt
+der Suchdienst nicht: `websuche.py` läuft in einem eigenen Pod ohne
+Secrets und ohne Volume, und LocaNoto gibt ihm nichts als den
+Suchbegriff. Herein kommen Titel, Adresse und reiner Text der besten
+Treffer — als Zitat mit dem Hinweis, dass es fremder Text und keine
+Anweisung ist.
+
+**Wer sie einschaltet.**
+
+| Raum | Websuche |
+|---|---|
+| eigener Raum | der Nutzer schaltet sie im Chat ein (🌐 Websuche) |
+| geteilter Raum | erst erlaubt ein Verwalter sie am Raum (*Räume verwalten*), dann schaltet der Nutzer sie ein |
+
+Warum am Raum, obwohl gesucht wird im Chat: Das Modell formuliert den
+Suchbegriff mit den Abschnitten der gefragten Räume im Kontext. Was
+davon in einen Suchbegriff gerät — ein Projektname, eine Zahl —, geht an
+Suchmaschinen. Darüber entscheidet bei geteilten Unterlagen der
+Verwalter. Fragt jemand ohne Raumwahl, also in allen seinen Räumen,
+müssen alle die Websuche erlauben; sonst nennt die Seitenleiste die
+Räume, die es nicht tun. Eingeschaltet wird ohne Rückfrage gesucht.
+
+**Übernehmen.** Treffer stehen unter der Antwort getrennt von den
+Dokumenten, als **🌐 Aus dem Netz** mit `[W1]`, `[W2]` … Angehakt und
+**übernommen** wird ein Treffer ein Dokument im gewählten Raum: die ganze
+Seite als Markdown im Ordner `Suchergebnisse/`, mit Quelle, Abrufdatum
+und Suchbegriff oben. Danach gilt für ihn, was für jeden Upload gilt —
+Rechte des Raums, Einlesen, Ablage. Übernommene Seiten sind Kopien
+fremder Texte; ob das im Einzelfall erlaubt ist, entscheidet, wer sie
+übernimmt.
+
+**Gegen Umwege ins eigene Netz.** Jede Adresse muss auf eine öffentliche
+IP zeigen — auch nach jeder Weiterleitung, nicht nur beim ersten Aufruf.
+Treffer, die ins eigene Netz zeigen, erscheinen gar nicht. Seiten werden
+nach 5 MB abgebrochen, nicht erst ganz geladen. Die NetworkPolicies in
+`k8s/98-websuche.yaml` sind die zweite Tür.
+
+**Einrichten.** Kubernetes: `k8s/98-websuche.yaml`, Ablauf im Kopf der
+Datei. Compose: `SEARXNG_SECRET` setzen (`openssl rand -hex 32`), dann
+`docker compose --profile websuche up -d`. In beiden Fällen danach unter
+*Verwaltung → 📬 Postfächer* einen Server der Art **Websuche** anlegen,
+Adresse `http://websuche:8000/mcp`. Prüfen ohne LocaNoto:
+`python websuche.py --probe "suchbegriff"` im Websuche-Container.
 
 ---
 

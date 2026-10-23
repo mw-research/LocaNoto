@@ -116,6 +116,14 @@ VORLAGEN = {
         "beschreibung": "MCP-Server über HTTP, Anmeldung mit Token",
         "angaben": {"transport": "http", "anmeldung": "bearer"},
     },
+    "websuche": {
+        "beschreibung": "Websuche (eigener Dienst, websuche.py)",
+        # Sucht und schickt nichts. Die leere Liste schaltet die
+        # Namensregel fuer Sendewerkzeuge ab: gesucht wird ohne
+        # Rueckfrage, sobald der Nutzer die Websuche einschaltet.
+        "angaben": {"transport": "http", "anmeldung": "keine",
+                    "art": "websuche", "sendet": []},
+    },
     "stdio": {
         "beschreibung": "lokaler Prozess (stdio)",
         "angaben": {"transport": "stdio", "anmeldung": "keine"},
@@ -402,7 +410,13 @@ def kopf_fuer(server, benutzer="", geheimnis=""):
     return {}
 
 
-def verbinde(koepfe=None):
+def websuche_server():
+    """Die Namen der eingerichteten Websuche-Server."""
+    return {n for n, a in lies_konfiguration().items()
+            if a.get("art") == "websuche"}
+
+
+def verbinde(koepfe=None, ohne=()):
     """{name: Verbindung} fuer alles, was in der Konfiguration steht.
 
     koepfe ordnet JE SERVER einen zusaetzlichen Kopf zu -- {name: kopf}.
@@ -418,6 +432,10 @@ def verbinde(koepfe=None):
     koepfe = koepfe or {}
     aus = {}
     for name, angaben in lies_konfiguration().items():
+        # Etwa die Websuche, solange der Nutzer sie nicht eingeschaltet
+        # hat: dann sieht das Modell das Werkzeug gar nicht erst.
+        if name in ohne:
+            continue
         # Ein Exchange-Postfach spricht kein JSON-RPC. Welche Klasse es
         # wird, entscheidet sich HIER und nur hier -- nach aussen haben
         # beide dieselben drei Methoden, und alles darueber merkt vom

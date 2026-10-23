@@ -27,7 +27,7 @@ SCHICHT = {
     "Einstiege": (
         "app", "verwaltung", "api", "ingest", "ingest_images", "abgleich",
         "einrichten", "sicherung", "selbsttest", "lasttest", "spiegeln",
-        "altbestand",
+        "altbestand", "websuche",
         "create_user", "create_token", "manage_users", "bestandsliste",
         "packe_umzug", "rebuild_index", "raum_diagnose",
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env",

@@ -259,6 +259,21 @@ Nur ein Funktionspostfach kann ein Verwalter für selbständige Antworten
 freischalten. Solche Mails tragen dann in der Regel einen Hinweis, dass sie
 automatisch erstellt wurden.
 
+### Wie suche ich mit LocaNoto im Internet?
+
+In der Seitenleiste **🌐 Websuche** einschalten. Dann darf LocaNoto im
+Netz nachsehen, wenn deine Dokumente die Frage nicht beantworten. Hinaus
+geht nur der Suchbegriff, keine Dokumente.
+
+In deinem eigenen Raum geht das immer. In einem geteilten Raum muss ein
+Verwalter die Websuche erst erlauben; sonst nennt die Seitenleiste die
+Räume, die es nicht tun. Dann oben nur freigegebene Räume wählen.
+
+Treffer stehen unter der Antwort als **🌐 Aus dem Netz** mit [W1], [W2]
+… – getrennt von den Dokumenten. Was du behalten willst, hakst du an,
+wählst einen Raum und klickst **übernehmen**: die Seite wird ein
+Dokument im Ordner *Suchergebnisse*, mit Quelle und Abrufdatum.
+
 ### Wie sage ich LocaNoto, wie es mir antworten soll?
 
 In der Seitenleiste unter **🗒️ Meine Anweisung** steht ein Textfeld für
@@ -518,6 +533,18 @@ Anmeldung.
 
 Andere Werkzeugserver nach dem Model-Context-Protocol (MCP) lassen sich
 über die Vorlagen „MCP-Server über HTTP" und „lokaler Prozess" anbinden.
+
+### Wie richte ich als Verwalter die Websuche in LocaNoto ein?
+
+Der Suchdienst läuft getrennt von LocaNoto (Betrieb: README, Abschnitt
+„Websuche"). Danach unter **📬 Postfächer** einen Server der Art
+**Websuche** anlegen, Adresse `http://websuche:8000/mcp`.
+
+Für geteilte Räume unter **🚪 Räume verwalten** am Raum **🌐 Websuche
+neben diesem Raum erlauben** setzen. Erst dann können Nutzer sie dort
+einschalten. Der Grund: das Modell formuliert den Suchbegriff mit den
+Abschnitten des Raums im Kontext, und der Suchbegriff geht an
+Suchmaschinen. Im eigenen Raum entscheidet jeder Nutzer selbst.
 
 ### Wann darf LocaNoto aus einem Postfach selbständig antworten?
 

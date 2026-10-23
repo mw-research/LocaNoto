@@ -449,6 +449,47 @@ class NichtGefunden(Exception):
     """In diesem Raum liegt kein Abschnitt dieser Datei."""
 
 
+class Datei:
+    """Name und Bytes -- mehr braucht process_uploaded_pdf nicht."""
+
+    def __init__(self, name, inhalt):
+        self.name = name
+        self._inhalt = inhalt
+
+    def getvalue(self):
+        return self._inhalt
+
+
+# Wohin uebernommene Treffer der Websuche im Raum kommen.
+WEB_ORDNER = "Suchergebnisse"
+
+
+def webseite_aufnehmen(titel, adresse, text, raum, *, anfrage="",
+                       benutzer_, ist_verwalter=False):
+    """Ein Treffer der Websuche wird ein Dokument des Raums.
+
+    Als Markdown mit Quelle und Abrufdatum oben, in den Ordner
+    Suchergebnisse -- und dann derselbe Weg wie ein Upload: Rechte,
+    Einlesen, Ablage. Rueckgabe: (abschnitte, hinweis, dateiname).
+    """
+    from datetime import datetime
+    from urllib.parse import urlsplit
+    host = urlsplit(adresse).hostname or "netz"
+    name = paths.sicherer_dateiname(f"{(titel or host)[:80]} ({host}).md")
+    kopf = [f"# {titel or adresse}", "",
+            f"- Quelle: {adresse}",
+            f"- Abgerufen: {datetime.now():%Y-%m-%d %H:%M} über die "
+            f"Websuche von LocaNoto"]
+    if anfrage:
+        kopf.append(f"- Suchbegriff: {anfrage}")
+    inhalt = ("\n".join(kopf) + "\n\n---\n\n"
+              + (text or "").strip() + "\n")
+    n, hinweis = process_uploaded_pdf(
+        Datei(name, inhalt.encode("utf-8")), raum, WEB_ORDNER,
+        benutzer_=benutzer_, ist_verwalter=ist_verwalter, streng=True)
+    return n, hinweis, name
+
+
 def fremde_ordner(eigener_raum):
     """Die Ablageordner ALLER anderen Raeume.
 

@@ -1,0 +1,299 @@
+# --- WEBSUCHE: SearXNG und der Werkzeugserver websuche.py ---
+#
+# Der einzige Teil von LocaNoto mit einem Weg ins Netz. Er traegt deshalb
+# nichts, was dort etwas wert waere: kein Secret von LocaNoto, kein
+# Volume, keine Dokumente. Er bekommt einen Suchbegriff, gibt Fundstellen
+# als Text zurueck und vergisst ihn -- protokolliert wird der Begriff
+# nicht.
+#
+# Zwei Dienste:
+#
+#   searxng    sucht ueber mehrere Suchmaschinen, von der Adresse des
+#              Clusters aus, ohne Nutzerkennung
+#   websuche   spricht MCP mit LocaNoto, fragt searxng, liest die besten
+#              Seiten und prueft jede Adresse gegen das eigene Netz
+#
+# ANZUPASSEN: der Namensraum (zweimal je Dokument), das Abbild von
+# websuche (dasselbe wie LocaNoto, siehe 30-anwendung.yaml) und, falls
+# euer LocaNoto-Pod anders heisst, die Labels in der NetworkPolicy unten.
+#
+# ABLAUF
+#
+#   # Schluessel fuer SearXNG, zufaellig, nie in einer Datei:
+#   openssl rand -hex 32 | tr -d '\n' | kubectl -n NAMENSRAUM create \
+#     secret generic searxng-geheim --from-file=SEARXNG_SECRET=/dev/stdin
+#   kubectl apply -f k8s/98-websuche.yaml
+#   kubectl -n NAMENSRAUM exec deploy/websuche -- python websuche.py --probe "test"
+#
+# Dann in LocaNoto unter Verwaltung -> Postfächer (Werkzeugserver) einen
+# Server anlegen: Art "Websuche", Name "websuche", Adresse
+# http://websuche:8000/mcp. Erlaubt wird sie je Raum (Räume verwalten),
+# eingeschaltet vom Nutzer im Chat.
+#
+# Die NetworkPolicies wirken nur, wenn das Netz des Clusters sie
+# durchsetzt (Calico, Cilium, ...). websuche.py prueft jede Adresse
+# zusaetzlich selbst -- die zweite Tuer, auch ohne sie.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: searxng
+data:
+  settings.yml: |
+    use_default_settings: true
+    general:
+      instance_name: "LocaNoto"
+      enable_metrics: false
+    search:
+      # Ohne JSON antwortet SearXNG nur in HTML.
+      formats:
+        - html
+        - json
+      safe_search: 1
+    server:
+      # Der Schluessel kommt aus SEARXNG_SECRET (Secret searxng-geheim).
+      limiter: false
+      image_proxy: false
+      public_instance: false
+    ui:
+      static_use_hash: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: searxng
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: searxng
+spec:
+  selector:
+    app: searxng
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: searxng
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: searxng
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: searxng
+  template:
+    metadata:
+      labels:
+        app: searxng
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 977
+        runAsGroup: 977
+      containers:
+        - name: searxng
+          # Fest und nicht latest: ein neues SearXNG kann Einstellungen
+          # anders lesen, und das soll ein bewusster Schritt sein.
+          image: searxng/searxng:2026.10.13-22c64b8d3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SEARXNG_BASE_URL
+              value: "http://searxng:8080/"
+            - name: SEARXNG_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: searxng-geheim
+                  key: SEARXNG_SECRET
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: einstellungen
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+            - name: fluechtig
+              mountPath: /tmp
+      volumes:
+        - name: einstellungen
+          configMap:
+            name: searxng
+        - name: fluechtig
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: websuche
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: websuche
+spec:
+  selector:
+    app: websuche
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: websuche
+  namespace: BITTE-EINTRAGEN
+  labels:
+    app: websuche
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: websuche
+  template:
+    metadata:
+      labels:
+        app: websuche
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: websuche
+          # Dasselbe Abbild wie LocaNoto -- websuche.py liegt darin.
+          image: locanoto:lokal
+          command: ["python", "websuche.py"]
+          # Bewusst OHNE envFrom: kein Secret von LocaNoto gelangt hierher.
+          env:
+            - name: WEBSUCHE_SEARXNG
+              value: "http://searxng:8080"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: fluechtig
+              mountPath: /tmp
+      volumes:
+        - name: fluechtig
+          emptyDir: {}
+---
+# Herein nur LocaNoto. Hinaus nur DNS, das eigene SearXNG und das offene
+# Netz -- ausdruecklich NICHT das eigene Clusternetz. Ohne die letzte
+# Regel waere der Pod ein Sprungbrett zu den Diensten nebenan.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: websuche
+  namespace: BITTE-EINTRAGEN
+spec:
+  podSelector:
+    matchLabels:
+      app: websuche
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        # Je nach Manifest heisst der LocaNoto-Pod so oder so.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: locanoto
+        - podSelector:
+            matchLabels:
+              app: locanoto
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: searxng
+      ports:
+        - {protocol: TCP, port: 8080}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+                     169.254.0.0/16, 127.0.0.0/8, 100.64.0.0/10]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 80}
+---
+# SearXNG: herein nur websuche, hinaus nur DNS und das offene Netz.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: searxng
+  namespace: BITTE-EINTRAGEN
+spec:
+  podSelector:
+    matchLabels:
+      app: searxng
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: websuche
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+                     169.254.0.0/16, 127.0.0.0/8, 100.64.0.0/10]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 80}

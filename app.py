@@ -1280,6 +1280,31 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         help="Leer lassen, um alle Räume zu durchsuchen, die du sehen "
              "darfst."
     ) if len(raum_optionen) > 1 else []
+
+    # --- WEBSUCHE ---
+    #
+    # Nur wenn ein Websuche-Server eingerichtet ist, und nur auf Wunsch.
+    # Gesucht wird dann ohne Rueckfrage -- das Einschalten ist die
+    # Entscheidung. Ob es neben den gefragten Raeumen sein darf, steht
+    # am Raum: das Modell formuliert den Suchbegriff mit deren
+    # Abschnitten im Kontext. Gefragt sind die gewaehlten Raeume, ohne
+    # Wahl alle erlaubten -- und dann muessen es alle erlauben.
+    _web_server = mcp.websuche_server()
+    _web_frei = False
+    if _web_server:
+        if st.toggle("🌐 Websuche", key="_websuche_an",
+                     help="Das Modell darf im Netz nachsehen, wenn die "
+                          "Dokumente nicht reichen. Hinaus geht nur der "
+                          "Suchbegriff."):
+            _web_zu = [r for r in (selected_raeume or raum_optionen)
+                       if not raeume.websuche_erlaubt(r)]
+            if _web_zu:
+                st.caption("🌐 Nicht freigegeben neben: "
+                           + ", ".join(raeume.bezeichnung(r)
+                                       for r in _web_zu)
+                           + " — oben nur freigegebene Räume wählen.")
+            else:
+                _web_frei = True
     # --- PROJEKT ---
     #
     # Eine Stufe zwischen Raum und Datei, und nur im eigenen Raum. Es
@@ -2683,6 +2708,74 @@ if _bestand > 0:
                                 except Exception as e:
                                     st.error(f"Konnte PDF nicht rendern: {e}")
 
+            # --- AUS DEM NETZ ---
+            #
+            # Getrennt von den Dokumenten und mit Haekchen: was bleiben
+            # soll, wird ein Dokument im Raum -- im Ordner Suchergebnisse,
+            # mit Quelle und Abrufdatum, und folgt danach den Rechten
+            # des Raums wie jeder Upload.
+            if msg.get("web"):
+                st.markdown("🌐 **Aus dem Netz:**")
+                _web_wahl = []
+                for _wk, _w in enumerate(msg["web"]):
+                    with st.expander(f"🌐 [{_w['nr']}] {_w['titel']}"):
+                        st.caption(_w["adresse"])
+                        st.write(_w["text"][:2000])
+                    if st.checkbox(f"[{_w['nr']}] übernehmen",
+                                   key=f"web_{i}_{_wk}"):
+                        _web_wahl.append(_w)
+                if _web_wahl:
+                    _web_ziele = raeume.schreibbar(
+                        st.session_state["username"], is_admin())
+                    _mein_w = raeume.privat_kennung(
+                        st.session_state["username"])
+                    _web_ziel = st.selectbox(
+                        "In den Raum", _web_ziele,
+                        index=(_web_ziele.index(_mein_w)
+                               if _mein_w in _web_ziele else 0),
+                        format_func=raeume.bezeichnung,
+                        key=f"webziel_{i}")
+                    if st.button(f"{len(_web_wahl)} übernehmen",
+                                 key=f"webueb_{i}", disabled=_antwortet):
+                        _wvb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
+                                            - mcp.websuche_server())
+                        try:
+                            for _w in _web_wahl:
+                                # Die ganze Seite, nicht nur der Auszug,
+                                # den das Modell sah. Geht das nicht,
+                                # bleibt der Auszug.
+                                _wtext = _w["text"]
+                                for _wv in _wvb.values():
+                                    try:
+                                        _ganz = _wv.rufe(
+                                            "seite_lesen",
+                                            {"adresse": _w["adresse"]})
+                                        _wtext = _ganz.split("\n\n", 1)[-1]
+                                        break
+                                    except Exception:
+                                        continue
+                                try:
+                                    _wn, _wh, _wname = \
+                                        aufnehmen.webseite_aufnehmen(
+                                            _w["titel"], _w["adresse"],
+                                            _wtext, _web_ziel,
+                                            anfrage=_w.get("anfrage", ""),
+                                            benutzer_=st.session_state[
+                                                "username"],
+                                            ist_verwalter=is_admin())
+                                    (st.success if _wn else st.warning)(
+                                        f"{_wname}: {_wh}")
+                                except Exception as e:
+                                    st.error(f"{_w['titel']}: "
+                                             f"{type(e).__name__}: {e}")
+                        finally:
+                            for _wv in _wvb.values():
+                                try:
+                                    _wv.schliesse()
+                                except Exception:
+                                    pass
+                        refresh_document_index()
+
     eingabe = st.chat_input(
         "Frage an die Datenbank -- Bilder koennen angehaengt werden ...",
         accept_file="multiple", file_type=vision.ERLAUBTE_TYPEN,
@@ -2998,7 +3091,8 @@ if _bestand > 0:
                 if mcp.eingerichtet():
                     _wmelder = st.empty()
                     _verb = mcp.verbinde(
-                        st.session_state.get("_postfach_koepfe"))
+                        st.session_state.get("_postfach_koepfe"),
+                        ohne=(() if _web_frei else _web_server))
                     try:
                         _zusatz, _entwuerfe = pipeline.werkzeuglauf(
                             chat_client, chat_model, _system,
@@ -3040,6 +3134,9 @@ if _bestand > 0:
                     # ausgefuehrt wurde. Es haengt an der Nachricht,
                     # damit es einen Neuaufbau der Seite ueberlebt.
                     "entwuerfe": _entwuerfe,
+                    # Was die Websuche gefunden hat -- getrennt von den
+                    # Dokumenten, und zum Uebernehmen in einen Raum.
+                    "web": pipeline.webtreffer(_zusatz, _web_server),
                 })
                 save_chat(st.session_state.current_chat_id,
                           st.session_state.messages)

@@ -1,0 +1,19 @@
+# SearXNG fuer die Websuche von LocaNoto (docker compose --profile websuche).
+# Dieselben Einstellungen wie in k8s/98-websuche.yaml.
+use_default_settings: true
+general:
+  instance_name: "LocaNoto"
+  enable_metrics: false
+search:
+  # Ohne JSON antwortet SearXNG nur in HTML.
+  formats:
+    - html
+    - json
+  safe_search: 1
+server:
+  # Der Schluessel kommt aus SEARXNG_SECRET.
+  limiter: false
+  image_proxy: false
+  public_instance: false
+ui:
+  static_use_hash: true

@@ -625,7 +625,8 @@ def zeichne(*, is_admin,
                          "den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. "
                          "Leer lassen sucht den Server selbst. Bei HTTP die "
                          "Adresse des Servers, bei einem lokalen Prozess "
-                         "der Startbefehl.")
+                         "der Startbefehl. Bei der Websuche "
+                         "`http://websuche:8000/mcp`.")
                 _v_pers = st.radio(
                     "Postfach", ["persönlich", "Funktionspostfach"],
                     key=_feldschluessel(_pk, "pers"),
@@ -961,6 +962,17 @@ def zeichne(*, is_admin,
                 # Firma nicht in der Abteilungsgruppe fuehrt, soll sich
                 # nicht selbst aussperren, indem er eine Gruppe eintraegt.
                 _gruppe_alt = str(_e.get("gruppe") or "")
+                _web_alt = raeume.websuche_erlaubt(_bearbeiten)
+                _web = _web_alt
+                if not _ist_privat:
+                    _web = st.checkbox(
+                        "🌐 Websuche neben diesem Raum erlauben",
+                        value=_web_alt, key=f"raum_w_{_bearbeiten}",
+                        help="Erst dann kann ein Nutzer im Chat die "
+                             "Websuche einschalten, wenn er in diesem "
+                             "Raum fragt. Der Suchbegriff entsteht mit "
+                             "den Abschnitten des Raums im Kontext und "
+                             "geht an Suchmaschinen.")
                 _gruppe = st.text_input(
                     "ownCloud-Gruppe (optional)", value=_gruppe_alt,
                     key=f"raum_g_{_bearbeiten}",
@@ -1072,6 +1084,8 @@ def zeichne(*, is_admin,
                         raeume.mitglieder_setzen(_bearbeiten, _neu_m)
                     if _gruppe.strip() != _gruppe_alt:
                         raeume.gruppe_setzen(_bearbeiten, _gruppe)
+                    if _web != _web_alt:
+                        raeume.websuche_setzen(_bearbeiten, _web)
                     st.success("Gespeichert.")
                     # Die Freigabe zieht mit -- SETZEN, nicht ergaenzen.
                     # Ein Mitglied zu entfernen und die Freigabe stehen zu

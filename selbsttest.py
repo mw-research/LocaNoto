@@ -4199,6 +4199,136 @@ try:
 except Exception as e:
     pruef("altbestand laesst sich pruefen", False, f"{type(e).__name__}: {e}")
 
+# --- WEBSUCHE ---
+#
+# Hinaus geht nur der Suchbegriff, herein Text. Erlaubt wird sie in
+# geteilten Raeumen vom Verwalter, im eigenen Raum entscheidet der Nutzer.
+# Uebernommene Treffer werden Dokumente des Raums.
+try:
+    import websuche as _ws
+
+    pruef("Websuche: Adressen im eigenen Netz gelten nicht als oeffentlich",
+          not any(_ws.oeffentlich(h) for h in
+                  ("127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.0.1",
+                   "100.64.0.1", "::1", "localhost", "")))
+    try:
+        _ws.abrufen("http://127.0.0.1:9/geheim")
+        _ws_ab = "kein Fehler"
+    except _ws.Fehler as e:
+        _ws_ab = str(e)
+    pruef("und werden nicht abgerufen", "oeffentliche" in _ws_ab, _ws_ab)
+
+    _ws_init = _ws.beantworte({"jsonrpc": "2.0", "id": 1,
+                               "method": "initialize", "params": {}})
+    _ws_liste = _ws.beantworte({"jsonrpc": "2.0", "id": 2,
+                                "method": "tools/list"})
+    pruef("der Werkzeugserver spricht MCP: Handschlag und Werkzeuge",
+          _ws_init["result"]["capabilities"] == {"tools": {}}
+          and sorted(w["name"] for w in _ws_liste["result"]["tools"])
+          == ["seite_lesen", "web_suchen"]
+          and _ws.beantworte({"jsonrpc": "2.0",
+                              "method": "notifications/initialized"}) is None)
+    _ws_alt_s = _ws.SEARXNG
+    _ws.SEARXNG = ""
+    _ws_f = _ws.beantworte({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                            "params": {"name": "web_suchen",
+                                       "arguments": {"anfrage": "test"}}})
+    _ws.SEARXNG = _ws_alt_s
+    pruef("ohne SearXNG ein lesbarer Fehler statt eines Absturzes",
+          _ws_f["result"]["isError"]
+          and "WEBSUCHE_SEARXNG" in _ws_f["result"]["content"][0]["text"])
+
+    _ws_text = _ws.als_text("pruefplan norm", [
+        {"titel": "Norm A", "adresse": "https://a.example/x",
+         "ausschnitt": "kurz", "text": "Langer Text\n\nzweiter Absatz"},
+        {"titel": "Norm B", "adresse": "https://b.example/y",
+         "ausschnitt": "nur Ausschnitt", "text": ""}])
+    _ws_z = [{"role": "assistant", "content": "", "tool_calls": [
+        {"id": "w1", "type": "function",
+         "function": {"name": "web__web_suchen", "arguments": "{}"}},
+        {"id": "p1", "type": "function",
+         "function": {"name": "post__mails_lesen", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "w1", "content": _ws_text},
+        {"role": "tool", "tool_call_id": "p1",
+         "content": "[W9] Mail\nAdresse: https://x.example\nnein"}]
+    _ws_t = pipeline.webtreffer(_ws_z, {"web"})
+    pruef("die Treffer kommen als Quellen an, mit Absaetzen, nur von der "
+          "Websuche",
+          [(t["nr"], t["adresse"]) for t in _ws_t]
+          == [("W1", "https://a.example/x"), ("W2", "https://b.example/y")]
+          and _ws_t[0]["text"] == "Langer Text\n\nzweiter Absatz"
+          and _ws_t[1]["text"] == "nur Ausschnitt"
+          and _ws_t[0]["anfrage"] == "pruefplan norm", _ws_t)
+
+    # Erlaubnis am Raum
+    raeume.anlegen("webraum", "Webraum", mitglieder=["markus"])
+    _ws_vor = raeume.websuche_erlaubt("webraum")
+    _ws_ok, _ = raeume.websuche_setzen("webraum", True)
+    pruef("in einem geteilten Raum erst nach Freigabe durch den Verwalter",
+          not _ws_vor and _ws_ok and raeume.websuche_erlaubt("webraum"))
+    pruef("im eigenen Raum ohne Freigabe, und dort nicht abschaltbar",
+          raeume.websuche_erlaubt(raeume.privat_kennung("markus"))
+          and not raeume.websuche_setzen(raeume.privat_kennung("markus"),
+                                         False)[0])
+    raeume.websuche_setzen("webraum", False)
+    pruef("und wieder sperrbar", not raeume.websuche_erlaubt("webraum"))
+
+    # Der Server in der MCP-Konfiguration: ohne Rueckfrage, aber nur
+    # verbunden, wenn der Nutzer sie einschaltet.
+    import mcp as _mcp_w
+    _ws_ok2, _ = _mcp_w.lege_an("websuche", "websuche",
+                                "http://websuche:8000/mcp")
+    pruef("die Websuche ist ein eigener Server-Typ",
+          _ws_ok2 and _mcp_w.websuche_server() == {"websuche"})
+    pruef("sie sucht ohne Rueckfrage -- sie verschickt nichts",
+          not _mcp_w.braucht_bestaetigung("websuche", "web_suchen",
+                                          {"anfrage": "x"}))
+    pruef("ausgeschaltet ist sie gar nicht verbunden",
+          "websuche" not in _mcp_w.verbinde(ohne={"websuche"})
+          and "websuche" in _mcp_w.verbinde())
+    _mcp_w.entferne_postfach("websuche")
+
+    # Uebernehmen: ein Dokument im Raum, mit Quelle oben.
+    _ws_n, _ws_h, _ws_name = _auf.webseite_aufnehmen(
+        "Druckbehaelter Normen", "https://normen.example/druck",
+        "Die Pruefung von Druckbehaeltern regelt die Betriebssicherheit.",
+        raeume.privat_kennung("markus"), anfrage="druckbehaelter pruefung",
+        benutzer_="markus")
+    _ws_pfad = _auf.dokument_pfad(_ws_name, raeume.privat_kennung("markus"))
+    _ws_inh = (io.open(_ws_pfad, encoding="utf-8").read()
+               if os.path.exists(_ws_pfad) else "")
+    pruef("ein Treffer wird ein Dokument im Ordner Suchergebnisse",
+          _ws_n > 0 and os.sep + _auf.WEB_ORDNER + os.sep in _ws_pfad
+          and "- Quelle: https://normen.example/druck" in _ws_inh
+          and "- Suchbegriff: druckbehaelter pruefung" in _ws_inh,
+          (_ws_n, _ws_h, _ws_pfad))
+    try:
+        _auf.webseite_aufnehmen("x", "https://x.example", "y",
+                                raeume.ALLGEMEIN, benutzer_="anna")
+        _ws_recht = False
+    except _auf.KeinRecht:
+        _ws_recht = True
+    pruef("und nur in einen Raum, in den der Nutzer schreiben darf",
+          _ws_recht)
+except Exception as e:
+    pruef("Websuche laesst sich pruefen", False, f"{type(e).__name__}: {e}")
+
+_app_q = _datei("app.py")
+pruef("die Oberflaeche verbindet die Websuche nur, wenn sie frei ist",
+      "ohne=(() if _web_frei else _web_server)" in _app_q
+      and "raeume.websuche_erlaubt(r)" in _app_q)
+_k98 = os.path.join(_k8s_oc, "98-websuche.yaml")
+if os.path.exists(_k98):
+    _k98q = io.open(_k98, encoding="utf-8").read()
+    # Der Pod mit dem Weg ins Netz bekommt nichts von LocaNoto.
+    pruef("der Websuche-Pod bekommt kein Secret von LocaNoto",
+          not any(z.strip().startswith("envFrom")
+                  for z in _k98q.splitlines())
+          and "kind: NetworkPolicy" in _k98q
+          and "searxng/searxng:latest" not in _k98q)
+else:
+    pruef("es gibt eine k8s-Vorlage fuer die Websuche", False)
+
 # Und die Oberflaeche ruft es an allen fuenf Stellen.
 _vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")
 pruef("Benutzer loeschen ruft das Loeschen in ownCloud",

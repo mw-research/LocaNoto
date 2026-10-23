@@ -396,6 +396,46 @@ services:
       # muss dem Nutzer 1000 gehoeren (chown -R 1000:1000).
       - ${OWNCLOUD_PFAD:-opencloud_daten}:/var/lib/opencloud
 
+  # --- WEBSUCHE ---
+  #
+  # Der einzige Teil mit einem Weg ins Netz, und deshalb ohne die
+  # Umgebung von LocaNoto: kein Schluessel, kein Volume. Er bekommt einen
+  # Suchbegriff und gibt Text zurueck.
+  #
+  #   docker compose --profile websuche up -d
+  #
+  # Dann in LocaNoto unter Verwaltung -> Postfaecher (Werkzeugserver):
+  # Art "Websuche", Name "websuche", Adresse http://websuche:8000/mcp.
+  searxng:
+    profiles: ["websuche"]
+    image: searxng/searxng:2026.10.13-22c64b8d3
+    container_name: ${CONTAINER_NAME:-locanoto_app}_searxng
+    restart: unless-stopped
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+      # Leer startet SearXNG nicht. Einmal erzeugen: openssl rand -hex 32
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+
+  websuche:
+    profiles: ["websuche"]
+    image: locanoto:lokal
+    container_name: ${CONTAINER_NAME:-locanoto_app}_websuche
+    restart: unless-stopped
+    command: ["python", "websuche.py"]
+    # Bewusst NICHT *umgebung.
+    environment:
+      - WEBSUCHE_SEARXNG=http://searxng:8080
+      - WEBSUCHE_TREFFER=${WEBSUCHE_TREFFER:-5}
+      - WEBSUCHE_LESEN=${WEBSUCHE_LESEN:-3}
+      - WEBSUCHE_SEKUNDEN=${WEBSUCHE_SEKUNDEN:-25}
+      - WEBSUCHE_SPRACHE=${WEBSUCHE_SPRACHE:-de}
+      - WEBSUCHE_PRO_MINUTE=${WEBSUCHE_PRO_MINUTE:-30}
+      - WEBSUCHE_PORT=8000
+    depends_on:
+      - searxng
+
 volumes:
   locanoto_index:
 
