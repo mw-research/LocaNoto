@@ -1,5 +1,7 @@
 # LocaNoto
 
+*English: [README.en.md](README.en.md)*
+
 Durchsucht Fachdokumente und beantwortet Fragen dazu — mit Angabe der
 Fundstelle, Datei und Seite. Die Dokumente werden in Abschnitte zerlegt,
 vektorisiert und über zwei Suchwege gefunden; ein Sprachmodell formuliert
