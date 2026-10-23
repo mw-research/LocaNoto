@@ -2569,10 +2569,20 @@ entscheidet, wer sie übernimmt.
 
 **Quellen sammeln ohne Antwort.** Über dem Chat steht **🌐 Quellen im
 Netz suchen**, wie bei NotebookLM: ein Thema, eine Liste mit bis zu zehn
-Treffern, anhaken, übernehmen. Die Seiten werden erst beim Übernehmen
-ganz gelesen. Hier braucht es keine Freigabe am Raum: den Suchbegriff
+Treffern, anhaken, übernehmen — auch bei leerem Bestand. **👁️ Lesen**
+zeigt vorher die ganze Seite als reinen Text in einem schreibgeschützten
+Feld; geholt wird sie über den Websuche-Dienst, nicht vom Browser, und
+für die Sitzung gepuffert. Übernommen wird genau der gelesene Text.
+**Original ↗** öffnet die Seite direkt — dann sieht sie den Nutzer, nicht
+den Server. Hier braucht es keine Freigabe am Raum: den Suchbegriff
 tippt der Nutzer selbst, das Modell formuliert nichts aus den
 Abschnitten eines Raums. Es genügt ein eingerichteter Websuche-Server.
+
+**Fremder Text lädt nichts nach.** Titel und Ausschnitte aus dem Netz
+werden maskiert, ganze Seiten nur als Text gezeigt. In Antworten wird
+jedes Markdown-Bild zu einem gewöhnlichen Link: ein Bild lädt der Browser
+von selbst, und eine Seite könnte das Modell sonst dazu bringen, Daten
+in eine Bildadresse zu schreiben.
 
 **Gegen Umwege ins eigene Netz.** Jede Adresse muss auf eine öffentliche
 IP zeigen — auch nach jeder Weiterleitung, nicht nur beim ersten Aufruf.

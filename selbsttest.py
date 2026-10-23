@@ -962,8 +962,12 @@ pruef("ohne Quellen bleibt der Text unveraendert",
 # Schlusszaun -- und Markdown zeigt bis dahin rohen Text mit drei
 # Anfuehrungszeichen davor. Gerade bei Code ist das die haesslichste
 # Art zu warten.
-_a3 = _quelle.index("def _anzeigefertig(")
-_raum3 = {}
+# Ab der Bildregel: _anzeigefertig entschaerft auch Bilder und braucht
+# sie. Ein aelterer Stand ohne sie beginnt bei der Funktion selbst.
+_a3 = _quelle.find("_BILD_MD = re.compile(")
+if _a3 < 0:
+    _a3 = _quelle.index("def _anzeigefertig(")
+_raum3 = {"re": __import__("re")}
 exec(_quelle[_a3:_quelle.index("\ndef _strom_zeichnen(")], _raum3)
 _fertig = _raum3["_anzeigefertig"]
 _zaun = "`" * 3
@@ -4360,6 +4364,39 @@ pruef("die Oberflaeche bietet beim Uebernehmen keinen Raum an",
 pruef("es gibt die Quellensuche ohne Antwort",
       "Quellen im Netz suchen" in _app_q
       and '"anzahl": 10, "lesen": 0' in _app_q)
+# Fremder Text laedt nichts nach. Die Funktionen stehen in app.py, das
+# hier nicht importierbar ist (streamlit fehlt) -- also einzeln
+# herausgeloest und ausgefuehrt.
+import ast as _ast_w
+_app_baum = _ast_w.parse(_app_q)
+_app_ns = {"re": __import__("re")}
+for _kn in _app_baum.body:
+    if ((isinstance(_kn, _ast_w.Assign)
+         and any(getattr(_t, "id", "") == "_BILD_MD" for _t in _kn.targets))
+            or (isinstance(_kn, _ast_w.FunctionDef) and _kn.name in
+                ("_ohne_fremdbilder", "_md_roh", "_anzeigefertig"))):
+        exec(compile(_ast_w.Module([_kn], []), "app.py", "exec"), _app_ns)
+_ofb = _app_ns.get("_ohne_fremdbilder", lambda t: t)
+_mdr = _app_ns.get("_md_roh", lambda t: t)
+pruef("ein Bild in einer Antwort wird ein Link und laedt nichts nach",
+      _ofb("A ![x](https://b.example/?d=GEHEIM) B")
+      == "A [Bild: x](https://b.example/?d=GEHEIM) B"
+      and "![" not in _ofb("![y][1]\n\n[1]: https://b.example/z.png")
+      and _ofb("Hallo! [Link](https://a.example)")
+      == "Hallo! [Link](https://a.example)")
+pruef("auch waehrend die Antwort entsteht",
+      "![" not in _app_ns.get("_anzeigefertig", lambda t: t)(
+          "Teil ![z](https://e.example/q)"))
+pruef("fremde Titel und Ausschnitte werden maskiert",
+      "![" not in _mdr("![b](https://x.example)")
+      and "](" not in _mdr("[l](https://x.example)"))
+pruef("die Quellensuche steht vor dem Chat und braucht keinen Bestand",
+      0 < _app_q.find("# --- QUELLEN IM NETZ SUCHEN ---")
+      < _app_q.find("_bestand = _zahl_abschnitte("))
+pruef("uebernommen wird der gelesene, gepufferte Text",
+      '_web_lesen(_w["adresse"])' in _app_q
+      and "disabled=True" in _app_q[_app_q.find("def _web_vorschau"):
+                                    _app_q.find("def _web_uebernehmen")])
 pruef("die Oberflaeche verbindet die Websuche nur, wenn sie frei ist",
       "ohne=(() if _web_frei else _web_server)" in _app_q
       and "raeume.websuche_erlaubt(r)" in _app_q)

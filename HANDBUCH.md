@@ -281,6 +281,11 @@ Treffern, ohne Antwort. Anhaken, was du behalten willst, dann **in meinen
 Raum übernehmen**. Den Suchbegriff tippst du selbst; er geht an
 Suchmaschinen, also keine internen Namen oder Zahlen.
 
+Vor dem Übernehmen kannst du jeden Treffer lesen: **👁️ Lesen** zeigt
+die ganze Seite als reinen Text in LocaNoto, ohne Bilder und Skripte.
+Übernommen wird genau dieser Text. **Original ↗** öffnet die Seite in
+deinem Browser.
+
 Übernommenes landet **immer in deinem eigenen Raum**, Ordner
 *Suchergebnisse*, als Dokument mit Quelle und Abrufdatum. Gehört etwas in
 einen geteilten Raum, verschiebst du es dorthin – so füllt kein Klick
