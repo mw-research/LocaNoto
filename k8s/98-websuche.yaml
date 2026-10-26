@@ -92,6 +92,10 @@ spec:
       labels:
         app: searxng
     spec:
+      # Ohne das legt Kubernetes fuer jeden Service im Namensraum
+      # Variablen wie SEARXNG_PORT=tcp://10.0.0.7:8080 in den Pod --
+      # und SearXNG liest SEARXNG_PORT als den Port, auf dem es lauscht.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 977
@@ -171,6 +175,9 @@ spec:
       labels:
         app: websuche
     spec:
+      # Dasselbe hier: der Service "websuche" erzeugte sonst
+      # WEBSUCHE_PORT=tcp://..., und websuche.py liest WEBSUCHE_PORT.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

@@ -4243,6 +4243,18 @@ except Exception as e:
 try:
     import websuche as _ws
 
+    _ws_z_alt = os.environ.get("WEBSUCHE_PORT")
+    os.environ["WEBSUCHE_PORT"] = "tcp://10.0.0.7:8000"
+    try:
+        _ws_port = getattr(_ws, "_zahl", lambda *a, **k: None)(
+            "WEBSUCHE_PORT", 8000)
+    finally:
+        if _ws_z_alt is None:
+            os.environ.pop("WEBSUCHE_PORT", None)
+        else:
+            os.environ["WEBSUCHE_PORT"] = _ws_z_alt
+    pruef("eine Service-Variable statt einer Zahl ist kein Absturz",
+          _ws_port == 8000, _ws_port)
     pruef("Websuche: Adressen im eigenen Netz gelten nicht als oeffentlich",
           not any(_ws.oeffentlich(h) for h in
                   ("127.0.0.1", "10.1.2.3", "169.254.169.254", "192.168.0.1",
@@ -4436,6 +4448,11 @@ _k98 = os.path.join(_k8s_oc, "98-websuche.yaml")
 if os.path.exists(_k98):
     _k98q = io.open(_k98, encoding="utf-8").read()
     # Der Pod mit dem Weg ins Netz bekommt nichts von LocaNoto.
+    # Kubernetes legt fuer jeden Service Variablen wie
+    # WEBSUCHE_PORT=tcp://... in die Pods; SearXNG und websuche.py lesen
+    # genau solche Namen.
+    pruef("Websuche und SearXNG bekommen keine Service-Variablen",
+          _k98q.count("enableServiceLinks: false") == 2)
     pruef("der Websuche-Pod bekommt kein Secret von LocaNoto",
           not any(z.strip().startswith("envFrom")
                   for z in _k98q.splitlines())

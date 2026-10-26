@@ -42,14 +42,28 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urljoin, urlsplit
 
+def _zahl(name, vorgabe, art=int):
+    """Eine Zahl aus der Umgebung, sonst die Vorgabe.
+
+    Nicht int(os.getenv(...)): Kubernetes legt fuer einen Service namens
+    "websuche" von selbst WEBSUCHE_PORT=tcp://10.0.0.7:8000 in jeden Pod
+    des Namensraums. Ein Absturz beim Start waere die Folge -- in einem
+    Pod, dessen Manifest das nicht abschaltet (enableServiceLinks).
+    """
+    try:
+        return art(os.getenv(name, "").strip() or vorgabe)
+    except ValueError:
+        return vorgabe
+
+
 SEARXNG = os.getenv("WEBSUCHE_SEARXNG", "").strip().rstrip("/")
-TREFFER = int(os.getenv("WEBSUCHE_TREFFER", "5") or 5)
-LESEN = int(os.getenv("WEBSUCHE_LESEN", "3") or 3)
-SEKUNDEN = float(os.getenv("WEBSUCHE_SEKUNDEN", "25") or 25)
+TREFFER = _zahl("WEBSUCHE_TREFFER", 5)
+LESEN = _zahl("WEBSUCHE_LESEN", 3)
+SEKUNDEN = _zahl("WEBSUCHE_SEKUNDEN", 25.0, float)
 SPRACHE = os.getenv("WEBSUCHE_SPRACHE", "de").strip() or "de"
 # Gegen gesperrte Suchmaschinen: ein Modell in einer Schleife soll nicht
 # hundert Anfragen in der Minute schicken.
-PRO_MINUTE = int(os.getenv("WEBSUCHE_PRO_MINUTE", "30") or 30)
+PRO_MINUTE = _zahl("WEBSUCHE_PRO_MINUTE", 30)
 
 # Ein langer Satz traegt mehr aus dem Zusammenhang hinaus als ein paar
 # Stichworte.
@@ -398,7 +412,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--probe", metavar="ANFRAGE", help="eine Suche, dann Ende")
     p.add_argument("--port", type=int,
-                   default=int(os.getenv("WEBSUCHE_PORT", "8000") or 8000))
+                   default=_zahl("WEBSUCHE_PORT", 8000))
     args = p.parse_args()
     if args.probe:
         text, fehler = werkzeug("web_suchen", {"anfrage": args.probe})
