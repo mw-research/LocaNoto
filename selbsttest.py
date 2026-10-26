@@ -4168,6 +4168,73 @@ finally:
     for _n, _w in _ock_alt.items():
         setattr(_ock, _n, _w)
 
+# Nach dem Umzug gibt es in der neuen Ablage nur die Konten, deren
+# Passwort schon gesetzt wurde. Eine Freigabe an jemanden ohne Konto
+# lehnt sie mit 998 ab -- das darf nicht die Freigaben aller anderen
+# und damit den ganzen Raum abbrechen.
+_ock_alt = {n: getattr(_ock, n, None) for n in _ock_namen
+            + ("freigaben", "freigeben", "freigabe_entfernen",
+               "ordner_anlegen", "richte_raum_ein", "nutzer_vorhanden",
+               "nutzer_anlegen", "freigaben_nachziehen")}
+_fg_rufe, _fg_fehlend = [], set()
+
+
+def _fg_freigeben(pfad, an, art="nutzer", rechte=1):
+    _fg_rufe.append((art, an))
+    if an in ("ohnekonto", "Fremdgruppe") or an in _fg_fehlend:
+        raise ValueError("ownCloud antwortete mit Status 998: user not found")
+    if an == "kaputt":
+        raise ValueError("ownCloud antwortete mit Status 400: bad request")
+    return True
+
+
+try:
+    _ock.URL, _ock.BENUTZER, _ock.PASSWORT = "https://oc3.test", "dienst", "x"
+    _ock.freigaben = lambda pfad: []
+    _ock.freigeben = _fg_freigeben
+    _ock.freigabe_entfernen = lambda k: True
+    _fg_ohne = []
+    _fg_erg = _ock.freigaben_setzen("/LocaNoto/allgemein",
+                                    ["anna", "ohnekonto", "bernd"],
+                                    gruppen_=["Fremdgruppe"],
+                                    ohne_konto=_fg_ohne)
+    pruef("ein Nutzer ohne Konto in der Ablage wird uebersprungen, die "
+          "anderen bekommen ihre Freigabe",
+          _fg_erg == (2, 0) and _fg_ohne == ["ohnekonto", "Gruppe Fremdgruppe"]
+          and ("nutzer", "bernd") in _fg_rufe, (_fg_erg, _fg_ohne, _fg_rufe))
+    try:
+        _ock.freigaben_setzen("/x", ["kaputt"])
+        _fg_echt = "kein Fehler"
+    except ValueError as e:
+        _fg_echt = str(e)
+    pruef("ein anderer Fehler bricht weiter ab", "400" in _fg_echt, _fg_echt)
+
+    _ock.ordner_anlegen = lambda pfad: True
+    _fg_fehlend.add(sorted(benutzer.namen())[-1])
+    _fg_b = _ock.richte_raum_ein(raeume.ALLGEMEIN)
+    pruef("'Ablage einrichten' meldet den Raum als eingerichtet und nennt, "
+          "wer noch kein Konto hat",
+          not _fg_b["fehler"] and any("ohne Konto" in x
+                                      for x in _fg_b["schritte"]), _fg_b)
+
+    # Entsteht das Konto beim Passwortsetzen, ziehen seine Freigaben nach.
+    _fg_nach = []
+    _ock._GRAPH = {"https://oc3.test": True}
+    _ock.KONTEN = os.path.join(tmp, "owncloud_konten_fg.json")
+    _ock.nutzer_vorhanden = lambda k: False
+    _ock.nutzer_anlegen = lambda k, p, a="": (True, "angelegt")
+    _ock.freigaben_nachziehen = lambda k: _fg_nach.append(k) or 3
+    _fg_ok, _fg_m = _ock.passwort_setzen("neu_fg", "passwort123")
+    pruef("ein beim Passwortsetzen entstandenes Konto bekommt seine "
+          "Freigaben sofort", _fg_ok and _fg_nach == ["neu_fg"]
+          and "nachgezogen" in _fg_m, (_fg_m, _fg_nach))
+except Exception as e:
+    pruef("Freigaben ohne Konto lassen sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+finally:
+    for _n, _w in _ock_alt.items():
+        setattr(_ock, _n, _w)
+
 # Jede Verbindung zur Ablage entsteht an EINER Stelle, und dort wird das
 # Zertifikat geprueft -- abschaltbar nur ausdruecklich, fuer das
 # mitgelieferte OpenCloud.

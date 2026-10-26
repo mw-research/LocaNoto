@@ -1050,7 +1050,20 @@ def freigabe_entfernen(kennung):
     return True
 
 
-def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
+def _unbekannt(fehler):
+    """Lehnt die Ablage ab, weil es den Empfaenger dort nicht gibt?
+
+    OCS antwortet dann mit Status 998 ("user not found"). Nach einem
+    Umzug auf eine neue Ablage ist das der Normalfall: Konten entstehen
+    erst beim naechsten Passwortsetzen.
+    """
+    text = str(fehler).lower()
+    return isinstance(fehler, ValueError) and ("998" in text
+                                               or "not found" in text)
+
+
+def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=(),
+                     ohne_konto=None):
     """Bringt die Freigaben eines Ordners auf genau diesen Stand.
 
     personen ist eine Liste (dann gilt rechte fuer alle) ODER eine
@@ -1070,6 +1083,11 @@ def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
         zuerst vergessen -- ein zum Nutzer zurueckgestufter Verwalter
         behielt sein Schreibrecht, und jeder Lauf legte obendrein eine
         zweite Freigabe an.
+
+    Wen es in der Ablage (noch) nicht gibt, der wird uebersprungen und in
+    ohne_konto (eine Liste, falls uebergeben) vermerkt -- statt mit ihm
+    die Freigaben aller anderen abzubrechen. Seine Freigabe folgt, wenn
+    sein Konto entsteht (passwort_setzen).
 
     Rueckgabe: (hinzugefuegt, entfernt).
     """
@@ -1104,11 +1122,25 @@ def freigaben_setzen(pfad, personen, rechte=NUR_LESEN, gruppen_=()):
 
     for k, r in sorted(soll_n.items()):
         if k not in hat_n:
-            freigeben(pfad, k, "nutzer", r)
+            try:
+                freigeben(pfad, k, "nutzer", r)
+            except ValueError as e:
+                if not _unbekannt(e):
+                    raise
+                if ohne_konto is not None:
+                    ohne_konto.append(k)
+                continue
             dazu += 1
     for g, r in sorted(soll_g.items()):
         if g not in hat_g:
-            freigeben(pfad, g, "gruppe", r)
+            try:
+                freigeben(pfad, g, "gruppe", r)
+            except ValueError as e:
+                if not _unbekannt(e):
+                    raise
+                if ohne_konto is not None:
+                    ohne_konto.append(f"Gruppe {g}")
+                continue
             dazu += 1
     return dazu, weg
 
@@ -1227,7 +1259,10 @@ def passwort_setzen(kennung, passwort):
         # etwas weggenommen.
         if not geschuetzt(kennung) and not nutzer_vorhanden(kennung):
             nutzer_anlegen(kennung, passwort)
-            return True, "In ownCloud neu angelegt, mit diesem Passwort."
+            nachgezogen = freigaben_nachziehen(kennung)
+            return True, ("In ownCloud neu angelegt, mit diesem Passwort"
+                          + (f"; Freigaben in {nachgezogen} Raeumen "
+                             f"nachgezogen." if nachgezogen else "."))
         if not verwaltet(kennung):
             return False, ("In ownCloud gilt weiter das alte Passwort -- "
                            "das Konto wird nicht von LocaNoto verwaltet.")
@@ -1242,6 +1277,24 @@ def passwort_setzen(kennung, passwort):
         # Grund in der Meldung.
         return False, f"In ownCloud nicht geaendert ({type(e).__name__}: {e})."
     return True, "Auch in ownCloud geaendert."
+
+
+def freigaben_nachziehen(kennung):
+    """Die Raumordner, die dieser Nutzer lesen darf, an ihn freigeben.
+
+    Fuer ein Konto, das gerade erst entstanden ist -- vorher hat die
+    Ablage seine Freigaben abgelehnt (freigaben_setzen: ohne_konto).
+    Wiederholbar wie richte_raum_ein. Anzahl der Raeume ohne Fehler.
+    """
+    import raeume
+    zahl = 0
+    for raum in raeume.lesbar(kennung):
+        try:
+            if not richte_raum_ein(raum).get("fehler"):
+                zahl += 1
+        except Exception:
+            pass
+    return zahl
 
 
 def leere_raumordner(raum):
@@ -1340,7 +1393,7 @@ def richte_nutzer_ein(kennung, passwort="", anzeigename=""):
     tu("persoenlicher Ordner", lambda: ordner_anlegen(privat) and "angelegt")
     tu("Freigabe persoenlich",
        lambda: "gesetzt (%d dazu, %d weg)" % freigaben_setzen(
-           privat, [kennung], LESEN_SCHREIBEN))
+           privat, [kennung], LESEN_SCHREIBEN, ohne_konto=[]))
     allgemein = raum_pfad(raeume.ALLGEMEIN)
     tu("allgemeiner Ordner",
        lambda: ordner_anlegen(allgemein) and "angelegt")
@@ -1398,8 +1451,16 @@ def richte_raum_ein(raum, rechte=None):
         bericht["fehler"].append(f"Ordner: {type(e).__name__}: {e}")
         return bericht
     try:
-        dazu, weg = freigaben_setzen(pfad, personen, wie, gruppen_)
+        ohne = []
+        dazu, weg = freigaben_setzen(pfad, personen, wie, gruppen_,
+                                     ohne_konto=ohne)
         bericht["schritte"].append(f"Freigaben: {dazu} dazu, {weg} entfernt")
+        if ohne:
+            # Kein Fehler: der Raum steht, und wer noch kein Konto hat,
+            # bekommt seine Freigabe, sobald es entsteht.
+            bericht["schritte"].append(
+                "Noch ohne Konto in der Ablage, Freigabe folgt mit dem "
+                "Konto: " + ", ".join(ohne))
     except Exception as e:
         bericht["fehler"].append(f"Freigaben: {type(e).__name__}: {e}")
     return bericht
