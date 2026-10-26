@@ -176,10 +176,7 @@ def _api_bewerte(paare):
                 treffer_liste = daten.get("data")
             if treffer_liste is None:
                 raise RuntimeError(
-                    f"Antwort von {_rerank_url()} enthaelt weder 'results' "
-                    f"noch 'data' -- Schluessel: "
-                    f"{sorted(daten)[:8]}. Passt die Adresse zu einem "
-                    f"Rerank-Dienst?")
+                    f"Antwort von {_rerank_url()} enthält weder 'results' noch 'data' (Schlüssel: {sorted(daten)[:8]}). Ist das ein Rerank-Dienst?")
             if not treffer_liste and eintraege:
                 raise RuntimeError(
                     f"{_rerank_url()} hat {len(eintraege)} Abschnitte "

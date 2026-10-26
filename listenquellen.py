@@ -112,32 +112,24 @@ def pruefe_pfad(p):
         # erreicht, entscheidet ownCloud.
         import owncloud
         if not owncloud.eingerichtet():
-            return False, ("Fuer eine ownCloud-Quelle muss die Anbindung "
-                           "eingerichtet sein (OWNCLOUD_URL, "
-                           "OWNCLOUD_USER, OWNCLOUD_PASSWORT).")
+            return False, ("ownCloud-Quelle braucht eingerichtete Anbindung (OWNCLOUD_URL, OWNCLOUD_USER, OWNCLOUD_PASSWORT).")
         if not p[len("owncloud:"):].strip("/"):
             return False, "Kein Pfad hinter 'owncloud:'."
         return True, ""
 
     probe = p.replace(PLATZHALTER, "platzhalter")
     if not os.path.isabs(probe):
-        return False, "Ein absoluter Pfad, bitte -- relative Angaben " \
-                      "haengen davon ab, wo der Prozess gerade steht."
+        return False, "Bitte einen absoluten Pfad angeben."
     echt = os.path.realpath(probe)
 
     for eigen in _eigene_verzeichnisse():
         if echt == eigen or echt.startswith(eigen + os.sep):
-            return False, (f"'{p}' liegt in einem Verzeichnis der "
-                           f"Anwendung ({eigen}). Dort stehen die Daten "
-                           f"aller Raeume -- eine Listenquelle darauf "
-                           f"haette sie an den Raeumen vorbei gelesen.")
+            return False, (f"'{p}' liegt in einem LocaNoto-Verzeichnis ({eigen}) mit den Daten aller Arbeitsbereiche – als Listenquelle nicht erlaubt.")
 
     if WURZELN:
         if not any(echt == w or echt.startswith(w + os.sep)
                    for w in (os.path.realpath(x) for x in WURZELN)):
-            return False, (f"'{p}' liegt unter keiner der erlaubten "
-                           f"Wurzeln ({', '.join(WURZELN)}). "
-                           f"LISTEN_WURZELN legt sie fest.")
+            return False, (f"'{p}' liegt unter keiner erlaubten Wurzel ({', '.join(WURZELN)}). Festgelegt in LISTEN_WURZELN.")
     return True, ""
 
 
@@ -188,14 +180,9 @@ def speichere(quellen):
         if not ok:
             return False, meldung
         if raum != MUSTER_RAUM and PLATZHALTER in p:
-            return False, (f"{PLATZHALTER} ergibt nur bei "
-                           f"'{MUSTER_RAUM}' einen Sinn -- ein fester "
-                           f"Raum hat nur einen Ordner.")
+            return False, (f"{PLATZHALTER} ergibt nur bei '{MUSTER_RAUM}' Sinn – ein fester Arbeitsbereich hat nur einen Ordner.")
         if raum == MUSTER_RAUM and PLATZHALTER not in p:
-            return False, (f"'{MUSTER_RAUM}' braucht {PLATZHALTER} im "
-                           f"Pfad. Ohne ihn zeigten alle "
-                           f"persoenlichen Raeume auf denselben Ordner "
-                           f"und jeder saehe die Listen aller.")
+            return False, (f"'{MUSTER_RAUM}' braucht {PLATZHALTER} im Pfad, sonst teilen sich alle persönlichen Arbeitsbereiche einen Ordner.")
         sauber.append({"raum": raum, "pfad": p})
 
     fehler = _ueberlappung(sauber)
@@ -209,7 +196,7 @@ def speichere(quellen):
         dateisperre.schreibe_atomar(
             QUELLEN, json.dumps(daten, indent=1, ensure_ascii=False))
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
+        return False, f'Speichern fehlgeschlagen: {e}'
     return True, f"{len(sauber)} Quelle(n) gespeichert."
 
 
@@ -381,9 +368,7 @@ def darf_setzen(raum, benutzer, ist_verwalter=False):
         return True, ""
     if raum == raeume.privat_kennung(benutzer):
         return True, ""
-    return False, ("Die Quelle eines gemeinsamen Raums setzt ein "
-                   "Verwalter. Deinen eigenen Ordner kannst du selbst "
-                   "eintragen.")
+    return False, ("Die Quelle eines gemeinsamen Arbeitsbereichs setzt ein Admin, deinen eigenen Ordner trägst du selbst ein.")
 
 
 @dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
@@ -406,14 +391,13 @@ def setze_raum(raum, pfad, benutzer="?", ist_verwalter=False):
         return ok, ("Quelle entfernt." if ok else meldung)
 
     if PLATZHALTER in pfad and raum != MUSTER_RAUM:
-        return False, (f"{PLATZHALTER} gehoert zum Muster fuer die "
-                       f"persoenlichen Raeume, nicht zu einem einzelnen.")
+        return False, (f'{PLATZHALTER} gehört zum Muster für die persönlichen Arbeitsbereiche, nicht zu einem einzelnen.')
 
     # Ein Nutzer darf nur in seinem eigenen Bereich bleiben. Geprueft
     # wird der AUFGELOESTE Pfad: "meinordner/../../fremd" sieht sonst
     # harmlos aus.
     if not ist_verwalter and not raeume.ist_privat(raum):
-        return False, "Nur Verwalter."
+        return False, "Nur für Admins."
     if not ist_verwalter:
         bereich = eigener_bereich(benutzer)
         try:
@@ -421,14 +405,9 @@ def setze_raum(raum, pfad, benutzer="?", ist_verwalter=False):
         except OSError:
             echt = pfad
         if not bereich:
-            return False, ("Fuer persoenliche Ordner ist kein Muster "
-                           "hinterlegt. Ein Verwalter traegt es einmal "
-                           "ein, danach kannst du deinen Ordner selbst "
-                           "waehlen.")
+            return False, ("Für persönliche Ordner ist kein Muster hinterlegt – ein Admin muss es einmal eintragen.")
         if not _enthaelt(bereich, echt):
-            return False, (f"Nur innerhalb deines eigenen Bereichs "
-                           f"({bereich}). Ein anderer Ordner waere ein "
-                           f"Zugriff, den dir niemand gegeben hat.")
+            return False, (f'Nur innerhalb deines Bereichs ({bereich}).')
 
     quellen.append({"raum": raum, "pfad": pfad})
     return speichere(quellen)

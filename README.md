@@ -1010,6 +1010,9 @@ entsteht beim ersten Start alles Übrige von selbst.
 
 
 ## 🚪 Räume
+In der Oberfläche heißt ein Raum **Arbeitsbereich**, ein Verwalter
+**Admin**; im Code, in der Konfiguration und hier bleibt es bei Raum.
+
 Ein **Raum** ist eine Mitgliederliste und eine eigene Sammlung in der
 Vektordatenbank. Er ist die einzige Grenze zwischen Nutzern — es gibt
 keine zweite daneben.
@@ -1984,11 +1987,23 @@ oben in der Seitenleiste als Auswahl:
 
 Fehlt einer Voreinstellung eine Prompt-Vorlage, gilt die aus `config/`,
 sonst die mitgelieferte — dieselbe Kette wie bisher, um eine Stufe
-verlängert. Angelegt werden sie unter **🎛️ Voreinstellungen verwalten**
-(Verwalter), ausgewählt von allen. Eigene Prompts bekommt eine
-Voreinstellung über die Auswahl **Gilt für** im Prompt-Editor.
+verlängert.
 
-Ohne angelegte Voreinstellungen erscheint die Auswahl nicht.
+Zwei Arten:
+
+| | angelegt von | unter | Prompts |
+|---|---|---|---|
+| gemeinsame | Admins | Admin-Bereich → **Voreinstellungen** | ja, über **Gilt für** im Prompt-Editor |
+| eigene | jedem Nutzer | Einstellungen → **Meine Voreinstellungen** | nein — verfeinert wird mit **Meine Anweisung** |
+
+Eigene liegen unter `config/presets_nutzer/<kennung>/`, erscheinen in der
+Auswahl mit „(eigene)“ und sind nur für ihren Besitzer wählbar, auch über
+die Schnittstelle. Ohne Voreinstellungen erscheint die Auswahl nicht.
+
+**Modell.** Gewählt wird aus `CHAT_MODEL` und `CHAT_MODELLE` (durch Kommas
+getrennt) — eintippen lässt sich kein Modell. Mit nur einem Modell
+erscheint keine Auswahl. Nennt eine Voreinstellung ein Modell, das nicht
+freigegeben ist, gilt `CHAT_MODEL`.
 
 ### Nicht enthalten
 

@@ -93,6 +93,20 @@ def modell(aufgabe, rueckfall=None):
     return STANDARD_MODELLE.get(aufgabe.upper(), "")
 
 
+def chat_modelle():
+    """Die Chat-Modelle, zwischen denen Nutzer waehlen duerfen.
+
+    CHAT_MODELLE, durch Kommas getrennt; das Modell aus CHAT_MODEL steht
+    immer vorn. Ein Modell, das hier nicht steht, laesst sich in der
+    Oberflaeche nicht waehlen -- ein Tippfehler waere sonst erst bei der
+    naechsten Frage ein Fehler.
+    """
+    standard = modell("CHAT")
+    liste = [m.strip() for m in os.getenv("CHAT_MODELLE", "").split(",")
+             if m.strip()]
+    return [standard] + [m for m in liste if m != standard]
+
+
 def client(aufgabe):
     """Client fuer die Aufgabe, zwischengespeichert je Endpunkt.
 

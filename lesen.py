@@ -144,7 +144,7 @@ def abschnitte(pfad):
     elif endung in (".md", ".markdown", ".txt"):
         yield from _markdown(pfad)
     else:
-        raise ValueError(f"Kein unterstuetztes Format: {endung}")
+        raise ValueError(f'Format nicht unterstützt: {endung}')
 
 
 # --- BILDER ---

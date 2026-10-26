@@ -83,9 +83,7 @@ def _lade():
         # Von aussen veraendert. Nichts davon gilt -- ein halb
         # geglaubter Schluesselbund ist schlimmer als keiner.
         raise ValueError(
-            f"{DATEI} ist veraendert worden: die Signatur passt nicht. "
-            f"Die Datei wird NICHT ueberschrieben. Stelle sie aus der "
-            f"Sicherung wieder her.")
+            f'{DATEI} wurde verändert: Signatur passt nicht. Datei wird NICHT überschrieben – aus der Sicherung wiederherstellen.')
     return inhalt.get("raeume") or {}
 
 
@@ -133,7 +131,7 @@ def schluessel(raum, anlegen=True):
     roh = geheim.entschluessele(base64.b64decode(verpackt),
                                 zusatz=raum.encode("utf-8"))
     if len(roh) != 32:
-        raise ValueError(f"Der Schluessel fuer '{raum}' ist unbrauchbar.")
+        raise ValueError(f"Schlüssel für '{raum}' ist unbrauchbar.")
     _schluessel[raum] = roh
     return roh
 
@@ -240,8 +238,7 @@ def entschluessele_text(raum, wert):
         return wert
     k = schluessel(raum, anlegen=False)
     if k is None:
-        raise ValueError(f"Verschluesselter Abschnitt in '{raum}', aber "
-                         f"kein Schluessel.")
+        raise ValueError(f"Verschlüsselter Abschnitt in '{raum}', Schlüssel fehlt.")
     roh = base64.b64decode(wert[len(MARKE):])
     nonce, rest = roh[:NONCE_LAENGE], roh[NONCE_LAENGE:]
     return _aes(k).decrypt(nonce, rest, raum.encode("utf-8")).decode("utf-8")

@@ -125,23 +125,19 @@ def beantrage(raum, von, grund):
     """Ein Verwalter beantragt Zugang zu einem persoenlichen Raum."""
     grund = (grund or "").strip()
     if not raeume.ist_privat(raum):
-        return False, ("Der Notzugang gilt nur fuer persoenliche Raeume. "
-                       "In alle anderen kommt ein Verwalter ohnehin.")
+        return False, ("Notzugang gilt nur für persönliche Arbeitsbereiche.")
     if raum == raeume.privat_kennung(von):
-        return False, "Das ist dein eigener Raum."
+        return False, "Das ist dein persönlicher Arbeitsbereich."
     if not benutzer.ist_admin(von):
-        return False, "Nur Verwalter koennen einen Notzugang beantragen."
+        return False, "Nur Admins können Notzugang beantragen."
     if len(grund) < 10:
-        return False, ("Bitte einen Grund angeben. Er steht im Protokoll "
-                       "und ist das, was die zweite Person beurteilt.")
+        return False, ("Bitte einen Grund angeben – die zweite Person entscheidet danach.")
     if not moeglich():
-        return False, ("Es gibt niemanden mit der Rolle 'notzugang'. Ohne "
-                       "eine zweite Person laesst sich kein Notzugang "
-                       "bestaetigen -- das ist der Sinn der Sache.")
+        return False, ("Niemand hat die Rolle 'notzugang' – ohne zweite Person lässt sich kein Notzugang bestätigen.")
 
     daten = _lade()
     if any(a["raum"] == raum and a["von"] == von for a in daten["antraege"]):
-        return False, "Dieser Antrag steht bereits."
+        return False, "Antrag läuft bereits."
     daten["antraege"].append({"raum": raum, "von": von, "grund": grund[:500],
                               "gestellt": _jetzt()})
     _speichere(daten)
@@ -162,15 +158,14 @@ def antraege():
 def bestaetige(raum, von, durch):
     """Der zweite Mensch bestaetigt. Erst hier entsteht der Zugang."""
     if not benutzer.hat_rolle(durch, "notzugang"):
-        return False, "Nur die Rolle 'notzugang' kann bestaetigen."
+        return False, "Nur die Rolle 'notzugang' kann bestätigen."
     if durch == von:
-        return False, ("Beantragen und Bestaetigen muessen zwei Personen "
-                       "sein.")
+        return False, ("Beantragen und Bestätigen müssen zwei Personen sein.")
     daten = _lade()
     passend = [a for a in daten["antraege"]
                if a["raum"] == raum and a["von"] == von]
     if not passend:
-        return False, "Diesen Antrag gibt es nicht (mehr)."
+        return False, "Antrag gibt es nicht (mehr)."
     antrag = passend[0]
     daten["antraege"] = [a for a in daten["antraege"] if a is not antrag]
     jetzt = _jetzt()
@@ -181,7 +176,7 @@ def bestaetige(raum, von, durch):
     _speichere(daten)
     benutzer.protokolliere("notzugang_bestaetigt", raum, von=durch,
                            hinweis=f"fuer {von}: {antrag.get('grund', '')[:150]}")
-    return True, f"Bestaetigt. Der Zugang gilt {STUNDEN} Stunden."
+    return True, f'Bestätigt. Zugang gilt {STUNDEN} Stunden.'
 
 
 @dateisperre.unter_sperre(lambda *_a, **_k: DATEI)
@@ -193,7 +188,7 @@ def lehne_ab(raum, von, durch, grund=""):
     daten["antraege"] = [a for a in daten["antraege"]
                          if not (a["raum"] == raum and a["von"] == von)]
     if len(daten["antraege"]) == vorher:
-        return False, "Diesen Antrag gibt es nicht (mehr)."
+        return False, "Antrag gibt es nicht (mehr)."
     _speichere(daten)
     benutzer.protokolliere("notzugang_abgelehnt", raum, von=durch,
                            hinweis=f"fuer {von}: {(grund or '')[:150]}")
@@ -232,7 +227,7 @@ def schliesse(raum, von, durch="?"):
     daten["zugaenge"] = [z for z in daten["zugaenge"]
                          if not (z["raum"] == raum and z["von"] == von)]
     if len(daten["zugaenge"]) == vorher:
-        return False, "Dieser Zugang steht nicht offen."
+        return False, "Zugang ist nicht offen."
     _speichere(daten)
     benutzer.protokolliere("notzugang_geschlossen", raum, von=durch,
                            hinweis=f"fuer {von}")

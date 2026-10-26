@@ -1,520 +1,527 @@
 # LocaNoto – Handbook
 
-LocaNoto is an assistant that answers questions from an organization's own
-records: from uploaded documents and, if desired, also from lists (Excel,
-CSV), a specialist database and connected mailboxes. Everything runs on
-your own servers; the documents never leave the organization.
+LocaNoto answers questions from an organization's own records: from
+uploaded documents and, if desired, also from lists (Excel, CSV), a
+specialist database and connected mailboxes. Everything runs on your own
+servers.
 
-This handbook has two parts: **for users** and **for administrators**. Each
-section answers one question and can be understood on its own. The
-interface language can be switched between German and English in the
-sidebar. The technical reference for setup and operation is in the
-`README.md`.
+Part 1 is **for users**, Part 2 **for admins**. Each section answers one
+question and can be understood on its own. The technical reference is in
+the `README.md`.
 
 ## Part 1: Using LocaNoto (for users)
 
-This part explains signing in, asking questions, reading sources, uploading
-documents, chats, rooms, lists, the database, mailboxes, your password and
+Signing in, asking questions, reading sources, uploading documents, chats,
+workspaces, presets, lists, the database, mailboxes, your password and
 access tokens in LocaNoto.
 
 ### What is LocaNoto and where do its answers come from?
 
-LocaNoto answers questions from the documents stored in your organization.
-For each question, LocaNoto picks out the matching passages from the
-documents – by meaning and by keywords at the same time – and a language
-model writes the answer from them. Below every answer are the sources used,
-with file and page.
+Ask a question → LocaNoto picks the matching passages from your documents
+(by meaning and by keywords), and a language model writes the answer from
+them. Below every answer are the sources with file and page.
 
-LocaNoto only searches the rooms you are allowed to see. What is not in
-the collection, LocaNoto cannot know; in that case the answer says so.
+Only the workspaces you are allowed to see are searched. If something is
+not in the collection, the answer says so.
+
+The sidebar is organized into:
+
+- **Preset** (at the very top, if available)
+- **Chats** – new chat, earlier chats
+- **Document filter** – narrow the search, web search
+- **Database** and **Lists** – only if set up
+- **Documents** – upload, move, delete
+- **Settings** – model, password, instruction, presets, mailboxes,
+  access tokens
+- **Admin area** – admins only
 
 ### How do I sign in to and out of LocaNoto?
 
-Signing in: enter your **Username** and **Password**, then **Log in**. An
-administrator creates your account.
-
-Signing out: **🚪 Log out** in the sidebar. After a longer period without
-input, the session ends by itself (default: 480 minutes); then sign in
-again.
-
-If the page stops responding after an update, the connection to the server
-has been re-established: reload the page and sign in again.
+- Sign in: enter **Username** and **Password** → **Log in**. An admin
+  creates your account.
+- Sign out: **Log out** in the sidebar.
+- No input for a longer time (default: 480 minutes) → the session ends by
+  itself; sign in again.
+- Page stops responding after an update → reload the page and sign in
+  again.
 
 ### How do I switch LocaNoto to English?
 
-In the sidebar, choose German or English under **🌐 Sprache / Language**;
-it takes effect immediately and is remembered for your account. The login
-page has the same switch. You can ask in any language: LocaNoto answers in
-the language of the question, even if the documents are German. File
-names, values and quotations stay as they are in the document.
+In the sidebar under **🌐 Sprache / Language**, choose German or English →
+takes effect immediately and is remembered for your account. The login
+page has the same switch.
+
+You can ask in any language: LocaNoto answers in the language of the
+question, even if the documents are German. File names, values and
+quotations stay as they are in the document.
 
 ### How do I ask LocaNoto a question?
 
-Type the question into the input field at the bottom (**Question to the
-database**) and send it. Images – such as a photo or a screenshot – can be
-attached to the question (png, jpg, webp, gif, bmp); LocaNoto describes
-them and takes them into account.
+- Type the question into the input field at the bottom (**Ask the
+  database**) and send it.
+- Attach an image (png, jpg, webp, gif, bmp) → LocaNoto describes it and
+  takes it into account.
+- Follow-up question in the same chat → refers to the conversation so far.
 
-While an answer is being written, the sidebar is locked. A click there
-would cancel the answer. If an answer ends with
-"Cancelled – the answer is incomplete", ask the question
-again.
-
-Follow-up questions in the same chat refer to the conversation so far.
+While an answer is being written, the sidebar is locked; a click there
+cancels the answer. If an answer ends with "Aborted – answer incomplete",
+ask the question again.
 
 ### How can I see in LocaNoto where an answer comes from?
 
-Below every answer is **📚 Sources used**: one entry **📄 File (page n)**
-per source passage. Expanded, it shows the text passage the answer is
-based on. The references in the answer text are clickable and jump to the
-corresponding source.
+Below every answer is **Sources**, with one entry **File (page n)** per
+source passage.
 
-For PDF files, **👁️ Load original page n as image** loads the original
-page, for example to see a table or drawing in the original. For Word and
-Markdown files, the number of the passage appears instead of the
-page.
+- Expand an entry → shows the text passage the answer is based on.
+- Click a reference in the answer text → jumps to the corresponding source.
+- For PDFs, tick **Original page n as image** → shows the page in the
+  original, e.g. for tables or drawings.
+- For Word and Markdown, the passage number appears instead of the page.
 
-**🛠️ Debug X-ray** shows which search queries were used and what the
+**Debug: what does the LLM see?** shows the search queries and what the
 language model got to see.
 
 ### Why doesn't LocaNoto find something?
 
-The most common reasons:
+- **The document is in a workspace you cannot see** → LocaNoto only
+  searches your workspaces.
+- **A filter is set** → under **Document filter**, clear workspace,
+  project and "Restrict search to".
+- **The document uses a different word** (you ask about "BANF", it says
+  "Bestellanforderung") → an admin adds it to the glossary. Questions
+  without results are logged automatically for this.
+- **Scan without readable text** → a message appears when uploading; see
+  "How do I upload a scan in LocaNoto?".
 
-- **The document is in a room you cannot see.** LocaNoto
-  only searches your rooms.
-- **A filter is set.** Under **🎯 Document filter**, clear room, project
-  and "Restrict search to".
-- **The document uses a different word.** If you ask about "BANF" and
-  the document says "Bestellanforderung" (purchase requisition), the
-  glossary maintained by an administrator helps. Questions without results
-  are logged automatically for this purpose.
-- **The document is a scan without a text layer.** Then it cannot be
-  searched; a message about this appears when uploading.
-
-The slider **Retrieve relevant passages** gets more results (default 5).
+More results: raise the slider **Passages to retrieve** (at the bottom of
+the sidebar, default 5).
 
 ### How do I narrow down the search in LocaNoto?
 
-In the sidebar under **🎯 Document filter**:
+In the sidebar under **Document filter**:
 
-- **Room:** search only in certain rooms. Empty means: all your rooms.
-- **Project:** only documents of one project from your personal room.
-- **Restrict search to:** select individual documents. The list only shows
-  documents that match the room and project above.
+- **Workspace:** choose → search only there. Empty → all your workspaces.
+- **Project:** choose → only documents of this project from your personal
+  workspace.
+- **Restrict search to:** choose individual documents. The list only shows
+  documents matching the workspace and project above.
 
-The slider **Retrieve relevant passages** determines how many source
-passages go into an answer. More helps with extensive sets of rules, but
-makes the answer slower.
+Slider **Passages to retrieve** (at the bottom of the sidebar) → sets how
+many source passages go into an answer. More helps with extensive sets of
+rules, but makes the answer slower.
 
-### What are rooms in LocaNoto and who sees my documents?
+### What are workspaces in LocaNoto and who sees my documents?
 
-A room determines who can find a document.
+The workspace determines who can find a document.
 
-| Room | visible to | upload and delete |
+| Workspace | visible to | upload and delete |
 |---|---|---|
-| General | all users | administrators only |
-| a named room (department, project, customer) | its members | its members |
-| your personal room | only you | you and administrators |
+| General | all users | admins only |
+| named workspace (department, project, customer) | its members | its members |
+| your personal workspace | only you | you and admins |
 
-Every user has a personal room from their first day. What is stored there
-never flows into other people's answers. Which rooms you see is shown
-under **Documents** in the sidebar.
+Every user has a personal workspace from the start. What is stored there
+never flows into other people's answers. Which workspaces you see is shown
+under **Documents** → **Stored documents**.
 
 ### How do I upload a document in LocaNoto?
 
-1. In the sidebar, **Upload documents** – PDF, Word (docx), Markdown,
-   text, or a scan as TIFF, JPG or PNG. Several files at once are
-   possible.
-2. Choose the **Room**. The default is your personal room ("Visible only
-   to you"), so nothing is shared by accident.
-3. Optionally enter a **Project** (personal room only). It sorts documents
-   and can be selected in the filter later.
-4. Only tick **Describe figures and scanned pages** if diagrams matter: it
-   costs one model call per image. Scanned pages are read by OCR even
-   without this box ticked.
-5. **Upload & vectorize**.
+In the sidebar under **Documents**:
 
-Afterwards, LocaNoto reports for each file how many passages are searchable.
+1. **Upload documents** – PDF, Word (docx), Markdown, text or scan (TIFF,
+   JPG, PNG); several files at once are possible.
+2. Choose the **Workspace**. The default is your personal workspace
+   ("Visible only to you") → nothing is shared by accident.
+3. Optionally enter a **Project** (personal workspace only) → selectable
+   in the document filter later.
+4. Only tick **Describe images and scans** if diagrams matter → one model
+   call per image. Scanned pages are read by OCR even without the tick.
+5. **Upload & ingest** → LocaNoto reports for each file how many passages
+   are searchable.
 
 ### How do I upload a scan in LocaNoto?
 
-Like any other document. Pages without a text layer – a scanned PDF or an
-image as TIFF, JPG, PNG – are read automatically by OCR (German and
-English).
+Like any document. Pages without a text layer (scanned PDF, TIFF, JPG,
+PNG) are read automatically by OCR (German, English).
 
-If OCR cannot read a page, the message names the page numbers, and below it
-**🔍 Read with vision model** appears. The vision model reads poor scans
-and handwriting better, but needs one model call per page.
+- Page not readable → the message names the page numbers, and **Read with
+  vision model** appears below it.
+- Click **Read with vision model** → reads poor scans and handwriting
+  better, one model call per page.
 
-Below an answer, such source passages are marked **from OCR**
-or **read by vision model**. Check numbers from them – test values,
-dimensions, deadlines – against the original page: OCR can confuse digits,
-and the vision model can plausibly fill in an illegible spot.
+Below the answer, such source passages are marked **from OCR** or **read
+by vision model**. Check numbers from them (test values, dimensions,
+deadlines) against the original page: OCR can confuse digits, and the
+vision model can plausibly fill in illegible spots.
 
 ### How do I move or delete a document in LocaNoto?
 
-Under **Documents** in the sidebar, each room has an expander with its
-files. In rooms you are allowed to write to:
+Under **Documents** → **Stored documents**, each workspace has an expander
+with its files:
 
-- **Manage document** – choose the file,
-- **move to** and **Move** – to another room, for example to share
-  something from your personal room with a department,
-- **🗑️ Delete** – removes the file and its passages from the search.
+1. **Manage document** – choose the file.
+2. Choose **move to** → **Move**, e.g. to share something from your
+   personal workspace with a department.
+3. Or **Delete** → the file and its passages disappear from the search.
 
-If ownCloud is connected, both also happen there: deleted files end up in
-the ownCloud trash, moved files in the folder of the new room. If that
-fails, the message says so – the file would then come back with the
-next sync.
+With ownCloud: deleted files go to the trash there, moved files to the
+folder of the new workspace. If that fails, the message says so –
+otherwise the file would come back with the next sync.
 
-If it says "Read only", you may not change anything in this room.
+"Read only" → you may not change anything in this workspace.
 
 ### How do I work with chats in LocaNoto?
 
-Under **💬 Chats** in the sidebar:
+In the sidebar under **Chats**:
 
-- **➕ New chat** starts a new conversation without history.
-- **Load previous chats** opens an earlier conversation.
-- **🗑️ Delete current chat** removes the open conversation.
+- **New chat** → new conversation without history.
+- **Earlier chats:** choose → opens an earlier conversation.
+- **Delete chat** → removes the open conversation.
 
-Chats are saved automatically and are visible only to you. They are stored
-encrypted on the server, including titles and attached images.
+After the first question, each chat automatically gets a short title (at
+most about six words). Chats are saved automatically, visible only to you
+and stored encrypted on the server, including titles and images.
 
-A new topic belongs in a new chat: LocaNoto takes the history of a chat
-into account in its answer.
+New topic → new chat, because LocaNoto takes the chat history into
+account in its answer.
 
 ### What do thumbs up and thumbs down do in LocaNoto?
 
-Below every answer are 👍 ("Helpful") and 👎 ("Not
-helpful"). The feedback goes to the administrators, together with the
-question and the sources used. From it they see which questions the
-collection answers well and where documents or glossary entries are missing.
+Below every answer are 👍 ("Helpful") and 👎 ("Not helpful").
 
-Questions for which nothing was found are logged even without a click.
-If a result came from a personal room, the feedback shows only
-"(persoenlicher Raum)" instead of the file name.
+- Click → the feedback goes to the admins together with the question and
+  the sources. It shows them where documents or glossary entries are
+  missing.
+- Questions without results are logged even without a click.
+- If a result came from a personal workspace, the feedback shows only a
+  placeholder instead of the file name.
 
 ### What is a preset in LocaNoto?
 
-A preset bundles settings for one purpose: language model, number of source
-passages, list areas and, if desired, custom wording. It can be selected at
-the very top of the sidebar under **🎛️ Preset**; below it, it says what
-the preset is meant for.
+A preset bundles model, number of source passages and list areas for one
+purpose. Choose it at the very top of the sidebar under **Preset**; below
+it, it says what the preset is meant for. **(Default)** uses the basic
+settings.
 
-The selection only appears if an administrator has created presets.
-**(Default)** uses the basic settings.
+**Create your own preset:** **Settings** → **My presets**:
+
+1. Enter a **Name**.
+2. Choose a **Model** (only models the admins have allowed).
+3. **Passages per question** – 0 = default.
+4. Choose **List areas** (if lists are set up).
+5. **Save** → appears at the top under **Preset**, marked "(eigene)" (own).
+   **Delete** removes it.
+
+Presets for everyone are created by admins in the **Admin area**; only
+those can have their own prompts.
+
+**Model:** under **Settings** you choose the language model from the list
+the admins allow. If there is only one model, the selection is hidden.
 
 ### How do I query lists from Excel or CSV in LocaNoto?
 
-Lists (xlsx, csv) are not ingested like documents, but read fresh with
-every question – new rows take effect immediately. Under **📊 Lists** in
-the sidebar:
+Lists (xlsx, csv) are read fresh with every question → new rows take
+effect immediately. In the sidebar under **Lists**:
 
-- **Also query lists** – LocaNoto picks the matching list and reads the
-  matching rows. Below, it says how many sheets are available.
-- **Area** – only lists from certain subfolders.
-- **Include large lists** – very large sheets; a question then takes
+- Tick **Also query lists** → LocaNoto picks the matching list and reads
+  the matching rows. Below, it says how many sheets are available.
+- Choose **List area** → only lists from these areas (subfolders). Empty →
+  all.
+- **Include large lists** → also very large sheets; questions then take
   considerably longer.
 
-Below the answer, **📊 List: …** shows which list was used with which
-query. **Detected sheets** shows which sheets with which columns are
-available; **Not readable** names files that could not be read. In
-**📁 My list folder** you can enter your own folder whose lists only you
-see.
+Below the answer, **List: … (n rows)** shows which list was used with
+which query. **Detected sheets** shows sheets and columns, **Not
+readable** files with errors.
+
+**My list folder:** enter your own folder under **Folder** → **Apply** →
+only you see its lists.
 
 ### How do I query the database in LocaNoto?
 
-If a specialist database is connected, the sidebar shows
-**🗄️ Database**. With **Include database**, LocaNoto writes a read-only
-query (SELECT) for your question and includes the result in the
-answer. LocaNoto cannot change anything in the database.
+If a specialist database is connected, the sidebar shows **Database**.
 
-Below the answer, **🗄️ Database query** shows the query that was run
-and the account used.
+- Switch on **Include database** → LocaNoto writes a read-only query
+  (SELECT) for your question and uses the result. LocaNoto cannot change
+  anything in the database.
+- Below the answer, **Database query** shows the query and the account.
+- "No database connection" → answers come only from the documents;
+  **Reconnect** tries again, **Driver message** shows details.
 
-In **🗄️ My database access** you enter your own database account.
-Questions then run with your permissions, and LocaNoto only sees the
-tables you are allowed to see. "No connection to the database" means: the
-answers come only from the documents; **Reconnect** tries again.
+**My database access:** enter your own account (**User**, **Password**) →
+**Apply** → queries run with your permissions, and LocaNoto only sees your
+tables.
 
 ### How do I connect my mailbox to LocaNoto?
 
-In the sidebar under **📬 My mailboxes**, enter the email address and
-password for each mailbox and click **Connect**. LocaNoto checks the login
-immediately. If it says "No mailbox set up yet", an administrator has to
-register the Exchange server once.
+**Settings** → **My mailboxes** → enter email address and password for
+each mailbox → **Connect**. LocaNoto checks the login immediately.
+
+"No mailbox set up yet" → an admin has to register the Exchange server
+once.
 
 After that, LocaNoto can include emails, for example:
 
 - "What did Ms Meier write most recently?"
 - "Summarize the emails from the last 24 hours."
-- "Reply to Mr Braun's email that the appointment works."
+- "Reply to Mr Braun that the appointment works."
 
-The login details are kept only in your current session. They are not
-saved and disappear when you sign out; connect again afterwards.
-**Disconnect** ends the connection earlier.
+The login details are kept only in your current session and disappear
+when you sign out → connect again afterwards. **Disconnect** ends the
+connection earlier.
 
 You open shared mailboxes (such as info@) with your own credentials;
-Exchange decides whether you have access.
+Exchange decides about access.
 
 ### What happens when LocaNoto wants to send an email?
 
-LocaNoto **never sends on its own** from a personal mailbox.
-If the answer wants to send an email, below it appears
-**✍️ Draft: … – waiting for you** with recipient, subject and text.
+From a personal mailbox, LocaNoto **never sends on its own**. If the
+answer wants to send an email, **Draft: … — waiting for you** appears
+below it with recipient, subject and text.
 
-- **Send** sends the draft exactly as it appears there.
-- **Discard** sends nothing.
+- **Send** → sends the draft exactly as it appears there.
+- **Discard** → sends nothing.
 
-Only for a shared mailbox can an administrator enable autonomous replies.
-Such emails then usually carry a note that they were
-created automatically.
+Only for a shared mailbox can an admin enable autonomous replies; such
+emails usually carry a note that they were created automatically.
 
 ### How do I search the internet with LocaNoto?
 
-In the sidebar, switch on **🌐 Web search**. LocaNoto may then look on the
+**Document filter** → switch on **Web search** → LocaNoto searches the
 web when your documents do not answer the question. Only the search term
 goes out, no documents.
 
-In your personal room this always works. In a shared room, an
-administrator has to allow web search first; otherwise the sidebar names
-the rooms that do not. Then select only enabled rooms at the top.
+- Personal workspace → always works.
+- Shared workspace → an admin has to allow web search there first.
+  Otherwise the sidebar names the workspaces that are not enabled; then
+  select only enabled ones at the top.
 
-Results appear below the answer as **🌐 From the web** with [W1], [W2]
-… – separate from the documents. Tick what you want to keep and
-click **import into my room**.
+Results appear below the answer as **From the web** with [W1], [W2] …,
+separate from the documents. Tick results → **Import n** → they land in
+your personal workspace.
 
 ### How do I collect sources from the internet with LocaNoto?
 
-Above the chat, expand **🌐 Search sources on the web**, enter a topic as
-keywords, **Search**. A list with up to ten results appears, without an
-answer. Tick what you want to keep, then **import into my
-room**. You type the search term yourself; it goes to search engines, so
-no internal names or figures.
+1. Above the chat, expand **Web sources**.
+2. Enter a **Topic** as keywords → **Search** → up to ten results, without
+   an answer. The search term goes to search engines: no internal names
+   or figures.
+3. Optionally **Read** → shows the page as plain text, without images and
+   scripts; exactly this text is imported. **Original ↗** opens the page
+   in your browser.
+4. Tick results → **Import n**.
 
-Before importing, you can read each result: **👁️ Read** shows the
-whole page as plain text in LocaNoto, without images and scripts.
-Exactly this text is imported. **Original ↗** opens the page in
-your browser.
-
-Imported items always land **in your personal room**, folder
-*Suchergebnisse*, as a document with source and retrieval date. If something
-belongs in a shared room, move it there – this way no click fills a
-shared room.
+Imported items always land **in your personal workspace**, folder
+*Suchergebnisse*, with source and retrieval date. If something belongs in
+a shared workspace → move it there.
 
 ### How do I tell LocaNoto how it should answer me?
 
-In the sidebar under **🗒️ My instruction** there is a text field for
-your personal instruction, for example: "Answer briefly, with tables,
-and always name the standard." **Save** – from the next question on, it
-applies to all your answers, including via the API. **Remove** takes
-it out again.
+**Settings** → **My instruction** → enter text, e.g. "Answer briefly, with
+tables, and always name the standard." → **Save**.
 
-The instruction only refines. The basics – how LocaNoto searches, which
-rules apply to answers, such as citing sources and inventing nothing – are
-set by an administrator in the templates, and they take precedence. Other
-users do not see your instruction; it is stored encrypted. At most 2000
-characters.
+- Applies from the next question to all your answers, including via the
+  API.
+- **Remove** → takes it out again.
+- At most 2000 characters; stored encrypted, others do not see it.
+
+The instruction only refines. The basic rules (cite sources, invent
+nothing) are set by the admins in the prompts; they take precedence.
 
 ### How do I change my password in LocaNoto?
 
-In the sidebar, **🔑 Change password**: **Current password**,
-**New password** (at least 8 characters), **Repeat**, then
-**Change**.
+**Settings** → **Change password** → **Current password**, **New password
+(min. 8 characters)**, **Repeat** → **Change**.
 
-If ownCloud is connected, the new password also applies there, provided
-LocaNoto manages your ownCloud account. If you do not have an account there
-yet, it is created now, with this password. If the account there belongs to
-someone else, the message says that the old password still applies there.
+With ownCloud:
 
-Forgot your password: an administrator sets a new one. It is best to change
-it yourself right afterwards, so that nobody else knows it.
+- LocaNoto manages your ownCloud account → the new password applies there
+  too.
+- No account there yet → it is created now, with this password.
+- The account belongs to someone else → the message says the old password
+  still applies there.
+
+Forgot your password → an admin sets a new one; change it yourself right
+afterwards.
 
 ### What are my access tokens in LocaNoto?
 
-An access token allows programs and scripts to query LocaNoto through the
-HTTP API or to submit documents – with your
-permissions. A token is created by an administrator; its value is shown
-exactly once.
+An access token lets programs and scripts query LocaNoto through the HTTP
+API or submit documents – with your permissions. An admin creates it; its
+value is shown exactly once.
 
-Under **🎫 My access tokens** you see all tokens issued to you,
-with label and expiry date. **🗑️** revokes a
-token immediately. Revoke what you no longer need.
+**Settings** → **My access tokens** → shows all tokens issued to you with
+label and expiry date. **🗑️** → revokes a token immediately. Revoke tokens
+you no longer need.
 
-### What do administrators see of my work in LocaNoto?
+### What do admins see of my work in LocaNoto?
 
-- **Chats:** nothing in the application. They are stored encrypted.
-- **Personal room:** administrators see the file names, never the content,
-  and can delete files. In strict mode they do not even see the file
-  names. They can reach the content only through emergency access, which a
-  second person must confirm; both names are recorded in the log.
-- **Feedback:** administrators see questions with 👍/👎 and questions
-  without results verbatim, together with your user ID.
+- **Chats:** nothing in the application; they are stored encrypted.
+- **Personal workspace:** admins see file names, never the content, and
+  can delete files. In strict mode they do not even see the file names.
+  They reach the content only through emergency access, which a second
+  person must confirm; both names are recorded in the log.
+- **Feedback:** questions with 👍/👎 and questions without results
+  verbatim, with your user ID.
 - **Mailbox logins:** nobody; they are not saved.
 
-Anyone with access to the server itself can technically see more. An
-encrypted disk and a small circle of people with server access protect
-against that.
+Anyone with access to the server itself can technically see more; an
+encrypted disk and a small circle with server access protect against that.
 
-## Part 2: Administering LocaNoto (for administrators)
+## Part 2: Administering LocaNoto (for admins)
 
-This part explains users, roles, rooms, the shared collection, lists,
-access tokens and the API, mailboxes, emergency access, feedback, the
-glossary, prompts, presets, ownCloud, backup and troubleshooting.
+Users, roles, workspaces, the shared collection, lists, access tokens and
+the API, mailboxes, emergency access, feedback, glossary, prompts,
+presets, ownCloud, backup and troubleshooting.
 
-### Where do I find the Administration area in LocaNoto as an administrator?
+### Where do I find the Admin area in LocaNoto as an admin?
 
-Administrators see the switch **🛠️ Administration** in the sidebar.
-When it is on, the following areas appear below it: 📝 Feedback,
-👥 Manage users, 🎫 Access tokens for the API,
-📬 Mailboxes (tool servers), 🔐 Encryption, 🔓 Emergency access,
-🚪 Manage rooms, ☁️ ownCloud, 🗃️ Backup of the vector database,
-🔒 Security status, 💾 Storage locations, 🗣️ Edit glossary,
-🎛️ Manage presets, 📜 Edit prompts and ⚙️ Configuration.
+Admins see the switch **Admin area** at the bottom of the sidebar. Switch
+it on → below it appear:
 
-Regardless of the switch, administrators also see **🔄 Catch up and
-re-ingest**, **List sources per room** and, under the documents, the
-documents in other people's rooms.
+Feedback, Users, Access tokens (API), Mailboxes (tool servers),
+Encryption, Emergency access, Workspaces, ownCloud, Vector database
+backup, Security status, Storage locations, Glossary, Presets, Prompts and
+Configuration.
 
-### How do I become an administrator in LocaNoto?
+Even without the switch, admins see:
 
-The role is stored in the signed user file. An existing administrator
-assigns it under **👥 Manage users** → choose user → **Role**
-→ **Apply role**.
+- **Fill gaps and re-ingest** (under **Documents**),
+- **List sources per workspace** (under **Lists**),
+- under **Stored documents**, also documents in other people's workspaces.
 
-The very first account of a new installation is created by `create_user.py`
-in the terminal; it becomes an administrator. After that, the script
-requires the login of an existing administrator.
+### How do I become an admin in LocaNoto?
 
-Nobody can demote or delete the last administrator – otherwise nobody could
-create users any more.
+- An existing admin: **Admin area** → **Users** → choose user → **Role**
+  `admin` → **Apply role**.
+- New installation: the very first account is created by `create_user.py`
+  in the terminal; it becomes admin. After that, the script requires the
+  login of an existing admin.
 
-### How do I create a user in LocaNoto as an administrator?
+Nobody can demote or delete the last admin.
 
-**🛠️ Administration** → **👥 Manage users** → under **Edit**
-"(create new)":
+### How do I create a user in LocaNoto as an admin?
 
-1. **User ID** – letters, digits, dot, hyphen, underscore.
+**Admin area** → **Users** → under **Edit** "(create new)":
+
+1. **ID** – letters, digits, dot, hyphen, underscore.
 2. **Role** – usually `nutzer`.
-3. **Password** twice, at least 8 characters.
+3. **Password (min. 8 characters)** and **Repeat password**.
 4. **Create user**.
 
-The personal room is created immediately. If ownCloud is connected,
-LocaNoto also sets up the account and personal folder there. User IDs that
-differ only by a special character ("m.meier" and "m_meier") are rejected
-by LocaNoto: they would result in the same personal room.
+→ The personal workspace is created immediately; with ownCloud, also the
+account and personal folder there.
 
-Several administrators can create users at the same time; no entry is lost.
+IDs that differ only by a special character ("m.meier", "m_meier") are
+rejected by LocaNoto: they would result in the same personal workspace.
 
-### How do I change or delete a user in LocaNoto as an administrator?
+### How do I change or delete a user in LocaNoto as an admin?
 
-Under **👥 Manage users**, choose the user under **Edit**:
+**Admin area** → **Users** → choose the user under **Edit**:
 
-- change the **Role** and click **Apply role**,
-- enter a **New password** twice and click **Set password** – the
-  user should then change it themselves,
-- tick **really delete** and click **Delete user**.
+- Change **Role** → **Apply role**.
+- **New password** twice → **Set password**. The user should then change
+  it themselves. For an account managed by LocaNoto, it also applies in
+  ownCloud.
+- Tick "… really delete" → **Delete user**. A managed ownCloud account is
+  removed too. Chat history and personal workspace remain; delete the
+  documents separately under **Stored documents** (other users' personal
+  workspaces).
 
-Deleting also removes the user's ownCloud account, provided
-LocaNoto manages it. Chat history and personal room remain;
-an administrator removes the documents separately, under the
-documents in other people's rooms. For a managed account, a new password
-also applies in ownCloud.
-
-Every change is recorded in the chained user log. If the top says "The
-user file was changed outside the application", a signature does not
-match: existing users keep working, an account entered by hand
-is locked.
+Every change is recorded in the chained user log. "User file was changed
+outside LocaNoto" → a signature does not match: existing users keep
+working, an account entered by hand is locked.
 
 ### Which roles are there in LocaNoto?
 
 | Role | may |
 |---|---|
-| `nutzer` | ask questions, upload to their own and enabled rooms |
-| `admin` | additionally manage users, rooms, the shared collection and all settings |
-| `notzugang` | none of that – only confirm or reject an administrator's emergency access to a personal room |
+| `nutzer` | ask questions, upload to their own and enabled workspaces |
+| `admin` | additionally manage users, workspaces, the shared collection and all settings |
+| `notzugang` | only confirm or reject an admin's emergency access to a personal workspace |
 
-The role `notzugang` belongs to someone who is **not** an administrator:
-management, the staff council or whoever is responsible for it in the
-organization. If administrators could confirm each other, emergency access
-would be a mere formality.
+The role `notzugang` belongs to someone who is **not** an admin, e.g.
+management or the staff council. If admins could confirm each other,
+emergency access would be a mere formality.
 
-### How do I create a room in LocaNoto as an administrator?
+### How do I create a workspace in LocaNoto as an admin?
 
-**🛠️ Administration** → **🚪 Manage rooms** → under **Edit**, a new
-room: **Name**, optionally **Description**, choose **Members**,
-**Create room**.
+**Admin area** → **Workspaces** → under **Edit**, create a new one:
+**Label**, optionally **Description**, **Members** → **Create workspace**.
 
-For an existing room you can change the name, description and
-members there, assign an **ownCloud group** (the group then determines the
-members), set a **List folder** for xlsx/csv and
-enter a database account under **Database account for this room**.
+Choose an existing workspace → editable there:
 
-The General room does not have to be open to everyone either: **Switch to
-a member list** gives it a list, **Open to everyone again**
-takes it back.
+- **Label**, **Description**, **Members**,
+- **ownCloud group** → its members are added,
+- **List folder (xlsx, csv)**,
+- **Allow web search**,
+- **Database account** → own database account for this workspace.
 
-**Remove room** takes the room out of administration; the documents are
-kept. **Delete data** is a separate step: it removes the
-room's passages from the search, moves the content of its
-ownCloud folder to the trash and asks for confirmation first.
-Personal rooms have exactly one reader; members cannot be added
+**General:** **Use member list** → only listed users see it; **Reopen for
+all** → reverts that.
+
+- **Remove workspace** → takes it off the list, the documents remain.
+- **Delete data** → after confirmation, removes its passages from the
+  search and moves the content of its ownCloud folder to the trash.
+
+Personal workspaces have exactly one reader; members cannot be added
 there.
 
-### How do I fill the shared collection in LocaNoto as an administrator?
+### How do I fill the shared collection in LocaNoto as an admin?
 
-Only administrators write to the room **General**. Three ways:
+Only admins write to **General**. Three ways:
 
-- **Interface:** upload documents, choose "General" as the room.
-- **Terminal:** put files in the document folder and run `python ingest.py`;
+- **Interface:** **Upload documents**, choose "General" as the workspace.
+- **Terminal:** put files in the document folder → `python ingest.py`.
   `INGEST_RAUM=einkauf python ingest.py` ingests into a different
-  room.
-- **API:** `POST /aufnehmen` with an administrator's token – for
-  many files at once, one file per call.
+  workspace.
+- **API:** `POST /aufnehmen` with an admin's token, one file per call.
 
-Scanned pages are read by OCR on all three ways; what it
-cannot read is named by `ingest.py` in its output. Figures are
-described by the upload only on request. For the whole collection, **🔄 Add missing and re-ingest** → **Catch up images**
-starts this as a separate process; **Re-ingest documents** ingests the
-document folder completely. Both keep running when you leave
-the page, and skip what has already been processed.
+Scanned pages are read by OCR on all three ways; what it cannot read is
+named by `ingest.py` in its output.
 
-### How do I set up lists (Excel, CSV) in LocaNoto as an administrator?
+**Fill gaps and re-ingest** (under **Documents**):
 
-Lists are not vectorized. A catalog records which sheets and
-columns exist; LocaNoto reads the rows fresh with every question. Under
-**📊 Lists** in the sidebar:
+- **Catch up images** → describes figures in the whole collection.
+- **Re-ingest documents** → ingests the document folder completely.
 
-- **List sources per room:** one line per source, `raum = pfad`. The room
-  determines who sees the lists. `@privat = /pfad/{benutzer}/Listen` gives
-  every user their own folder. **Save and ingest sources**.
-- **Upload list:** drop files, choose an **Area** (subfolder),
-  then store and ingest. Only works if the folder is writable.
-- **Re-ingest lists:** needed when files are added or columns
-  change. New rows take effect without any action.
-- **Detected sheets:** if columns without names appear, the header row
-  was detected incorrectly. Correct the **Header row**, then **Apply and
-  re-ingest**.
+Both keep running when you leave the page, and skip what has already been
+processed.
 
-A list folder per room can also be entered under **🚪 Manage rooms**.
+### How do I set up lists (Excel, CSV) in LocaNoto as an admin?
 
-### How do I create an access token for LocaNoto as an administrator?
+Lists are not vectorized: a catalog knows sheets and columns, and LocaNoto
+reads the rows fresh with every question. In the sidebar under **Lists**:
 
-**🛠️ Administration** → **🎫 Access tokens for the API**:
+- **List sources per workspace:** one line per source,
+  `arbeitsbereich = pfad`; the workspace determines who sees the lists.
+  `@privat = /pfad/{benutzer}/Listen` gives every user their own folder.
+  → **Save and ingest**.
+- **Upload list:** choose files, choose **Upload to** (subfolder) →
+  **Upload n file(s)**. Only if the folder is writable.
+- **Re-ingest lists:** needed for new files or changed columns; new rows
+  take effect without any action.
+- **Detected sheets:** columns without names → header row detected
+  incorrectly. Correct the **Header row** → **Apply and re-ingest**.
+
+A list folder per workspace can also be entered under **Admin area** →
+**Workspaces**.
+
+### How do I create an access token for LocaNoto as an admin?
+
+**Admin area** → **Access tokens (API)**:
 
 1. **For whom** – the user whose permissions the token carries.
-2. **Label** – what it is for, e.g. "Bulk ingest purchasing".
-3. **Valid for days** – 0 means unlimited.
-4. **Create token**.
+2. **Label** – purpose, e.g. "Bulk ingest purchasing".
+3. **Valid (days, 0 = unlimited)**.
+4. **Create token** → the value appears **exactly once**; only its hash is
+   stored. Copy it → **Noted**.
 
-The value appears **exactly once**; only its hash is stored.
-Write it down, then **Noted**. The list below shows all tokens;
-**🗑️** revokes one. Users see and revoke their own under
-**🎫 My access tokens**.
+The list below shows all tokens; **🗑️** revokes one. Users see and revoke
+their own under **Settings** → **My access tokens**.
 
-A token only identifies the user. What they may do is stated in the
-user file: only an administrator's token can submit to the General
-room.
+The token only identifies the user; their permissions are in the user
+file. Only an admin's token can submit to **General**.
 
 ### How do I use the HTTP API of LocaNoto?
 
@@ -524,231 +531,222 @@ Every call carries the token in the header `X-LocaNoto-Token`.
 |---|---|
 | `GET /gesundheit` | sign of life, without token |
 | `GET /status` | models, collection, lists, presets |
-| `GET /raeume`, `GET /dokumente` | what this user is allowed to see |
+| `GET /raeume`, `GET /dokumente` | what this user may see |
 | `POST /frage` | answer with sources, `?strom=1` streaming |
 | `POST /aufnehmen` | submit a document (form: `datei`, `raum`, optional `projekt`, `bilder`, `sehmodell`) |
 | `POST /rueckmeldung` | 👍/👎 for an answer |
-| `DELETE /dokumente?raum=…&datei=…` | delete a document, like 🗑️ in the interface |
-| `GET /hilfe` | the API describes itself |
+| `DELETE /dokumente?raum=…&datei=…` | delete a document, like **Delete** in the interface |
+| `GET /hilfe` | self-description |
 
-Searches only cover the token owner's rooms; they may only delete where they could also do so in the interface (otherwise `403`). `/aufnehmen` responds
-with `403` if the user may not write to the room, and with `413`
-if the file is too large. The API can only be reached from the server
-itself; from outside, a reverse proxy with TLS belongs in front of it.
-Examples are in the `README.md` under "HTTP-Schnittstelle".
+Searches only cover the token owner's workspaces; deleting and submitting
+only where they could also do so in the interface (otherwise `403`). File
+too large → `413`. The API is only reachable from the server itself; from
+outside, a reverse proxy with TLS belongs in front of it. Examples:
+`README.md`, "HTTP-Schnittstelle".
 
-### How do I set up a mailbox in LocaNoto as an administrator?
+### How do I set up a mailbox in LocaNoto as an admin?
 
-For the personal mailboxes, **one entry for everyone** is enough: every
-user opens their own mailbox in it with their own address. Each
-shared mailbox gets its own entry. **🛠️ Administration** →
-**📬 Mailboxes (tool servers)** → **New mailbox**:
+Personal mailboxes need **one entry for everyone**; every user opens their
+own mailbox in it. Each shared mailbox gets its own entry.
 
-1. **Type of server:** "Exchange/Outlook – direct, without another server".
+**Admin area** → **Mailboxes (tool servers)** → **New mailbox**:
+
+1. **Server type:** "Exchange/Outlook — direct, without another server".
 2. **Name:** `postfach` for the common entry, `info` for info@, etc.
-3. **Address or command:** the Exchange server, e.g. `owa.firma.de`.
-   Leaving it empty finds the server automatically.
+3. **Address or command:** the Exchange server, e.g. `owa.firma.de`;
+   empty → found automatically.
 4. **Mailbox:** personal or shared mailbox.
-5. **Email address of the mailbox:** required for a shared mailbox
+5. **Mailbox address (Exchange only):** required for a shared mailbox
    (`info@firma.de`), empty for a personal one.
 6. **Create**.
 
-After that, every user connects themselves under **📬 My mailboxes**.
-There is no shared password; Exchange decides about
-access. **Query tools** checks a mailbox with your own
+After that, every user connects themselves under **My mailboxes**; there
+is no shared password. **Fetch tools** → checks a mailbox with your own
 login.
 
-Other tool servers following the Model Context Protocol (MCP) can be
-connected via the templates "MCP server over HTTP" and "local process".
+Other tool servers (MCP) → server type "MCP server over HTTP" or "local
+process (stdio)".
 
-### How do I set up web search in LocaNoto as an administrator?
+### How do I set up web search in LocaNoto as an admin?
 
-The search service runs separately from LocaNoto (operation: README, section
-"Websuche"). Then, under **📬 Mailboxes**, create a server of the type
-**Web search**, address `http://websuche:8000/mcp`.
+1. Run the search service separately from LocaNoto (`README.md`,
+   "Websuche").
+2. **Admin area** → **Mailboxes (tool servers)** → **New mailbox** →
+   **Server type** web search, **Address or command**
+   `http://websuche:8000/mcp` → **Create**.
+3. For each shared workspace: **Workspaces** → choose the workspace →
+   tick **Allow web search** → only then can users switch on web search
+   there.
 
-For shared rooms, under **🚪 Manage rooms**, set **🌐 Allow web search
-alongside this room** on the room. Only then can users switch it on
-there. The reason: the model writes the search term with the
-room's passages in its context, and the search term goes to
-search engines. In their personal room, every user decides for themselves.
+Why the approval: the model writes the search term with passages of the
+workspace in its context, and the search term goes to search engines. In
+their personal workspace, every user decides for themselves.
 
 ### When may LocaNoto reply from a mailbox on its own?
 
-Only from a **shared mailbox**, and only if **may reply
-on its own** was ticked when it was created. A personal mailbox presents
-every email as a draft, without exception.
+Only from a **shared mailbox** for which **may reply on its own** was
+ticked when it was created. A personal mailbox presents every email as a
+draft, without exception.
 
-**Set notice under automatic replies** appends to every email sent
-on its own a note that it was created automatically; the
-wording is set by **Notice text**. Without the tick, there is no note.
-A draft checked by the user and sent with **Send** never carries
-a note.
+- Tick **Add notice to auto-replies** → every email sent on its own
+  carries a note that it was created automatically. Wording: **Notice
+  text**.
+- Without the tick → no note.
+- A draft checked by the user and sent with **Send** never carries a note.
 
-Which tools send something is shown by **Query tools** with
-**[SENDET]**; all others only read.
+**Fetch tools** marks tools that send something with **[SENDET]**; all
+others only read.
 
 ### How does emergency access work in LocaNoto?
 
-A personal room is closed even to administrators. If someone leaves or
-is absent for a longer time, emergency access gets you in:
+A personal workspace is closed even to admins. If someone leaves or is
+absent for a longer time:
 
-1. An administrator requests access to exactly
-   one room under **🔓 Emergency access**, with a **Reason** → **Request
-   emergency access**.
-2. A person with the role `notzugang` signs in and clicks
-   **Confirm** or **Reject**.
-3. Access then applies for 24 hours and expires by itself;
-   **Close now** ends it earlier.
+1. An admin: **Admin area** → **Emergency access** → choose the
+   **Workspace**, enter a **Reason** → **Request emergency access**.
+2. A person with the role `notzugang` signs in → **Confirm** or
+   **Reject**.
+3. Confirmed → access applies for 24 hours and expires by itself; **Close
+   now** ends it earlier.
 
-Both names and the reason are recorded in the log. If there is nobody with
-the role `notzugang`, there is no emergency access – the room can then only
-be deleted, not read.
+Both names and the reason are recorded in the log. Without anyone holding
+the role `notzugang`, there is no emergency access: the workspace can then
+only be deleted, not read.
 
-### How do I evaluate feedback in LocaNoto as an administrator?
+### How do I evaluate feedback in LocaNoto as an admin?
 
-**🛠️ Administration** → **📝 Feedback** shows two lists:
+**Admin area** → **Feedback** shows:
 
-- **Questions without results** – usually a word is missing from the
-  glossary or a document from the collection.
+- **Questions without results** – usually a glossary entry or a document
+  is missing.
 - **Reported as not helpful** – there were results, but the wrong ones.
 
-**Download log** fetches the complete list for evaluation.
-**Finish list** files it under the current date and starts a
-new one; nothing is deleted. Earlier files are listed below for
-download.
+**Download log** → the complete list. **Finish list** → files it under
+the current date and starts a new one; nothing is deleted. Earlier files
+are listed below.
 
 The list contains questions verbatim with user ID and is therefore stored
 encrypted.
 
-### How do I maintain the glossary in LocaNoto as an administrator?
+### How do I maintain the glossary in LocaNoto as an admin?
 
 The glossary translates users' words into the words of the documents.
-**🛠️ Administration** → **🗣️ Edit glossary**, one mapping per line:
+**Admin area** → **Glossary**, one mapping per line, `#` = comment:
 
 ```
 BANF = Bestellanforderung; auch Anforderung oder Bestellvorschlag
 FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
 ```
 
-**Save glossary** – it takes effect from the next question. Lines with `#`
-are comments and are not passed to the language model. Only enter checked
-mappings: a wrong entry reliably steers the search to the wrong
-place. Where the entries come from: from the "Questions without results"
-under 📝 Feedback.
+**Save glossary** → takes effect from the next question. Comment lines are
+not passed to the language model.
 
-### How do I adjust prompts and presets in LocaNoto as an administrator?
+Only enter checked mappings: a wrong entry reliably steers the search to
+the wrong place. Candidates come from the "Questions without results"
+under **Feedback**.
 
-The templates are the basis for everyone; users refine them for themselves under **🗒️ My instruction**, without changing them.
+### How do I adjust prompts and presets in LocaNoto as an admin?
 
-**📜 Edit prompts:** two templates – one turns the question into the
-search queries, the other determines how answers are written. **Applies
-to** chooses whether the change applies to everyone or only to one preset.
-**Save** takes effect from the next question; a text without the
-required placeholders is rejected. **Reset** restores the
-supplied version.
+**Prompts:** two templates – one turns the question into search queries,
+the other determines how answers are written.
 
-**🎛️ Manage presets:** **Name**, **Description**,
-**Chat model**, **Relevant passages**, **List areas**, then
-**Save**. Users choose them at the top of the sidebar. **Remove**
-deletes a preset.
+- **Applies to** → everyone or only one preset.
+- **Save** → takes effect from the next question; a text without the
+  required placeholders is rejected.
+- **Reset** → restores the supplied version.
 
-A wording in the prompt affects every subsequent answer; after a
-change, ask a few familiar questions and compare the answers.
+**Presets** (for everyone): **Label**, **Description**, **Chat model**,
+**Relevant passages** (0 = default), **List areas** → **Save**.
+**Remove** deletes one. Only these presets can have their own prompts
+(choose them under **Prompts** → **Applies to**).
 
-### How do I connect ownCloud to LocaNoto as an administrator?
+The selectable models are set by `CHAT_MODELLE` in the `.env`; users see
+the same list under **Model** and **My presets**. Users create their own
+presets without prompts and refine with **My instruction**.
 
-"ownCloud" here means the file store, also OpenCloud. If it is configured
-in the `.env`, LocaNoto additionally stores uploaded documents there
-and can import folders and groups.
-**🛠️ Administration** → **☁️ ownCloud**:
+After a prompt change, ask a few familiar questions and compare the
+answers.
 
-- **Save mapping** – assigns an ownCloud folder to a room.
-- **Set up for all rooms** – creates a folder per room and shares
-  it with the room's members.
-- **Set up personal file store** – brings the account and folder of a
-  single user up to date, for example after an import.
-- **Review changes** – shows what has changed in ownCloud.
-- **Sync memberships now** – imports the ownCloud groups
-  as room members.
+### How do I connect ownCloud to LocaNoto as an admin?
 
-What is deleted or moved in LocaNoto, LocaNoto also deletes or moves in
-ownCloud; deleted items end up in the trash there.
+"ownCloud" means the file store, also OpenCloud. Configured in the `.env`
+→ LocaNoto also stores uploaded documents there and imports folders and
+groups. **Admin area** → **ownCloud**:
 
-**Accounts:** deleting users and changing passwords only affect ownCloud
-for accounts that LocaNoto manages – that is, the ones it created itself. An
-account that already existed before remains untouched. **Import existing
-accounts** marks existing accounts as managed once; the
-service and administrator account is always excluded. If an account is
-missing in the file store, it is created the next time a password is set.
-Setup and the service account are described in the `README.md` under
-"Dokumente aus ownCloud".
+- **Save mapping** → assigns a folder to a workspace.
+- **Set up all** → one folder per workspace, shared with its members.
+- **Set up personal file store** → brings a single user's account and
+  folder up to date.
+- **Review changes** → shows what has changed in ownCloud.
+- **Sync memberships** → imports ownCloud groups as members.
+- **Import accounts** → marks existing accounts once as managed by
+  LocaNoto (service and admin account excluded).
 
-### How do I back up LocaNoto as an administrator?
+Deleting and moving in LocaNoto also applies in ownCloud (deleted items →
+trash). Deleting users and changing passwords only affect managed accounts
+there. A missing account is created the next time a password is set.
+Setup: `README.md`, "Dokumente aus ownCloud".
+
+### How do I back up LocaNoto as an admin?
 
 Three things belong in the backup:
 
-1. **The installation key** (`config/schluessel.key`, or the value
-   of `LOCANOTO_SCHLUESSEL`). Without it, chats, attachments and
-   feedback are permanently unreadable – without an error message. Nothing
-   else is impossible to recover.
-2. **The configuration directory** (`config/`): users, rooms, tokens,
+1. **Installation key** (`config/schluessel.key` or
+   `LOCANOTO_SCHLUESSEL`). Without it, chats, attachments and feedback are
+   permanently unreadable. Nothing can replace it.
+2. **Configuration directory** (`config/`): users, workspaces, tokens,
    glossary, prompts, mailboxes.
-3. **The vector database:** **🗃️ Backup of the vector database** →
-   **Back up now**. **Restore snapshot** and **Restore** bring back a
-   state. Without a snapshot, a loss would mean: ingest everything again.
+3. **Vector database:** **Admin area** → **Vector database backup** →
+   **Back up now**. Restore: **Restore snapshot** → **Restore**. Without a
+   snapshot, a loss would mean: ingest everything again.
 
 The original documents are in the data directory and, if connected, in
 ownCloud.
 
 ### What do security status, storage locations, encryption and configuration show in LocaNoto?
 
-- **🔒 Security status** – a checklist with ✅ and ⚠️: which protection
-  is set up and what remains open.
-- **💾 Storage locations** – where data, configuration and index are stored
+In the **Admin area**:
+
+- **Security status** – checklist with ✅ and ⚠️: what is set up, what
+  remains open.
+- **Storage locations** – where data, configuration and index are stored
   and whether the location is set externally.
-- **🔐 Encryption** – whether encryption is active and what is encrypted,
-  signed or stored in plain text; **Re-encrypt log** converts
-  older feedback to the encrypted form.
-- **⚙️ Configuration** – settings in the `.env` that are missing, differ
-  from the template or are outdated. Names only, no values.
+- **Encryption** – what is encrypted, signed or stored in plain text.
+  **Re-encrypt log** → converts older feedback to the encrypted form.
+- **Configuration** – `.env` settings that are missing, differ or are
+  outdated; names only, no values.
 
-**🔌 Model endpoints** (visible to everyone) shows which language models
-are connected and whether the endpoint for ranking the results
-responds.
+**Model endpoints** (under **Settings**, for everyone) shows the connected
+language models and whether the endpoint for ranking the results responds.
 
-### What do I do as an administrator when something in LocaNoto does not work?
+### What do I do as an admin when something in LocaNoto does not work?
 
-| Observation | Cause and remedy |
+| Observation | Remedy |
 |---|---|
-| Page does not respond after an update | Connection re-established: reload the page, sign in again |
+| Page does not respond after an update | Reload the page, sign in again |
 | Search hangs after the search queries | Model server unreachable or cold; the message names the reason |
-| "RANGFOLGE Modell aus dem Image" | Rerank endpoint unreachable; LocaNoto retries it by itself |
-| "No connection to the database" | Database or VPN unreachable; **Driver message** shows details |
+| "RANGFOLGE Modell aus dem Image" | Rerank endpoint unreachable; LocaNoto retries by itself |
+| "No database connection" | Check database or VPN; **Driver message** shows details |
 | Document ingested but not findable | `python raum_diagnose.py` in the container |
-| User file "changed outside" | a signature does not match; accounts entered by hand are locked |
-| Settings unclear | **⚙️ Configuration** |
+| User file "changed outside" | Signature does not match; accounts entered by hand are locked |
+| Settings unclear | **Admin area** → **Configuration** |
 
-After an update, `python selbsttest.py` checks login, permissions, search,
-encryption and backup without touching the collection.
+After an update → `python selbsttest.py` checks login, permissions,
+search, encryption and backup without touching the collection.
 
 ## Part 3: This handbook in LocaNoto
 
-This part explains how the handbook is ingested into LocaNoto and kept up
-to date, so that LocaNoto can answer questions about how to use it.
+How the handbook is ingested and kept up to date, so that LocaNoto can
+answer questions about how to use it.
 
 ### How can LocaNoto answer questions about itself?
 
-This handbook is written so that LocaNoto can search it like any other
-document: every heading is a question, and every section can be understood
-on its own.
+Every heading of this handbook is a question, and every section can be
+understood on its own – so LocaNoto finds it like any other document.
 
-Ingesting: as an administrator, upload `HANDBUCH.md` and choose
-**General** as the room. LocaNoto then answers questions such as "How do I
-upload a document?" or "How do I create a user?" with a reference to this
-section.
-
-After a new version, remove the old handbook under **Documents** →
-**General** with **🗑️ Delete** and upload the new version.
-Simply overwriting would leave passages that no longer exist in the new
-version.
+- Ingesting: as an admin, upload `HANDBUCH.md`, workspace **General** →
+  LocaNoto answers questions such as "How do I upload a document?" with a
+  reference to the matching section.
+- New version: under **Stored documents** → **General**, remove the old
+  version with **Delete**, then upload the new one. Simply overwriting
+  would leave passages that no longer exist.

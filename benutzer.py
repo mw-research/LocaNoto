@@ -350,11 +350,7 @@ def _anlege_gesperrt(name, hashwert, rolle, von):
     except Exception:
         andere = None
     if andere:
-        return False, (f"'{name}' und '{andere}' ergaeben denselben "
-                       f"persoenlichen Raum ({raeume.privat_kennung(name)}) "
-                       f"-- beide saehen die Unterlagen des anderen. Bitte "
-                       f"eine Kennung waehlen, die sich um mehr als ein "
-                       f"Sonderzeichen unterscheidet.")
+        return False, (f"'{name}' und '{andere}' ergäben denselben persönlichen Arbeitsbereich ({raeume.privat_kennung(name)}). Bitte eine deutlicher abweichende Kennung wählen.")
     nutzer[name] = {
         "passwort": hashwert,
         "rolle": rolle,
@@ -378,7 +374,7 @@ def passwort_setzen(name, passwort, von="?"):
     nutzer[name]["geaendert"] = _jetzt()
     _speichere(nutzer)
     protokolliere("passwort", name, von)
-    return True, f"Passwort von '{name}' geaendert."
+    return True, f"Passwort von '{name}' geändert."
 
 
 @_unter_sperre
@@ -393,7 +389,7 @@ def rolle_setzen(name, rolle, von="?"):
     # Nutzer anlegen, und die Datei liesse sich nur noch von Hand
     # reparieren.
     if rolle != "admin" and admins() == [name]:
-        return False, "Das ist der letzte Verwalter."
+        return False, "Das ist der letzte Admin."
     nutzer[name]["rolle"] = rolle
     nutzer[name]["geaendert"] = _jetzt()
     _speichere(nutzer)
@@ -408,12 +404,11 @@ def loesche(name, von="?"):
     if name not in nutzer:
         return False, f"'{name}' gibt es nicht."
     if admins() == [name]:
-        return False, "Das ist der letzte Verwalter."
+        return False, "Das ist der letzte Admin."
     del nutzer[name]
     _speichere(nutzer)
     protokolliere("geloescht", name, von)
-    return True, (f"'{name}' geloescht. Chatverlauf und persoenlicher Raum "
-                  f"bleiben bestehen und muessen getrennt entfernt werden.")
+    return True, (f"'{name}' gelöscht. Chatverlauf und persönlichen Arbeitsbereich getrennt entfernen.")
 
 
 @_unter_sperre
@@ -433,10 +428,7 @@ def neu_signieren(von="?"):
     protokolliere("neu_signiert", "-", von,
                   f"vorher={z}, ohne_signatur={len(vorher)}")
     if vorher and z != UNSIGNIERT:
-        return True, (f"{len(nutzer)} Benutzer signiert. Darunter "
-                      f"{len(vorher)} ohne gueltige Signatur -- diese "
-                      f"gelten damit als bestaetigt: "
-                      f"{', '.join(sorted(vorher))}")
+        return True, (f"{len(nutzer)} Benutzer signiert, davon {len(vorher)} ohne gültige Signatur – diese gelten jetzt als bestätigt: {', '.join(sorted(vorher))}")
     return True, f"{len(nutzer)} Benutzer neu signiert."
 
 

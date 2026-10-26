@@ -54,16 +54,17 @@ could be forgotten: a foreign room's collection is simply not queried.
 
 ## Features
 
-### Rooms and permissions
+### Workspaces and permissions
 
-A **room** is a member list plus its own collection in the vector store. It
-is the only boundary between users.
+A **workspace** (in code and configuration: *Raum*, room) is a member list
+plus its own collection in the vector store. It is the only boundary
+between users.
 
-| Room | visible to | upload and delete |
+| Workspace | visible to | upload and delete |
 |---|---|---|
-| General | all users | administrators |
-| a named room | its members | its members |
-| a personal room | only its owner | the owner and administrators |
+| General | all users | admins |
+| a named workspace | its members | its members |
+| a personal workspace | only its owner | the owner and admins |
 
 Administrators see documents in foreign rooms only in the admin area, and
 only room and file name; they never flow into their searches or answers. A
@@ -155,6 +156,14 @@ probes are written in German, because keyword search only finds words as
 they appear in the documents. Citations with "page" are linked like
 those with "Seite". The prompt templates themselves are German and carry
 these rules; the HTTP API reports in German.
+
+### Presets and models
+
+Every user creates **own presets** (model, passages per question, list
+areas) under Settings → *My presets*; admins create shared presets, which
+may also carry their own prompts. The model is chosen from `CHAT_MODEL`
+and `CHAT_MODELLE` (comma-separated) — no free text; with a single model
+there is no selection. Chat titles are a short phrase.
 
 ### Learning from use
 

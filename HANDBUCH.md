@@ -1,519 +1,546 @@
 # LocaNoto – Handbuch
 
-LocaNoto ist ein Assistent, der Fragen aus den eigenen Unterlagen eines
-Hauses beantwortet: aus hochgeladenen Dokumenten, auf Wunsch auch aus
-Listen (Excel, CSV), einer Fachdatenbank und angebundenen Postfächern.
-Alles läuft auf eigenen Servern; die Dokumente verlassen das Haus nicht.
+LocaNoto beantwortet Fragen aus den eigenen Unterlagen eines Hauses: aus
+hochgeladenen Dokumenten, auf Wunsch auch aus Listen (Excel, CSV), einer
+Fachdatenbank und angebundenen Postfächern. Alles läuft auf eigenen
+Servern.
 
-Dieses Handbuch hat zwei Teile: **für Nutzer** und **für Verwalter**. Jeder
-Abschnitt beantwortet eine Frage und ist für sich verständlich. Die
-technische Referenz für Einrichtung und Betrieb steht in der `README.md`.
+Teil 1 ist **für Nutzer**, Teil 2 **für Admins**. Jeder Abschnitt
+beantwortet eine Frage und ist für sich verständlich. Die technische
+Referenz steht in der `README.md`.
 
 ## Teil 1: LocaNoto benutzen (für Nutzer)
 
-Dieser Teil erklärt Anmelden, Fragen stellen, Quellen lesen, Dokumente
-hochladen, Chats, Räume, Listen, Datenbank, Postfächer, Passwort und
-Zugangstoken in LocaNoto.
+Anmelden, Fragen stellen, Quellen lesen, Dokumente hochladen, Chats,
+Arbeitsbereiche, Voreinstellungen, Listen, Datenbank, Postfächer, Passwort
+und Zugangstoken in LocaNoto.
 
 ### Was ist LocaNoto und woher kommen die Antworten?
 
-LocaNoto beantwortet Fragen aus den Dokumenten, die im Haus hinterlegt
-sind. Zu jeder Frage sucht LocaNoto die passenden Abschnitte in den
-Dokumenten heraus – über Bedeutung und über Stichworte zugleich – und ein
-Sprachmodell formuliert daraus die Antwort. Unter jeder Antwort stehen die
-verwendeten Quellen mit Datei und Seite.
+Frage stellen → LocaNoto sucht die passenden Abschnitte in deinen
+Dokumenten (nach Bedeutung und nach Stichworten), ein Sprachmodell
+formuliert daraus die Antwort. Unter jeder Antwort stehen die Quellen mit
+Datei und Seite.
 
-LocaNoto durchsucht nur die Räume, die du sehen darfst. Was nicht im
-Bestand steht, kann LocaNoto nicht wissen; dann sagt die Antwort das.
+Durchsucht werden nur die Arbeitsbereiche, die du sehen darfst. Steht
+etwas nicht im Bestand, sagt die Antwort das.
+
+Die Seitenleiste ist gegliedert in:
+
+- **Voreinstellung** (ganz oben, falls vorhanden)
+- **Chats** – neuer Chat, frühere Chats
+- **Dokumentfilter** – Suche eingrenzen, Websuche
+- **Datenbank** und **Listen** – nur, wenn eingerichtet
+- **Dokumente** – hochladen, verschieben, löschen
+- **Einstellungen** – Modell, Passwort, Anweisung, Voreinstellungen,
+  Postfächer, Zugangstoken
+- **Admin-Bereich** – nur für Admins
 
 ### Wie melde ich mich bei LocaNoto an und ab?
 
-Anmelden: **Benutzername** und **Passwort** eingeben, **Einloggen**. Den
-Zugang legt ein Verwalter an.
-
-Abmelden: **🚪 Ausloggen** in der Seitenleiste. Nach längerer Zeit ohne
-Eingabe endet die Anmeldung von selbst (Vorgabe: 480 Minuten); dann
-erneut anmelden.
-
-Zeigt die Seite nach einem Update keine Reaktion mehr, ist die Verbindung
-zum Server neu aufgebaut worden: Seite neu laden und erneut anmelden.
+- Anmelden: **Benutzername** und **Passwort** eingeben → **Anmelden**. Den
+  Zugang legt ein Admin an.
+- Abmelden: **Abmelden** in der Seitenleiste.
+- Längere Zeit keine Eingabe (Vorgabe: 480 Minuten) → die Anmeldung endet
+  von selbst; erneut anmelden.
+- Seite reagiert nach einem Update nicht mehr → Seite neu laden und erneut
+  anmelden.
 
 ### Wie stelle ich LocaNoto auf Englisch um?
 
-In der Seitenleiste unter **🌐 Sprache / Language** zwischen Deutsch und
-English wählen; das gilt sofort und wird für deinen Zugang gemerkt. Auf
-der Anmeldeseite steht derselbe Umschalter. Gefragt werden kann in jeder
-Sprache: LocaNoto antwortet in der Sprache der Frage, auch wenn die
-Dokumente deutsch sind. Dateinamen, Werte und Zitate bleiben, wie sie im
-Dokument stehen.
+In der Seitenleiste unter **🌐 Sprache / Language** Deutsch oder English
+wählen → gilt sofort und wird für deinen Zugang gemerkt. Derselbe
+Umschalter steht auf der Anmeldeseite.
+
+Fragen kannst du in jeder Sprache: LocaNoto antwortet in der Sprache der
+Frage, auch bei deutschen Dokumenten. Dateinamen, Werte und Zitate bleiben
+wie im Dokument.
 
 ### Wie stelle ich LocaNoto eine Frage?
 
-Die Frage ins Eingabefeld unten schreiben (**Frage an die Datenbank**) und
-abschicken. Bilder – etwa ein Foto oder ein Screenshot – lassen sich an die
-Frage anhängen (png, jpg, webp, gif, bmp); LocaNoto beschreibt sie und
-bezieht sie ein.
+- Frage ins Eingabefeld unten (**Frage an die Datenbank**) schreiben und
+  abschicken.
+- Bild anhängen (png, jpg, webp, gif, bmp) → LocaNoto beschreibt es und
+  bezieht es ein.
+- Nachfrage im selben Chat → bezieht sich auf den bisherigen Verlauf.
 
-Während eine Antwort entsteht, ist die Seitenleiste gesperrt. Ein Klick
-dort würde die Antwort abbrechen. Steht unter einer Antwort
-„Abgebrochen – die Antwort ist unvollständig", die Frage noch einmal
-stellen.
-
-Nachfragen im selben Chat beziehen sich auf den bisherigen Verlauf.
+Während eine Antwort entsteht, ist die Seitenleiste gesperrt; ein Klick
+dort bricht die Antwort ab. Steht unter einer Antwort „Abgebrochen –
+Antwort unvollständig", die Frage erneut stellen.
 
 ### Woran sehe ich in LocaNoto, woher eine Antwort stammt?
 
-Unter jeder Antwort steht **📚 Verwendete Quellen**: je Fundstelle ein
-Eintrag **📄 Datei (Seite n)**. Aufgeklappt zeigt er den Textabschnitt,
-auf den sich die Antwort stützt. Die Verweise im Antworttext sind
-anklickbar und springen zur zugehörigen Quelle.
+Unter jeder Antwort steht **Quellen** mit je einem Eintrag
+**Datei (Seite n)** pro Fundstelle.
 
-Bei PDF-Dateien lädt **👁️ Original-Seite n als Bild laden** die
-Originalseite, etwa um eine Tabelle oder Zeichnung im Original zu sehen.
-Bei Word- und Markdown-Dateien steht statt der Seite die Nummer des
-Abschnitts.
+- Eintrag aufklappen → zeigt den Textabschnitt, auf den sich die Antwort
+  stützt.
+- Verweis im Antworttext anklicken → springt zur zugehörigen Quelle.
+- Bei PDF **Originalseite n als Bild** ankreuzen → zeigt die Seite im
+  Original, etwa für Tabellen oder Zeichnungen.
+- Bei Word und Markdown steht statt der Seite die Nummer des Abschnitts.
 
-**🛠️ Debug-Röntgenblick** zeigt, mit welchen Suchanfragen gesucht wurde
-und was das Sprachmodell zu sehen bekam.
+**Debug: Was sieht das LLM?** zeigt die Suchanfragen und was das
+Sprachmodell zu sehen bekam.
 
 ### Warum findet LocaNoto etwas nicht?
 
-Die häufigsten Gründe:
+- **Dokument liegt in einem Arbeitsbereich, den du nicht siehst** →
+  LocaNoto durchsucht nur deine Arbeitsbereiche.
+- **Ein Filter ist gesetzt** → unter **Dokumentfilter** Arbeitsbereich,
+  Projekt und „Suche beschränken auf" leeren.
+- **Das Dokument verwendet ein anderes Wort** (du fragst „BANF", dort steht
+  „Bestellanforderung") → ein Admin ergänzt das Glossar. Fragen ohne
+  Treffer werden dafür automatisch vermerkt.
+- **Scan ohne lesbaren Text** → beim Hochladen erscheint eine Meldung; siehe
+  „Wie lade ich einen Scan in LocaNoto hoch?".
 
-- **Das Dokument liegt in einem Raum, den du nicht siehst.** LocaNoto
-  durchsucht nur deine Räume.
-- **Ein Filter ist gesetzt.** Unter **🎯 Dokumenten-Filter** Raum, Projekt
-  und „Suche beschränken auf" leeren.
-- **Das Dokument verwendet ein anderes Wort.** Fragt man nach „BANF" und
-  das Dokument schreibt „Bestellanforderung", hilft das Glossar, das ein
-  Verwalter pflegt. Fragen ohne Treffer werden dafür automatisch vermerkt.
-- **Das Dokument ist ein Scan ohne Textebene.** Dann ist es nicht
-  durchsuchbar; beim Hochladen erscheint eine Meldung dazu.
-
-Mehr Treffer holt der Regler **Relevante Abschnitte abrufen** (Vorgabe 5).
+Mehr Treffer: Regler **Abschnitte abrufen** (ganz unten in der
+Seitenleiste, Vorgabe 5) höher stellen.
 
 ### Wie grenze ich die Suche in LocaNoto ein?
 
-In der Seitenleiste unter **🎯 Dokumenten-Filter**:
+In der Seitenleiste unter **Dokumentfilter**:
 
-- **Raum:** nur in bestimmten Räumen suchen. Leer heißt: alle deine Räume.
-- **Projekt:** nur Dokumente eines Projekts aus deinem persönlichen Raum.
-- **Suche beschränken auf:** einzelne Dokumente auswählen. Die Liste zeigt
-  nur Dokumente, die zu Raum und Projekt darüber passen.
+- **Arbeitsbereich:** wählen → nur dort suchen. Leer → alle deine
+  Arbeitsbereiche.
+- **Projekt:** wählen → nur Dokumente dieses Projekts aus deinem
+  persönlichen Arbeitsbereich.
+- **Suche beschränken auf:** einzelne Dokumente wählen. Die Liste zeigt nur
+  Dokumente, die zu Arbeitsbereich und Projekt passen.
 
-Der Regler **Relevante Abschnitte abrufen** bestimmt, wie viele Fundstellen
-in eine Antwort eingehen. Mehr hilft bei umfangreichen Regelwerken, macht
-die Antwort aber langsamer.
+Regler **Abschnitte abrufen** (ganz unten in der Seitenleiste) → bestimmt,
+wie viele Fundstellen in eine Antwort eingehen. Mehr hilft bei
+umfangreichen Regelwerken, macht die Antwort aber langsamer.
 
-### Was sind Räume in LocaNoto und wer sieht meine Dokumente?
+### Was sind Arbeitsbereiche in LocaNoto und wer sieht meine Dokumente?
 
-Ein Raum legt fest, wer ein Dokument finden kann.
+Der Arbeitsbereich legt fest, wer ein Dokument finden kann.
 
-| Raum | sichtbar für | hochladen und löschen |
+| Arbeitsbereich | sichtbar für | hochladen und löschen |
 |---|---|---|
-| Allgemein | alle Nutzer | nur Verwalter |
-| ein benannter Raum (Abteilung, Projekt, Kunde) | seine Mitglieder | seine Mitglieder |
-| dein persönlicher Raum | nur du | du und Verwalter |
+| Allgemein | alle Nutzer | nur Admins |
+| benannter Arbeitsbereich (Abteilung, Projekt, Kunde) | seine Mitglieder | seine Mitglieder |
+| dein persönlicher Arbeitsbereich | nur du | du und Admins |
 
-Jeder Nutzer hat ab seinem ersten Tag einen persönlichen Raum. Was dort
-liegt, fließt nie in die Antworten anderer ein. Welche Räume du siehst,
-steht unter **Dokumente** in der Seitenleiste.
+Jeder Nutzer hat von Anfang an einen persönlichen Arbeitsbereich. Was dort
+liegt, fließt nie in die Antworten anderer ein. Welche Arbeitsbereiche du
+siehst, steht unter **Dokumente** → **Gespeicherte Dokumente**.
 
 ### Wie lade ich ein Dokument in LocaNoto hoch?
 
-1. In der Seitenleiste **Dokumente hochladen** – PDF, Word (docx),
-   Markdown, Text oder ein Scan als TIFF, JPG oder PNG. Mehrere Dateien auf
-   einmal gehen.
-2. **Raum** wählen. Vorgegeben ist dein persönlicher Raum („Nur für dich
-   sichtbar"), sodass nichts versehentlich geteilt wird.
-3. Optional ein **Projekt** angeben (nur im persönlichen Raum). Es sortiert
-   und lässt sich später im Filter wählen.
-4. **Abbildungen und gescannte Seiten beschreiben** nur ankreuzen, wenn
-   Schaubilder wichtig sind: es kostet einen Modellaufruf je Bild. Gescannte
-   Seiten liest die Texterkennung auch ohne diesen Haken.
-5. **Hochladen & Vektorisieren**.
+In der Seitenleiste unter **Dokumente**:
 
-Danach meldet LocaNoto je Datei, wie viele Abschnitte durchsuchbar sind.
+1. **Dokumente hochladen** – PDF, Word (docx), Markdown, Text oder Scan
+   (TIFF, JPG, PNG); mehrere Dateien auf einmal gehen.
+2. **Arbeitsbereich** wählen. Vorgabe ist dein persönlicher Arbeitsbereich
+   („Nur für dich sichtbar") → nichts wird versehentlich geteilt.
+3. Optional **Projekt** angeben (nur im persönlichen Arbeitsbereich) →
+   später im Dokumentfilter wählbar.
+4. **Bilder und Scans beschreiben** nur ankreuzen, wenn Schaubilder wichtig
+   sind → ein Modellaufruf je Bild. Gescannte Seiten liest die
+   Texterkennung auch ohne Haken.
+5. **Hochladen & einlesen** → LocaNoto meldet je Datei, wie viele
+   Abschnitte durchsuchbar sind.
 
 ### Wie lade ich einen Scan in LocaNoto hoch?
 
-Wie jedes andere Dokument. Seiten ohne Textebene – ein gescanntes PDF oder
-ein Bild als TIFF, JPG, PNG – liest die Texterkennung (Deutsch und
-Englisch) automatisch.
+Wie jedes Dokument. Seiten ohne Textebene (gescanntes PDF, TIFF, JPG, PNG)
+liest die Texterkennung (Deutsch, Englisch) automatisch.
 
-Kann sie eine Seite nicht lesen, nennt die Meldung die Seitenzahlen, und
-darunter erscheint **🔍 Mit Sehmodell lesen**. Das Sehmodell liest schlechte
-Scans und Handschrift besser, braucht aber einen Modellaufruf je Seite.
+- Seite nicht lesbar → die Meldung nennt die Seitenzahlen, darunter
+  erscheint **Mit Sehmodell lesen**.
+- **Mit Sehmodell lesen** klicken → liest schlechte Scans und Handschrift
+  besser, ein Modellaufruf je Seite.
 
-Unter einer Antwort steht bei solchen Fundstellen **aus Texterkennung**
-oder **vom Sehmodell gelesen**. Zahlen daraus – Prüfwerte, Maße, Fristen –
-an der Originalseite prüfen: die Texterkennung kann Ziffern verwechseln,
-und das Sehmodell kann eine unleserliche Stelle plausibel ergänzen.
+Unter der Antwort sind solche Fundstellen mit **aus Texterkennung** oder
+**vom Sehmodell gelesen** markiert. Zahlen daraus (Prüfwerte, Maße,
+Fristen) an der Originalseite prüfen: die Texterkennung kann Ziffern
+verwechseln, das Sehmodell unleserliche Stellen plausibel ergänzen.
 
 ### Wie verschiebe oder lösche ich ein Dokument in LocaNoto?
 
-Unter **Dokumente** in der Seitenleiste steht je Raum ein Aufklapper mit
-seinen Dateien. In Räumen, in die du schreiben darfst:
+Unter **Dokumente** → **Gespeicherte Dokumente** steht je Arbeitsbereich
+ein Aufklapper mit seinen Dateien:
 
-- **Dokument verwalten** – die Datei wählen,
-- **verschieben nach** und **Verschieben** – in einen anderen Raum, etwa
-  um etwas aus dem persönlichen Raum mit einer Abteilung zu teilen,
-- **🗑️ Löschen** – entfernt die Datei samt ihren Abschnitten aus der Suche.
+1. **Dokument verwalten** – Datei wählen.
+2. **verschieben nach** wählen → **Verschieben**, etwa um etwas aus deinem
+   persönlichen Arbeitsbereich mit einer Abteilung zu teilen.
+3. Oder **Löschen** → Datei und ihre Abschnitte verschwinden aus der Suche.
 
-Ist ownCloud angebunden, geschieht beides dort mit: gelöschte Dateien
-landen im ownCloud-Papierkorb, verschobene im Ordner des neuen Raums.
-Gelingt das nicht, sagt die Meldung es – dann käme die Datei mit dem
-nächsten Abgleich zurück.
+Mit ownCloud: gelöschte Dateien landen dort im Papierkorb, verschobene im
+Ordner des neuen Arbeitsbereichs. Klappt das nicht, sagt die Meldung es –
+sonst käme die Datei beim nächsten Abgleich zurück.
 
-Steht dort „Nur lesen", darfst du in diesem Raum nichts ändern.
+„Nur lesen" → in diesem Arbeitsbereich darfst du nichts ändern.
 
 ### Wie arbeite ich in LocaNoto mit Chats?
 
-Unter **💬 Chats** in der Seitenleiste:
+In der Seitenleiste unter **Chats**:
 
-- **➕ Neuer Chat** beginnt ein neues Gespräch ohne Vorgeschichte.
-- **Vorherige Chats laden** öffnet ein früheres Gespräch.
-- **🗑️ Aktuellen Chat löschen** entfernt das geöffnete Gespräch.
+- **Neuer Chat** → neues Gespräch ohne Vorgeschichte.
+- **Frühere Chats:** wählen → öffnet ein früheres Gespräch.
+- **Chat löschen** → entfernt das geöffnete Gespräch.
 
-Chats werden automatisch gespeichert und sind nur für dich sichtbar. Sie
-liegen verschlüsselt auf dem Server, samt Titeln und angehängten Bildern.
+Jeder Chat bekommt nach der ersten Frage automatisch einen kurzen Titel
+(höchstens etwa sechs Wörter). Chats werden automatisch gespeichert, sind
+nur für dich sichtbar und liegen verschlüsselt auf dem Server, samt Titeln
+und Bildern.
 
-Ein neues Thema gehört in einen neuen Chat: LocaNoto bezieht den Verlauf
-eines Chats in die Antwort ein.
+Neues Thema → neuer Chat, denn LocaNoto bezieht den Verlauf des Chats in
+die Antwort ein.
 
 ### Was bewirken Daumen hoch und Daumen runter in LocaNoto?
 
 Unter jeder Antwort stehen 👍 („Hat geholfen") und 👎 („Hat nicht
-geholfen"). Die Rückmeldung geht an die Verwalter, mit der Frage und den
-verwendeten Quellen. Daraus sehen sie, welche Fragen der Bestand gut
-beantwortet und wo Dokumente oder Glossareinträge fehlen.
+geholfen").
 
-Fragen, zu denen nichts gefunden wurde, werden auch ohne Klick vermerkt.
-Stammte ein Treffer aus einem persönlichen Raum, steht in der Rückmeldung
-statt des Dateinamens nur „(persoenlicher Raum)".
+- Klick → die Rückmeldung geht mit Frage und Quellen an die Admins. Sie
+  sehen daran, wo Dokumente oder Glossareinträge fehlen.
+- Fragen ohne Treffer werden auch ohne Klick vermerkt.
+- Stammt ein Treffer aus einem persönlichen Arbeitsbereich, steht in der
+  Rückmeldung statt des Dateinamens nur ein Platzhalter.
 
 ### Was ist eine Voreinstellung in LocaNoto?
 
-Eine Voreinstellung bündelt Einstellungen für einen Einsatzzweck:
-Sprachmodell, Zahl der Fundstellen, Listenbereiche und auf Wunsch eigene
-Formulierungen. Wählbar ist sie ganz oben in der Seitenleiste unter
-**🎛️ Voreinstellung**; darunter steht, wofür sie gedacht ist.
+Eine Voreinstellung bündelt Modell, Zahl der Fundstellen und
+Listenbereiche für einen Zweck. Auswahl ganz oben in der Seitenleiste unter
+**Voreinstellung**; darunter steht, wofür sie gedacht ist. **(Standard)**
+nutzt die Grundeinstellung.
 
-Die Auswahl erscheint nur, wenn ein Verwalter Voreinstellungen angelegt
-hat. **(Standard)** nutzt die Grundeinstellung.
+**Eigene Voreinstellung anlegen:** **Einstellungen** → **Meine
+Voreinstellungen**:
+
+1. **Name** eingeben.
+2. **Modell** wählen (nur Modelle, die die Admins freigegeben haben).
+3. **Abschnitte je Frage** – 0 = Vorgabe.
+4. **Listenbereiche** wählen (falls Listen eingerichtet sind).
+5. **Speichern** → erscheint oben unter **Voreinstellung** mit dem Zusatz
+   „(eigene)". **Löschen** entfernt sie.
+
+Voreinstellungen für alle legen Admins im **Admin-Bereich** an; nur diese
+können eigene Prompts haben.
+
+**Modell:** Unter **Einstellungen** wählst du das Sprachmodell aus der
+Liste, die die Admins freigeben. Gibt es nur ein Modell, entfällt die
+Auswahl.
 
 ### Wie frage ich in LocaNoto Listen aus Excel oder CSV ab?
 
-Listen (xlsx, csv) werden nicht wie Dokumente eingelesen, sondern bei
-jeder Frage frisch gelesen – neue Zeilen wirken sofort. Unter **📊 Listen**
-in der Seitenleiste:
+Listen (xlsx, csv) werden bei jeder Frage frisch gelesen → neue Zeilen
+wirken sofort. In der Seitenleiste unter **Listen**:
 
-- **Listen mit abfragen** – LocaNoto wählt die passende Liste und liest die
-  passenden Zeilen. Darunter steht, wie viele Blätter bereitstehen.
-- **Bereich** – nur Listen aus bestimmten Unterordnern.
-- **Grosse Listen einbeziehen** – sehr große Blätter; eine Frage dauert
+- **Listen mit abfragen** ankreuzen → LocaNoto wählt die passende Liste und
+  liest die passenden Zeilen. Darunter steht, wie viele Blätter bereit
+  sind.
+- **Listenbereich** wählen → nur Listen aus diesen Bereichen
+  (Unterordnern). Leer → alle.
+- **Große Listen einbeziehen** → auch sehr große Blätter; Fragen dauern
   dann deutlich länger.
 
-Unter der Antwort zeigt **📊 Liste: …**, welche Liste mit welcher Abfrage
-benutzt wurde. **Erkannte Blaetter** zeigt, welche Blätter mit welchen
-Spalten bereitstehen; **Nicht lesbar** nennt Dateien, die sich nicht lesen
-ließen. In **📁 Mein Listenordner** lässt sich ein eigener Ordner
-eintragen, dessen Listen nur du siehst.
+Unter der Antwort zeigt **Liste: … (n Zeilen)**, welche Liste mit welcher
+Abfrage benutzt wurde. **Erkannte Blätter** zeigt Blätter und Spalten,
+**Nicht lesbar** Dateien mit Fehlern.
+
+**Mein Listenordner:** eigenen Ordner bei **Ordner** eintragen →
+**Übernehmen** → dessen Listen siehst nur du.
 
 ### Wie frage ich in LocaNoto die Datenbank ab?
 
-Ist eine Fachdatenbank angebunden, steht in der Seitenleiste
-**🗄️ Datenbank**. Mit **Datenbank einbeziehen** formuliert LocaNoto zu
-deiner Frage eine lesende Abfrage (SELECT) und bezieht das Ergebnis in die
-Antwort ein. Ändern kann LocaNoto an der Datenbank nichts.
+Ist eine Fachdatenbank angebunden, steht in der Seitenleiste **Datenbank**.
 
-Unter der Antwort zeigt **🗄️ Datenbankabfrage** die ausgeführte Abfrage
-und das verwendete Konto.
+- **Datenbank einbeziehen** einschalten → LocaNoto schreibt zu deiner Frage
+  eine lesende Abfrage (SELECT) und nutzt das Ergebnis. Ändern kann
+  LocaNoto an der Datenbank nichts.
+- Unter der Antwort zeigt **Datenbankabfrage** die Abfrage und das Konto.
+- „Keine Datenbankverbindung" → Antworten nur aus den Dokumenten;
+  **Neu verbinden** versucht es erneut, **Treibermeldung** zeigt Details.
 
-In **🗄️ Mein Datenbankzugang** trägst du dein eigenes Datenbankkonto ein.
-Dann laufen Fragen mit deinen Rechten, und LocaNoto sieht nur die Tabellen,
-die du sehen darfst. „Keine Verbindung zur Datenbank" heißt: die Antworten
-kommen nur aus den Dokumenten; **Erneut verbinden** versucht es wieder.
+**Mein Datenbankzugang:** eigenes Konto (**Benutzer**, **Passwort**)
+eintragen → **Übernehmen** → Abfragen laufen mit deinen Rechten, LocaNoto
+sieht nur deine Tabellen.
 
 ### Wie verbinde ich mein Postfach mit LocaNoto?
 
-In der Seitenleiste unter **📬 Meine Postfächer** je Postfach Mailadresse
-und Passwort eintragen und **Verbinden**. LocaNoto prüft die Anmeldung
-sofort. Steht dort „Noch kein Postfach eingerichtet", muss ein Verwalter
-den Exchange-Server einmal hinterlegen.
+**Einstellungen** → **Meine Postfächer** → je Postfach Mailadresse und
+Passwort eintragen → **Verbinden**. LocaNoto prüft die Anmeldung sofort.
 
-Danach kann LocaNoto Mails einbeziehen, zum Beispiel:
+„Noch kein Postfach eingerichtet" → ein Admin muss den Exchange-Server
+einmal hinterlegen.
+
+Danach kann LocaNoto Mails einbeziehen, etwa:
 
 - „Was hat Frau Meier zuletzt geschrieben?"
 - „Fasse mir die Mails der letzten 24 Stunden zusammen."
-- „Antworte auf die Mail von Herrn Braun, dass der Termin passt."
+- „Antworte Herrn Braun, dass der Termin passt."
 
-Die Anmeldedaten liegen nur in deiner laufenden Sitzung. Sie werden nicht
-gespeichert und verschwinden beim Abmelden; danach neu verbinden.
-**Trennen** beendet die Verbindung vorher.
+Die Anmeldedaten liegen nur in deiner laufenden Sitzung und verschwinden
+beim Abmelden → danach neu verbinden. **Trennen** beendet die Verbindung
+vorher.
 
 Funktionspostfächer (etwa info@) öffnest du mit deinen eigenen Daten;
-Exchange entscheidet, ob du Zugriff hast.
+Exchange entscheidet über den Zugriff.
 
 ### Was passiert, wenn LocaNoto eine Mail verschicken will?
 
-LocaNoto verschickt aus einem persönlichen Postfach **nie selbständig**.
-Will die Antwort eine Mail senden, erscheint darunter
-**✍️ Entwurf: … – wartet auf dich** mit Empfänger, Betreff und Text.
+Aus einem persönlichen Postfach verschickt LocaNoto **nie selbst**. Will
+die Antwort eine Mail senden, erscheint darunter **Entwurf: … — wartet auf
+dich** mit Empfänger, Betreff und Text.
 
-- **Senden** verschickt den Entwurf so, wie er dort steht.
-- **Verwerfen** verschickt nichts.
+- **Senden** → verschickt den Entwurf so, wie er dort steht.
+- **Verwerfen** → verschickt nichts.
 
-Nur ein Funktionspostfach kann ein Verwalter für selbständige Antworten
-freischalten. Solche Mails tragen dann in der Regel einen Hinweis, dass sie
+Nur für ein Funktionspostfach kann ein Admin selbständige Antworten
+freischalten; solche Mails tragen in der Regel einen Hinweis, dass sie
 automatisch erstellt wurden.
 
 ### Wie suche ich mit LocaNoto im Internet?
 
-In der Seitenleiste **🌐 Websuche** einschalten. Dann darf LocaNoto im
-Netz nachsehen, wenn deine Dokumente die Frage nicht beantworten. Hinaus
-geht nur der Suchbegriff, keine Dokumente.
+**Dokumentfilter** → **Websuche** einschalten → LocaNoto sucht im Netz,
+wenn deine Dokumente die Frage nicht beantworten. Hinaus geht nur der
+Suchbegriff, keine Dokumente.
 
-In deinem eigenen Raum geht das immer. In einem geteilten Raum muss ein
-Verwalter die Websuche erst erlauben; sonst nennt die Seitenleiste die
-Räume, die es nicht tun. Dann oben nur freigegebene Räume wählen.
+- Persönlicher Arbeitsbereich → geht immer.
+- Geteilter Arbeitsbereich → ein Admin muss die Websuche dort erst
+  erlauben. Sonst nennt die Seitenleiste die nicht freigegebenen
+  Arbeitsbereiche; dann oben nur freigegebene wählen.
 
-Treffer stehen unter der Antwort als **🌐 Aus dem Netz** mit [W1], [W2]
-… – getrennt von den Dokumenten. Was du behalten willst, hakst du an und
-klickst **in meinen Raum übernehmen**.
+Treffer stehen unter der Antwort als **Aus dem Netz** mit [W1], [W2] …,
+getrennt von den Dokumenten. Treffer ankreuzen → **n übernehmen** → sie
+landen in deinem persönlichen Arbeitsbereich.
 
 ### Wie sammle ich mit LocaNoto Quellen aus dem Internet?
 
-Über dem Chat **🌐 Quellen im Netz suchen** aufklappen, ein Thema in
-Stichworten eingeben, **Suchen**. Es kommt eine Liste mit bis zu zehn
-Treffern, ohne Antwort. Anhaken, was du behalten willst, dann **in meinen
-Raum übernehmen**. Den Suchbegriff tippst du selbst; er geht an
-Suchmaschinen, also keine internen Namen oder Zahlen.
+1. Über dem Chat **Quellen im Netz** aufklappen.
+2. **Thema** in Stichworten eingeben → **Suchen** → bis zu zehn Treffer,
+   ohne Antwort. Der Suchbegriff geht an Suchmaschinen: keine internen
+   Namen oder Zahlen.
+3. Optional **Lesen** → zeigt die Seite als reinen Text, ohne Bilder und
+   Skripte; genau dieser Text wird übernommen. **Original ↗** öffnet die
+   Seite im Browser.
+4. Treffer ankreuzen → **n übernehmen**.
 
-Vor dem Übernehmen kannst du jeden Treffer lesen: **👁️ Lesen** zeigt
-die ganze Seite als reinen Text in LocaNoto, ohne Bilder und Skripte.
-Übernommen wird genau dieser Text. **Original ↗** öffnet die Seite in
-deinem Browser.
-
-Übernommenes landet **immer in deinem eigenen Raum**, Ordner
-*Suchergebnisse*, als Dokument mit Quelle und Abrufdatum. Gehört etwas in
-einen geteilten Raum, verschiebst du es dorthin – so füllt kein Klick
-einen gemeinsamen Raum.
+Übernommenes landet **immer in deinem persönlichen Arbeitsbereich**, Ordner
+*Suchergebnisse*, mit Quelle und Abrufdatum. Gehört es in einen geteilten
+Arbeitsbereich → dorthin verschieben.
 
 ### Wie sage ich LocaNoto, wie es mir antworten soll?
 
-In der Seitenleiste unter **🗒️ Meine Anweisung** steht ein Textfeld für
-deine persönliche Anweisung, zum Beispiel: „Antworte knapp, mit Tabellen,
-und nenne immer die Norm." **Speichern** – sie gilt ab der nächsten Frage
-für alle deine Antworten, auch über die Schnittstelle. **Entfernen** nimmt
-sie wieder heraus.
+**Einstellungen** → **Meine Anweisung** → Text eintragen, etwa „Antworte
+knapp, mit Tabellen, und nenne immer die Norm." → **Speichern**.
 
-Die Anweisung verfeinert nur. Die Grundlagen – wie LocaNoto sucht, welche
-Regeln für Antworten gelten, etwa Quellen nennen und nichts erfinden –
-legt ein Verwalter in den Vorlagen fest, und sie gehen vor. Andere Nutzer
-sehen deine Anweisung nicht; sie liegt verschlüsselt. Höchstens 2000
-Zeichen.
+- Gilt ab der nächsten Frage für alle deine Antworten, auch über die
+  Schnittstelle.
+- **Entfernen** → nimmt sie wieder heraus.
+- Höchstens 2000 Zeichen; verschlüsselt gespeichert, andere sehen sie
+  nicht.
+
+Die Anweisung verfeinert nur. Die Grundregeln (Quellen nennen, nichts
+erfinden) legen die Admins in den Prompts fest; sie gehen vor.
 
 ### Wie ändere ich mein Passwort in LocaNoto?
 
-In der Seitenleiste **🔑 Passwort aendern**: **Bisheriges Passwort**,
-**Neues Passwort** (mindestens 8 Zeichen), **Wiederholen**, dann
-**Aendern**.
+**Einstellungen** → **Passwort ändern** → **Bisheriges Passwort**,
+**Neues Passwort (mind. 8 Zeichen)**, **Wiederholen** → **Ändern**.
 
-Ist ownCloud angebunden, gilt das neue Passwort auch dort, sofern
-LocaNoto dein ownCloud-Konto verwaltet. Gibt es dort noch kein Konto für
-dich, entsteht es jetzt, mit diesem Passwort. Gehört das Konto dort
-jemand anderem, sagt die Meldung, dass dort weiter das alte gilt.
+Mit ownCloud:
 
-Passwort vergessen: ein Verwalter setzt ein neues. Das ändert sich danach
-am besten sofort selbst, damit niemand anders es kennt.
+- Verwaltet LocaNoto dein ownCloud-Konto → das neue Passwort gilt dort
+  auch.
+- Gibt es dort noch kein Konto → es entsteht jetzt, mit diesem Passwort.
+- Gehört das Konto jemand anderem → die Meldung sagt, dass dort das alte
+  Passwort weiter gilt.
+
+Passwort vergessen → ein Admin setzt ein neues; danach sofort selbst
+ändern.
 
 ### Was sind meine Zugangstoken in LocaNoto?
 
-Ein Zugangstoken erlaubt Programmen und Skripten, LocaNoto über die
-HTTP-Schnittstelle zu fragen oder Dokumente einzuliefern – mit deinen
-Rechten. Angelegt wird ein Token von einem Verwalter; der Wert wird genau
-einmal angezeigt.
+Ein Zugangstoken lässt Programme und Skripte LocaNoto über die
+HTTP-Schnittstelle fragen oder Dokumente einliefern – mit deinen Rechten.
+Ein Admin legt es an; der Wert wird genau einmal angezeigt.
 
-Unter **🎫 Meine Zugangstoken** siehst du alle Token, die auf dich
-ausgestellt sind, mit Bezeichnung und Ablaufdatum. **🗑️** widerruft ein
-Token sofort. Was du nicht mehr brauchst, widerrufe.
+**Einstellungen** → **Meine Zugangstoken** → zeigt alle Token auf deinen
+Namen mit Bezeichnung und Ablaufdatum. **🗑️** → widerruft ein Token sofort.
+Nicht mehr gebrauchte Token widerrufen.
 
-### Was sehen Verwalter von meiner Arbeit in LocaNoto?
+### Was sehen Admins von meiner Arbeit in LocaNoto?
 
-- **Chats:** nicht in der Anwendung. Sie liegen verschlüsselt.
-- **Persönlicher Raum:** Verwalter sehen die Dateinamen, nie den Inhalt, und
-  können Dateien löschen. Im strengen Betrieb sehen sie nicht einmal die
-  Dateinamen. Den Inhalt erreichen sie nur über den Notzugang, den eine
+- **Chats:** nichts in der Anwendung; sie liegen verschlüsselt.
+- **Persönlicher Arbeitsbereich:** Admins sehen Dateinamen, nie den Inhalt,
+  und können Dateien löschen. Im strengen Betrieb sehen sie nicht einmal
+  die Dateinamen. Den Inhalt erreichen sie nur über den Notzugang, den eine
   zweite Person bestätigen muss; beide Namen stehen im Protokoll.
-- **Rückmeldungen:** Fragen mit 👍/👎 und Fragen ohne Treffer sehen
-  Verwalter im Wortlaut, zusammen mit deiner Kennung.
+- **Rückmeldungen:** Fragen mit 👍/👎 und Fragen ohne Treffer im Wortlaut,
+  mit deiner Kennung.
 - **Postfach-Anmeldungen:** niemand; sie werden nicht gespeichert.
 
-Wer Zugriff auf den Server selbst hat, kann technisch mehr. Dagegen
+Wer Zugriff auf den Server selbst hat, kann technisch mehr; dagegen
 schützen ein verschlüsselter Datenträger und ein kleiner Kreis mit
 Serverzugang.
 
-## Teil 2: LocaNoto verwalten (für Verwalter)
+## Teil 2: LocaNoto verwalten (für Admins)
 
-Dieser Teil erklärt Benutzer, Rollen, Räume, den gemeinsamen Bestand,
-Listen, Zugangstoken und Schnittstelle, Postfächer, Notzugang, Rückmeldungen,
+Benutzer, Rollen, Arbeitsbereiche, gemeinsamer Bestand, Listen,
+Zugangstoken und Schnittstelle, Postfächer, Notzugang, Rückmeldungen,
 Glossar, Prompts, Voreinstellungen, ownCloud, Sicherung und Störungen.
 
-### Wo finde ich als Verwalter die Verwaltung in LocaNoto?
+### Wo finde ich als Admin den Admin-Bereich in LocaNoto?
 
-Verwalter sehen in der Seitenleiste den Schalter **🛠️ Verwaltung**.
-Eingeschaltet erscheinen darunter die Bereiche: 📝 Rueckmeldungen,
-👥 Benutzer verwalten, 🎫 Zugangstoken für die Schnittstelle,
-📬 Postfächer (Werkzeugserver), 🔐 Verschlüsselung, 🔓 Notzugang,
-🚪 Räume verwalten, ☁️ ownCloud, 🗃️ Sicherung der Vektordatenbank,
-🔒 Sicherheitslage, 💾 Speicherorte, 🗣️ Glossar bearbeiten,
-🎛️ Voreinstellungen verwalten, 📜 Prompts bearbeiten und ⚙️ Konfiguration.
+Admins sehen unten in der Seitenleiste den Schalter **Admin-Bereich**.
+Einschalten → darunter erscheinen:
 
-Unabhängig vom Schalter sehen Verwalter außerdem **🔄 Nachtragen und neu
-einlesen**, **Listenquellen je Raum** und unter den Dokumenten die
-Dokumente in fremden Räumen.
+Rückmeldungen, Benutzer, Zugangstoken (Schnittstelle), Postfächer
+(Werkzeugserver), Verschlüsselung, Notzugang, Arbeitsbereiche, ownCloud,
+Sicherung der Vektordatenbank, Sicherheitslage, Speicherorte, Glossar,
+Voreinstellungen, Prompts und Konfiguration.
 
-### Wie werde ich Verwalter in LocaNoto?
+Auch ohne den Schalter sehen Admins:
 
-Die Rolle steht in der signierten Benutzerdatei. Ein vorhandener Verwalter
-vergibt sie unter **👥 Benutzer verwalten** → Benutzer wählen → **Rolle**
-→ **Rolle übernehmen**.
+- **Nachtragen und neu einlesen** (unter **Dokumente**),
+- **Listenquellen je Arbeitsbereich** (unter **Listen**),
+- unter **Gespeicherte Dokumente** auch Dokumente in fremden
+  Arbeitsbereichen.
 
-Den allerersten Zugang einer neuen Installation legt `create_user.py` im
-Terminal an; er wird Verwalter. Danach verlangt das Skript die Anmeldung
-eines vorhandenen Verwalters.
+### Wie werde ich Admin in LocaNoto?
 
-Den letzten Verwalter kann niemand herabsetzen oder löschen – sonst könnte
-niemand mehr Benutzer anlegen.
+- Ein vorhandener Admin: **Admin-Bereich** → **Benutzer** → Benutzer wählen
+  → **Rolle** `admin` → **Rolle übernehmen**.
+- Neue Installation: den allerersten Zugang legt `create_user.py` im
+  Terminal an; er wird Admin. Danach verlangt das Skript die Anmeldung
+  eines vorhandenen Admins.
 
-### Wie lege ich als Verwalter einen Benutzer in LocaNoto an?
+Den letzten Admin kann niemand herabsetzen oder löschen.
 
-**🛠️ Verwaltung** → **👥 Benutzer verwalten** → bei **Bearbeiten**
-„(neu anlegen)":
+### Wie lege ich als Admin einen Benutzer in LocaNoto an?
+
+**Admin-Bereich** → **Benutzer** → bei **Bearbeiten** „(neu anlegen)":
 
 1. **Kennung** – Buchstaben, Ziffern, Punkt, Strich, Unterstrich.
 2. **Rolle** – in der Regel `nutzer`.
-3. **Passwort** zweimal, mindestens 8 Zeichen.
+3. **Passwort (mind. 8 Zeichen)** und **Passwort wiederholen**.
 4. **Benutzer anlegen**.
 
-Der persönliche Raum entsteht dabei sofort. Ist ownCloud angebunden,
-richtet LocaNoto dort Konto und persönlichen Ordner mit ein. Kennungen, die
-sich nur durch ein Sonderzeichen unterscheiden („m.meier" und „m_meier"),
-weist LocaNoto ab: sie ergäben denselben persönlichen Raum.
+→ Der persönliche Arbeitsbereich entsteht sofort; mit ownCloud auch Konto
+und persönlicher Ordner dort.
 
-Mehrere Verwalter können gleichzeitig anlegen; kein Eintrag geht verloren.
+Kennungen, die sich nur durch ein Sonderzeichen unterscheiden („m.meier",
+„m_meier"), weist LocaNoto ab: sie ergäben denselben persönlichen
+Arbeitsbereich.
 
-### Wie ändere oder lösche ich als Verwalter einen Benutzer in LocaNoto?
+### Wie ändere oder lösche ich als Admin einen Benutzer in LocaNoto?
 
-Unter **👥 Benutzer verwalten** den Benutzer bei **Bearbeiten** wählen:
+**Admin-Bereich** → **Benutzer** → Benutzer bei **Bearbeiten** wählen:
 
-- **Rolle** ändern und **Rolle übernehmen**,
-- **Neues Passwort** zweimal eintragen und **Passwort setzen** – der
-  Benutzer ändert es danach am besten selbst,
-- **wirklich löschen** ankreuzen und **Benutzer löschen**.
+- **Rolle** ändern → **Rolle übernehmen**.
+- **Neues Passwort** zweimal → **Passwort setzen**. Der Benutzer ändert es
+  danach am besten selbst. Gilt bei einem von LocaNoto verwalteten Konto
+  auch in ownCloud.
+- „… wirklich löschen" ankreuzen → **Benutzer löschen**. Ein verwaltetes
+  ownCloud-Konto verschwindet mit. Chatverlauf und persönlicher
+  Arbeitsbereich bleiben; die Dokumente löschst du getrennt unter
+  **Gespeicherte Dokumente** (fremde persönliche Arbeitsbereiche).
 
-Beim Löschen verschwindet auch das ownCloud-Konto des Benutzers, sofern
-LocaNoto es verwaltet. Chatverlauf und persönlicher Raum bleiben
-bestehen; die Dokumente entfernt ein Verwalter getrennt, unter den
-Dokumenten in fremden Räumen. Ein neues Passwort gilt bei einem
-verwalteten Konto auch in ownCloud.
-
-Jede Änderung steht im verketteten Benutzerprotokoll. Steht oben „Die
-Benutzerdatei wurde außerhalb der Anwendung geändert", passt eine Signatur
-nicht: bestehende Nutzer arbeiten weiter, ein von Hand eingetragener Zugang
-ist gesperrt.
+Jede Änderung steht im verketteten Benutzerprotokoll. „Benutzerdatei wurde
+außerhalb von LocaNoto geändert" → eine Signatur passt nicht: bestehende
+Nutzer arbeiten weiter, ein von Hand eingetragener Zugang ist gesperrt.
 
 ### Welche Rollen gibt es in LocaNoto?
 
 | Rolle | darf |
 |---|---|
-| `nutzer` | fragen, in eigene und freigegebene Räume hochladen |
-| `admin` | zusätzlich Benutzer, Räume, gemeinsamen Bestand und alle Einstellungen verwalten |
-| `notzugang` | nichts davon – nur den Notzugang eines Verwalters zu einem persönlichen Raum bestätigen oder ablehnen |
+| `nutzer` | fragen, in eigene und freigegebene Arbeitsbereiche hochladen |
+| `admin` | zusätzlich Benutzer, Arbeitsbereiche, gemeinsamen Bestand und alle Einstellungen verwalten |
+| `notzugang` | nur den Notzugang eines Admins zu einem persönlichen Arbeitsbereich bestätigen oder ablehnen |
 
-Die Rolle `notzugang` gehört an jemanden, der **kein** Verwalter ist:
-Geschäftsführung, Personalrat oder wer im Haus dafür steht. Könnten
-Verwalter einander bestätigen, wäre der Notzugang eine Formalie.
+Die Rolle `notzugang` gehört an jemanden, der **kein** Admin ist, etwa
+Geschäftsführung oder Personalrat. Könnten Admins einander bestätigen, wäre
+der Notzugang eine Formalie.
 
-### Wie lege ich als Verwalter einen Raum in LocaNoto an?
+### Wie lege ich als Admin einen Arbeitsbereich in LocaNoto an?
 
-**🛠️ Verwaltung** → **🚪 Räume verwalten** → bei **Bearbeiten** einen neuen
-Raum: **Bezeichnung**, optional **Beschreibung**, **Mitglieder** wählen,
-**Raum anlegen**.
+**Admin-Bereich** → **Arbeitsbereiche** → bei **Bearbeiten** neu anlegen:
+**Bezeichnung**, optional **Beschreibung**, **Mitglieder** →
+**Arbeitsbereich anlegen**.
 
-Für einen bestehenden Raum lassen sich dort Bezeichnung, Beschreibung und
-Mitglieder ändern, eine **ownCloud-Gruppe** zuordnen (dann bestimmt die
-Gruppe die Mitglieder), ein **Listenordner** für xlsx/csv hinterlegen und
-unter **Datenbankzugang dieses Raums** ein Datenbankkonto eintragen.
+Bestehenden Arbeitsbereich wählen → dort änderbar:
 
-Auch der allgemeine Raum muss nicht allen offenstehen: **Auf eine
-Mitgliederliste umstellen** gibt ihm eine Liste, **Wieder für alle öffnen**
-nimmt sie zurück.
+- **Bezeichnung**, **Beschreibung**, **Mitglieder**,
+- **ownCloud-Gruppe** → deren Mitglieder kommen hinzu,
+- **Listenordner (xlsx, csv)**,
+- **Websuche erlauben**,
+- **Datenbankzugang** → eigenes Datenbankkonto für diesen Arbeitsbereich.
 
-**Raum entfernen** nimmt den Raum aus der Verwaltung; die Dokumente bleiben
-erhalten. **Daten löschen** ist ein eigener Schritt: er entfernt die
-Abschnitte des Raums aus der Suche, legt den Inhalt seines
-ownCloud-Ordners in den Papierkorb und verlangt vorher eine Bestätigung.
-Persönliche Räume haben genau einen Leser; Mitglieder lassen sich dort
-nicht eintragen.
+**Allgemein:** **Mitgliederliste verwenden** → nur Eingetragene sehen ihn;
+**Für alle öffnen** → nimmt das zurück.
 
-### Wie befülle ich als Verwalter den gemeinsamen Bestand in LocaNoto?
+- **Arbeitsbereich entfernen** → nimmt ihn aus der Liste, die Dokumente
+  bleiben.
+- **Daten löschen** → entfernt nach Bestätigung seine Abschnitte aus der
+  Suche und legt den Inhalt seines ownCloud-Ordners in den Papierkorb.
 
-In den Raum **Allgemein** schreiben nur Verwalter. Drei Wege:
+Persönliche Arbeitsbereiche haben genau einen Leser; Mitglieder lassen sich
+dort nicht eintragen.
 
-- **Oberfläche:** Dokumente hochladen, als Raum „Allgemein" wählen.
-- **Terminal:** Dateien in den Dokumentenordner legen und `python ingest.py`
-  starten; `INGEST_RAUM=einkauf python ingest.py` liest in einen anderen
-  Raum ein.
-- **Schnittstelle:** `POST /aufnehmen` mit dem Token eines Verwalters – für
-  viele Dateien auf einmal, eine Datei je Aufruf.
+### Wie befülle ich als Admin den gemeinsamen Bestand in LocaNoto?
+
+In **Allgemein** schreiben nur Admins. Drei Wege:
+
+- **Oberfläche:** **Dokumente hochladen**, als Arbeitsbereich „Allgemein"
+  wählen.
+- **Terminal:** Dateien in den Dokumentenordner legen → `python ingest.py`.
+  `INGEST_RAUM=einkauf python ingest.py` liest in einen anderen
+  Arbeitsbereich ein.
+- **Schnittstelle:** `POST /aufnehmen` mit dem Token eines Admins, eine
+  Datei je Aufruf.
 
 Gescannte Seiten liest die Texterkennung auf allen drei Wegen; was sie
-nicht lesen kann, nennt `ingest.py` in seiner Ausgabe. Abbildungen
-beschreibt der Upload nur auf Wunsch. Für den ganzen Bestand startet **🔄 Nachtragen und neu einlesen** → **Bilder nachtragen**
-das als eigenen Vorgang; **Dokumente neu einlesen** liest den
-Dokumentenordner vollständig ein. Beide laufen weiter, wenn man die Seite
-verlässt, und überspringen bereits Verarbeitetes.
+nicht lesen kann, nennt `ingest.py` in seiner Ausgabe.
 
-### Wie richte ich als Verwalter Listen (Excel, CSV) in LocaNoto ein?
+**Nachtragen und neu einlesen** (unter **Dokumente**):
 
-Listen werden nicht vektorisiert. Ein Katalog hält fest, welche Blätter und
-Spalten es gibt; die Zeilen liest LocaNoto bei jeder Frage frisch. Unter
-**📊 Listen** in der Seitenleiste:
+- **Bilder nachtragen** → beschreibt Abbildungen im ganzen Bestand.
+- **Dokumente neu einlesen** → liest den Dokumentenordner vollständig ein.
 
-- **Listenquellen je Raum:** eine Zeile je Quelle, `raum = pfad`. Der Raum
-  bestimmt, wer die Listen sieht. `@privat = /pfad/{benutzer}/Listen` gibt
-  jedem Nutzer seinen eigenen Ordner. **Quellen speichern und einlesen**.
-- **Liste hochladen:** Dateien ablegen, einen **Bereich** (Unterordner)
-  wählen, dann ablegen und einlesen. Geht nur, wenn der Ordner beschreibbar
-  ist.
-- **Listen neu einlesen:** nötig, wenn Dateien dazukommen oder Spalten sich
-  ändern. Neue Zeilen wirken ohne Zutun.
-- **Erkannte Blaetter:** stehen Spalten ohne Namen da, ist die Kopfzeile
-  falsch erkannt. **Kopfzeile** korrigieren, dann **Uebernehmen und neu
-  einlesen**.
+Beide laufen weiter, wenn du die Seite verlässt, und überspringen bereits
+Verarbeitetes.
 
-Ein Listenordner je Raum lässt sich auch unter **🚪 Räume verwalten**
-eintragen.
+### Wie richte ich als Admin Listen (Excel, CSV) in LocaNoto ein?
 
-### Wie lege ich als Verwalter ein Zugangstoken für LocaNoto an?
+Listen werden nicht vektorisiert: ein Katalog kennt Blätter und Spalten,
+die Zeilen liest LocaNoto bei jeder Frage frisch. In der Seitenleiste unter
+**Listen**:
 
-**🛠️ Verwaltung** → **🎫 Zugangstoken für die Schnittstelle**:
+- **Listenquellen je Arbeitsbereich:** eine Zeile je Quelle,
+  `arbeitsbereich = pfad`; der Arbeitsbereich bestimmt, wer die Listen
+  sieht. `@privat = /pfad/{benutzer}/Listen` gibt jedem Nutzer einen
+  eigenen Ordner. → **Speichern und einlesen**.
+- **Liste hochladen:** Dateien wählen, **Hochladen in** (Unterordner)
+  wählen → **n Datei(en) hochladen**. Nur bei beschreibbarem Ordner.
+- **Listen neu einlesen:** nötig bei neuen Dateien oder geänderten
+  Spalten; neue Zeilen wirken ohne Zutun.
+- **Erkannte Blätter:** Spalten ohne Namen → Kopfzeile falsch erkannt.
+  **Kopfzeile** korrigieren → **Übernehmen und neu einlesen**.
+
+Ein Listenordner je Arbeitsbereich lässt sich auch unter **Admin-Bereich**
+→ **Arbeitsbereiche** eintragen.
+
+### Wie lege ich als Admin ein Zugangstoken für LocaNoto an?
+
+**Admin-Bereich** → **Zugangstoken (Schnittstelle)**:
 
 1. **Für wen** – der Benutzer, dessen Rechte das Token trägt.
-2. **Bezeichnung** – wofür es ist, etwa „Masseningest Einkauf".
-3. **Gültig für Tage** – 0 heißt unbegrenzt.
-4. **Token anlegen**.
+2. **Bezeichnung** – Zweck, etwa „Masseningest Einkauf".
+3. **Gültig (Tage, 0 = unbegrenzt)**.
+4. **Token anlegen** → der Wert erscheint **genau einmal**; gespeichert
+   wird nur sein Hashwert. Kopieren → **Notiert**.
 
-Der Wert erscheint **genau einmal**; gespeichert ist nur sein Hashwert.
-Notieren, dann **Habe ich notiert**. Die Liste darunter zeigt alle Token;
-**🗑️** widerruft eines. Nutzer sehen und widerrufen ihre eigenen unter
-**🎫 Meine Zugangstoken**.
+Die Liste darunter zeigt alle Token; **🗑️** widerruft eines. Nutzer sehen
+und widerrufen ihre eigenen unter **Einstellungen** → **Meine
+Zugangstoken**.
 
-Ein Token weist nur den Nutzer aus. Was er darf, steht in der
-Benutzerdatei: in den allgemeinen Raum liefert nur das Token eines
-Verwalters ein.
+Das Token weist nur den Nutzer aus; seine Rechte stehen in der
+Benutzerdatei. In **Allgemein** liefert nur das Token eines Admins ein.
 
 ### Wie benutze ich die HTTP-Schnittstelle von LocaNoto?
 
@@ -525,227 +552,228 @@ Jeder Aufruf trägt das Token im Kopf `X-LocaNoto-Token`.
 | `GET /status` | Modelle, Bestand, Listen, Voreinstellungen |
 | `GET /raeume`, `GET /dokumente` | was dieser Nutzer sehen darf |
 | `POST /frage` | Antwort mit Quellen, `?strom=1` laufend |
-| `POST /aufnehmen` | ein Dokument einliefern (Formular: `datei`, `raum`, optional `projekt`, `bilder`, `sehmodell`) |
+| `POST /aufnehmen` | Dokument einliefern (Formular: `datei`, `raum`, optional `projekt`, `bilder`, `sehmodell`) |
 | `POST /rueckmeldung` | 👍/👎 zu einer Antwort |
-| `DELETE /dokumente?raum=…&datei=…` | ein Dokument löschen, wie mit 🗑️ in der Oberfläche |
-| `GET /hilfe` | die Schnittstelle beschreibt sich selbst |
+| `DELETE /dokumente?raum=…&datei=…` | Dokument löschen, wie **Löschen** in der Oberfläche |
+| `GET /hilfe` | Selbstbeschreibung |
 
-Gesucht wird nur in den Räumen des Token-Besitzers; löschen darf er nur, wo er es auch in der Oberfläche dürfte (sonst `403`). `/aufnehmen` antwortet
-mit `403`, wenn der Nutzer in den Raum nicht schreiben darf, und mit `413`,
-wenn die Datei zu groß ist. Die Schnittstelle ist nur vom Server selbst
-erreichbar; von außen gehört ein Reverse Proxy mit TLS davor. Beispiele
-stehen in der `README.md` unter „HTTP-Schnittstelle".
+Gesucht wird nur in den Arbeitsbereichen des Token-Besitzers; löschen und
+einliefern nur, wo er es auch in der Oberfläche dürfte (sonst `403`).
+Datei zu groß → `413`. Die Schnittstelle ist nur vom Server selbst
+erreichbar; von außen gehört ein Reverse Proxy mit TLS davor. Beispiele:
+`README.md`, „HTTP-Schnittstelle".
 
-### Wie richte ich als Verwalter ein Postfach in LocaNoto ein?
+### Wie richte ich als Admin ein Postfach in LocaNoto ein?
 
-Für die persönlichen Postfächer genügt **ein Eintrag für alle**: jeder
-Nutzer öffnet darin mit seiner eigenen Adresse sein eigenes Postfach. Jedes
-Funktionspostfach bekommt einen eigenen Eintrag. **🛠️ Verwaltung** →
-**📬 Postfächer (Werkzeugserver)** → **Neues Postfach**:
+Persönliche Postfächer brauchen **einen Eintrag für alle**; jeder Nutzer
+öffnet darin sein eigenes Postfach. Jedes Funktionspostfach bekommt einen
+eigenen Eintrag.
 
-1. **Art des Servers:** „Exchange/Outlook – direkt, ohne weiteren Server".
+**Admin-Bereich** → **Postfächer (Werkzeugserver)** → **Neues Postfach**:
+
+1. **Servertyp:** „Exchange/Outlook — direkt, ohne weiteren Server".
 2. **Name:** `postfach` für den gemeinsamen Eintrag, `info` für info@ usw.
-3. **Adresse oder Befehl:** der Exchange-Server, etwa `owa.firma.de`.
-   Leer lassen sucht den Server selbst.
+3. **Adresse oder Befehl:** Exchange-Server, etwa `owa.firma.de`; leer →
+   wird automatisch gesucht.
 4. **Postfach:** persönlich oder Funktionspostfach.
-5. **Mailadresse des Postfachs:** bei einem Funktionspostfach Pflicht
-   (`info@firma.de`), bei einem persönlichen leer.
+5. **Postfachadresse (nur Exchange):** Pflicht bei Funktionspostfach
+   (`info@firma.de`), leer bei persönlich.
 6. **Anlegen**.
 
-Danach verbindet jeder Nutzer sich selbst unter **📬 Meine Postfächer**.
-Ein gemeinsames Passwort gibt es nicht; Exchange entscheidet über den
-Zugriff. **Werkzeuge abfragen** prüft ein Postfach mit deiner eigenen
-Anmeldung.
+Danach verbindet sich jeder Nutzer selbst unter **Meine Postfächer**; ein
+gemeinsames Passwort gibt es nicht. **Werkzeuge abfragen** → prüft ein
+Postfach mit deiner eigenen Anmeldung.
 
-Andere Werkzeugserver nach dem Model-Context-Protocol (MCP) lassen sich
-über die Vorlagen „MCP-Server über HTTP" und „lokaler Prozess" anbinden.
+Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP" oder
+„lokaler Prozess (stdio)".
 
-### Wie richte ich als Verwalter die Websuche in LocaNoto ein?
+### Wie richte ich als Admin die Websuche in LocaNoto ein?
 
-Der Suchdienst läuft getrennt von LocaNoto (Betrieb: README, Abschnitt
-„Websuche"). Danach unter **📬 Postfächer** einen Server der Art
-**Websuche** anlegen, Adresse `http://websuche:8000/mcp`.
+1. Suchdienst getrennt von LocaNoto betreiben (`README.md`, „Websuche").
+2. **Admin-Bereich** → **Postfächer (Werkzeugserver)** → **Neues
+   Postfach** → **Servertyp** Websuche, **Adresse oder Befehl**
+   `http://websuche:8000/mcp` → **Anlegen**.
+3. Für jeden geteilten Arbeitsbereich: **Arbeitsbereiche** → Arbeitsbereich
+   wählen → **Websuche erlauben** ankreuzen → erst dann können Nutzer dort
+   die Websuche einschalten.
 
-Für geteilte Räume unter **🚪 Räume verwalten** am Raum **🌐 Websuche
-neben diesem Raum erlauben** setzen. Erst dann können Nutzer sie dort
-einschalten. Der Grund: das Modell formuliert den Suchbegriff mit den
-Abschnitten des Raums im Kontext, und der Suchbegriff geht an
-Suchmaschinen. Im eigenen Raum entscheidet jeder Nutzer selbst.
+Warum die Freigabe: das Modell formuliert den Suchbegriff mit Abschnitten
+des Arbeitsbereichs im Kontext, und der Suchbegriff geht an Suchmaschinen.
+Im persönlichen Arbeitsbereich entscheidet jeder Nutzer selbst.
 
 ### Wann darf LocaNoto aus einem Postfach selbständig antworten?
 
-Nur aus einem **Funktionspostfach**, und nur wenn beim Anlegen **darf
-selbständig antworten** angekreuzt ist. Ein persönliches Postfach legt jede
-Mail als Entwurf vor, ohne Ausnahme.
+Nur aus einem **Funktionspostfach**, bei dem beim Anlegen **darf selbst
+antworten** angekreuzt ist. Ein persönliches Postfach legt jede Mail als
+Entwurf vor, ohne Ausnahme.
 
-**Hinweis unter automatische Antworten setzen** hängt an jede selbständig
-verschickte Mail einen Hinweis, dass sie automatisch erstellt wurde; den
-Wortlaut legt **Text des Hinweises** fest. Ohne Haken entfällt der Hinweis.
-Ein vom Nutzer geprüfter und mit **Senden** verschickter Entwurf trägt nie
-einen Hinweis.
+- **Hinweis unter Autoantworten setzen** ankreuzen → jede selbständig
+  verschickte Mail trägt einen Hinweis, dass sie automatisch erstellt
+  wurde. Wortlaut: **Hinweistext**.
+- Ohne Haken → kein Hinweis.
+- Ein vom Nutzer geprüfter, mit **Senden** verschickter Entwurf trägt nie
+  einen Hinweis.
 
-Welche Werkzeuge etwas verschicken, zeigt **Werkzeuge abfragen** mit
+**Werkzeuge abfragen** markiert Werkzeuge, die etwas verschicken, mit
 **[SENDET]**; alle anderen lesen nur.
 
 ### Wie funktioniert der Notzugang in LocaNoto?
 
-Ein persönlicher Raum ist auch für Verwalter zu. Scheidet jemand aus oder
-fällt länger aus, führt der Notzugang hinein:
+Ein persönlicher Arbeitsbereich ist auch für Admins zu. Scheidet jemand aus
+oder fällt länger aus:
 
-1. Ein Verwalter beantragt unter **🔓 Notzugang** den Zugang zu genau
-   einem Raum, mit **Grund** → **Notzugang beantragen**.
-2. Eine Person mit der Rolle `notzugang` meldet sich an und klickt
-   **Bestätigen** oder **Ablehnen**.
-3. Der Zugang gilt danach 24 Stunden und erlischt von selbst;
+1. Ein Admin: **Admin-Bereich** → **Notzugang** → **Arbeitsbereich**
+   wählen, **Grund** eintragen → **Notzugang beantragen**.
+2. Eine Person mit der Rolle `notzugang` meldet sich an → **Bestätigen**
+   oder **Ablehnen**.
+3. Bestätigt → der Zugang gilt 24 Stunden und erlischt von selbst;
    **Jetzt schließen** beendet ihn früher.
 
-Beide Namen und der Grund stehen im Protokoll. Gibt es niemanden mit der
-Rolle `notzugang`, gibt es keinen Notzugang – der Raum bleibt dann nur
+Beide Namen und der Grund stehen im Protokoll. Ohne jemanden mit der Rolle
+`notzugang` gibt es keinen Notzugang: der Arbeitsbereich ist dann nur
 löschbar, nicht lesbar.
 
-### Wie werte ich als Verwalter die Rückmeldungen in LocaNoto aus?
+### Wie werte ich als Admin die Rückmeldungen in LocaNoto aus?
 
-**🛠️ Verwaltung** → **📝 Rueckmeldungen** zeigt zwei Listen:
+**Admin-Bereich** → **Rückmeldungen** zeigt:
 
-- **Fragen ohne Treffer** – meist fehlt ein Wort im Glossar oder ein
-  Dokument im Bestand.
-- **Als nicht hilfreich gemeldet** – es gab Treffer, aber die falschen.
+- **Fragen ohne Treffer** – meist fehlt ein Glossareintrag oder ein
+  Dokument.
+- **Als nicht hilfreich gemeldet** – Treffer gab es, aber die falschen.
 
-**Protokoll herunterladen** holt die vollständige Liste zum Auswerten.
-**Liste abschliessen** legt sie unter dem Tagesdatum ab und beginnt eine
-neue; gelöscht wird nichts. Frühere Ablagen stehen darunter zum
-Herunterladen.
+**Protokoll herunterladen** → die vollständige Liste. **Liste
+abschließen** → legt sie unter dem Tagesdatum ab und beginnt eine neue;
+gelöscht wird nichts. Frühere Ablagen stehen darunter.
 
 Die Liste enthält Fragen im Wortlaut mit Kennung und liegt deshalb
 verschlüsselt.
 
-### Wie pflege ich als Verwalter das Glossar in LocaNoto?
+### Wie pflege ich als Admin das Glossar in LocaNoto?
 
 Das Glossar übersetzt Wörter der Nutzer in die Wörter der Dokumente.
-**🛠️ Verwaltung** → **🗣️ Glossar bearbeiten**, je Zeile eine Zuordnung:
+**Admin-Bereich** → **Glossar**, eine Zuordnung je Zeile, `#` =
+Kommentar:
 
 ```
 BANF = Bestellanforderung; auch Anforderung oder Bestellvorschlag
 FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
 ```
 
-**Glossar speichern** – es wirkt ab der nächsten Frage. Zeilen mit `#` sind
-Erläuterungen und gehen nicht ins Sprachmodell. Nur geprüfte Zuordnungen
-eintragen: ein falscher Eintrag lenkt die Suche zuverlässig an die falsche
-Stelle. Woher die Einträge kommen: aus den „Fragen ohne Treffer" unter
-📝 Rueckmeldungen.
+**Glossar speichern** → wirkt ab der nächsten Frage. Kommentarzeilen gehen
+nicht ans Sprachmodell.
 
-### Wie passe ich als Verwalter Prompts und Voreinstellungen in LocaNoto an?
+Nur geprüfte Zuordnungen eintragen: ein falscher Eintrag lenkt die Suche
+zuverlässig an die falsche Stelle. Kandidaten liefern die „Fragen ohne
+Treffer" unter **Rückmeldungen**.
 
-Die Vorlagen sind die Grundlage für alle; Nutzer verfeinern sie für sich unter **🗒️ Meine Anweisung**, ohne sie zu ändern.
+### Wie passe ich als Admin Prompts und Voreinstellungen in LocaNoto an?
 
-**📜 Prompts bearbeiten:** zwei Vorlagen – eine bildet aus der Frage die
-Suchanfragen, die andere legt fest, wie geantwortet wird. **Gilt fuer**
-wählt, ob die Änderung für alle oder nur eine Voreinstellung gilt.
-**Speichern** wirkt ab der nächsten Frage; ein Text ohne die
-Pflicht-Platzhalter wird abgelehnt. **Zuruecksetzen** stellt die
-mitgelieferte Fassung wieder her.
+**Prompts:** zwei Vorlagen – eine bildet aus der Frage die Suchanfragen,
+die andere legt fest, wie geantwortet wird.
 
-**🎛️ Voreinstellungen verwalten:** **Bezeichnung**, **Beschreibung**,
-**Chat-Modell**, **Relevante Abschnitte**, **Listenbereiche**, dann
-**Speichern**. Nutzer wählen sie oben in der Seitenleiste. **Entfernen**
-löscht eine Voreinstellung.
+- **Gilt für** → alle oder nur eine Voreinstellung.
+- **Speichern** → wirkt ab der nächsten Frage; ein Text ohne die
+  Pflicht-Platzhalter wird abgelehnt.
+- **Zurücksetzen** → stellt die mitgelieferte Fassung wieder her.
 
-Eine Formulierung im Prompt wirkt auf jede folgende Antwort; nach einer
-Änderung ein paar bekannte Fragen stellen und die Antworten vergleichen.
+**Voreinstellungen** (für alle): **Bezeichnung**, **Beschreibung**,
+**Chat-Modell**, **Relevante Abschnitte** (0 = Vorgabe), **Listenbereiche**
+→ **Speichern**. **Entfernen** löscht. Nur diese Voreinstellungen können
+eigene Prompts haben (unter **Prompts** bei **Gilt für** wählen).
 
-### Wie binde ich als Verwalter ownCloud an LocaNoto an?
+Wählbare Modelle legt `CHAT_MODELLE` in der `.env` fest; dieselbe Liste
+sehen Nutzer unter **Modell** und **Meine Voreinstellungen**. Nutzer legen
+eigene Voreinstellungen ohne Prompts an und verfeinern mit **Meine
+Anweisung**.
 
-„ownCloud" heißt hier die Dateiablage, auch OpenCloud. Ist sie in der
-`.env` eingerichtet, legt LocaNoto hochgeladene Dokumente zusätzlich dort
-ab und kann Ordner und Gruppen übernehmen.
-**🛠️ Verwaltung** → **☁️ ownCloud**:
+Nach einer Prompt-Änderung ein paar bekannte Fragen stellen und die
+Antworten vergleichen.
 
-- **Zuordnung speichern** – ordnet einem Raum einen ownCloud-Ordner zu.
-- **Für alle Räume einrichten** – legt je Raum einen Ordner an und teilt
-  ihn mit den Mitgliedern des Raums.
-- **Persönliche Ablage einrichten** – zieht Konto und Ordner eines
-  einzelnen Nutzers nach, etwa nach einer Übernahme.
-- **Änderungen prüfen** – zeigt, was sich in ownCloud geändert hat.
-- **Mitgliedschaften jetzt nachziehen** – übernimmt die ownCloud-Gruppen
-  als Raummitglieder.
+### Wie binde ich als Admin ownCloud an LocaNoto an?
 
-Was in LocaNoto gelöscht oder verschoben wird, löscht oder verschiebt
-LocaNoto auch in ownCloud; Gelöschtes liegt dort im Papierkorb.
+„ownCloud" meint die Dateiablage, auch OpenCloud. In der `.env`
+eingerichtet → LocaNoto legt hochgeladene Dokumente auch dort ab und
+übernimmt Ordner und Gruppen. **Admin-Bereich** → **ownCloud**:
 
-**Konten:** Benutzer löschen und Passwörter ändern wirken in ownCloud nur
-bei Konten, die LocaNoto verwaltet – also die es selbst angelegt hat. Ein
-Konto, das es vorher schon gab, bleibt unangetastet. **Bestehende Konten
-übernehmen** vermerkt vorhandene Konten einmalig als verwaltet; das
-Dienst- und Verwalterkonto ist immer ausgenommen. Fehlt ein Konto in der
-Ablage, entsteht es beim nächsten Passwortsetzen. Einrichtung und
-Dienstkonto beschreibt die `README.md` unter „Dokumente aus ownCloud".
+- **Zuordnung speichern** → ordnet einem Arbeitsbereich einen Ordner zu.
+- **Alle einrichten** → je Arbeitsbereich ein Ordner, geteilt mit seinen
+  Mitgliedern.
+- **Persönliche Ablage einrichten** → zieht Konto und Ordner eines Nutzers
+  nach.
+- **Änderungen prüfen** → zeigt, was sich in ownCloud geändert hat.
+- **Mitgliedschaften abgleichen** → übernimmt ownCloud-Gruppen als
+  Mitglieder.
+- **Konten übernehmen** → markiert vorhandene Konten einmalig als von
+  LocaNoto verwaltet (Dienst- und Admin-Konto ausgenommen).
 
-### Wie sichere ich LocaNoto als Verwalter?
+Löschen und Verschieben in LocaNoto wirkt auch in ownCloud (Gelöschtes →
+Papierkorb). Benutzer löschen und Passwörter ändern wirkt dort nur bei
+verwalteten Konten. Fehlt ein Konto, entsteht es beim nächsten
+Passwortsetzen. Einrichtung: `README.md`, „Dokumente aus ownCloud".
+
+### Wie sichere ich LocaNoto als Admin?
 
 Drei Dinge gehören in die Sicherung:
 
-1. **Der Installationsschlüssel** (`config/schluessel.key`, oder der Wert
-   von `LOCANOTO_SCHLUESSEL`). Ohne ihn sind Chats, Anhänge und
-   Rückmeldungen endgültig unlesbar – ohne Fehlermeldung. Nichts anderes
-   lässt sich nachholen.
-2. **Das Konfigurationsverzeichnis** (`config/`): Benutzer, Räume, Token,
-   Glossar, Prompts, Postfächer.
-3. **Die Vektordatenbank:** **🗃️ Sicherung der Vektordatenbank** →
-   **Jetzt sichern**. **Abzug einspielen** und **Einspielen** stellen einen
-   Stand wieder her. Ohne Abzug hieße ein Verlust: alles neu einlesen.
+1. **Installationsschlüssel** (`config/schluessel.key` oder
+   `LOCANOTO_SCHLUESSEL`). Ohne ihn sind Chats, Anhänge und Rückmeldungen
+   endgültig unlesbar. Er ist durch nichts zu ersetzen.
+2. **Konfigurationsverzeichnis** (`config/`): Benutzer, Arbeitsbereiche,
+   Token, Glossar, Prompts, Postfächer.
+3. **Vektordatenbank:** **Admin-Bereich** → **Sicherung der
+   Vektordatenbank** → **Jetzt sichern**. Wiederherstellen: **Abzug
+   einspielen** → **Einspielen**. Ohne Abzug hieße ein Verlust: alles neu
+   einlesen.
 
 Die Originaldokumente liegen im Datenverzeichnis und, falls angebunden, in
 ownCloud.
 
 ### Was zeigen Sicherheitslage, Speicherorte, Verschlüsselung und Konfiguration in LocaNoto?
 
-- **🔒 Sicherheitslage** – eine Prüfliste mit ✅ und ⚠️: was an Schutz
-  eingerichtet ist und was offen bleibt.
-- **💾 Speicherorte** – wo Daten, Konfiguration und Index liegen und ob der
+Im **Admin-Bereich**:
+
+- **Sicherheitslage** – Prüfliste mit ✅ und ⚠️: was eingerichtet ist, was
+  offen bleibt.
+- **Speicherorte** – wo Daten, Konfiguration und Index liegen und ob der
   Ort von außen gesetzt ist.
-- **🔐 Verschlüsselung** – ob verschlüsselt wird und was verschlüsselt,
-  signiert oder im Klartext liegt; **Protokoll neu verschlüsseln** bringt
-  ältere Rückmeldungen in die verschlüsselte Form.
-- **⚙️ Konfiguration** – Einstellungen der `.env`, die fehlen, von der
-  Vorlage abweichen oder veraltet sind. Nur Namen, keine Werte.
+- **Verschlüsselung** – was verschlüsselt, signiert oder im Klartext liegt.
+  **Protokoll neu verschlüsseln** → bringt ältere Rückmeldungen in die
+  verschlüsselte Form.
+- **Konfiguration** – Einstellungen der `.env`, die fehlen, abweichen oder
+  veraltet sind; nur Namen, keine Werte.
 
-**🔌 Modell-Endpunkte** (für alle sichtbar) zeigt, welche Sprachmodelle
-angebunden sind und ob der Endpunkt für die Rangfolge der Treffer
-antwortet.
+**Modell-Endpunkte** (unter **Einstellungen**, für alle) zeigt die
+angebundenen Sprachmodelle und ob der Endpunkt für die Rangfolge der
+Treffer antwortet.
 
-### Was tue ich als Verwalter, wenn in LocaNoto etwas nicht funktioniert?
+### Was tue ich als Admin, wenn in LocaNoto etwas nicht funktioniert?
 
-| Beobachtung | Ursache und Abhilfe |
+| Beobachtung | Abhilfe |
 |---|---|
-| Seite reagiert nach einem Update nicht | Verbindung neu aufgebaut: Seite neu laden, neu anmelden |
+| Seite reagiert nach einem Update nicht | Seite neu laden, neu anmelden |
 | Suche hängt nach den Suchanfragen | Modellserver nicht erreichbar oder kalt; die Meldung nennt den Grund |
-| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar; LocaNoto versucht ihn von selbst wieder |
-| „Keine Verbindung zur Datenbank" | Datenbank oder VPN nicht erreichbar; **Meldung des Treibers** zeigt Details |
+| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar; LocaNoto versucht es von selbst wieder |
+| „Keine Datenbankverbindung" | Datenbank oder VPN prüfen; **Treibermeldung** zeigt Details |
 | Dokument eingelesen, aber nicht auffindbar | `python raum_diagnose.py` im Container |
-| Benutzerdatei „außerhalb geändert" | eine Signatur passt nicht; von Hand eingetragene Zugänge sind gesperrt |
-| Einstellungen unklar | **⚙️ Konfiguration** |
+| Benutzerdatei „außerhalb geändert" | Signatur passt nicht; von Hand eingetragene Zugänge sind gesperrt |
+| Einstellungen unklar | **Admin-Bereich** → **Konfiguration** |
 
-Nach einem Update prüft `python selbsttest.py` Anmeldung, Rechte, Suche,
+Nach einem Update → `python selbsttest.py` prüft Anmeldung, Rechte, Suche,
 Verschlüsselung und Sicherung, ohne den Bestand anzufassen.
 
 ## Teil 3: Dieses Handbuch in LocaNoto
 
-Dieser Teil erklärt, wie das Handbuch in LocaNoto eingelesen und aktuell
-gehalten wird, damit LocaNoto Fragen zur eigenen Bedienung beantwortet.
+Wie das Handbuch eingelesen und aktuell gehalten wird, damit LocaNoto
+Fragen zur eigenen Bedienung beantwortet.
 
 ### Wie kann LocaNoto Fragen zu sich selbst beantworten?
 
-Dieses Handbuch ist so geschrieben, dass LocaNoto es wie jedes andere
-Dokument durchsuchen kann: jede Überschrift ist eine Frage, und jeder
-Abschnitt ist für sich verständlich.
+Jede Überschrift dieses Handbuchs ist eine Frage, jeder Abschnitt für sich
+verständlich – so findet LocaNoto ihn wie jedes andere Dokument.
 
-Einlesen: als Verwalter `HANDBUCH.md` hochladen und als Raum **Allgemein**
-wählen. Danach beantwortet LocaNoto Fragen wie „Wie lade ich ein Dokument
-hoch?" oder „Wie lege ich einen Benutzer an?" mit Verweis auf diesen
-Abschnitt.
-
-Nach einer neuen Fassung das alte Handbuch unter **Dokumente** →
-**Allgemein** mit **🗑️ Löschen** entfernen und die neue Fassung hochladen.
-Beim bloßen Überschreiben blieben Abschnitte stehen, die es in der neuen
-Fassung nicht mehr gibt.
+- Einlesen: als Admin `HANDBUCH.md` hochladen, Arbeitsbereich
+  **Allgemein** → LocaNoto beantwortet Fragen wie „Wie lade ich ein
+  Dokument hoch?" mit Verweis auf den passenden Abschnitt.
+- Neue Fassung: unter **Gespeicherte Dokumente** → **Allgemein** die alte
+  Fassung mit **Löschen** entfernen, dann die neue hochladen. Bloßes
+  Überschreiben ließe Abschnitte stehen, die es nicht mehr gibt.

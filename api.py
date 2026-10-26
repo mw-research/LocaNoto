@@ -321,13 +321,17 @@ def _suchen(anfrage, kennung):
     # Die Voreinstellung liefert die Vorgaben; ein ausdruecklich
     # uebergebener Wert geht vor. Wer sie nennt, will ihr Buendel -- wer
     # zusaetzlich top_k setzt, meint es so.
-    if anfrage.preset and anfrage.preset not in presets.namen():
+    # Gemeinsame und die eigenen -- eine fremde eigene nicht.
+    if anfrage.preset and not presets.erlaubt(anfrage.preset, kennung):
+        vorhanden = presets.namen() + presets.eigene(kennung)
         raise HTTPException(
             status_code=400,
             detail=f"Unbekannte Voreinstellung. Vorhanden: "
-                   f"{', '.join(presets.namen()) or 'keine'}")
+                   f"{', '.join(vorhanden) or 'keine'}")
     p = presets.lese(anfrage.preset)
-    modell = p["chat_modell"] or CHAT_MODELL
+    # Nur ein freigegebenes Modell -- wie in der Oberflaeche.
+    modell = (p["chat_modell"] if p["chat_modell"] in llm.chat_modelle()
+              else CHAT_MODELL)
     top_k = anfrage.top_k or p["top_k"] or STANDARD_TOP_K
     if not anfrage.listen_bereiche:
         anfrage.listen_bereiche = p["listen_bereiche"]
@@ -568,4 +572,4 @@ def voreinstellungen(kennung: str = Depends(benutzer)):
     """Welche Voreinstellungen es gibt und was sie setzen."""
     return [{"name": n, **{k: v for k, v in presets.lese(n).items()
                            if k != "beschreibung" or v}}
-            for n in presets.namen()]
+            for n in presets.namen() + presets.eigene(kennung)]

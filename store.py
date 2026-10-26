@@ -562,7 +562,7 @@ def loesche(name):
     try:
         client().delete_collection(name=name)
         vergiss(name)
-        return True, "Geloescht."
+        return True, "Gelöscht."
     except Exception as e:
         vergiss(name)
         return False, str(e)

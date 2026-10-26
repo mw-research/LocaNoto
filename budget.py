@@ -204,10 +204,7 @@ def zaehle(benutzer, raum, anzahl, wartung=False):
           {"raum": raum, "abschnitte": summe, "raeume": raeume_,
            "grund": zu_viel})
     raise Ueberzogen(
-        f"Das Entnahmebudget ist aufgebraucht: {zu_viel}. Die Anwendung "
-        f"bricht hier ab und hat es protokolliert. Ist das ein "
-        f"berechtigter Lauf -- ein Abzug, eine Auswertung --, hebt "
-        f"BUDGET_ABSCHNITTE die Schwelle.")
+        f'Entnahmebudget aufgebraucht: {zu_viel}. Abgebrochen und protokolliert; für berechtigte Läufe BUDGET_ABSCHNITTE erhöhen.')
 
 
 # --- PROTOKOLL ---
@@ -278,22 +275,16 @@ def beschreibung():
 def ziel_erreichbar():
     """(ok, meldung) -- laesst sich das aeussere Ziel beschreiben?"""
     if not ZIEL:
-        return False, ("Kein aeusseres Protokollziel. Auf demselben Server "
-                       "raeumt ein Angreifer das Protokoll mit auf -- "
-                       "PROTOKOLL_ZIEL nimmt eine Datei ausserhalb des "
-                       "Datenverzeichnisses, ein syslog oder '-' fuer den "
-                       "Log-Sammler.")
+        return False, ("Kein äußeres Protokollziel – PROTOKOLL_ZIEL auf eine Datei außerhalb des Datenverzeichnisses, ein syslog oder '-' setzen.")
     if ZIEL == "-":
         return True, "Protokoll nach stdout (Log-Sammler)."
     if ZIEL.startswith("udp://"):
-        return True, f"Protokoll nach {ZIEL} (ungeprueft -- UDP antwortet nicht)."
+        return True, f'Protokoll nach {ZIEL} (ungeprüft, UDP antwortet nicht).'
     try:
         with open(ZIEL, "a", encoding="utf-8"):
             pass
     except OSError as e:
         return False, f"{ZIEL} ist nicht beschreibbar: {e}"
     if os.path.abspath(ZIEL).startswith(os.path.abspath(paths.DATA_DIR)):
-        return False, (f"{ZIEL} liegt IM Datenverzeichnis. Wer die Daten "
-                       f"holt, holt das Protokoll mit -- ein zweiter Ort "
-                       f"waere der Sinn.")
+        return False, (f'{ZIEL} liegt IM Datenverzeichnis. Lege das Protokoll an einen zweiten Ort.')
     return True, f"Protokoll nach {ZIEL}."

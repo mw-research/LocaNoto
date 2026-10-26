@@ -164,7 +164,7 @@ def zustand():
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa
     except Exception:
-        return "aus", "Das Paket cryptography fehlt im Abbild."
+        return "aus", "Das Paket cryptography fehlt im Image."
     if schluessel() is None:
         return "unlesbar", _grund or "Kein Schluessel zu holen."
     return "ok", beschreibung()
@@ -247,7 +247,7 @@ def entschluessele(daten, zusatz=b""):
         return daten
     c = _cipher()
     if c is None:
-        raise ValueError("Verschluesselter Inhalt, aber kein Schluessel.")
+        raise ValueError("Verschlüsselter Inhalt, Schlüssel fehlt.")
     nonce = daten[len(MARKE):len(MARKE) + NONCE_LAENGE]
     rest = daten[len(MARKE) + NONCE_LAENGE:]
     try:
@@ -257,7 +257,7 @@ def entschluessele(daten, zusatz=b""):
         # Stelle gelesen, an die der Inhalt nicht gehoert. Als ValueError
         # weitergegeben, damit die Aufrufer einen Fehlschlag behandeln
         # koennen, ohne cryptography zu kennen.
-        raise ValueError("Inhalt nicht entschluesselbar.") from e
+        raise ValueError("Inhalt nicht entschlüsselbar.") from e
 
 
 def ist_verschluesselt(daten):

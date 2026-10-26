@@ -92,7 +92,7 @@ def _speichere(zugaenge):
         dateisperre.schreibe_atomar(
             QUELLEN, json.dumps(daten, indent=1, ensure_ascii=False))
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
+        return False, f'Speichern fehlgeschlagen: {e}'
     return True, "Gespeichert."
 
 
@@ -109,9 +109,7 @@ def darf_setzen(raum, benutzer, ist_verwalter=False):
         # aus "jeder mit seinen Rechten" wieder ein gemeinsames Konto
         # geworden, nur muehsamer.
         return True, ""
-    return False, ("Den Zugang eines gemeinsamen Raums legt ein "
-                   "Verwalter fest. Deinen eigenen kannst du selbst "
-                   "eintragen.")
+    return False, ("Den Zugang eines gemeinsamen Arbeitsbereichs legt ein Admin fest, deinen eigenen trägst du selbst ein.")
 
 
 @dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
@@ -134,14 +132,10 @@ def setze(raum, angaben, benutzer="?", ist_verwalter=False):
         return ok, ("Zugang entfernt." if ok else _m)
 
     if not angaben.get("benutzer") or not angaben.get("passwort"):
-        return False, ("Benutzer UND Passwort -- eines von beidem "
-                       "ergibt keine Anmeldung.")
+        return False, ("Benutzer UND Passwort angeben.")
 
     if not raumschluessel.verfuegbar():
-        return False, ("Ohne Installationsschluessel wird kein Passwort "
-                       "gespeichert. Es laege sonst im Klartext in "
-                       "config/sqlquellen.json -- schlechter als gar "
-                       "kein Zugang.")
+        return False, ("Ohne Installationsschlüssel wird kein Passwort gespeichert.")
 
     eintrag = {"raum": raum}
     for k in FELDER:

@@ -19,26 +19,13 @@ import raumschluessel
 
 def _schluesselherkunft():
     if os.getenv("LOCANOTO_SCHLUESSEL_DATEI", "").strip():
-        return True, ("Aus einem Secret. Das liegt unter /run/secrets in "
-                      "tmpfs -- im Arbeitsspeicher, auf keiner Platte. "
-                      "Die dichteste Form: ein kopiertes Volume, ein "
-                      "Snapshot, eine ausgebaute Platte enthalten ihn "
-                      "nicht.")
+        return True, ("Aus einem Secret (/run/secrets, nur im Arbeitsspeicher). Sicherste Form.")
     if os.getenv("LOCANOTO_SCHLUESSEL", "").strip():
-        return False, ("Aus der Umgebung. Das sieht dichter aus, als es "
-                       "ist: der Wert steht meist in der .env und damit "
-                       "auf einer Platte -- oft derselben. Dichter waere "
-                       "LOCANOTO_SCHLUESSEL_DATEI mit einem Secret.")
+        return False, ("Aus der Umgebung (meist .env auf derselben Platte). Sicherer: LOCANOTO_SCHLUESSEL_DATEI mit einem Secret.")
     import geheim
     if not raumschluessel.verfuegbar():
-        return False, ("Keine Verschluesselung. Der Bestand liegt im "
-                       "Klartext -- wer das Datenvolume kopiert, liest "
-                       "alles.")
-    return True, (f"In {os.path.basename(geheim.SCHLUESSEL_DATEI)} unter "
-                  f"dem Konfigurationsverzeichnis. Das ist ein ANDERES "
-                  f"Volume als die Daten, und der Abzug nimmt ihn nicht "
-                  f"mit. Dichter waere LOCANOTO_SCHLUESSEL als Secret: "
-                  f"dann liegt er nirgends.")
+        return False, ("Keine Verschlüsselung: Wer das Datenvolume kopiert, liest alles.")
+    return True, (f'In {os.path.basename(geheim.SCHLUESSEL_DATEI)} im Konfigurationsverzeichnis – getrennt von den Daten und nicht im Abzug. Sicherer: LOCANOTO_SCHLUESSEL als Secret.')
 
 
 def _index_getrennt():
@@ -56,17 +43,9 @@ def _index_getrennt():
                 and not os.path.abspath(wo).startswith(
                     os.path.abspath(paths.DATA_DIR) + os.sep))
     if getrennt:
-        return True, (f"Stichwortindex unter {wo} -- getrennt von den "
-                      f"Daten. Richtig so: er traegt den Text im "
-                      f"Klartext, weil FTS5 nicht anders kann.")
+        return True, (f'Stichwortindex unter {wo}, getrennt von den Daten und im Klartext (FTS5).')
     return False, (
-        "Der Stichwortindex liegt IM Datenverzeichnis und traegt den Text "
-        "im Klartext. Damit ist die Verschluesselung der Sammlung ohne "
-        "Wirkung: wer das Volume kopiert, liest den Index. Setze "
-        "LOCANOTO_STICHWORTINDEX auf einen containerlokalen Pfad -- nur "
-        "diese Datei wandert dann, die Vektordatenbank bleibt liegen. "
-        "Der Index baut sich in Sekunden neu auf (18.600 Abschnitte je "
-        "Sekunde).")
+        "Stichwortindex liegt im Datenverzeichnis und enthält Klartext – Verschlüsselung wirkungslos. LOCANOTO_STICHWORTINDEX auf einen containerlokalen Pfad setzen.")
 
 
 def _traeger(name, pfad):
@@ -88,19 +67,12 @@ def _traeger(name, pfad):
 
 def _vektoren():
     return False, (
-        "Die Vektoren sind NICHT verschluesselt und koennen es nicht sein "
-        "-- sonst gibt es keine Aehnlichkeitssuche. Aus ihnen laesst sich "
-        "mit demselben Modell ein guter Teil des Textes rekonstruieren. "
-        "Wer das Datenvolume hat, hat also nie nichts. Dagegen hilft nur "
-        "ein verschluesselter Datentraeger.")
+        "Vektoren sind nicht verschlüsselt und verraten viel vom Text – dagegen hilft nur ein verschlüsselter Datenträger.")
 
 
 def _laufender_server():
     return False, (
-        "Gegen einen Angreifer AUF DEM LAUFENDEN SERVER hilft nichts "
-        "davon: die Anwendung muss entschluesseln, um zu antworten. Was "
-        "bleibt, ist das Zaehlen -- ein Massenabzug bricht ab und wird "
-        "protokolliert.")
+        "Gegen Angreifer auf dem laufenden Server hilft das nicht; Massenabzüge werden aber abgebrochen und protokolliert.")
 
 
 def lage():

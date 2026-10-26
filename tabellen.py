@@ -85,19 +85,16 @@ def pruefe_pfad(p):
     """(ok, meldung) fuer einen eingetragenen Ordner."""
     p = (p or "").strip()
     if not p:
-        return True, "Zurueck auf die Vorgabe."
+        return True, "Auf Vorgabe zurückgesetzt."
     if not os.path.isabs(p):
-        return False, ("Bitte einen vollstaendigen Pfad angeben, wie er im "
-                       "Container gilt -- etwa /listen.")
+        return False, ("Bitte vollständigen Pfad im Container angeben, etwa /listen.")
     if not os.path.exists(p):
-        return False, (f"'{p}' gibt es im Container nicht. Ist das "
-                       f"Verzeichnis eingehaengt? Siehe README, Abschnitt "
-                       f"Listen.")
+        return False, (f"'{p}' fehlt im Container. Verzeichnis eingehängt? Siehe README, Kapitel Listen.")
     if not os.path.isdir(p):
         return False, f"'{p}' ist eine Datei, kein Ordner."
     if not os.access(p, os.R_OK):
         return False, f"'{p}' ist nicht lesbar."
-    return True, "Verknuepft."
+    return True, "Verknüpft."
 
 
 def setze_pfad(p):
@@ -108,7 +105,7 @@ def setze_pfad(p):
     try:
         dateisperre.schreibe_atomar(PFAD_DATEI, (p or "").strip())
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
+        return False, f'Speichern fehlgeschlagen: {e}'
     _zwischenspeicher.clear()
     return True, meldung
 
@@ -254,7 +251,7 @@ def setze_kopfzeile(datei, blatt, zeile):
         dateisperre.schreibe_atomar(
             KOPF_DATEI, json.dumps(d, indent=1, ensure_ascii=False))
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
+        return False, f'Speichern fehlgeschlagen: {e}'
     _zwischenspeicher.clear()
     return True, "Gespeichert."
 
@@ -633,12 +630,10 @@ def sicherer_dateiname(name):
 def lege_ab(daten, name, bereich=""):
     """Speichert eine hochgeladene Tabellendatei. (ok, meldung)."""
     if not beschreibbar():
-        return False, ("Der Listenordner ist nicht beschreibbar -- "
-                       "vermutlich nur lesend eingehaengt.")
+        return False, ("Listenordner ist nicht beschreibbar – wohl nur lesend eingehängt.")
     sicher = sicherer_dateiname(name)
     if not sicher:
-        return False, (f"'{name}' ist kein zulaessiger Name. Erlaubt sind "
-                       f"{', '.join(ENDUNGEN)}.")
+        return False, (f"'{name}' ist kein zulässiger Name. Erlaubt: {', '.join(ENDUNGEN)}.")
 
     bereich = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]",
                      "", (bereich or "").strip()).strip()
@@ -649,14 +644,14 @@ def lege_ab(daten, name, bereich=""):
     # Nach dem Aufloesen muss die Datei noch im Listenordner liegen. Sonst
     # haette ein praeparierter Name aus ihm herausgefuehrt.
     if not (ziel == wurzel or ziel.startswith(wurzel + os.sep)):
-        return False, "Ziel liegt ausserhalb des Listenordners."
+        return False, "Ziel liegt außerhalb des Listenordners."
 
     try:
         os.makedirs(os.path.dirname(ziel), exist_ok=True)
         with open(ziel, "wb") as f:
             f.write(daten)
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
+        return False, f'Speichern fehlgeschlagen: {e}'
     _zwischenspeicher.clear()
     return True, os.path.relpath(ziel, wurzel).replace(os.sep, "/")
 
@@ -974,7 +969,7 @@ def _lade(datei, blatt, wurzel=None):
         wurzel_ = os.path.realpath(wurzel or pfad())
         voll = os.path.realpath(os.path.join(wurzel_, datei))
         if not (voll == wurzel_ or voll.startswith(wurzel_ + os.sep)):
-            raise ValueError("Die Datei liegt ausserhalb ihrer Quelle.")
+            raise ValueError("Datei liegt außerhalb ihrer Quelle.")
     if not os.path.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
     stand = (voll, os.path.getmtime(voll), os.path.getsize(voll))

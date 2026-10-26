@@ -107,8 +107,7 @@ def _speichern_chunks(chunks, metadatas, ids, raum,
         # "hinzugefuegt" -- die Datei lag danach auf der Platte, in
         # keiner Sammlung und in keiner Indexzeile. Auffallen konnte das
         # erst, wenn jemand danach suchte und nichts fand.
-        return 0, ("Kein Text gefunden -- auch die Texterkennung las "
-                   "nichts Brauchbares.")
+        return 0, ("Kein Text gefunden, auch nicht per Texterkennung.")
     # Gebuendelt vektorisieren -- vorher ging pro Chunk eine eigene
     # HTTP-Anfrage an den Modellserver.
     embeddings = embed_batch(embed_client, chunks, llm.modell("EMBEDDING"))
@@ -171,7 +170,7 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     if raum not in raeume.schreibbar(benutzer_, ist_verwalter):
         if streng:
             raise KeinRecht(
-                f"'{benutzer_}' darf nicht in den Raum '{raum}' schreiben.")
+                f"'{benutzer_}' darf nicht in den Arbeitsbereich '{raum}' schreiben.")
         raum = raeume.sichere_anlage_privat(benutzer_)
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
@@ -570,7 +569,7 @@ def entferne_dokument(dateiname, raum, *, benutzer_=None, ist_verwalter=False,
     """
     if benutzer_ is not None and not raeume.darf_schreiben(
             benutzer_, raum, ist_verwalter, tuple(notzugang or ())):
-        raise KeinRecht(f"'{benutzer_}' darf in '{raum}' nicht loeschen.")
+        raise KeinRecht(f"'{benutzer_}' darf in '{raum}' nicht löschen.")
     import owncloud
 
     sml = raum_sammlung(raum, anlegen=False)

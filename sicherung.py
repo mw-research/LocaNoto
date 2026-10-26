@@ -172,8 +172,7 @@ def _lies_raum(kennung, sml, gesamt, fortschritt=None, versuche=4):
         embs = b.get("embeddings")
         if embs is None or len(embs) != len(ids):
             raise ValueError(
-                "Die Sammlung gibt keine Vektoren heraus -- ohne "
-                "sie waere der Abzug nur Text.")
+                "Sammlung liefert keine Vektoren – Abzug nicht möglich.")
         docs = b.get("documents") or []
         metas = b.get("metadatas") or []
         for i, kid in enumerate(ids):
@@ -385,15 +384,11 @@ def entferne(name, trotzdem=False):
                      if s.get("vollstaendig") and not s.get("fehler")]
     if vollstaendige and vollstaendige[0] == name and not trotzdem:
         return False, (
-            f"'{name}' ist der neueste VOLLSTAENDIGE Abzug. Er bleibt "
-            f"stehen. Erst einen neuen ziehen (python sicherung.py), "
-            f"dann diesen entfernen -- oder mit --trotzdem darauf "
-            f"bestehen.")
+            f"'{name}' ist der neueste VOLLSTÄNDIGE Abzug und bleibt. Erst neuen ziehen (python sicherung.py) oder --trotzdem angeben.")
 
     shutil.rmtree(ziel, ignore_errors=True)
     if os.path.isdir(ziel):
-        return False, (f"'{name}' liess sich nicht entfernen. Rechte des "
-                       f"Kontos pruefen, unter dem der Container laeuft.")
+        return False, (f"'{name}' ließ sich nicht entfernen. Rechte des Container-Kontos prüfen.")
     return True, f"'{name}' entfernt."
 
 

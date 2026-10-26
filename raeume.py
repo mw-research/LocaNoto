@@ -225,6 +225,11 @@ def bezeichnung(kennung):
     wird erst bei der Anzeige, wie jeder andere Text.
     """
     r = raum(kennung)
+    if ist_privat(kennung):
+        # Unabhaengig davon, was beim Anlegen gespeichert wurde
+        # ("Privat (anna)"): so heisst er in der Oberflaeche.
+        wer = ((r or {}).get("mitglieder") or [kennung[len(PRIVAT):]])[0]
+        return sprache.t(f"Persönlicher Arbeitsbereich ({wer})")
     if r:
         return sprache.t(r.get("bezeichnung") or kennung)
     return kennung
@@ -266,8 +271,7 @@ def stand_gueltig():
         return False, alter, "kein Stand vorhanden"
     if GRUPPEN_HOECHSTALTER and (alter is None
                                  or alter > GRUPPEN_HOECHSTALTER):
-        return False, alter, (f"aelter als {GRUPPEN_HOECHSTALTER} Minuten "
-                              f"(OWNCLOUD_GRUPPEN_HOECHSTALTER)")
+        return False, alter, (f'älter als {GRUPPEN_HOECHSTALTER} Minuten (OWNCLOUD_GRUPPEN_HOECHSTALTER)')
     return True, alter, ""
 
 
@@ -435,17 +439,15 @@ def anlegen(kennung, bezeichnung_, beschreibung="", mitglieder=None):
     """(ok, meldung). Legt keine Sammlung an -- das tut der erste Upload."""
     kennung = sichere_kennung(kennung)
     if len(kennung) < 3:
-        return False, "Kennung zu kurz (mindestens drei Zeichen)."
+        return False, "Kennung zu kurz (mind. 3 Zeichen)."
     if ist_privat(kennung):
         # Persoenliche Raeume entstehen nur ueber sichere_anlage_privat --
         # mit dem Zugang ihres Besitzers und mit ihm als einzigem
         # Mitglied. Von Hand angelegt saehe der Raum genauso aus, haette
         # aber die Mitglieder, die der Anlegende eintraegt.
-        return False, (f"'{PRIVAT}' ist den persoenlichen Raeumen "
-                       f"vorbehalten. Sie entstehen mit dem Zugang ihres "
-                       f"Besitzers, nicht von Hand.")
+        return False, (f"'{PRIVAT}' ist für persönliche Arbeitsbereiche reserviert; die entstehen automatisch mit dem Zugang.")
     if kennung in _lade()["raeume"] or kennung == ALLGEMEIN:
-        return False, "Diesen Raum gibt es schon."
+        return False, "Arbeitsbereich gibt es schon."
     daten = _lade()
     daten["raeume"][kennung] = {
         "bezeichnung": (bezeichnung_ or kennung).strip(),
@@ -507,17 +509,13 @@ def mitglieder_setzen(kennung, mitglieder):
     """
     daten = _lade()
     if not _materialisiere(daten, kennung):
-        return False, "Unbekannter Raum."
+        return False, "Unbekannter Arbeitsbereich."
     if ist_privat(kennung):
-        return False, ("Ein persoenlicher Raum hat genau einen Leser -- "
-                       "seinen Besitzer. Daran laesst sich nichts "
-                       "eintragen. Soll etwas daraus geteilt werden, "
-                       "verschiebt es der Besitzer in einen anderen Raum.")
+        return False, ("Ein persönlicher Arbeitsbereich hat nur seinen Besitzer als Leser. Zum Teilen verschiebt der Besitzer Dokumente in einen anderen Arbeitsbereich.")
     daten["raeume"][kennung]["mitglieder"] = sorted(set(mitglieder or []))
     _speichere(daten)
     if kennung == ALLGEMEIN and "*" not in (mitglieder or []):
-        return True, ("Gespeichert. Der allgemeine Raum ist damit nicht "
-                      "mehr fuer alle sichtbar.")
+        return True, ("Gespeichert. Allgemein ist jetzt nicht mehr für alle sichtbar.")
     return True, "Gespeichert."
 
 
@@ -530,7 +528,7 @@ def fuer_alle_oeffnen(kennung):
 def beschriften(kennung, bezeichnung_=None, beschreibung=None):
     daten = _lade()
     if not _materialisiere(daten, kennung):
-        return False, "Unbekannter Raum."
+        return False, "Unbekannter Arbeitsbereich."
     if bezeichnung_ is not None:
         daten["raeume"][kennung]["bezeichnung"] = bezeichnung_.strip()
     if beschreibung is not None:
@@ -544,10 +542,9 @@ def gruppe_setzen(kennung, gruppe):
     """Traegt die ownCloud-Gruppe eines Raums ein, oder loescht sie."""
     daten = _lade()
     if not _materialisiere(daten, kennung):
-        return False, "Unbekannter Raum."
+        return False, "Unbekannter Arbeitsbereich."
     if ist_privat(kennung):
-        return False, ("Ein persoenlicher Raum bekommt keine Gruppe -- "
-                       "sonst lesen ihn alle ihre Mitglieder.")
+        return False, ("Ein persönlicher Arbeitsbereich bekommt keine Gruppe.")
     gruppe = str(gruppe or "").strip()
     if gruppe:
         daten["raeume"][kennung]["gruppe"] = gruppe
@@ -576,10 +573,9 @@ def websuche_setzen(kennung, an):
     """Erlaubt die Websuche neben einem geteilten Raum, oder sperrt sie."""
     daten = _lade()
     if not _materialisiere(daten, kennung):
-        return False, "Unbekannter Raum."
+        return False, "Unbekannter Arbeitsbereich."
     if ist_privat(kennung):
-        return False, ("Im eigenen Raum schaltet der Nutzer die Websuche "
-                       "selbst ein.")
+        return False, ("Im persönlichen Arbeitsbereich schaltet jeder die Websuche selbst ein.")
     if an:
         daten["raeume"][kennung]["websuche"] = True
     else:
@@ -597,10 +593,10 @@ def entfernen(kennung):
     wirklich los will, loescht die Sammlung ausdruecklich.
     """
     if kennung == ALLGEMEIN:
-        return False, "Der allgemeine Raum bleibt."
+        return False, "Allgemein bleibt bestehen."
     daten = _lade()
     if kennung not in daten["raeume"]:
-        return False, "Unbekannter Raum."
+        return False, "Unbekannter Arbeitsbereich."
     del daten["raeume"][kennung]
     _speichere(daten)
     return True, "Entfernt."

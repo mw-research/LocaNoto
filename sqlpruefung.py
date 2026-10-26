@@ -70,7 +70,7 @@ def pruefe_abfrage(sql):
     # unterschiedlich erkennen, wo ein Kommentar endet, entsteht genau die
     # Luecke, die eine angehaengte zweite Anweisung braucht.
     if "--" in sql or "/*" in sql:
-        return False, "Kommentare sind nicht zulaessig"
+        return False, "Kommentare nicht zulässig"
 
     kern = _ohne_zeichenketten(_ohne_kommentare(sql))
 
@@ -84,11 +84,11 @@ def pruefe_abfrage(sql):
 
     treffer = _VERBOTEN.search(kern)
     if treffer:
-        return False, f"unzulaessiges Schluesselwort: {treffer.group(1).upper()}"
+        return False, f'unzulässiges Schlüsselwort: {treffer.group(1).upper()}'
 
     treffer = _VERBOTEN_PRAEFIX.search(kern)
     if treffer:
-        return False, f"unzulaessiger Aufruf: {treffer.group(1)}"
+        return False, f'unzulässiger Aufruf: {treffer.group(1)}'
 
     if _SELECT_INTO.search(kern):
         return False, "SELECT ... INTO erzeugt eine Tabelle"

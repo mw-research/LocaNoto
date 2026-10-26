@@ -140,7 +140,7 @@ def schreibe_konfiguration(daten):
         return True, "Kein Postfach mehr eingerichtet."
     with open(KONFIG, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=1)
-    return True, f"{len(daten)} Postfach/Postfaecher eingerichtet."
+    return True, f'{len(daten)} Postfach/Postfächer eingerichtet.'
 
 
 def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
@@ -171,18 +171,14 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
         # saehe dann seine eigene Post unter fremdem Namen, und eine
         # automatische Antwort ginge aus dem falschen Postfach hinaus.
         if not persoenlich and not str(weitere.get("postfach") or "").strip():
-            return False, ("Fuer ein Funktionspostfach die Mailadresse des "
-                           "Postfachs eintragen (z. B. info@firma.de).")
+            return False, ("Für ein Funktionspostfach dessen Mailadresse eintragen (z. B. info@firma.de).")
         # Umgekehrt: ein persoenlicher Eintrag gilt fuer ALLE Nutzer, jeder
         # oeffnet darin sein eigenes Postfach. Mit fester Adresse waere es
         # das Postfach einer einzigen Person, und alle anderen bekaemen von
         # Exchange eine Absage -- das ist ein Funktionspostfach ohne
         # selbstaendiges Antworten, und so wird es angelegt.
         if persoenlich and str(weitere.get("postfach") or "").strip():
-            return False, ("Ein persoenlicher Eintrag bekommt keine feste "
-                           "Adresse: jeder Nutzer meldet sich darin mit "
-                           "seiner eigenen an. Fuer das Postfach einer "
-                           "bestimmten Person 'Funktionspostfach' waehlen.")
+            return False, ("Ein persönlicher Eintrag hat keine feste Adresse – jeder meldet sich mit seiner eigenen an. Für das Postfach einer bestimmten Person 'Funktionspostfach' wählen.")
     else:
         angaben["url"] = str(ziel).strip()
         if not angaben["url"]:
@@ -572,12 +568,11 @@ def darf_automatisch(server, werkzeug, argumente):
     """
     a = _angaben(server)
     if not a.get("automatisch"):
-        return False, "fuer dieses Postfach nicht freigeschaltet"
+        return False, "für dieses Postfach nicht freigeschaltet"
     if not hinweis_an(server):
         return True, ""
     if not textfeld(server, argumente):
-        return False, ("kein Textfeld gefunden -- der Hinweis liesse "
-                       "sich nicht anhaengen")
+        return False, ("kein Textfeld gefunden, Hinweis nicht anhängbar")
     if not (a.get("hinweis") or HINWEIS_VORGABE).strip():
         return False, "kein Hinweistext hinterlegt"
     return True, ""

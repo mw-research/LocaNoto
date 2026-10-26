@@ -2063,7 +2063,7 @@ pruef("so wie die Anmeldemaske", 'st.form("login_form")' in _app)
 # -- und wer sich damit anmeldet, ist im Protokoll nicht von seinem
 # Besitzer zu unterscheiden.
 _app = _datei("app.py")
-_stelle = _app.find('with st.expander("\\U0001f511 Passwort aendern")')
+_stelle = _app.find('with st.expander("Passwort ändern")')
 pruef("es gibt die eigene Passwortaenderung", _stelle > 0)
 _block = _app[_stelle:_stelle + 3000]
 
@@ -2406,7 +2406,7 @@ pruef("das Dokumentenfeld gibt es", _feld > 0)
 pruef("und es nimmt mehrere Dateien",
       "accept_multiple_files=True" in _app[_feld:_feld + 500])
 
-_knopf = _app.find('st.button("Hochladen & Vektorisieren")')
+_knopf = _app.find('st.button("Hochladen & einlesen")')
 pruef("der Knopf arbeitet einen Stapel ab",
       "for _i, _datei in enumerate(hochgeladen" in _app[_knopf:_knopf + 900])
 
@@ -3120,7 +3120,7 @@ pruef("und die Anlage steht in einem Formular",
 # gepruefft wird die Reihenfolge im Quelltext, denn ein Token fuer eine
 # fremde Kennung ist eine Vollmacht.
 _vw_anfang = _vwq2.find("    if _vw:")
-_token_stelle = _vwq2.find("Zugangstoken für die Schnittstelle")
+_token_stelle = _vwq2.find("Zugangstoken (Schnittstelle)")
 pruef("und nur Verwalter kommen hin",
       0 < _vw_anfang < _token_stelle, (_vw_anfang, _token_stelle))
 
@@ -4062,7 +4062,7 @@ try:
         _gr_um = str(e)
     pruef("OpenCloud: eine Kennung mit Umlaut wird vorher und "
           "verstaendlich abgelehnt",
-          "Umlaute" in _gr_um
+          "a-z" in _gr_um
           and not any(r[0] == "POST" for r in _gr_rufe), (_gr_um, _gr_rufe))
 
     _gr_rufe.clear()
@@ -4471,9 +4471,10 @@ except Exception as e:
 
 _app_q = _datei("app.py")
 pruef("die Oberflaeche bietet beim Uebernehmen keinen Raum an",
-      "webziel_" not in _app_q and "in meinen Raum übernehmen" in _app_q)
+      "webziel_" not in _app_q
+      and "aufnehmen.webseite_aufnehmen(" in _app_q)
 pruef("es gibt die Quellensuche ohne Antwort",
-      "Quellen im Netz suchen" in _app_q
+      'st.expander("Quellen im Netz")' in _app_q
       and '"anzahl": 10, "lesen": 0' in _app_q)
 # Fremder Text laedt nichts nach. Die Funktionen stehen in app.py, das
 # hier nicht importierbar ist (streamlit fehlt) -- also einzeln
@@ -4597,6 +4598,73 @@ try:
 except Exception as e:
     pruef("die Uebersetzung laesst sich pruefen", False,
           f"{type(e).__name__}: {e}")
+
+# --- EIGENE VOREINSTELLUNGEN, ERLAUBTE MODELLE, CHAT-TITEL ---
+#
+# Jeder legt eigene Voreinstellungen an -- ohne Prompts, die bleiben bei
+# den Admins. Ein Modell laesst sich nur aus der freigegebenen Liste
+# waehlen. Chat-Titel sind ein kurzer Satz, kein Datum mehr.
+try:
+    import presets as _pr_e
+    import llm as _llm_e
+    _pe_alt = _pr_e.NUTZER_ORDNER
+    _pr_e.NUTZER_ORDNER = os.path.join(tmp, "presets_nutzer")
+    try:
+        _pe_ok, _pe_k = _pr_e.eigene_speichern(
+            "Anna", "Kurz & knapp", {"chat_modell": "m2", "top_k": 4})
+        pruef("ein Nutzer legt eine eigene Voreinstellung an",
+              _pe_ok and _pe_k in _pr_e.eigene("anna")
+              and _pr_e.lese(_pe_k)["top_k"] == 4
+              and _pr_e.anzeige(_pe_k).endswith("(eigene)"), _pe_k)
+        pruef("nur er darf sie benutzen und loeschen",
+              _pr_e.erlaubt(_pe_k, "anna") and not _pr_e.erlaubt(_pe_k, "bernd")
+              and not _pr_e.eigene_loeschen(_pe_k, "bernd")
+              and _pe_k in _pr_e.eigene("anna"))
+        pruef("eigene Voreinstellungen bringen keine Prompts mit",
+              _pr_e.vorlage_pfad(_pe_k, "system_prompt.txt") is None)
+        pruef("eine krumme Kennung liest nichts",
+              _pr_e.lese("@anna/../../geheim")["top_k"] == 0
+              and not _pr_e.erlaubt("@anna/../x", "anna"))
+        pruef("und er kann sie wieder loeschen",
+              _pr_e.eigene_loeschen(_pe_k, "anna")
+              and not _pr_e.eigene("anna"))
+    finally:
+        _pr_e.NUTZER_ORDNER = _pe_alt
+
+    _cm_alt = (os.environ.get("CHAT_MODELLE"), os.environ.get("CHAT_MODEL"))
+    os.environ["CHAT_MODEL"], os.environ["CHAT_MODELLE"] = "a", "b, a ,c"
+    try:
+        pruef("waehlbar sind CHAT_MODEL und CHAT_MODELLE, CHAT_MODEL zuerst",
+              _llm_e.chat_modelle() == ["a", "b", "c"], _llm_e.chat_modelle())
+    finally:
+        for _n_e, _w_e in zip(("CHAT_MODELLE", "CHAT_MODEL"), _cm_alt):
+            if _w_e is None:
+                os.environ.pop(_n_e, None)
+            else:
+                os.environ[_n_e] = _w_e
+except Exception as e:
+    pruef("Voreinstellungen und Modelle lassen sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+
+_ae_q = _datei("app.py")
+pruef("das Modell wird gewaehlt, nicht eingetippt",
+      'st.text_input("Chat Modell"' not in _ae_q
+      and "llm.chat_modelle()" in _ae_q)
+_ae_ns = {"re": __import__("re")}
+for _ae_k in __import__("ast").parse(_ae_q).body:
+    if (isinstance(_ae_k, __import__("ast").FunctionDef)
+            and _ae_k.name in ("_titel_bereinigen", "_titel_anzeige")):
+        exec(compile(__import__("ast").Module([_ae_k], []), "app.py", "exec"),
+             _ae_ns)
+_tb = _ae_ns.get("_titel_bereinigen", lambda t: t)
+_ta = _ae_ns.get("_titel_anzeige", lambda t: t)
+pruef("ein Chat-Titel ist ein kurzer Satz ohne Unterstriche und ohne Datum",
+      _tb('"Prüffristen_für Druckbehälter."') == "Prüffristen für Druckbehälter"
+      and len(_tb("wort " * 40)) <= 62
+      and _ta("Druckbehaelter_Pruefung 26-10-26") == "Druckbehaelter Pruefung"
+      and "datetime.now().strftime('%y-%m-%d')" not in _ae_q)
+pruef("die Schnittstelle erlaubt eigene, keine fremden Voreinstellungen",
+      "presets.erlaubt(anfrage.preset, kennung)" in _datei("api.py"))
 
 _spr_sys = _datei("system_prompt.txt")
 pruef("Antworten kommen in der Sprache der Frage",

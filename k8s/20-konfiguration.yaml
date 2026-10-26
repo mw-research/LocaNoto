@@ -42,6 +42,8 @@ data:
   # hierher, sondern in das Secret darunter.
   OPENAI_BASE_URL: "http://litellm:4000"
   CHAT_MODEL: "qwen3.8:27b"
+  # Weitere waehlbare Chat-Modelle, durch Kommas getrennt.
+  # CHAT_MODELLE: "gemma4:27b,qwen3.8:8b"
   EMBEDDING_MODEL: "qwen3-embedding:8b"
   VISION_MODEL: "qwen3-vl:32b"
   RERANKER_BASE_URL: "http://litellm:4000"

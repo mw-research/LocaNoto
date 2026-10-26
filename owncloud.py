@@ -273,9 +273,7 @@ def pruefe():
                        "ebenso ownCloud und Nextcloud bei aktiver "
                        "Zwei-Faktor-Anmeldung.")
     if a.status_code == 404:
-        return False, ("Kein WebDAV unter dieser Adresse. Erwartet wird die "
-                       "Wurzel der Installation, etwa "
-                       "https://cloud.firma.de")
+        return False, ("Kein WebDAV unter dieser Adresse. Erwartet: Wurzel der Installation, etwa https://cloud.firma.de")
     if a.status_code != 207:
         return False, f"Unerwartete Antwort {a.status_code}."
     return True, f"Verbunden mit {URL} als {BENUTZER}."
@@ -475,12 +473,12 @@ def entferne(raum, dateiname, lokal=""):
         with _sitzung() as s:
             a = s.delete(_url(fern), timeout=TIMEOUT)
     except requests.RequestException as e:
-        return False, f"In ownCloud nicht geloescht ({type(e).__name__})."
+        return False, f'In ownCloud nicht gelöscht ({type(e).__name__}).'
     if a.status_code == 404:
         return True, ""
     if a.status_code in (200, 204):
-        return True, f"Auch in ownCloud geloescht: {fern}"
-    return False, f"In ownCloud nicht geloescht, ownCloud antwortete {a.status_code}."
+        return True, f'Auch in ownCloud gelöscht: {fern}'
+    return False, f'In ownCloud nicht gelöscht, Antwort: {a.status_code}.'
 
 
 def verschiebe(von_raum, von_lokal, nach_raum, nach_lokal):
@@ -510,9 +508,8 @@ def verschiebe(von_raum, von_lokal, nach_raum, nach_lokal):
     if a.status_code in (201, 204):
         return True, f"Auch in ownCloud verschoben: {nach}"
     if a.status_code == 412:
-        return False, (f"In ownCloud nicht verschoben: am Ziel liegt schon "
-                       f"'{os.path.basename(nach)}'.")
-    return False, f"In ownCloud nicht verschoben, ownCloud antwortete {a.status_code}."
+        return False, (f"In ownCloud nicht verschoben: '{os.path.basename(nach)}' gibt es am Ziel schon.")
+    return False, f'In ownCloud nicht verschoben, Antwort: {a.status_code}.'
 
 
 # --- GRUPPEN ---
@@ -538,16 +535,14 @@ def _ocs(pfad, sitzung=None):
     try:
         umschlag = a.json()["ocs"]
     except (ValueError, KeyError) as e:
-        raise ValueError("Keine OCS-Antwort -- zeigt die Adresse auf die "
-                         "Wurzel der Installation?") from e
+        raise ValueError("Keine OCS-Antwort – zeigt die Adresse auf die Wurzel der Installation?") from e
     stand = (umschlag.get("meta") or {}).get("statuscode")
     # 100 (v1) und 200 (v2) heissen beide "in Ordnung". 997 heisst "nicht
     # berechtigt" -- und das ist der Fall, den man erklaeren muss: die
     # Gruppenabfrage braucht ein Verwalterkonto.
     if stand == 997:
         raise PermissionError(
-            "Nicht berechtigt. Die Gruppenabfrage verlangt in ownCloud ein "
-            "Konto mit Verwalterrechten -- siehe OWNCLOUD_ADMIN_USER.")
+            "Nicht berechtigt: Die Gruppenabfrage braucht ein ownCloud-Admin-Konto (OWNCLOUD_ADMIN_USER).")
     if stand not in (100, 200):
         raise ValueError("ownCloud antwortete mit Status " + str(stand))
     return umschlag.get("data") or {}
@@ -687,8 +682,7 @@ def plane(raum, endungen=None):
     """
     ordner = ordner_fuer(raum)
     if not ordner:
-        raise ValueError(f"Fuer den Raum '{raum}' ist kein Ordner "
-                         f"eingerichtet.")
+        raise ValueError(f"Für Arbeitsbereich '{raum}' ist kein Ordner eingerichtet.")
     fern = {d["rel"]: d for d in dateien(ordner, endungen)}
     stand = _stand_lesen(raum)
 
@@ -853,15 +847,12 @@ def _ocs_ruf(methode, pfad, daten=None, app=None):
     try:
         umschlag = a.json()["ocs"]
     except (ValueError, KeyError) as e:
-        raise ValueError("Keine OCS-Antwort -- zeigt die Adresse auf die "
-                         "Wurzel der Installation?") from e
+        raise ValueError("Keine OCS-Antwort – zeigt die Adresse auf die Wurzel der Installation?") from e
     meta = umschlag.get("meta") or {}
     stand = meta.get("statuscode")
     if stand == 997:
         raise PermissionError(
-            "Nicht berechtigt. Nutzer anzulegen und Ordner freizugeben "
-            "verlangt in ownCloud ein Konto mit Verwalterrechten -- siehe "
-            "OWNCLOUD_ADMIN_USER.")
+            "Nicht berechtigt: Benutzer anlegen und Ordner freigeben braucht ein ownCloud-Admin-Konto (OWNCLOUD_ADMIN_USER).")
     if stand not in (100, 200):
         raise ValueError(f"ownCloud antwortete mit Status {stand}"
                          + (f": {meta.get('message')}"
@@ -917,8 +908,7 @@ def _graph(methode, pfad, daten=None, params=None):
         return None
     if a.status_code in (401, 403):
         raise PermissionError(
-            "Nicht berechtigt. Nutzer und Gruppen verwalten verlangt ein "
-            "Konto mit Verwalterrechten -- siehe OWNCLOUD_ADMIN_USER.")
+            "Nicht berechtigt: Benutzer und Gruppen verwalten braucht ein Admin-Konto (OWNCLOUD_ADMIN_USER).")
     if not a.ok:
         try:
             grund = a.json()["error"]["message"]
@@ -935,7 +925,7 @@ def _graph_mitglieder(gruppe):
     daten = _graph("GET", "groups/" + quote(str(gruppe), safe=""),
                    params={"$expand": "members"})
     if daten is None:
-        raise ValueError(f"Die Gruppe '{gruppe}' gibt es nicht.")
+        raise ValueError(f"Gruppe '{gruppe}' gibt es nicht.")
     return sorted({str(m.get("onPremisesSamAccountName") or "").lower()
                    for m in daten.get("members") or []}
                   - {""})
@@ -1008,8 +998,7 @@ def ordner_anlegen(pfad):
                 continue
             if a.status_code in (401, 403):
                 raise PermissionError(
-                    f"Darf {gebaut} nicht anlegen -- Rechte des Kontos "
-                    f"{BENUTZER} pruefen.")
+                    f'Darf {gebaut} nicht anlegen -- Rechte des Kontos {BENUTZER} prüfen.')
             a.raise_for_status()
     return True
 
@@ -1230,12 +1219,9 @@ def konto_loeschen(kennung):
     if not eingerichtet():
         return True, ""
     if geschuetzt(kennung):
-        return False, (f"'{kennung}' ist das Dienstkonto von LocaNoto in "
-                       f"ownCloud und wurde nicht geloescht.")
+        return False, (f"'{kennung}' ist das ownCloud-Dienstkonto von LocaNoto – nicht gelöscht.")
     if not verwaltet(kennung):
-        return False, (f"Das ownCloud-Konto '{kennung}' wird nicht von "
-                       f"LocaNoto verwaltet und blieb bestehen. Uebernehmen "
-                       f"laesst es sich unter ownCloud -> Konten.")
+        return False, (f"ownCloud-Konto '{kennung}' wird nicht von LocaNoto verwaltet und bleibt bestehen. Übernehmen unter ownCloud -> Konten.")
     try:
         if nutzer_vorhanden(kennung):
             if ist_graph():
@@ -1243,9 +1229,9 @@ def konto_loeschen(kennung):
             else:
                 _ocs_ruf("DELETE", f"users/{kennung}")
     except Exception as e:
-        return False, f"ownCloud-Konto nicht geloescht ({type(e).__name__}: {e})."
+        return False, f'ownCloud-Konto nicht gelöscht ({type(e).__name__}: {e}).'
     _konten_aendern(weg=[kennung])
-    return True, f"Auch das ownCloud-Konto '{kennung}' ist geloescht."
+    return True, f"Auch das ownCloud-Konto '{kennung}' ist gelöscht."
 
 
 def passwort_setzen(kennung, passwort):
@@ -1264,8 +1250,7 @@ def passwort_setzen(kennung, passwort):
                           + (f"; Freigaben in {nachgezogen} Raeumen "
                              f"nachgezogen." if nachgezogen else "."))
         if not verwaltet(kennung):
-            return False, ("In ownCloud gilt weiter das alte Passwort -- "
-                           "das Konto wird nicht von LocaNoto verwaltet.")
+            return False, ("In ownCloud gilt weiter das alte Passwort – LocaNoto verwaltet dieses Konto nicht.")
         if ist_graph():
             _graph("PATCH", "users/" + quote(str(kennung), safe=""),
                    daten={"passwordProfile": {"password": passwort}})
@@ -1275,8 +1260,8 @@ def passwort_setzen(kennung, passwort):
     except Exception as e:
         # ownCloud hat eine eigene Passwortregel. Lehnt sie ab, steht der
         # Grund in der Meldung.
-        return False, f"In ownCloud nicht geaendert ({type(e).__name__}: {e})."
-    return True, "Auch in ownCloud geaendert."
+        return False, f'In ownCloud nicht geändert ({type(e).__name__}: {e}).'
+    return True, "Auch in ownCloud geändert."
 
 
 def freigaben_nachziehen(kennung):
@@ -1343,10 +1328,7 @@ def nutzer_anlegen(kennung, passwort, anzeigename=""):
     if ist_graph():
         if not _GRAPH_KENNUNG.fullmatch(str(kennung)):
             raise ValueError(
-                f"'{kennung}' nehmen OpenCloud und oCIS nicht als Kennung "
-                f"an: sie muss mit einem Buchstaben beginnen und darf nur "
-                f"a-z, 0-9, Punkt, Strich und Unterstrich enthalten, "
-                f"keine Umlaute.")
+                f"'{kennung}' ist als Kennung für OpenCloud und oCIS ungültig: Buchstabe am Anfang, dann nur a-z, 0-9, Punkt, Strich, Unterstrich.")
         # Der Anzeigename ist dort Pflicht.
         _graph("POST", "users", daten={
             "onPremisesSamAccountName": kennung,

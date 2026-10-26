@@ -81,7 +81,7 @@ def starte(name):
     if name not in LAEUFE:
         return False, "Unbekannter Lauf."
     if laeuft(name):
-        return False, "Laeuft bereits."
+        return False, "Läuft bereits."
 
     skript, _, _ = LAEUFE[name]
     pfad = os.path.join(paths.BASE_DIR, skript)
@@ -103,7 +103,7 @@ def starte(name):
             start_new_session=True)
     except OSError as e:
         log.close()
-        return False, f"Konnte nicht gestartet werden: {e}"
+        return False, f'Start fehlgeschlagen: {e}'
 
     try:
         with open(_pid_datei(name), "w", encoding="utf-8") as f:

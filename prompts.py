@@ -64,7 +64,7 @@ def eigener_pfad(name, preset=None):
     Mit preset gehoert sie zu einer Voreinstellung, sonst gilt sie fuer die
     ganze Installation.
     """
-    if preset:
+    if preset and not presets.ist_eigene(preset):
         return os.path.join(presets.ORDNER, preset, name)
     return os.path.join(paths.CONFIG_DIR, name)
 
@@ -109,7 +109,7 @@ def pruefe(name, text):
     if not angaben:
         return False, "Unbekannte Vorlage."
     if not text.strip():
-        return False, "Die Vorlage darf nicht leer sein."
+        return False, "Vorlage darf nicht leer sein."
     fehlend = [p for p in angaben["pflicht"] if p not in text]
     if fehlend:
         return False, ("Es fehlt: " + ", ".join(fehlend) +
@@ -129,8 +129,8 @@ def speichern(name, text, preset=None):
         # steht die alte Fassung noch vollstaendig da.
         dateisperre.schreibe_atomar(eigener_pfad(name, preset), text)
     except OSError as e:
-        return False, f"Konnte nicht gespeichert werden: {e}"
-    return True, "Gespeichert. Wirkt ab der naechsten Frage."
+        return False, f'Speichern fehlgeschlagen: {e}'
+    return True, "Gespeichert. Wirkt ab der nächsten Frage."
 
 
 def zuruecksetzen(name, preset=None):
@@ -194,13 +194,11 @@ def anweisung_speichern(benutzer, text):
         anweisung_loeschen(benutzer)
         return True, "Anweisung entfernt."
     if len(text) > ANWEISUNG_MAX:
-        return False, (f"Hoechstens {ANWEISUNG_MAX} Zeichen -- es sind "
-                       f"{len(text)}. Eine Anweisung steht in jeder Antwort "
-                       f"und nimmt dort den Platz der Fundstellen ein.")
+        return False, (f'Höchstens {ANWEISUNG_MAX} Zeichen – es sind {len(text)}.')
     roh = geheim.verschluessele(text.encode("utf-8"),
                                 _anweisung_zusatz(benutzer))
     dateisperre.schreibe_atomar(_anweisung_pfad(benutzer), roh, 0o600)
-    return True, "Gespeichert. Gilt ab der naechsten Frage."
+    return True, "Gespeichert. Gilt ab der nächsten Frage."
 
 
 def anweisung_loeschen(benutzer):

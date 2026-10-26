@@ -28,6 +28,7 @@ x-umgebung: &umgebung
   # paths.env_int/env_float behandeln einen leeren Wert als "nicht
   # gesetzt".
   - CHAT_MODEL=${CHAT_MODEL:-qwen3.8:27b}
+  - CHAT_MODELLE=${CHAT_MODELLE:-}
   - CHAT_BASE_URL=${CHAT_BASE_URL:-}
   - CHAT_API_KEY=${CHAT_API_KEY:-}
   - CHAT_API_VERSION=${CHAT_API_VERSION:-}

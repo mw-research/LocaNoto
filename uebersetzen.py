@@ -239,6 +239,49 @@ def _oberflaeche():
     return aus
 
 
+def mit_rolle():
+    """[{art, de, rollen}] -- jeder Text mit der Stelle, an der er steht.
+
+    rolle ist die Streamlit-Methode (header, button, caption ...), bei
+    Schluesselwoertern deren Name (help, placeholder); Meldungen aus
+    Modulen heissen "modul". Gebraucht, um Texte nach ihrer Aufgabe zu
+    ueberarbeiten: ein Knopf ist kurz, ein Hilfetext erklaert.
+    """
+    rollen = {}
+    for name in OBERFLAECHE:
+        baum = ast.parse(open(os.path.join(BASIS, name), encoding="utf-8").read())
+        eltern = {}
+        for k in ast.walk(baum):
+            for kind in ast.iter_child_nodes(k):
+                eltern[kind] = k
+        for k in ast.walk(baum):
+            if not (_ist_tx(k) and k.args):
+                continue
+            s = _schluessel(k.args[0])
+            if not (s and _sprachlich(s[1])):
+                continue
+            rolle, x = "sonst", k
+            while x in eltern:
+                p = eltern[x]
+                if isinstance(p, ast.keyword):
+                    rolle = p.arg or rolle
+                    x = p
+                    continue
+                if isinstance(p, ast.Call) and _st_aufruf(p):
+                    if rolle == "sonst":
+                        rolle = _st_aufruf(p)
+                    break
+                x = p
+            rollen.setdefault(s, set()).add(rolle)
+    for m in _module():
+        teil = _meldungen(os.path.join(BASIS, m + ".py"))
+        for art in ("texte", "muster"):
+            for text in teil[art]:
+                rollen.setdefault((art, text), set()).add("modul")
+    return [{"art": a, "de": d, "rollen": sorted(r)}
+            for (a, d), r in sorted(rollen.items(), key=lambda x: x[0][1])]
+
+
 def _module():
     """Modulnamen, die die Oberflaeche importiert -- ihre Meldungen."""
     namen = set()
