@@ -20,6 +20,7 @@ import os
 
 import geheim
 import paths
+import statefiles
 import llm
 
 VISION_TIMEOUT = paths.env_float("VISION_TIMEOUT", 120)
@@ -116,7 +117,7 @@ def beschreibe(daten, frage=""):
 def anhang_verzeichnis(benutzer):
     """Ablage fuer Bilder eines Nutzers, neben seinen Chats."""
     pfad = os.path.join(paths.CHATS_DIR, benutzer, "anhaenge")
-    os.makedirs(pfad, exist_ok=True)
+    statefiles.makedirs(pfad, exist_ok=True)
     return pfad
 
 
@@ -132,7 +133,7 @@ def speichern(daten, benutzer, name):
     mehrere Megabyte.
     """
     ziel = os.path.join(anhang_verzeichnis(benutzer), name)
-    with open(ziel, "wb") as f:
+    with statefiles.open(ziel, "wb") as f:
         # Verschluesselt, an Nutzer und Dateiname gebunden. Ein
         # Bildschirmfoto aus dem ERP ist oft der heikelste Teil eines
         # Verlaufs -- ein Chat ohne Klartext, dessen Anhaenge daneben offen
@@ -148,7 +149,7 @@ def lade(pfad):
     None und keine Ausnahme: ein fehlendes oder unlesbares Bild soll einen
     Verlauf nicht unbenutzbar machen.
     """
-    if not pfad or not os.path.exists(pfad):
+    if not pfad or not statefiles.exists(pfad):
         return None
     # Die Ablage ist chats/<nutzer>/anhaenge/<name> -- zwei Ebenen hoch,
     # nicht eine. Eine Ebene waere "anhaenge", und die Zusatzdaten passten
@@ -157,7 +158,7 @@ def lade(pfad):
     benutzer = os.path.basename(
         os.path.dirname(os.path.dirname(pfad)))
     try:
-        with open(pfad, "rb") as f:
+        with statefiles.open(pfad, "rb") as f:
             return geheim.entschluessele(f.read(), _zusatz(benutzer, name))
     except (OSError, ValueError):
         return None

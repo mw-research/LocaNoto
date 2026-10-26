@@ -36,6 +36,7 @@ import re
 
 import dateisperre
 import paths
+import statefiles
 
 ORDNER = os.path.join(paths.CONFIG_DIR, "presets")
 
@@ -76,10 +77,10 @@ def _kennung(bezeichnung):
 
 def namen():
     """Vorhandene Voreinstellungen, alphabetisch."""
-    if not os.path.isdir(ORDNER):
+    if not statefiles.isdir(ORDNER):
         return []
-    return sorted(d for d in os.listdir(ORDNER)
-                  if os.path.isfile(os.path.join(ORDNER, d, "preset.json")))
+    return sorted(d for d in statefiles.listdir(ORDNER)
+                  if statefiles.isfile(os.path.join(ORDNER, d, "preset.json")))
 
 
 def ist_eigene(name):
@@ -99,9 +100,9 @@ def eigene(benutzer):
     """Die eigenen Voreinstellungen eines Nutzers, als Kennungen."""
     k = _kennung(str(benutzer or ""))
     ordner = os.path.join(NUTZER_ORDNER, k)
-    if not k or not os.path.isdir(ordner):
+    if not k or not statefiles.isdir(ordner):
         return []
-    return sorted(f"{EIGEN}{k}/{d[:-5]}" for d in os.listdir(ordner)
+    return sorted(f"{EIGEN}{k}/{d[:-5]}" for d in statefiles.listdir(ordner)
                   if d.endswith(".json"))
 
 
@@ -139,7 +140,7 @@ def eigene_loeschen(name, benutzer):
         return False
     pfad = _eigene_datei(name)
     try:
-        os.remove(pfad)
+        statefiles.remove(pfad)
     except (OSError, TypeError):
         return False
     return True
@@ -155,7 +156,7 @@ def lese(name):
     if not p:
         return werte
     try:
-        with open(p, "r", encoding="utf-8") as f:
+        with statefiles.open(p, "r", encoding="utf-8") as f:
             gelesen = json.load(f)
     except (OSError, json.JSONDecodeError):
         return werte
@@ -194,11 +195,11 @@ def speichern(name, werte):
 def loesche(name):
     """Entfernt eine Voreinstellung samt ihrer Vorlagen."""
     ziel = os.path.join(ORDNER, name)
-    if not os.path.isdir(ziel):
+    if not statefiles.isdir(ziel):
         return False
     try:
-        for d in os.listdir(ziel):
-            os.remove(os.path.join(ziel, d))
+        for d in statefiles.listdir(ziel):
+            statefiles.remove(os.path.join(ziel, d))
         os.rmdir(ziel)
     except OSError:
         return False
@@ -216,4 +217,4 @@ def vorlage_pfad(name, datei):
     if not name or datei not in VORLAGEN:
         return None
     p = os.path.join(ORDNER, name, datei)
-    return p if os.path.exists(p) else None
+    return p if statefiles.exists(p) else None

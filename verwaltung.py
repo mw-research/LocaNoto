@@ -40,6 +40,7 @@ import mcp
 import notzugang
 import owncloud
 import paths
+import statefiles
 import dateisperre
 import pipeline
 import presets
@@ -160,7 +161,7 @@ def zeichne(*, is_admin,
                 # Herunterladen statt auf den Server steigen: die Liste
                 # wird ausgewertet, nicht nur angesehen, und dafuer braucht
                 # man sie vollstaendig.
-                if os.path.exists(feedback.DATEI):
+                if statefiles.exists(feedback.DATEI):
                     # Entschluesselt: auf der Platte liegt es
                     # verschluesselt, ausgewertet wird es im Klartext.
                     st.download_button(
@@ -174,8 +175,8 @@ def zeichne(*, is_admin,
                     st.caption(tx("Früher abgelegt:"))
                     wahl = st.selectbox(tx("Ablage"), alte, label_visibility="collapsed", format_func=sprache.uebersetzt())
                     pfad = os.path.join(os.path.dirname(feedback.DATEI), wahl)
-                    if os.path.exists(pfad):
-                        with open(pfad, "rb") as f:
+                    if statefiles.exists(pfad):
+                        with statefiles.open(pfad, "rb") as f:
                             st.download_button(
                                 tx(f"{wahl} herunterladen"), f.read(),
                                 file_name=wahl, mime="application/x-ndjson",
@@ -1429,14 +1430,14 @@ def zeichne(*, is_admin,
         with st.expander(tx("Glossar")):
             pfad = paths.resolve_glossar()
             try:
-                with open(pfad, "r", encoding="utf-8") as f:
+                with statefiles.open(pfad, "r", encoding="utf-8") as f:
                     inhalt = f.read()
             except OSError:
                 # Noch nicht angelegt: mit der Vorlage beginnen, damit die
                 # Hinweise zur Pflege gleich dabeistehen.
                 vorlage = os.path.join(paths.BASE_DIR, "glossar.example.txt")
                 try:
-                    with open(vorlage, "r", encoding="utf-8") as f:
+                    with statefiles.open(vorlage, "r", encoding="utf-8") as f:
                         inhalt = f.read()
                 except OSError:
                     inhalt = ""

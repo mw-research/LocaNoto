@@ -45,6 +45,7 @@ import benutzer
 import geheim
 import dateisperre
 import paths
+import statefiles
 import raeume
 
 DATEI = os.path.join(paths.CONFIG_DIR, "notzugang.json")
@@ -77,7 +78,7 @@ def _lade():
     waere ein Zugang, den niemand bestaetigt hat.
     """
     try:
-        with open(DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return _leer()

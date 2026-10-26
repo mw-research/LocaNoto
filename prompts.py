@@ -20,6 +20,7 @@ import os
 import dateisperre
 import geheim
 import paths
+import statefiles
 import presets
 
 # Je Vorlage: Anzeigename, Zweck, und welche Platzhalter darin vorkommen
@@ -76,7 +77,7 @@ def verfuegbar():
     eine Vorlage anzubieten, die nichts steuert, waere irrefuehrend.
     """
     return [n for n in VORLAGEN
-            if os.path.exists(vorlage_pfad(n)) or os.path.exists(eigener_pfad(n))]
+            if statefiles.exists(vorlage_pfad(n)) or statefiles.exists(eigener_pfad(n))]
 
 
 def lese(name, preset=None):
@@ -93,10 +94,10 @@ def lese(name, preset=None):
     stufen.append((eigener_pfad(name), "eigen"))
     stufen.append((vorlage_pfad(name), "vorlage"))
     for pfad, herkunft in stufen:
-        if not os.path.exists(pfad):
+        if not statefiles.exists(pfad):
             continue
         try:
-            with open(pfad, "r", encoding="utf-8") as f:
+            with statefiles.open(pfad, "r", encoding="utf-8") as f:
                 return f.read(), herkunft
         except OSError:
             continue
@@ -136,10 +137,10 @@ def speichern(name, text, preset=None):
 def zuruecksetzen(name, preset=None):
     """Entfernt die bearbeitete Fassung; die naechste Stufe gilt wieder."""
     p = eigener_pfad(name, preset)
-    if not os.path.exists(p):
+    if not statefiles.exists(p):
         return False
     try:
-        os.remove(p)
+        statefiles.remove(p)
     except OSError:
         return False
     return True
@@ -180,7 +181,7 @@ def anweisung(benutzer):
     if not benutzer:
         return ""
     try:
-        with open(_anweisung_pfad(benutzer), "rb") as f:
+        with statefiles.open(_anweisung_pfad(benutzer), "rb") as f:
             roh = geheim.entschluessele(f.read(), _anweisung_zusatz(benutzer))
         return roh.decode("utf-8").strip()
     except (OSError, ValueError, UnicodeDecodeError):
@@ -203,7 +204,7 @@ def anweisung_speichern(benutzer, text):
 
 def anweisung_loeschen(benutzer):
     try:
-        os.remove(_anweisung_pfad(benutzer))
+        statefiles.remove(_anweisung_pfad(benutzer))
     except OSError:
         pass
 

@@ -33,6 +33,7 @@ from functools import lru_cache
 
 import dateisperre
 import paths
+import statefiles
 
 SPRACHEN = {"de": "Deutsch", "en": "English"}
 VORGABE = (os.getenv("LOCANOTO_SPRACHE", "de").strip().lower() or "de")
@@ -59,7 +60,7 @@ def aktuell():
 def gewaehlt(benutzer):
     """Die gespeicherte Sprache eines Nutzers, sonst die Vorgabe."""
     try:
-        with open(WAHL, encoding="utf-8") as f:
+        with statefiles.open(WAHL, encoding="utf-8") as f:
             code = (json.load(f) or {}).get(str(benutzer or "").lower())
     except (OSError, ValueError):
         code = None
@@ -75,7 +76,7 @@ def speichere(benutzer, code):
         return False, "Kein Nutzer."
     with dateisperre.gesperrt(WAHL):
         try:
-            with open(WAHL, encoding="utf-8") as f:
+            with statefiles.open(WAHL, encoding="utf-8") as f:
                 daten = json.load(f) or {}
         except (OSError, ValueError):
             daten = {}
@@ -89,7 +90,7 @@ def speichere(benutzer, code):
 @lru_cache(maxsize=1)
 def _tabelle():
     try:
-        with open(TABELLE, encoding="utf-8") as f:
+        with statefiles.open(TABELLE, encoding="utf-8") as f:
             daten = json.load(f) or {}
     except (OSError, ValueError):
         daten = {}

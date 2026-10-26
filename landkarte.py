@@ -47,7 +47,7 @@ SCHICHT = {
         "budget", "pg_collection", "pg_keywords",
     ),
     "Grundlage": ("paths", "geheim", "llm", "embedding",
-                  "dateisperre", "sprache", "database"),
+                  "dateisperre", "sprache", "database", "statefiles"),
 }
 
 

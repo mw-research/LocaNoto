@@ -39,6 +39,7 @@ import sqlite3
 
 import dateisperre
 import paths
+import statefiles
 import sqlpruefung
 
 # Der Raum, dem eine Liste ohne eigene Angabe gehoert -- so hiess
@@ -72,7 +73,7 @@ MAX_DATEIEN = paths.env_int("TABELLEN_MAX_DATEIEN", 500)
 def pfad():
     """Der Ordner, in dem die Listen liegen."""
     try:
-        with open(PFAD_DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(PFAD_DATEI, "r", encoding="utf-8") as f:
             eigen = f.read().strip()
         if eigen:
             return eigen
@@ -88,9 +89,9 @@ def pruefe_pfad(p):
         return True, "Auf Vorgabe zurückgesetzt."
     if not os.path.isabs(p):
         return False, ("Bitte vollständigen Pfad im Container angeben, etwa /listen.")
-    if not os.path.exists(p):
+    if not statefiles.exists(p):
         return False, (f"'{p}' fehlt im Container. Verzeichnis eingehängt? Siehe README, Kapitel Listen.")
-    if not os.path.isdir(p):
+    if not statefiles.isdir(p):
         return False, f"'{p}' ist eine Datei, kein Ordner."
     if not os.access(p, os.R_OK):
         return False, f"'{p}' ist nicht lesbar."
@@ -225,7 +226,7 @@ def finde_kopfzeile(roh, pruefen=None):
 def _kopfzeilen():
     """Von Hand gesetzte Kopfzeilen, je 'datei#blatt'."""
     try:
-        with open(KOPF_DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(KOPF_DATEI, "r", encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
     except (OSError, json.JSONDecodeError):
@@ -368,7 +369,7 @@ def _wolken_zwischenspeicher():
     """Wo heruntergeladene Listen liegen. Ableitbar, also beim Index."""
     p = os.path.join(paths.INDEX_DIR, "listen_wolke")
     try:
-        os.makedirs(p, exist_ok=True)
+        statefiles.makedirs(p, exist_ok=True)
     except OSError:
         pass
     return p
@@ -396,22 +397,22 @@ def _wolke_holen(fern, etag=""):
         angabe = owncloud.stand(fern)
         etag = (angabe or ("", ""))[1]
     try:
-        with open(marke, encoding="utf-8") as f:
+        with statefiles.open(marke, encoding="utf-8") as f:
             bekannt = f.read().strip()
     except OSError:
         bekannt = ""
-    if os.path.isfile(lokal) and etag and bekannt == etag:
+    if statefiles.isfile(lokal) and etag and bekannt == etag:
         return lokal
     try:
         owncloud.hole(fern, lokal)
-        with open(marke, "w", encoding="utf-8") as f:
+        with statefiles.open(marke, "w", encoding="utf-8") as f:
             f.write(etag)
     except Exception:
         # Eine nicht erreichbare Instanz darf die uebrigen Listen nicht
         # kosten. Liegt eine aeltere Fassung da, ist sie besser als
         # keine -- und dass sie aelter ist, faellt beim naechsten
         # gelungenen Rundlauf von selbst weg.
-        return lokal if os.path.isfile(lokal) else ""
+        return lokal if statefiles.isfile(lokal) else ""
     return lokal
 
 
@@ -454,7 +455,7 @@ def alter_ordner():
     sondern ihr Fehlen.
     """
     try:
-        with open(PFAD_DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(PFAD_DATEI, "r", encoding="utf-8") as f:
             if f.read().strip():
                 return True
     except OSError:
@@ -508,7 +509,7 @@ def _lies_ordner(ordner, raum, uebrig):
     if str(ordner).startswith(WOLKE):
         return _lies_wolke(ordner, raum, uebrig)
     eintraege, fehler, gesehen = [], [], 0
-    if not os.path.isdir(ordner):
+    if not statefiles.isdir(ordner):
         # Kein Fehlschlag des Ganzen: ein nicht eingehaengtes
         # Heimlaufwerk ist der Normalfall, nicht die Ausnahme. Nur
         # feste Quellen werden gemeldet -- bei einem Muster je Nutzer
@@ -539,8 +540,8 @@ def _lies_ordner(ordner, raum, uebrig):
                         "zeilen": int(len(rahmen)),
                         "gross": len(rahmen) >= GROSS_AB,
                         "spalten": _spaltenangaben(rahmen),
-                        "groesse": os.path.getsize(datei_pfad),
-                        "geaendert": int(os.path.getmtime(datei_pfad)),
+                        "groesse": statefiles.getsize(datei_pfad),
+                        "geaendert": int(statefiles.getmtime(datei_pfad)),
                     })
             except Exception as e:
                 fehler.append((rel, f"{type(e).__name__}: {e}"))
@@ -588,7 +589,7 @@ def baue_katalog():
 def lies_katalog():
     """Der abgelegte Katalog, oder ein leerer."""
     try:
-        with open(KATALOG, "r", encoding="utf-8") as f:
+        with statefiles.open(KATALOG, "r", encoding="utf-8") as f:
             k = json.load(f)
     except (OSError, json.JSONDecodeError):
         return {"eintraege": [], "fehler": []}
@@ -598,7 +599,7 @@ def lies_katalog():
 def vorhanden():
     """Liegt ueberhaupt eine Tabellendatei im Ordner?"""
     ordner = pfad()
-    if not os.path.isdir(ordner):
+    if not statefiles.isdir(ordner):
         return False
     for _, _, dateien in os.walk(ordner):
         if any(d.lower().endswith(ENDUNGEN) and not d.startswith("~$")
@@ -614,7 +615,7 @@ def beschreibbar():
     die Dateien, und ein Upload waere ohnehin der falsche Weg.
     """
     ordner = pfad()
-    return os.path.isdir(ordner) and os.access(ordner, os.W_OK)
+    return statefiles.isdir(ordner) and os.access(ordner, os.W_OK)
 
 
 def sicherer_dateiname(name):
@@ -647,8 +648,8 @@ def lege_ab(daten, name, bereich=""):
         return False, "Ziel liegt außerhalb des Listenordners."
 
     try:
-        os.makedirs(os.path.dirname(ziel), exist_ok=True)
-        with open(ziel, "wb") as f:
+        statefiles.makedirs(os.path.dirname(ziel), exist_ok=True)
+        with statefiles.open(ziel, "wb") as f:
             f.write(daten)
     except OSError as e:
         return False, f'Speichern fehlgeschlagen: {e}'
@@ -970,9 +971,9 @@ def _lade(datei, blatt, wurzel=None):
         voll = os.path.realpath(os.path.join(wurzel_, datei))
         if not (voll == wurzel_ or voll.startswith(wurzel_ + os.sep)):
             raise ValueError("Datei liegt außerhalb ihrer Quelle.")
-    if not os.path.isfile(voll):
+    if not statefiles.isfile(voll):
         raise ValueError(f"Datei nicht gefunden: {datei}")
-    stand = (voll, os.path.getmtime(voll), os.path.getsize(voll))
+    stand = (voll, statefiles.getmtime(voll), statefiles.getsize(voll))
     kennung = stand + (blatt,)
     con = _zwischenspeicher.get(kennung)
     if con is not None:
@@ -1055,7 +1056,7 @@ MEHRERE_HINWEIS = (
 
 
 def _sql_prompt(frage, katalogtext, verlauf, hoechstens):
-    with open(paths.resolve_prompt("tabellen_prompt.txt"),
+    with statefiles.open(paths.resolve_prompt("tabellen_prompt.txt"),
               "r", encoding="utf-8") as f:
         vorlage = f.read()
     mehrere = (MEHRERE_HINWEIS.replace("{N}", str(hoechstens))
@@ -1143,7 +1144,7 @@ def waehle_blaetter(client, modell, frage, eintraege, hoechstens=None,
     aussieht.
     """
     hoechstens = hoechstens or BLAETTER_MAX
-    with open(paths.resolve_prompt("tabellen_wahl_prompt.txt"),
+    with statefiles.open(paths.resolve_prompt("tabellen_wahl_prompt.txt"),
               "r", encoding="utf-8") as f:
         vorlage = f.read()
     prompt = (vorlage

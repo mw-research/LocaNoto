@@ -36,6 +36,7 @@ from datetime import datetime, timedelta, timezone
 import geheim
 import dateisperre
 import paths
+import statefiles
 
 TOKEN_FILE = os.path.join(paths.CONFIG_DIR, "tokens.json")
 
@@ -68,10 +69,10 @@ def _eintrag_daten(kennung, eintrag):
 
 def laden():
     """Alle Eintraege. Fehlt die Datei, gibt es eben noch keine Token."""
-    if not os.path.exists(TOKEN_FILE) or os.path.getsize(TOKEN_FILE) == 0:
+    if not statefiles.exists(TOKEN_FILE) or statefiles.getsize(TOKEN_FILE) == 0:
         return {}
     try:
-        with open(TOKEN_FILE, "r", encoding="utf-8") as f:
+        with statefiles.open(TOKEN_FILE, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (json.JSONDecodeError, UnicodeDecodeError, OSError):
         # Eine beschaedigte Datei darf nicht dazu fuehren, dass jeder
@@ -103,7 +104,7 @@ def nachsichtig(daten=None):
 
 
 def speichern(daten):
-    os.makedirs(paths.CONFIG_DIR, exist_ok=True)
+    statefiles.makedirs(paths.CONFIG_DIR, exist_ok=True)
     # Erst daneben schreiben, dann umbenennen. Bricht der Vorgang ab, steht
     # die alte Datei noch vollstaendig da statt halb.
     fertig = {}

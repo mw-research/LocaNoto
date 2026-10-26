@@ -445,22 +445,23 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `api`, `app` +50 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `api`, `app` +51 |
 | `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +13 |
-| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `keyword_index`, `pg_collection`, `pg_keywords`, `selbsttest` +1 |
+| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `aufnehmen`, `auth`, `benutzer` +20 |
+| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `keyword_index`, `pg_collection`, `pg_keywords`, `raum_diagnose` +3 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +13 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +12 |
 | `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `raeume`, `selbsttest`, `uebersetzen` +1 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_VERSUCHE`, `OPENAI_API_KEY` +1 | `api`, `app`, `aufnehmen`, `ingest` +5 |
 | **Bestand** | | | |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +10 |
-| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `api`, `app` +20 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +11 |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `api`, `app` +21 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `api`, `app`, `bestandsliste` +10 |
 | `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `ingest`, `ingest_images` +8 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `api`, `app`, `selbsttest`, `sicherheit` +1 |
-| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `selbsttest`, `sicherheit` +3 |
+| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `app`, `keyword_index`, `pg_keywords`, `selbsttest` +4 |
+| `pg_keywords.py` | Keyword search on Postgres -- the enterprise counterpart of keyword_index. | — | `keyword_index`, `raum_diagnose` |
 | `pg_collection.py` | Chroma-compatible collections on Postgres + pgvector. | — | `store` |
-| `pg_keywords.py` | Keyword search on Postgres -- the enterprise counterpart of keyword_index. | — | `keyword_index` |
 | **Fachlogik** | | | |
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `altbestand`, `app`, `aufnehmen` +7 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `api`, `app`, `listen_diagnose`, `selbsttest` +1 |
@@ -508,10 +509,10 @@ Dateien importieren sie.
 | `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `altbestand`, `selbsttest` |
 | `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
+| `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
 | `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
 | `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
 | `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
-| `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
 | `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
 | `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
 | `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |

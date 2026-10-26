@@ -51,6 +51,7 @@ import time
 
 import dateisperre
 import paths
+import statefiles
 import sprache
 
 # Ab welchem Alter ein Gruppenstand nicht mehr gilt, in Minuten. 0 heisst:
@@ -96,7 +97,7 @@ PRIVAT = "privat_"
 
 def _lade():
     try:
-        with open(DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {"raeume": {}}
@@ -244,7 +245,7 @@ def bezeichnung(kennung):
 def gruppenstand():
     """({gruppe: [kennung]}, alter_in_minuten). Leer, wenn nichts da ist."""
     try:
-        with open(paths.GRUPPEN_DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(paths.GRUPPEN_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}, None

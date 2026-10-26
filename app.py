@@ -23,6 +23,7 @@ from datetime import datetime
 import re
 
 import paths
+import statefiles
 import sicherheit
 import store
 import auth
@@ -771,7 +772,7 @@ def _verschiebe_datei(filename, von_raum, nach_raum):
     in dem Abschnitt und Datei auseinanderlaufen -- und gesagt wird es.
     """
     quelle = dokument_pfad(filename, von_raum)
-    if not quelle or not os.path.exists(quelle):
+    if not quelle or not statefiles.exists(quelle):
         return ""
 
     def basis(raum):
@@ -791,13 +792,13 @@ def _verschiebe_datei(filename, von_raum, nach_raum):
     ziel = os.path.join(ziel_ordner, os.path.basename(quelle))
     if os.path.normpath(ziel) == os.path.normpath(quelle):
         return ""
-    if os.path.exists(ziel):
+    if statefiles.exists(ziel):
         return (" Die Datei blieb liegen: am Ziel gibt es bereits eine "
                 "gleichen Namens. Die Originalseite laesst sich dort "
                 "nicht anzeigen.")
     try:
-        os.makedirs(ziel_ordner, exist_ok=True)
-        os.replace(quelle, ziel)
+        statefiles.makedirs(ziel_ordner, exist_ok=True)
+        statefiles.rename(quelle, ziel)
     except OSError as e:
         return f" Die Datei liess sich nicht mitnehmen ({e})."
     # ownCloud zieht mit. Sonst laege die Datei dort weiter im alten
@@ -2904,7 +2905,7 @@ if _bestand > 0:
                         # eine Abschnittsnummer, und pymupdf kann die Datei
                         # ohnehin nicht oeffnen.
                         if (file_n.lower().endswith(".pdf")
-                                and os.path.exists(pdf_path)
+                                and statefiles.exists(pdf_path)
                                 and isinstance(page_n, int)):
                             # Einzigartiger Key für diese Nachricht und diese Seite
                             chk_key = f"chk_{file_n}_{page_n}_{i}"
@@ -2999,7 +3000,7 @@ if _bestand > 0:
                                                 _auftrag["namen"])):
             with st.spinner(tx(f"Lese Bild {n + 1} von {len(bild_pfade)} ...")):
                 try:
-                    with open(pfad, "rb") as _f:
+                    with statefiles.open(pfad, "rb") as _f:
                         bild_texte.append(vision.beschreibe(_f.read(),
                                                             user_query))
                 except Exception as e:

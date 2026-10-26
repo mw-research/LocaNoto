@@ -65,6 +65,7 @@ for _v in _entfernt:
 tmp = tempfile.mkdtemp(prefix="ende_")
 os.environ["ADMIN_USERS"] = "markus"
 import paths
+import statefiles
 import database
 if _SELFTEST_DB:
     import psycopg
@@ -88,8 +89,8 @@ if _SELFTEST_DB:
     import atexit
     atexit.register(_drop_test_db)
 for n, u in (("CONFIG_DIR", "konfig"), ("DATA_DIR", "daten")):
-    setattr(paths, n, os.path.join(tmp, u)); os.makedirs(getattr(paths, n))
-paths.DOCS_DIR = os.path.join(paths.DATA_DIR, "dokumente"); os.makedirs(paths.DOCS_DIR)
+    setattr(paths, n, os.path.join(tmp, u)); statefiles.makedirs(getattr(paths, n))
+paths.DOCS_DIR = os.path.join(paths.DATA_DIR, "dokumente"); statefiles.makedirs(paths.DOCS_DIR)
 paths.CHATS_DIR = os.path.join(paths.DATA_DIR, "chats")
 paths.INDEX_DIR = paths.DATA_DIR
 paths.CHROMA_DIR = os.path.join(paths.DATA_DIR, "chroma_db")
@@ -196,7 +197,7 @@ pruef("eigener Raum entsteht mit dem Zugang",
 import threading as _th_g
 _g_alt = (benutzer._datei, benutzer.PROTOKOLL, raeume.DATEI)
 _g_ord = os.path.join(tmp, "gleichzeitig")
-os.makedirs(_g_ord, exist_ok=True)
+statefiles.makedirs(_g_ord, exist_ok=True)
 benutzer._datei = lambda: os.path.join(_g_ord, "users.json")
 benutzer.PROTOKOLL = os.path.join(_g_ord, "benutzer.log")
 raeume.DATEI = os.path.join(_g_ord, "raeume.json")
@@ -365,7 +366,7 @@ for wer, erwartet_datei, verboten in (
 print("=== 5. Chat verschluesselt ===")
 k = chats.neue_kennung()
 chats.speichere("anna", k, [{"role": "user", "content": "Geheime Frage zu Kabeln"}], "Titel 26")
-roh = open(os.path.join(chats.ordner("anna"), k), "rb").read()
+roh = statefiles.open(os.path.join(chats.ordner("anna"), k), "rb").read()
 pruef("Chatdatei verschluesselt", geheim.ist_verschluesselt(roh))
 pruef("kein Klartext in der Datei", b"Kabel" not in roh)
 pruef("Titel nicht im Dateinamen", "Titel" not in k)
@@ -375,7 +376,7 @@ pruef("markus liest ihn NICHT", chats.lade("markus", k) == [])
 print("=== 6. Rueckmeldungen und Sicherung ===")
 feedback.notiere("leer", "anna", "Welche Kabel gab es 2018?")
 pruef("Rueckmeldung verschluesselt",
-      b"Kabel" not in open(feedback.DATEI, "rb").read())
+      b"Kabel" not in statefiles.open(feedback.DATEI, "rb").read())
 pruef("Rueckmeldung lesbar", feedback.lese()[0]["frage"].startswith("Welche"))
 import sicherung
 sicherung.ORDNER = os.path.join(paths.DATA_DIR, "sicherungen")
@@ -399,13 +400,13 @@ print("=== 7. Ablage: gleicher Dateiname in zwei Raeumen ===")
 # suchte allein nach dem Dateinamen. Zwei Raeume durften dieselbe
 # 'Angebot.pdf' haben -- und die Quellenansicht zeigte zu einem Treffer
 # im eigenen Raum die Seite aus dem Dokument eines anderen.
-os.makedirs(paths.DOCS_DIR, exist_ok=True)
+statefiles.makedirs(paths.DOCS_DIR, exist_ok=True)
 _wurzel_datei = os.path.join(paths.DOCS_DIR, "Angebot.pdf")
-open(_wurzel_datei, "wb").write(b"AUS DEM WURZELBEREICH")
+statefiles.open(_wurzel_datei, "wb").write(b"AUS DEM WURZELBEREICH")
 _ek_ordner = paths.raum_ordner("einkauf")
-os.makedirs(_ek_ordner, exist_ok=True)
+statefiles.makedirs(_ek_ordner, exist_ok=True)
 _ek_datei = os.path.join(_ek_ordner, "Angebot.pdf")
-open(_ek_datei, "wb").write(b"AUS DEM EINKAUF")
+statefiles.open(_ek_datei, "wb").write(b"AUS DEM EINKAUF")
 
 _fremd = lambda eigen: [paths.raum_ordner(k) for k in raeume.liste()
                         if k != eigen]
@@ -413,17 +414,17 @@ _gefunden = paths.finde_dokument(
     "Angebot.pdf", bevorzugt=paths.raum_ordner("einkauf"),
     ausser=_fremd("einkauf"))
 pruef("einkauf findet SEINE Datei",
-      _gefunden and open(_gefunden, "rb").read() == b"AUS DEM EINKAUF")
+      _gefunden and statefiles.open(_gefunden, "rb").read() == b"AUS DEM EINKAUF")
 _gefunden = paths.finde_dokument(
     "Angebot.pdf",
     bevorzugt=paths.raum_ordner(raeume.privat_kennung("anna")),
     ausser=_fremd(raeume.privat_kennung("anna")))
 pruef("anna bekommt NICHT die Datei des Einkaufs",
-      _gefunden and open(_gefunden, "rb").read() == b"AUS DEM WURZELBEREICH")
+      _gefunden and statefiles.open(_gefunden, "rb").read() == b"AUS DEM WURZELBEREICH")
 
 # Der scharfe Fall: die Datei liegt NUR im Ordner des Einkaufs. Vorher
 # fand os.walk sie fuer jeden, der nach dem Namen fragte.
-open(os.path.join(_ek_ordner, "Preisliste.pdf"), "wb").write(b"NUR EINKAUF")
+statefiles.open(os.path.join(_ek_ordner, "Preisliste.pdf"), "wb").write(b"NUR EINKAUF")
 pruef("Datei allein im fremden Raumordner ist unerreichbar",
       paths.finde_dokument(
           "Preisliste.pdf",
@@ -460,7 +461,7 @@ pruef("Kennung des persoenlichen Raums nicht im Protokoll",
       raeume.privat_kennung("anna") not in _klar)
 pruef("gemeinsamer Dateiname bleibt", "Handbuch.pdf" in _klar)
 pruef("und nichts davon liegt im Klartext auf der Platte",
-      b"Kuendigung" not in open(feedback.DATEI, "rb").read())
+      b"Kuendigung" not in statefiles.open(feedback.DATEI, "rb").read())
 
 sicherung.BEHALTEN = 2
 print("=== 9. Ein unvollstaendiger Abzug sieht nicht wie ein guter aus ===")
@@ -510,7 +511,7 @@ sicherung._lies_raum = _echt_lesen
 pruef("dauerhafter Lesefehler wird als unvollstaendig vermerkt",
       _schlecht["vollstaendig"] is False)
 pruef("und der Vermerk steht IM Abzug",
-      json.load(open(os.path.join(sicherung.ORDNER, _schlecht["name"],
+      json.load(statefiles.open(os.path.join(sicherung.ORDNER, _schlecht["name"],
                                   "stand.json"),
                      encoding="utf-8")).get("vollstaendig") is False)
 pruef("Einspielen sagt es vorher",
@@ -551,9 +552,9 @@ pruef("beide Namen stehen im Protokoll",
       any(e.get("aktion") == "notzugang_bestaetigt" and e.get("von") == "chef"
           and "markus" in str(e.get("hinweis"))
           for e in benutzer.protokoll(50)))
-_roh = json.load(open(notzugang.DATEI, encoding="utf-8"))
+_roh = json.load(statefiles.open(notzugang.DATEI, encoding="utf-8"))
 _roh["inhalt"]["zugaenge"][0]["von"] = "anna"
-json.dump(_roh, open(notzugang.DATEI, "w", encoding="utf-8"))
+json.dump(_roh, statefiles.open(notzugang.DATEI, "w", encoding="utf-8"))
 pruef("eine von Hand veraenderte Datei gilt nicht",
       notzugang.raeume_fuer("anna") == []
       and notzugang.raeume_fuer("markus") == [])
@@ -752,8 +753,8 @@ for _unter, _inhalt in (
         ("heim/markus/Listen", "Vorgang;Betrag\nGehalt;1\n"),
         ("heim/anna/Listen", "Notiz;Wert\nPrivat;2\n")):
     _o = os.path.join(_netz, _unter)
-    os.makedirs(_o, exist_ok=True)
-    with open(os.path.join(_o, "liste.csv"), "w", encoding="utf-8") as _f:
+    statefiles.makedirs(_o, exist_ok=True)
+    with statefiles.open(os.path.join(_o, "liste.csv"), "w", encoding="utf-8") as _f:
         _f.write(_inhalt)
 
 os.environ["LISTEN_WURZELN"] = _netz
@@ -790,7 +791,7 @@ pruef("eine Quelle, die eine andere enthaelt, wird abgewiesen",
 # Betreiber einen Raum gewonnen und den gemeinsamen Bestand verloren,
 # ohne Meldung und ohne erratbaren Zusammenhang.
 _altpfad = os.path.join(_netz, "allgemein")
-with io.open(tabellen.PFAD_DATEI, "w", encoding="utf-8") as _f:
+with statefiles.open(tabellen.PFAD_DATEI, "w", encoding="utf-8") as _f:
     _f.write(_altpfad)
 listenquellen.speichere([{"raum": "einkauf",
                           "pfad": os.path.join(_netz, "abteilung",
@@ -804,7 +805,7 @@ listenquellen.speichere([
     {"raum": "allgemein", "pfad": os.path.join(_netz, "heim")}])
 pruef("eine ausdrueckliche Quelle fuer allgemein ersetzt ihn",
       ("allgemein", _altpfad) not in tabellen.quellen(), tabellen.quellen())
-os.remove(tabellen.PFAD_DATEI)
+statefiles.remove(tabellen.PFAD_DATEI)
 
 pruef("nebeneinanderliegende Ordner gehen weiter",
       listenquellen.speichere([
@@ -853,7 +854,7 @@ pruef("gleichnamige Dateien liefern verschiedene Zeilen",
 # verschluesselten Datentraeger. Was er ueber fremde Listen preisgibt,
 # gibt er dort preis.
 _roh = tabellen.lies_katalog()["eintraege"]
-_text = io.open(tabellen.KATALOG, encoding="utf-8").read()
+_text = statefiles.open(tabellen.KATALOG, encoding="utf-8").read()
 pruef("die Katalogdatei nennt weder Datei- noch Spaltennamen",
       not any(w in _text for w in ("liste.csv", "Gehalt", "Vorgang",
                                    "Listen", "Lieferant")))
@@ -901,8 +902,8 @@ pruef("ein leerer Pfad entfernt den Eintrag",
 # ein gewoehnlicher Pfad; nur ownCloud ist ohnehin angebunden.
 import owncloud as _oc
 _ferne = os.path.join(_netz, "wolke")
-os.makedirs(_ferne, exist_ok=True)
-with open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
+statefiles.makedirs(_ferne, exist_ok=True)
+with statefiles.open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
     _f.write("Artikel;Preis\nSchraube;0,12\n")
 
 _oc.eingerichtet = lambda: True
@@ -910,9 +911,9 @@ _oc.dateien = lambda pfad, endungen=None, tiefe=8: [
     {"rel": "preise.csv", "fern": "Listen/preise.csv",
      "groesse": 30, "etag": _etag[0], "geaendert": ""}]
 _oc.hole = lambda fern, ziel: (
-    os.makedirs(os.path.dirname(ziel), exist_ok=True),
-    open(ziel, "wb").write(
-        open(os.path.join(_ferne, "preise.csv"), "rb").read()))[1]
+    statefiles.makedirs(os.path.dirname(ziel), exist_ok=True),
+    statefiles.open(ziel, "wb").write(
+        statefiles.open(os.path.join(_ferne, "preise.csv"), "rb").read()))[1]
 _oc.stand = lambda fern: (30, _etag[0])
 _etag = ["eins"]
 tabellen._zwischenspeicher.clear()
@@ -934,7 +935,7 @@ pruef("und die Zeilen kommen an", "Schraube" in str(_z), _z)
 # Die Frischezusage: geaenderte Zeilen wirken in der naechsten Frage,
 # ohne Neueinlesen. Bei einer lokalen Datei haengt das an mtime und
 # Groesse, hier am etag.
-with open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
+with statefiles.open(os.path.join(_ferne, "preise.csv"), "w", encoding="utf-8") as _f:
     _f.write("Artikel;Preis\nSchraube;0,99\n")
 _etag[0] = "zwei"
 _sp, _z2 = tabellen.fuehre_aus(_we[0]["datei"], _we[0].get("blatt") or "",
@@ -989,7 +990,7 @@ def _ohne_tx(quelle):
     return roh.decode("utf-8")
 
 
-_quelle = _ohne_tx(io.open(os.path.join(os.path.dirname(
+_quelle = _ohne_tx(statefiles.open(os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "app.py"), encoding="utf-8").read())
 _a = _quelle.index("def list_foreign_private_documents(")
 _rumpf = _quelle[_a:_quelle.index("\ndef ", _a + 10)]
@@ -1238,7 +1239,7 @@ pruef("Benutzer ohne Passwort wird abgewiesen",
 # Das Passwort liegt verschluesselt -- mit dem Schluessel des Raums,
 # dem es gehoert. Wer die Konfigurationsdatei kopiert, bekommt
 # Geheimtext.
-_roh = io.open(sqlquellen.QUELLEN, encoding="utf-8").read()
+_roh = statefiles.open(sqlquellen.QUELLEN, encoding="utf-8").read()
 pruef("das Passwort steht nicht im Klartext in der Datei",
       "geheim123" not in _roh and "annageheim" not in _roh)
 pruef("aufgeschlossen kommt es zurueck",
@@ -1429,7 +1430,7 @@ sys.modules.pop("vision", None)
 # nutzlosen Messung.
 import lasttest as _lt
 
-_api_quelle = io.open(os.path.join(
+_api_quelle = statefiles.open(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "api.py"),
     encoding="utf-8").read()
 _treffer = _re.search(r"def benutzer\(\s*(\w+)\s*:", _api_quelle)
@@ -1452,7 +1453,7 @@ if _treffer:
 # Der Grund, warum es durchrutschte, ist der Stammbaum: app.py fing an
 # der Suche nur ValueError. Ueberzogen ist keiner -- also flog es
 # vorbei. Genau das haelt die erste Pruefung fest.
-_datei_roh = lambda n: io.open(os.path.join(
+_datei_roh = lambda n: statefiles.open(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), n), encoding="utf-8").read()
 _datei = lambda n: (_ohne_tx(_datei_roh(n))
                     if n in ("app.py", "verwaltung.py") else _datei_roh(n))
@@ -1529,13 +1530,13 @@ import zipfile as _zip
 
 _alt = os.path.join(tmp, "altinstallation")
 for _u in ("chats", "dokumente", "chroma_db", "sicherungen"):
-    os.makedirs(os.path.join(_alt, _u), exist_ok=True)
+    statefiles.makedirs(os.path.join(_alt, _u), exist_ok=True)
 for _p, _inhalt in ((["chats", "a.json"], b"12"),
                     (["dokumente", "b.pdf"], b"345"),
                     (["chroma_db", "chroma.sqlite3"], b"XXXXX"),
                     (["sicherungen", "raum_allgemein.npy"], b"6789"),
                     (["keyword_index.sqlite3"], b"YYY")):
-    with open(os.path.join(_alt, *_p), "wb") as _f:
+    with statefiles.open(os.path.join(_alt, *_p), "wb") as _f:
         _f.write(_inhalt)
 
 _ziel = os.path.join(tmp, "probe.zip")
@@ -1637,7 +1638,7 @@ pruef("ohne Konfiguration ist kein Server eingerichtet",
       not _mcp.eingerichtet())
 
 _fake = os.path.join(tmp, "fake_mcp.py")
-with open(_fake, "w", encoding="utf-8") as _f:
+with statefiles.open(_fake, "w", encoding="utf-8") as _f:
     _f.write(FAKE_MCP)
 
 _vb = _mcp.Verbindung("probe", {"transport": "stdio",
@@ -1750,7 +1751,7 @@ pruef("und vor allem kein Modellaufruf", _m.aufrufe == 0, _m.aufrufe)
 # 2. Konfiguration wie im Betrieb: ein persoenliches Postfach ohne
 #    Freigabe, ein Funktionspostfach mit.
 _mk = os.path.join(paths.CONFIG_DIR, "mcp.json")
-with open(_mk, "w", encoding="utf-8") as _f:
+with statefiles.open(_mk, "w", encoding="utf-8") as _f:
     json.dump({"mein": {"transport": "http", "url": "http://x",
                         "sendet": ["send_mail"]},
                "info": {"transport": "http", "url": "http://x",
@@ -1801,7 +1802,7 @@ _pl.werkzeuglauf(_m, "x", "sys", [], _vb3)
 pruef("der Kreis bricht nach den vorgesehenen Runden ab",
       _m.aufrufe == _pl.WERKZEUG_RUNDEN, (_m.aufrufe, _pl.WERKZEUG_RUNDEN))
 
-os.remove(_mk)
+statefiles.remove(_mk)
 
 # --- WAS RAUSGEHT, GEHT NICHT ZURUECK ---
 #
@@ -1809,7 +1810,7 @@ os.remove(_mk)
 # Funktionspostfach, das ausdruecklich freigeschaltet ist -- und dann
 # traegt jede Nachricht einen Hinweis, dass sie automatisch entstand.
 _mcp_konf = os.path.join(paths.CONFIG_DIR, "mcp.json")
-with open(_mcp_konf, "w", encoding="utf-8") as _f:
+with statefiles.open(_mcp_konf, "w", encoding="utf-8") as _f:
     json.dump({
         "persoenlich": {"transport": "http", "url": "http://x"},
         "info": {"transport": "http", "url": "http://x",
@@ -1860,7 +1861,7 @@ pruef("mit Liste gilt nur die Liste",
       _mcp.sendet("info", "send_mail")
       and not _mcp.sendet("info", "reply_to_message"))
 
-os.remove(_mcp_konf)
+statefiles.remove(_mcp_konf)
 
 # --- DER OWNCLOUD-ZIELPFAD BEHAELT DEN PROJEKTORDNER ---
 #
@@ -1971,11 +1972,11 @@ pruef("und BEIDE Texte stehen danach da -- keiner faellt weg",
 # gemeldet.
 _alt_samml = sicherung._raum_sammlungen
 sicherung._raum_sammlungen = lambda: []
-_vorher = (set(os.listdir(sicherung.ORDNER))
-           if os.path.isdir(sicherung.ORDNER) else set())
+_vorher = (set(statefiles.listdir(sicherung.ORDNER))
+           if statefiles.isdir(sicherung.ORDNER) else set())
 _ber = sicherung.sichere()
-_nachher = (set(os.listdir(sicherung.ORDNER))
-            if os.path.isdir(sicherung.ORDNER) else set())
+_nachher = (set(statefiles.listdir(sicherung.ORDNER))
+            if statefiles.isdir(sicherung.ORDNER) else set())
 sicherung._raum_sammlungen = _alt_samml
 
 pruef("ein Abzug ohne Sammlungen gilt nicht als vollstaendig",
@@ -1989,14 +1990,14 @@ pruef("der Grund steht im Bericht", "Chroma" in (_ber.get("grund") or ""),
 # traegt vollstaendig=true. Daran aendert das Schreiben von heute
 # nichts -- also muss das LESEN ihn erkennen.
 _stummel = os.path.join(sicherung.ORDNER, "2000-01-01_00-00-00")
-os.makedirs(_stummel, exist_ok=True)
-with open(os.path.join(_stummel, "stand.json"), "w", encoding="utf-8") as _f:
+statefiles.makedirs(_stummel, exist_ok=True)
+with statefiles.open(os.path.join(_stummel, "stand.json"), "w", encoding="utf-8") as _f:
     json.dump({"name": "2000-01-01_00-00-00", "raeume": {},
                "abschnitte": 0, "fehler": [], "vollstaendig": True}, _f)
 pruef("ein alter Stummel taugt nicht zum Zurueckholen",
       "2000-01-01_00-00-00" not in sicherung.vollstaendige(),
       sicherung.vollstaendige())
-shutil.rmtree(_stummel, ignore_errors=True)
+statefiles.rmtree(_stummel, ignore_errors=True)
 
 # --- DIE BESTANDSLISTE ZAEHLT RICHTIG ---
 #
@@ -2007,11 +2008,11 @@ shutil.rmtree(_stummel, ignore_errors=True)
 import bestandsliste as _bl
 
 _probe = os.path.join(tmp, "zaehlprobe")
-os.makedirs(os.path.join(_probe, "tief", "tiefer"), exist_ok=True)
+statefiles.makedirs(os.path.join(_probe, "tief", "tiefer"), exist_ok=True)
 for _p, _inhalt in ((["a.txt"], b"12345"),
                     (["tief", "b.txt"], b"123"),
                     (["tief", "tiefer", "c.txt"], b"1")):
-    with open(os.path.join(_probe, *_p), "wb") as _f:
+    with statefiles.open(os.path.join(_probe, *_p), "wb") as _f:
         _f.write(_inhalt)
 pruef("sie zaehlt auch in Unterordnern",
       _bl.zaehle_ordner(_probe) == (3, 9), _bl.zaehle_ordner(_probe))
@@ -2029,9 +2030,9 @@ pruef("und einen fehlenden Ordner als leer",
 import spiegeln as _sp
 
 _quelle = os.path.join(tmp, "spiegelprobe")
-os.makedirs(os.path.join(_quelle, "unterordner"), exist_ok=True)
+statefiles.makedirs(os.path.join(_quelle, "unterordner"), exist_ok=True)
 for _p in (["a.pdf"], ["b.pdf"], ["unterordner", "c.pdf"], [".versteckt"]):
-    with open(os.path.join(_quelle, *_p), "wb") as _f:
+    with statefiles.open(os.path.join(_quelle, *_p), "wb") as _f:
         _f.write(b"x")
 
 pruef("gespiegelt wird auch aus Unterordnern",
@@ -2189,7 +2190,7 @@ pruef("danach wird die Ablage eingerichtet",
 # in ownCloud laengst gibt -- ihnen von hier aus das Passwort ihres
 # Firmenkontos zu nehmen, spaerrte sie aus allem aus, was daran haengt.
 import owncloud as _ocp
-_qu = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+_qu = statefiles.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "owncloud.py"), encoding="utf-8").read()
 _na = _qu.split("def nutzer_anlegen(", 1)[1]
 _na = _na.split("def richte_nutzer_ein(", 1)[0]
@@ -2411,10 +2412,10 @@ pruef("der Upload benutzt dieselbe Regel",
 # Raeume NICHT mitkommen. Sie liegen darunter, und sie gehoeren
 # anderen Leuten -- der allgemeine Raum ist fuer alle sichtbar.
 _w = os.path.join(tmp, "wurzelprobe")
-os.makedirs(os.path.join(_w, "einkauf"), exist_ok=True)
-os.makedirs(os.path.join(_w, "offen"), exist_ok=True)
+statefiles.makedirs(os.path.join(_w, "einkauf"), exist_ok=True)
+statefiles.makedirs(os.path.join(_w, "offen"), exist_ok=True)
 for _p in (["basis.pdf"], ["offen", "auch.pdf"], ["einkauf", "geheim.pdf"]):
-    with open(os.path.join(_w, *_p), "wb") as _f:
+    with statefiles.open(os.path.join(_w, *_p), "wb") as _f:
         _f.write(b"x")
 _gefunden = [r for _v, r in _sp._dateien(_w, [os.path.join(_w, "einkauf")])]
 pruef("der Ordner eines fremden Raums bleibt aussen vor",
@@ -3294,7 +3295,7 @@ _js0.dump({"persoenlich": {"transport": "http", "url": "http://x",
                            "anmeldung": "basic"},
            "info": {"transport": "http", "url": "http://y",
                     "anmeldung": "keine"}},
-          io.open(_mcp0.KONFIG, "w", encoding="utf-8"))
+          statefiles.open(_mcp0.KONFIG, "w", encoding="utf-8"))
 
 pruef("ein persoenliches Postfach verlangt eine Anmeldung",
       _mcp0.braucht_anmeldung("persoenlich"))
@@ -3316,7 +3317,7 @@ pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
       '_postfach_koepfe' in _datei("app.py")
       and '_postfach_kopf"' not in _datei("app.py"))
 
-os.remove(_mcp0.KONFIG)
+statefiles.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
 # --- EXCHANGE SPRICHT KEIN MCP, UND DAS DARF NIRGENDS AUFFALLEN ---
@@ -3338,7 +3339,7 @@ _js0.dump({"markus": {"transport": "exchange", "anmeldung": "basic",
                     "sendet": list(_pf0.SENDEWERKZEUGE)},
            "irgendein": {"transport": "http", "url": "http://z",
                          "anmeldung": "keine"}},
-          io.open(_mcp0.KONFIG, "w", encoding="utf-8"))
+          statefiles.open(_mcp0.KONFIG, "w", encoding="utf-8"))
 
 _vb1 = _mcp0.verbinde({})
 pruef("ein Exchange-Postfach wird kein JSON-RPC-Server",
@@ -3490,7 +3491,7 @@ for _w in _mp_with:
 pruef("'Meine Postfaecher' erscheint auch ohne eingerichtetes Postfach",
       _mp_with and not _mp_bedingt, _mp_bedingt or len(_mp_with))
 
-os.remove(_mcp0.KONFIG)
+statefiles.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
 # --- DER HINWEIS UNTER AUTOMATISCHEN ANTWORTEN IST ABSCHALTBAR ---
@@ -3508,7 +3509,7 @@ _mcp2.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_probe.json")
 
 def _postfach(**angaben):
     _js.dump({"pf": dict(angaben)},
-             io.open(_mcp2.KONFIG, "w", encoding="utf-8"))
+             statefiles.open(_mcp2.KONFIG, "w", encoding="utf-8"))
 
 
 _arg = {"body": "Guten Tag"}
@@ -3538,7 +3539,7 @@ _postfach(automatisch=True, sendet=["senden"], hinweis_anhaengen=True)
 pruef("und mit Hinweis, aber ohne Textfeld, auch",
       _mcp2.braucht_bestaetigung("pf", "senden", {"x": 1}))
 
-os.remove(_mcp2.KONFIG)
+statefiles.remove(_mcp2.KONFIG)
 _mcp2.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
 # --- DER QUELLENHINWEIS IST DER NACHWEIS, NICHT DAS SCHMUCKSTUECK ---
@@ -3608,7 +3609,7 @@ def _zugleich(ziele):
 
 
 _s_ord = os.path.join(tmp, "gleichzeitig_rest")
-os.makedirs(_s_ord, exist_ok=True)
+statefiles.makedirs(_s_ord, exist_ok=True)
 
 # 1. Raumschluessel
 _rs_alt = raumschluessel.DATEI
@@ -3679,7 +3680,7 @@ try:
                        for _ in range(10)])
     _gh_neu = [x for x in _gh_aus if isinstance(x, bytes)]
     import base64 as _b64_s
-    with open(geheim.SCHLUESSEL_DATEI, "rb") as _f:
+    with statefiles.open(geheim.SCHLUESSEL_DATEI, "rb") as _f:
         _gh_platte = _b64_s.urlsafe_b64decode(_f.read().strip())
     pruef("erster Start, zehn Faeden: genau einer erzeugt den Schluessel",
           len(_gh_neu) == 1 and not _gh_f, (len(_gh_neu), _gh_f[:1]))
@@ -3739,7 +3740,7 @@ for _wurzel_s, _ordner_s, _namen_s in os.walk(_HIER_S := os.path.dirname(
     for _n in _namen_s:
         if not _n.endswith(".py") or _n in ("dateisperre.py", "selbsttest.py"):
             continue
-        with io.open(os.path.join(_wurzel_s, _n), encoding="utf-8") as _f:
+        with statefiles.open(os.path.join(_wurzel_s, _n), encoding="utf-8") as _f:
             for _nr, _z in enumerate(_f, 1):
                 _code = _z.split("#", 1)[0]
                 if _re_s.search(r"""\.neu["']""", _code):
@@ -4090,15 +4091,15 @@ try:
     _ock._eintraege = lambda s, p: [("a.pdf", False, 1, "e", ""),
                                     ("Projekt", True, 0, "e", "")]
     _st_d = _ock._stand_datei("einkauf")
-    os.makedirs(os.path.dirname(_st_d), exist_ok=True)
-    io.open(_st_d, "w", encoding="utf-8").write('{"a.pdf": {}}')
+    statefiles.makedirs(os.path.dirname(_st_d), exist_ok=True)
+    statefiles.open(_st_d, "w", encoding="utf-8").write('{"a.pdf": {}}')
     _n_l, _f_l = _ock.leere_raumordner("einkauf")
     _o_l = (_ock.ordner_fuer("einkauf") or _ock.raum_pfad("einkauf")).rstrip("/")
     pruef("Daten loeschen leert auch den ownCloud-Ordner des Raums",
           _n_l == 2 and not _f_l
           and _ls.rufe == [_ock._url(f"{_o_l}/a.pdf"),
                            _ock._url(f"{_o_l}/Projekt")]
-          and not os.path.exists(_st_d), (_n_l, _f_l, _ls.rufe))
+          and not statefiles.exists(_st_d), (_n_l, _f_l, _ls.rufe))
 except Exception as e:
     pruef("ownCloud-Konten und Raumordner lassen sich pruefen", False,
           f"{type(e).__name__}: {e}")
@@ -4352,10 +4353,10 @@ pruef("OpenCloud lauscht innen auf dem Port seiner eigenen Adresse",
       '"${OWNCLOUD_PORT:-9200}:${OWNCLOUD_PORT:-9200}"' in _dc_q
       and "PROXY_HTTP_ADDR=0.0.0.0:${OWNCLOUD_PORT:-9200}" in _dc_q)
 pruef("die k8s-Vorlage ist OpenCloud, die fuer ownCloud 10 ist weg",
-      os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml"))
-      and not os.path.exists(os.path.join(_k8s_oc, "97-owncloud.yaml")))
-if os.path.exists(os.path.join(_k8s_oc, "97-opencloud.yaml")):
-    _k97 = io.open(os.path.join(_k8s_oc, "97-opencloud.yaml"),
+      statefiles.exists(os.path.join(_k8s_oc, "97-opencloud.yaml"))
+      and not statefiles.exists(os.path.join(_k8s_oc, "97-owncloud.yaml")))
+if statefiles.exists(os.path.join(_k8s_oc, "97-opencloud.yaml")):
+    _k97 = statefiles.open(os.path.join(_k8s_oc, "97-opencloud.yaml"),
                    encoding="utf-8").read()
     # Die interne /data-Adresse bricht das Hochladen im Browser.
     pruef("die Vorlage legt /data nicht auf eine interne Adresse",
@@ -4382,8 +4383,8 @@ try:
                        ("admin/files/Sonstiges/c.pdf", "c"),
                        ("bernd/files/geheim.docx", "dddd")):
         _p = os.path.join(_ab_alt, *_rel.split("/"))
-        os.makedirs(os.path.dirname(_p), exist_ok=True)
-        io.open(_p, "w", encoding="utf-8").write(_inh)
+        statefiles.makedirs(os.path.dirname(_p), exist_ok=True)
+        statefiles.open(_p, "w", encoding="utf-8").write(_inh)
     _ab_b = _ab.vergleiche(os.path.join(_ab_alt, "admin", "files"), {
         "wurzeln": ["LocaNoto/allgemein"],
         "dateien": {"LocaNoto/allgemein/a.pdf": {"groesse": 2},
@@ -4505,8 +4506,8 @@ try:
         "Die Pruefung von Druckbehaeltern regelt die Betriebssicherheit.",
         anfrage="druckbehaelter pruefung", benutzer_="markus")
     _ws_pfad = _auf.dokument_pfad(_ws_name, raeume.privat_kennung("markus"))
-    _ws_inh = (io.open(_ws_pfad, encoding="utf-8").read()
-               if os.path.exists(_ws_pfad) else "")
+    _ws_inh = (statefiles.open(_ws_pfad, encoding="utf-8").read()
+               if statefiles.exists(_ws_pfad) else "")
     pruef("ein Treffer wird ein Dokument im Ordner Suchergebnisse",
           _ws_n > 0 and os.sep + _auf.WEB_ORDNER + os.sep in _ws_pfad
           and "- Quelle: https://normen.example/druck" in _ws_inh
@@ -4523,8 +4524,8 @@ try:
         benutzer_="anna")
     _ws_pfad2 = _auf.dokument_pfad(_ws_name2, raeume.privat_kennung("anna"))
     pruef("auch fuer jeden anderen Nutzer in dessen eigenen",
-          _ws_n2 > 0 and os.path.exists(_ws_pfad2)
-          and not os.path.exists(_auf.dokument_pfad(_ws_name2,
+          _ws_n2 > 0 and statefiles.exists(_ws_pfad2)
+          and not statefiles.exists(_auf.dokument_pfad(_ws_name2,
                                                     raeume.ALLGEMEIN)))
 
     # Quellensuche: mehr Treffer, noch keine ganzen Seiten.
@@ -4609,8 +4610,8 @@ pruef("die Oberflaeche verbindet die Websuche nur, wenn sie frei ist",
       "ohne=(() if _web_frei else _web_server)" in _app_q
       and "raeume.websuche_erlaubt(r)" in _app_q)
 _k98 = os.path.join(_k8s_oc, "98-websuche.yaml")
-if os.path.exists(_k98):
-    _k98q = io.open(_k98, encoding="utf-8").read()
+if statefiles.exists(_k98):
+    _k98q = statefiles.open(_k98, encoding="utf-8").read()
     # Der Pod mit dem Weg ins Netz bekommt nichts von LocaNoto.
     # Kubernetes legt fuer jeden Service Variablen wie
     # WEBSUCHE_PORT=tcp://... in die Pods; SearXNG und websuche.py lesen
@@ -4635,7 +4636,7 @@ try:
     import uebersetzen as _ueb
     _spr_alt = (_spr.TABELLE, _spr.WAHL)
     _spr_tab = os.path.join(tmp, "sprache_probe.json")
-    io.open(_spr_tab, "w", encoding="utf-8").write(json.dumps({
+    statefiles.open(_spr_tab, "w", encoding="utf-8").write(json.dumps({
         "texte": {"Gespeichert.": "Saved."},
         "muster": {"{} Dateien in {}": "{1}: {0} files",
                    "Raum {} entfernt": "Room {} removed",
@@ -4670,7 +4671,7 @@ try:
         _spr._englisch.cache_clear()
         _spr.setze("de")
 
-    _spr_echt = json.loads(io.open(os.path.join(
+    _spr_echt = json.loads(statefiles.open(os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "sprache_en.json"),
         encoding="utf-8").read())
     _spr_kaputt = []
@@ -4823,7 +4824,7 @@ try:
   pruef("die Anweisung eines anderen erscheint nicht",
         "Antworte immer mit einer Tabelle." not in _sys_markus
         and "Persoenliche Anweisung" not in _sys_markus)
-  with open(_pr_a._anweisung_pfad("anna"), "rb") as _f:
+  with statefiles.open(_pr_a._anweisung_pfad("anna"), "rb") as _f:
       _roh_a = _f.read()
   pruef("die Anweisung liegt verschluesselt",
         b"Tabelle" not in _roh_a or not geheim.verfuegbar())
@@ -4833,7 +4834,7 @@ try:
   _pr_a.anweisung_speichern("anna", "")
   pruef("leer speichern entfernt sie",
         _pr_a.anweisung("anna") == ""
-        and not os.path.exists(_pr_a._anweisung_pfad("anna")))
+        and not statefiles.exists(_pr_a._anweisung_pfad("anna")))
 except Exception as e:
   pruef("die persoenliche Anweisung laesst sich pruefen", False,
         f"{type(e).__name__}: {e}")
@@ -5095,6 +5096,22 @@ pruef("jede Datei kommt in der Landkarte des README vor",
 _stumm = sorted(n for n, i in _karte.items() if not i["kopf"].strip())
 pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
 
+# --- STATE IN POSTGRES ---
+# With DATABASE_URL the state files must end up in the database and
+# nowhere on disk -- otherwise a second pod would not see them.
+if database.active():
+    _users_db = database.connect().execute(
+        "SELECT count(*) FROM state_file WHERE path = 'config/users.json'"
+    ).fetchone()[0]
+    pruef("state lives in Postgres (config/users.json)", _users_db == 1,
+          _users_db)
+    pruef("and not on disk",
+          not os.path.exists(os.path.join(paths.CONFIG_DIR, "users.json")))
+    _chats_db = database.connect().execute(
+        "SELECT count(*) FROM state_file WHERE path LIKE 'data/chats/%'"
+    ).fetchone()[0]
+    pruef("chats live in Postgres", _chats_db > 0, _chats_db)
+
 # --- WAS DER CODE LIEST, STEHT IN DER VORLAGE ---
 #
 # Das SQL-Modul lag monatelang vollstaendig in der oeffentlichen Fassung
@@ -5145,5 +5162,5 @@ if gescheitert:
     for _g in gescheitert:
         print(f"    {_g}")
 print(f"=== {sum(ok)}/{len(ok)} Pruefungen bestanden ===")
-shutil.rmtree(tmp, ignore_errors=True)
+statefiles.rmtree(tmp, ignore_errors=True)
 sys.exit(0 if all(ok) else 1)

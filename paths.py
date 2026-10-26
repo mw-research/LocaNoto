@@ -408,8 +408,9 @@ def resolve_prompt(name):
     Verzeichnis ist eingehaengt. Fehlt sie, gilt die mitgelieferte neben dem
     Code.
     """
+    import statefiles
     eigen = os.path.join(CONFIG_DIR, name)
-    if os.path.exists(eigen):
+    if statefiles.exists(eigen):
         return eigen
     return os.path.join(BASE_DIR, name)
 
@@ -421,7 +422,8 @@ def resolve_glossar():
     neben dem Code wird weiterverwendet, wenn dort keine liegt -- so bleibt
     eine bestehende Installation lesbar, die sie noch beim Code hat.
     """
-    if os.path.exists(GLOSSAR_FILE):
+    import statefiles
+    if statefiles.exists(GLOSSAR_FILE):
         return GLOSSAR_FILE
     if os.path.exists(_LEGACY_GLOSSAR):
         return _LEGACY_GLOSSAR
@@ -503,7 +505,8 @@ def resolve_user_file():
     mit einer gefuellten users.json im Wurzelverzeichnis werden nicht
     ausgesperrt -- deren Datei wird weiterverwendet.
     """
-    if os.path.exists(USER_FILE):
+    import statefiles
+    if statefiles.exists(USER_FILE):
         return USER_FILE
     if os.path.exists(_LEGACY_USER_FILE) and os.path.getsize(_LEGACY_USER_FILE) > 0:
         return _LEGACY_USER_FILE

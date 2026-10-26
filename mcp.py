@@ -51,6 +51,7 @@ import subprocess
 import threading
 
 import paths
+import statefiles
 import postfach
 
 KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
@@ -76,7 +77,7 @@ def lies_konfiguration():
     nichts aendern.
     """
     try:
-        with open(KONFIG, "r", encoding="utf-8") as f:
+        with statefiles.open(KONFIG, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -133,12 +134,12 @@ VORLAGEN = {
 
 def schreibe_konfiguration(daten):
     """Schreibt mcp.json. Leer heisst: Datei weg, nichts eingerichtet."""
-    os.makedirs(os.path.dirname(KONFIG), exist_ok=True)
+    statefiles.makedirs(os.path.dirname(KONFIG), exist_ok=True)
     if not daten:
-        if os.path.exists(KONFIG):
-            os.remove(KONFIG)
+        if statefiles.exists(KONFIG):
+            statefiles.remove(KONFIG)
         return True, "Kein Postfach mehr eingerichtet."
-    with open(KONFIG, "w", encoding="utf-8") as f:
+    with statefiles.open(KONFIG, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=1)
     return True, f'{len(daten)} Postfach/Postfächer eingerichtet.'
 

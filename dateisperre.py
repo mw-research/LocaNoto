@@ -81,13 +81,23 @@ def gesperrt(pfad):
             tiefen = _TIEFE.werte = {}
         tiefen[pfad] = tiefen.get(pfad, 0) + 1
         fd = None
+        db_lock = None
         try:
             if tiefen[pfad] == 1:
-                os.makedirs(os.path.dirname(pfad) or ".", exist_ok=True)
-                fd = os.open(pfad + ".sperre", os.O_RDWR | os.O_CREAT, 0o600)
-                _sperre_datei(fd)
+                import statefiles
+                if statefiles.key(pfad) is not None:
+                    # State in Postgres: a lock that holds across pods.
+                    db_lock = statefiles.advisory_lock(pfad)
+                    db_lock.__enter__()
+                else:
+                    os.makedirs(os.path.dirname(pfad) or ".", exist_ok=True)
+                    fd = os.open(pfad + ".sperre", os.O_RDWR | os.O_CREAT,
+                                 0o600)
+                    _sperre_datei(fd)
             yield
         finally:
+            if db_lock is not None:
+                db_lock.__exit__(None, None, None)
             if fd is not None:
                 _entsperre_datei(fd)
                 os.close(fd)
@@ -147,6 +157,9 @@ def schreibe_atomar(pfad, text, modus=None):
     soll. Die Zwischendatei entsteht bereits mit 0600; ohne modus
     bekommt das Ergebnis die ueblichen Rechte.
     """
+    import statefiles
+    if statefiles.key(pfad) is not None:
+        return statefiles.write(pfad, text)
     verzeichnis = os.path.dirname(os.path.abspath(pfad))
     os.makedirs(verzeichnis, exist_ok=True)
     fd, zwischen = tempfile.mkstemp(

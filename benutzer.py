@@ -50,6 +50,7 @@ import bcrypt
 import dateisperre
 import geheim
 import paths
+import statefiles
 
 PROTOKOLL = os.path.join(paths.DATA_DIR, "benutzer.log")
 
@@ -108,9 +109,9 @@ def lade():
     """
     p = _datei()
     try:
-        if not os.path.exists(p) or os.path.getsize(p) == 0:
+        if not statefiles.exists(p) or statefiles.getsize(p) == 0:
             return {}, LEER
-        with open(p, "r", encoding="utf-8") as f:
+        with statefiles.open(p, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}, MANIPULIERT
@@ -441,7 +442,7 @@ def neu_signieren(von="?"):
 
 def _letzte_kette():
     try:
-        with open(PROTOKOLL, "r", encoding="utf-8") as f:
+        with statefiles.open(PROTOKOLL, "r", encoding="utf-8") as f:
             letzte = ""
             for zeile in f:
                 if zeile.strip():
@@ -524,7 +525,7 @@ def protokolliere(aktion, ziel, von="?", hinweis=""):
             eintrag_["kette"] = hashlib.sha256(
                 vorher.encode("utf-8")
                 + geheim.kanonisch(eintrag_)).hexdigest()
-            with open(PROTOKOLL, "a", encoding="utf-8") as f:
+            with statefiles.open(PROTOKOLL, "a", encoding="utf-8") as f:
                 f.write(json.dumps(eintrag_, ensure_ascii=False) + "\n")
     except OSError:
         pass
@@ -532,7 +533,7 @@ def protokolliere(aktion, ziel, von="?", hinweis=""):
 
 def protokoll(letzte=50):
     try:
-        with open(PROTOKOLL, "r", encoding="utf-8") as f:
+        with statefiles.open(PROTOKOLL, "r", encoding="utf-8") as f:
             zeilen = [z for z in f if z.strip()]
     except OSError:
         return []
@@ -549,7 +550,7 @@ def protokoll(letzte=50):
 def protokoll_pruefen():
     """(ok, zeile). ok=False nennt die erste Zeile, an der die Kette bricht."""
     try:
-        with open(PROTOKOLL, "r", encoding="utf-8") as f:
+        with statefiles.open(PROTOKOLL, "r", encoding="utf-8") as f:
             zeilen = [z for z in f if z.strip()]
     except OSError:
         return True, 0

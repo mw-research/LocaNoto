@@ -33,6 +33,7 @@ import time
 import geheim
 import dateisperre
 import paths
+import statefiles
 
 INDEX = "verzeichnis"
 KENNUNG = re.compile(r"^c_[0-9a-f]{16}\.json$")
@@ -40,7 +41,7 @@ KENNUNG = re.compile(r"^c_[0-9a-f]{16}\.json$")
 
 def ordner(benutzer):
     p = os.path.join(paths.CHATS_DIR, benutzer)
-    os.makedirs(p, exist_ok=True)
+    statefiles.makedirs(p, exist_ok=True)
     return p
 
 
@@ -60,7 +61,7 @@ def _index_pfad(benutzer):
 
 def _index_lesen(benutzer):
     try:
-        with open(_index_pfad(benutzer), "rb") as f:
+        with statefiles.open(_index_pfad(benutzer), "rb") as f:
             roh = geheim.entschluessele(f.read(),
                                         _zusatz(benutzer, INDEX))
         daten = json.loads(roh.decode("utf-8"))
@@ -96,12 +97,12 @@ def uebernimm_alt(benutzer):
     o = ordner(benutzer)
     index = _index_lesen(benutzer)
     uebernommen = 0
-    for name in sorted(os.listdir(o)):
+    for name in sorted(statefiles.listdir(o)):
         if not name.endswith(".json") or KENNUNG.match(name):
             continue
         alt = os.path.join(o, name)
         try:
-            with open(alt, "rb") as f:
+            with statefiles.open(alt, "rb") as f:
                 roh = f.read()
             nachrichten = json.loads(
                 geheim.entschluessele(roh).decode("utf-8"))
@@ -113,13 +114,13 @@ def uebernimm_alt(benutzer):
         try:
             _schreibe(benutzer, kennung, nachrichten,
                       _titel_aus_name(name),
-                      os.path.getmtime(alt))
+                      statefiles.getmtime(alt))
         except OSError:
             continue
         index[kennung] = {"titel": _titel_aus_name(name),
-                          "geaendert": os.path.getmtime(alt)}
+                          "geaendert": statefiles.getmtime(alt)}
         try:
-            os.remove(alt)
+            statefiles.remove(alt)
         except OSError:
             pass
         uebernommen += 1
@@ -142,7 +143,7 @@ def _schreibe(benutzer, kennung, nachrichten, titel, geaendert=None):
 def _lies(benutzer, kennung):
     p = os.path.join(ordner(benutzer), kennung)
     try:
-        with open(p, "rb") as f:
+        with statefiles.open(p, "rb") as f:
             roh = geheim.entschluessele(f.read(),
                                         _zusatz(benutzer, kennung))
         daten = json.loads(roh.decode("utf-8"))
@@ -166,7 +167,7 @@ def liste(benutzer):
     uebernimm_alt(benutzer)
     o = ordner(benutzer)
     index = _index_lesen(benutzer)
-    vorhanden = [n for n in os.listdir(o) if KENNUNG.match(n)]
+    vorhanden = [n for n in statefiles.listdir(o) if KENNUNG.match(n)]
 
     geaendert_index = False
     for kennung in vorhanden:
@@ -175,7 +176,7 @@ def liste(benutzer):
         daten = _lies(benutzer, kennung) or {}
         index[kennung] = {"titel": daten.get("titel") or "Chat",
                           "geaendert": daten.get("geaendert")
-                          or os.path.getmtime(os.path.join(o, kennung))}
+                          or statefiles.getmtime(os.path.join(o, kennung))}
         geaendert_index = True
 
     # Eintraege ohne Datei entfernen, sonst waechst das Verzeichnis um
@@ -242,7 +243,7 @@ def loesche(benutzer, kennung):
     """Verlauf und Verzeichniseintrag entfernen."""
     p = os.path.join(ordner(benutzer), kennung)
     try:
-        os.remove(p)
+        statefiles.remove(p)
     except OSError:
         pass
     index = _index_lesen(benutzer)
@@ -258,11 +259,11 @@ def zaehle_klartext(benutzer):
     """Wie viele Verlaeufe noch unverschluesselt daliegen -- fuer die Anzeige."""
     o = ordner(benutzer)
     offen = 0
-    for name in os.listdir(o):
+    for name in statefiles.listdir(o):
         if not (name.endswith(".json") or name == INDEX):
             continue
         try:
-            with open(os.path.join(o, name), "rb") as f:
+            with statefiles.open(os.path.join(o, name), "rb") as f:
                 if not geheim.ist_verschluesselt(f.read(8)):
                     offen += 1
         except OSError:

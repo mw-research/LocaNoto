@@ -48,6 +48,7 @@ import os
 import geheim
 import dateisperre
 import paths
+import statefiles
 
 DATEI = os.path.join(paths.CONFIG_DIR, "raumschluessel.json")
 
@@ -69,7 +70,7 @@ def verfuegbar():
 
 def _lade():
     try:
-        with open(DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}

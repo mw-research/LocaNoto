@@ -155,6 +155,15 @@ def _versions(vtype, dims):
             "CREATE INDEX IF NOT EXISTS keyword_file ON keyword (file_key)",
         ] + ([f"CREATE INDEX IF NOT EXISTS passage_embedding "
               f"ON passage USING hnsw (embedding {ops})"] if index_ok else [])),
+        (2, [
+            # Config and runtime state that lived in files (statefiles.py).
+            "CREATE TABLE IF NOT EXISTS state_file ("
+            " path text PRIMARY KEY,"
+            " content bytea NOT NULL,"
+            " updated timestamptz NOT NULL DEFAULT now())",
+            "CREATE INDEX IF NOT EXISTS state_file_prefix "
+            "ON state_file (path text_pattern_ops)",
+        ]),
     ]
 
 

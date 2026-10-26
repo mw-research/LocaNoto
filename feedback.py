@@ -43,6 +43,7 @@ from datetime import datetime, timezone
 import geheim
 import dateisperre
 import paths
+import statefiles
 import raeume
 
 DATEI = os.path.join(paths.DATA_DIR, "feedback.jsonl")
@@ -110,10 +111,10 @@ def notiere(art, benutzer, frage, sonden=(), zahlen=None, quellen=(),
         "herkunft": herkunft,
     }
     try:
-        os.makedirs(os.path.dirname(DATEI), exist_ok=True)
+        statefiles.makedirs(os.path.dirname(DATEI), exist_ok=True)
         roh = json.dumps(eintrag, ensure_ascii=False).encode("utf-8")
         zeile = base64.b64encode(geheim.verschluessele(roh)).decode("ascii")
-        with open(DATEI, "a", encoding="utf-8") as f:
+        with statefiles.open(DATEI, "a", encoding="utf-8") as f:
             f.write(zeile + "\n")
         return True
     except OSError:
@@ -159,11 +160,11 @@ def lese(grenze=None, art=None):
     Ort, der mit ihr aus dem Takt geraten koennte.
     """
     grenze = ANZEIGE_GRENZE if grenze is None else grenze
-    if not os.path.exists(DATEI):
+    if not statefiles.exists(DATEI):
         return []
     eintraege = []
     try:
-        with open(DATEI, "r", encoding="utf-8", errors="replace") as f:
+        with statefiles.open(DATEI, "r", encoding="utf-8", errors="replace") as f:
             for zeile in f:
                 zeile = zeile.strip()
                 if not zeile:
@@ -184,11 +185,11 @@ def lese(grenze=None, art=None):
 
 def klartextzeilen():
     """Wie viele Zeilen noch unverschluesselt daliegen."""
-    if not os.path.exists(DATEI):
+    if not statefiles.exists(DATEI):
         return 0
     offen = 0
     try:
-        with open(DATEI, "r", encoding="utf-8", errors="replace") as f:
+        with statefiles.open(DATEI, "r", encoding="utf-8", errors="replace") as f:
             for zeile in f:
                 if zeile.strip().startswith("{"):
                     offen += 1
@@ -207,7 +208,7 @@ def neu_verschluesseln():
 
     Rueckgabe: (ok, Anzahl neu geschriebener Zeilen).
     """
-    if not os.path.exists(DATEI):
+    if not statefiles.exists(DATEI):
         return True, 0
     eintraege = list(reversed(lese(grenze=10 ** 9)))
     if not eintraege:
@@ -235,7 +236,7 @@ def archiviere():
 
     Rueckgabe: Pfad der Ablage, oder None wenn nichts abzulegen war.
     """
-    if not os.path.exists(DATEI) or os.path.getsize(DATEI) == 0:
+    if not statefiles.exists(DATEI) or statefiles.getsize(DATEI) == 0:
         return None
     stamm, endung = os.path.splitext(DATEI)
     tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -243,11 +244,11 @@ def archiviere():
     # Zweimal am selben Tag ist kein Fehler, aber auch kein Grund, die erste
     # Ablage zu ueberschreiben.
     n = 2
-    while os.path.exists(ziel):
+    while statefiles.exists(ziel):
         ziel = f"{stamm}-{tag}-{n}{endung}"
         n += 1
     try:
-        os.replace(DATEI, ziel)
+        statefiles.rename(DATEI, ziel)
     except OSError:
         return None
     return ziel
@@ -257,9 +258,9 @@ def ablagen():
     """Die bereits beiseitegelegten Protokolle, neueste zuerst."""
     ordner = os.path.dirname(DATEI)
     stamm = os.path.basename(os.path.splitext(DATEI)[0]) + "-"
-    if not os.path.isdir(ordner):
+    if not statefiles.isdir(ordner):
         return []
-    return sorted((d for d in os.listdir(ordner)
+    return sorted((d for d in statefiles.listdir(ordner)
                    if d.startswith(stamm) and d.endswith(".jsonl")),
                   reverse=True)
 

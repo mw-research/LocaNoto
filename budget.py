@@ -52,6 +52,7 @@ import threading
 import time
 
 import paths
+import statefiles
 
 # Schwellen je Fenster. Sie sollen einen Abzug treffen und keinen
 # fleissigen Menschen.
@@ -251,7 +252,7 @@ def _nach_aussen(zeile):
             finally:
                 s.close()
             return
-        with open(ZIEL, "a", encoding="utf-8") as f:
+        with statefiles.open(ZIEL, "a", encoding="utf-8") as f:
             f.write(zeile + "\n")
     except Exception:
         # Ein nicht erreichbares Ziel ist kein Grund, die Antwort
@@ -281,7 +282,7 @@ def ziel_erreichbar():
     if ZIEL.startswith("udp://"):
         return True, f'Protokoll nach {ZIEL} (ungeprüft, UDP antwortet nicht).'
     try:
-        with open(ZIEL, "a", encoding="utf-8"):
+        with statefiles.open(ZIEL, "a", encoding="utf-8"):
             pass
     except OSError as e:
         return False, f"{ZIEL} ist nicht beschreibbar: {e}"

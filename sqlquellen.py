@@ -39,6 +39,7 @@ import os
 import geheim
 import dateisperre
 import paths
+import statefiles
 
 QUELLEN = os.path.join(paths.CONFIG_DIR, "sqlquellen.json")
 
@@ -59,7 +60,7 @@ def lade():
     Datei, die jemand danebengelegt hat.
     """
     try:
-        with open(QUELLEN, "r", encoding="utf-8") as f:
+        with statefiles.open(QUELLEN, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, json.JSONDecodeError):
         return _leer()

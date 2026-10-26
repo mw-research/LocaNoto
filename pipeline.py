@@ -22,6 +22,7 @@ import re
 import time
 
 import paths
+import statefiles
 import keyword_index
 import raeume
 import ranking
@@ -83,7 +84,7 @@ def _vorlage(dateiname, rueckfall, preset=None):
     # Kette: Voreinstellung, dann config/, dann die mitgelieferte Fassung.
     pfad = presets.vorlage_pfad(preset, dateiname) or paths.resolve_prompt(dateiname)
     try:
-        with open(pfad, "r", encoding="utf-8") as f:
+        with statefiles.open(pfad, "r", encoding="utf-8") as f:
             return f.read()
     except OSError:
         return rueckfall
@@ -106,7 +107,7 @@ def glossar(preset=None):
     # gehoeren nicht in den Prompt: das Modell wuerde sie als Inhalt lesen.
     pfad = presets.vorlage_pfad(preset, "glossar.txt") or paths.resolve_glossar()
     try:
-        with open(pfad, "r", encoding="utf-8") as f:
+        with statefiles.open(pfad, "r", encoding="utf-8") as f:
             roh = f.read()
     except OSError:
         roh = ""

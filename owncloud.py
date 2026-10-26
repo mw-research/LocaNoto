@@ -65,6 +65,7 @@ import requests
 
 import dateisperre
 import paths
+import statefiles
 
 URL = os.getenv("OWNCLOUD_URL", "").strip().rstrip("/")
 BENUTZER = os.getenv("OWNCLOUD_USER", "").strip()
@@ -131,7 +132,7 @@ def _url(pfad):
 def zuordnung():
     """{raum: ordner}. Leer, wenn nichts eingerichtet ist."""
     try:
-        with open(ZUORDNUNG, "r", encoding="utf-8") as f:
+        with statefiles.open(ZUORDNUNG, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -208,7 +209,7 @@ def ablage(raum):
     import raeume
     p = (paths.DOCS_DIR if raum == raeume.ALLGEMEIN
          else os.path.join(paths.DOCS_DIR, paths.sicherer_teil(raum)))
-    os.makedirs(p, exist_ok=True)
+    statefiles.makedirs(p, exist_ok=True)
     return p
 
 
@@ -218,7 +219,7 @@ def _stand_datei(raum):
 
 def _stand_lesen(raum):
     try:
-        with open(_stand_datei(raum), "r", encoding="utf-8") as f:
+        with statefiles.open(_stand_datei(raum), "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -368,20 +369,20 @@ def stand(fern):
 
 def hole(fern, ziel):
     """Laedt eine Datei herunter. Bytes."""
-    os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    statefiles.makedirs(os.path.dirname(ziel), exist_ok=True)
     vorlaeufig = ziel + ".teil"
     geschrieben = 0
     with _sitzung() as s:
         with s.get(_url(fern), stream=True, timeout=TIMEOUT) as a:
             a.raise_for_status()
-            with open(vorlaeufig, "wb") as f:
+            with statefiles.open(vorlaeufig, "wb") as f:
                 for stueck in a.iter_content(chunk_size=1 << 16):
                     if stueck:
                         f.write(stueck)
                         geschrieben += len(stueck)
     # Erst vollstaendig, dann an den richtigen Namen: ein abgebrochener
     # Download soll nicht als fertige Datei eingelesen werden.
-    os.replace(vorlaeufig, ziel)
+    statefiles.rename(vorlaeufig, ziel)
     return geschrieben
 
 
@@ -418,7 +419,7 @@ def lege_ab(quelle, fern, ueberschreiben=False):
                     return False, (f"'{os.path.basename(fern)}' liegt dort "
                                    f"schon. Nicht ueberschrieben.")
             daten = (quelle if isinstance(quelle, (bytes, bytearray))
-                     else open(quelle, "rb").read())
+                     else statefiles.open(quelle, "rb").read())
             a = s.put(_url(fern), data=daten, timeout=TIMEOUT)
     except requests.RequestException as e:
         return False, f"Nicht abgelegt: {e}"
@@ -653,7 +654,7 @@ def gruppen_abgleich():
 def gruppen_stand():
     """Der abgelegte Stand: {aktualisiert, gruppen, alter_minuten}."""
     try:
-        with open(paths.GRUPPEN_DATEI, "r", encoding="utf-8") as f:
+        with statefiles.open(paths.GRUPPEN_DATEI, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -690,7 +691,7 @@ def plane(raum, endungen=None):
     for rel, d in fern.items():
         alt = stand.get(rel)
         lokal = os.path.join(ablage(raum), _sicher(rel))
-        if not alt or not os.path.exists(lokal):
+        if not alt or not statefiles.exists(lokal):
             neu.append(rel)
         elif (alt.get("etag") != d["etag"]
               or alt.get("groesse") != d["groesse"]):
@@ -741,8 +742,8 @@ def abgleich(raum, endungen=None, loeschen=True, fortschritt=None):
         for rel in entfallen:
             pfad = os.path.join(ziel, _sicher(rel))
             try:
-                if os.path.exists(pfad):
-                    os.remove(pfad)
+                if statefiles.exists(pfad):
+                    statefiles.remove(pfad)
             except OSError as e:
                 bericht["fehler"].append({"datei": rel, "grund": str(e)})
                 continue
@@ -1152,7 +1153,7 @@ def nutzer_vorhanden(kennung):
 def verwaltete_konten():
     """Die Kennungen der Konten, die LocaNoto in ownCloud verwaltet."""
     try:
-        with open(KONTEN, "r", encoding="utf-8") as f:
+        with statefiles.open(KONTEN, "r", encoding="utf-8") as f:
             daten = json.load(f)
     except (OSError, ValueError):
         return set()
@@ -1311,7 +1312,7 @@ def leere_raumordner(raum):
     # Der Stand des Abgleichs kennt die Dateien noch. Leer heisst: beim
     # naechsten Lauf gibt es nichts zu entfernen und nichts zu holen.
     try:
-        os.remove(_stand_datei(raum))
+        statefiles.remove(_stand_datei(raum))
     except OSError:
         pass
     return weg, fehler

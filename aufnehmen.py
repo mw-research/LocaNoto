@@ -34,6 +34,7 @@ import lesen
 import llm
 import ocr
 import paths
+import statefiles
 import raeume
 import store
 from embedding import embed_batch
@@ -194,7 +195,7 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     projekt = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]", "", str(projekt or "")).strip()
     if projekt:
         ziel_ordner = os.path.join(ziel_ordner, projekt)
-    os.makedirs(ziel_ordner, exist_ok=True)
+    statefiles.makedirs(ziel_ordner, exist_ok=True)
 
     # Im Wurzelbereich kann trotzdem noch etwas im Weg liegen -- eine
     # Datei aus der Zeit vor den Raeumen, die einem anderen Raum gehoert.
@@ -202,7 +203,7 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     # dass eine Datei dieses Namens existiert, ist schon genug Auskunft.
     pdf_path = os.path.join(ziel_ordner, dateiname)
     name_hinweis = ""
-    if os.path.exists(pdf_path) and _gehoert_anderem_raum(dateiname, raum):
+    if statefiles.exists(pdf_path) and _gehoert_anderem_raum(dateiname, raum):
         pdf_path = paths.freier_name(ziel_ordner, dateiname)
         dateiname = os.path.basename(pdf_path)
         name_hinweis = (f"Eine Datei dieses Namens liegt bereits in der "
@@ -215,12 +216,12 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     # ab, und die Meldung saehe nach einem Fehler aus.
     _inhalt = uploaded_file.getvalue()
     try:
-        with open(pdf_path, "rb") as f:
+        with statefiles.open(pdf_path, "rb") as f:
             _schon_da = f.read() == _inhalt
     except OSError:
         _schon_da = False
     if not _schon_da:
-        with open(pdf_path, "wb") as f:
+        with statefiles.open(pdf_path, "wb") as f:
             f.write(_inhalt)
 
     # UND nach ownCloud, wenn der Raum dort einen Ordner hat.
@@ -541,8 +542,8 @@ def remove_pdf_if_orphaned(filename, raum=None):
             return False
     file_path = (dokument_pfad(filename, raum) if raum
                  else os.path.join(DOCS_DIR, filename))
-    if file_path and os.path.exists(file_path):
-        os.remove(file_path)
+    if file_path and statefiles.exists(file_path):
+        statefiles.remove(file_path)
     return True
 
 
