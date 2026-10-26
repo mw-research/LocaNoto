@@ -37,6 +37,28 @@ except (AttributeError, ValueError):
 # darunter eine Wache, die abbricht, falls doch ein Server antwortet.
 for _v in ("CHROMA_HOST", "CHROMA_CLOUD_KEY", "CHROMA_SSL", "CHROMA_TOKEN"):
     os.environ.pop(_v, None)
+
+# Im laufenden Pod sieht der Test dessen Umgebung: die echte Ablage, die
+# Datenbank, Listen- und Sicherungsordner, die Sitzungsdauer. Mit ihr lud
+# er Testdateien in die echte OpenCloud und zaehlte Einstellungen des
+# Betriebs als Fehlschlag. Er soll ueberall laufen wie auf einem leeren
+# Rechner und nichts nach draussen schreiben -- also bleibt von der
+# Umgebung nur, was Betriebssystem und Python brauchen.
+_SYSTEM = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG",
+           "LANGUAGE", "TZ", "TMPDIR", "TEMP", "TMP", "HOSTNAME",
+           "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
+           "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA",
+           "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+           "SSL_CERT_FILE", "SSL_CERT_DIR", "TESSDATA_PREFIX",
+           "VIRTUAL_ENV"}
+_SYSTEM_PRAEFIX = ("PYTHON", "LC_", "HF_", "TRANSFORMERS_", "TORCH", "OMP_",
+                   "MKL_", "CUDA", "NVIDIA", "XDG_", "PROGRAMFILES",
+                   "COMMONPROGRAMFILES")
+_entfernt = sorted(v for v in os.environ
+                   if v.upper() not in _SYSTEM
+                   and not v.upper().startswith(_SYSTEM_PRAEFIX))
+for _v in _entfernt:
+    del os.environ[_v]
 tmp = tempfile.mkdtemp(prefix="ende_")
 os.environ["ADMIN_USERS"] = "markus"
 import paths
@@ -70,6 +92,11 @@ if "Dateiablage" not in _ablage:
 if not _ablage.endswith(paths.CHROMA_DIR):
     print(f"ABBRUCH: Ablage {_ablage} liegt nicht im Testverzeichnis.")
     sys.exit(2)
+import owncloud as _oc_wache
+if _oc_wache.eingerichtet():
+    print("ABBRUCH: Eine Dateiablage ist eingerichtet -- der Test wuerde "
+          "dort Dateien ablegen.")
+    sys.exit(2)
 
 ok = []
 gescheitert = []
@@ -80,6 +107,17 @@ def pruef(was, bedingung, zusatz=""):
     if not bedingung:
         gescheitert.append(f"{was}{'  ' + str(zusatz) if zusatz else ''}")
     print(f"  {'OK  ' if bedingung else 'FEHL'} {was}{'  ' + str(zusatz) if zusatz else ''}")
+
+
+# Laeuft der Test im Betrieb, darf er dessen Umgebung nicht sehen -- sonst
+# schreibt er in die echte Ablage und haengt am Zustand der Installation.
+pruef("der Test laeuft ohne die Umgebung des Betriebs",
+      not any(v.startswith(("OWNCLOUD_", "SQL_", "TABELLEN_", "SICHERUNG_",
+                            "SITZUNG_", "LOCANOTO_", "CHAT_", "OPENAI_"))
+              for v in os.environ)
+      and not _oc_wache.eingerichtet(),
+      f"{len(_entfernt)} Variablen entfernt")
+
 
 def _fremd_scheitert(roh):
     """Oeffnet ein anderer Raumschluessel den Geheimtext? Er darf nicht."""
