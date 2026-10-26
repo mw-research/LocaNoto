@@ -32,7 +32,8 @@ SCHICHT = {
         "packe_umzug", "rebuild_index", "raum_diagnose",
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env",
         "landkarte", "lizenzen", "migrate_to_postgres", "compare_search",
-        "test_migration",
+        "test_migration", "server", "routes_account", "routes_chat",
+        "routes_documents", "routes_admin", "worker", "test_api",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
@@ -40,7 +41,8 @@ SCHICHT = {
         "lesen", "tables", "textutils", "vision", "bildtext", "sqldb",
         "sqlpruefung", "sqlquellen", "chats", "feedback", "notzugang",
         "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
-        "postfach", "ocr",
+        "postfach", "ocr", "answering", "doc_actions", "web_sources",
+        "mailboxes", "accounts", "sessions", "jobs",
         "auth", "sicherheit", "datentraeger",
     ),
     "Bestand": (

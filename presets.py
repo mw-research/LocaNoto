@@ -200,7 +200,7 @@ def loesche(name):
     try:
         for d in statefiles.listdir(ziel):
             statefiles.remove(os.path.join(ziel, d))
-        os.rmdir(ziel)
+        statefiles.rmdir(ziel)
     except OSError:
         return False
     return True

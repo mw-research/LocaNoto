@@ -135,10 +135,9 @@ def listdir(path):
     rows = database.connect().execute(
         "SELECT DISTINCT split_part(substr(path, %s), '/', 1) FROM state_file "
         "WHERE path LIKE %s", (len(prefix) + 1, _like(prefix) + "%"))
-    names = sorted(r[0] for r in rows if r[0])
-    if not names and not os.path.isdir(path):
-        raise FileNotFoundError(2, "No such directory", path)
-    return names
+    # Directories are implicit: makedirs creates nothing here, so an
+    # empty managed directory is simply empty, not missing.
+    return sorted(r[0] for r in rows if r[0])
 
 
 def getmtime(path):
@@ -228,6 +227,14 @@ def rename(src, dst):
     with con.transaction():
         write(dst, data)
         remove(src)
+
+
+def rmdir(path):
+    """Remove an empty directory (like os.rmdir)."""
+    if _dir_key(path) is None:
+        return os.rmdir(path)
+    if isdir(path):
+        raise OSError(39, "Directory not empty", path)
 
 
 def makedirs(path, mode=0o777, exist_ok=False):

@@ -164,6 +164,31 @@ def _versions(vtype, dims):
             "CREATE INDEX IF NOT EXISTS state_file_prefix "
             "ON state_file (path text_pattern_ops)",
         ]),
+        (3, [
+            # Counters for rate limits (sessions.py), shared by all pods.
+            "CREATE TABLE IF NOT EXISTS rate_limit ("
+            " bucket text PRIMARY KEY,"
+            " hits int NOT NULL,"
+            " expires timestamptz NOT NULL)",
+        ]),
+        (4, [
+            # Background jobs (jobs.py, worker.py).
+            "CREATE TABLE IF NOT EXISTS job ("
+            " id bigserial PRIMARY KEY,"
+            " name text NOT NULL,"
+            " state text NOT NULL DEFAULT 'queued',"
+            " requested_by text NOT NULL DEFAULT '',"
+            " cancelled_by text,"
+            " worker text,"
+            " created timestamptz NOT NULL DEFAULT now(),"
+            " started timestamptz,"
+            " finished timestamptz,"
+            " heartbeat timestamptz,"
+            " exit_code int,"
+            " log text NOT NULL DEFAULT '')",
+            "CREATE INDEX IF NOT EXISTS job_state ON job (state, id)",
+            "CREATE INDEX IF NOT EXISTS job_name ON job (name, id)",
+        ]),
     ]
 
 
