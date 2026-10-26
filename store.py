@@ -21,6 +21,7 @@ import time
 
 import chromadb
 
+import database
 import paths
 
 CHROMA_HOST = os.getenv("CHROMA_HOST", "").strip()
@@ -74,6 +75,8 @@ _client_sperre = threading.Lock()
 
 
 def im_server_betrieb():
+    if database.active():
+        return True  # Postgres: no local segments, no reconnect tricks
     return bool(CHROMA_HOST or CHROMA_CLOUD_KEY)
 
 
@@ -115,6 +118,9 @@ def collection(anlegen=True):
     Raumnamen; diese Funktion bleibt, damit die Umsortierung den alten
     Bestand lesen kann.
     """
+    if database.active():
+        import pg_collection
+        return pg_collection.get(paths.COLLECTION_NAME, create=anlegen)
     c = client()
     if anlegen:
         return c.get_or_create_collection(name=paths.COLLECTION_NAME)
@@ -260,6 +266,12 @@ def sammlung(name, anlegen=True):
     gemerkt = _sammlungen.get(name)
     if gemerkt is not None:
         return gemerkt
+    if database.active():
+        import pg_collection
+        sml = pg_collection.get(name, create=anlegen)
+        if sml is not None:
+            _sammlungen[name] = sml
+        return sml
     c = client()
     if anlegen:
         sml = c.get_or_create_collection(name=name)
@@ -551,6 +563,9 @@ def _schreibe_teil(sammlung, kennungen, documents, metadatas, embeddings,
 
 def namen():
     """Die Namen aller vorhandenen Sammlungen."""
+    if database.active():
+        import pg_collection
+        return pg_collection.names()
     try:
         return sorted(x.name for x in client().list_collections())
     except Exception:
@@ -559,6 +574,11 @@ def namen():
 
 def loesche(name):
     """Loescht eine Sammlung samt Inhalt. (ok, meldung)."""
+    if database.active():
+        import pg_collection
+        pg_collection.drop(name)
+        vergiss(name)
+        return True, "Gelöscht."
     try:
         client().delete_collection(name=name)
         vergiss(name)
@@ -574,6 +594,8 @@ def beschreibung():
     Das Zugangsmerkmal wird genannt, aber nicht gezeigt: ob eines gesetzt
     ist, gehoert auf den Bildschirm, sein Wert nicht.
     """
+    if database.active():
+        return database.describe()
     if CHROMA_CLOUD_KEY:
         return (f"Gehostet ({CHROMA_CLOUD_TENANT or 'Vorgabe'}/"
                 f"{CHROMA_CLOUD_DATABASE})")

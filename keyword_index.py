@@ -19,6 +19,7 @@ import os
 import re
 import sqlite3
 
+import database
 import paths
 
 # INDEX_DIR und nicht DATA_DIR: eine SQLite-Datei braucht ein echtes
@@ -83,7 +84,29 @@ _SPALTEN = ("chunk_id", "file_name", "page", "access", "owner", "folder",
             "doc_type", "raum", "text")
 
 
+class _SharedConnection:
+    """The Postgres connection of this thread, safe to "close".
+
+    Callers written for SQLite close what connect() gave them. On
+    Postgres that is the connection the whole thread shares.
+    """
+
+    def __init__(self, con):
+        self._con = con
+
+    def close(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+
 def connect():
+    if database.active():
+        return _SharedConnection(database.connect())
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     # WAL: Leser blockieren einander und den Schreiber nicht.
@@ -105,6 +128,8 @@ def journal_modus(con=None):
     passiert auf einem Netzlaufwerk. Ohne Rueckfrage merkt es niemand, und
     die Anwendung laeuft langsamer und empfindlicher als gedacht.
     """
+    if database.active():
+        return "postgres"
     own = con is None
     con = con or connect()
     try:
@@ -123,6 +148,8 @@ def schema_aktuell(con=None):
     kaputt, aber er kann nicht nach Raum filtern -- und ein Stichworttreffer
     ohne Raumfilter waere genau das Leck, das die Raeume schliessen sollen.
     """
+    if database.active():
+        return True
     own = con is None
     con = con or connect()
     try:
@@ -171,6 +198,9 @@ def passt_zu(paare, con=None):
 
 def neu_anlegen(con=None):
     """Verwirft die Tabelle und legt sie mit aktuellem Schema an."""
+    if database.active():
+        import pg_keywords
+        return pg_keywords.reset()
     own = con is None
     con = con or connect()
     try:
@@ -183,6 +213,9 @@ def neu_anlegen(con=None):
 
 
 def count(con=None):
+    if database.active():
+        import pg_keywords
+        return pg_keywords.count()
     own = con is None
     con = con or connect()
     try:
@@ -219,6 +252,9 @@ def _lesbarer_name(meta):
 
 def add_chunks(rows, con=None):
     """rows: Iterable von (chunk_id, text, metadata-dict)."""
+    if database.active():
+        import pg_keywords
+        return pg_keywords.add_chunks(rows, _lesbarer_name)
     own = con is None
     con = con or connect()
     try:
@@ -251,6 +287,9 @@ def add_chunks(rows, con=None):
 def delete_document(file_name, access=None, owner=None, con=None, raum=None):
     """Entfernt Eintraege eines Dokuments. Spiegelt die Filter der
     Chroma-Loeschung, damit beide Indizes deckungsgleich bleiben."""
+    if database.active():
+        import pg_keywords
+        return pg_keywords.delete_document(file_name, access, owner, raum)
     own = con is None
     con = con or connect()
     try:
@@ -279,6 +318,9 @@ def delete_document_by_raum(raum, con=None):
     stehen, wuerden Treffer auf Abschnitte zeigen, die es nicht mehr gibt --
     mit Text, denn den haelt diese Tabelle selbst.
     """
+    if database.active():
+        import pg_keywords
+        return pg_keywords.delete_by_room(raum)
     own = con is None
     con = con or connect()
     try:
@@ -291,6 +333,9 @@ def delete_document_by_raum(raum, con=None):
 
 def set_access(file_name, owner, new_access, con=None):
     """Haelt den Index nach einer Freigabe aktuell."""
+    if database.active():
+        import pg_keywords
+        return pg_keywords.set_access(file_name, owner, new_access)
     own = con is None
     con = con or connect()
     try:
@@ -334,6 +379,10 @@ def search(query_text, username, limit=5, file_names=None,
     gelten: bei einer unfertigen Umsortierung fehlen lieber Treffer, als
     dass fremde erscheinen.
     """
+    if database.active():
+        import pg_keywords
+        return pg_keywords.search(query_text, username, limit, file_names,
+                                  rooms=raeume)
     match = build_match_query(query_text)
     if not match:
         return []

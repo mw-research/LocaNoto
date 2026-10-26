@@ -44,10 +44,10 @@ SCHICHT = {
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",
-        "budget",
+        "budget", "pg_collection", "pg_keywords",
     ),
     "Grundlage": ("paths", "geheim", "llm", "embedding",
-                  "dateisperre", "sprache"),
+                  "dateisperre", "sprache", "database"),
 }
 
 

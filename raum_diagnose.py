@@ -105,10 +105,27 @@ print("=" * 66)
 con = keyword_index.connect()
 print(f"  Zeilen gesamt: {keyword_index.count(con)}")
 print(f"  Journalmodus: {keyword_index.journal_modus(con)}")
+import database
+if database.active():
+    import pg_keywords
+
+
+def _rows_per_room():
+    if database.active():
+        return pg_keywords.rows_per_room()
+    return con.execute("SELECT COALESCE(raum,'(leer)'), COUNT(*) FROM chunks "
+                       "GROUP BY 1 ORDER BY 2 DESC")
+
+
+def _rows_for_file(name):
+    if database.active():
+        return pg_keywords.rows_for_file(name)
+    return con.execute("SELECT COUNT(*) FROM chunks WHERE file_name = ?",
+                       (name,)).fetchone()[0]
+
+
 try:
-    for r, n in con.execute(
-            "SELECT COALESCE(raum,'(leer)'), COUNT(*) FROM chunks "
-            "GROUP BY 1 ORDER BY 2 DESC"):
+    for r, n in _rows_per_room():
         marke = "" if r in lesbar or r == "(leer)" else "   [nicht lesbar]"
         if r == "(leer)":
             marke = "   >>> ohne Raum -- faellt aus jeder Suche heraus"
@@ -116,8 +133,7 @@ try:
 except Exception as e:
     print(f"  Abfrage fehlgeschlagen: {e}")
 if gesucht:
-    n = con.execute("SELECT COUNT(*) FROM chunks WHERE file_name = ?",
-                    (gesucht,)).fetchone()[0]
+    n = _rows_for_file(gesucht)
     print(f"  Zeilen fuer '{gesucht}': {n}")
     if not n:
         print("     >>> Nicht im Stichwortindex. Vektorsuche findet es,")

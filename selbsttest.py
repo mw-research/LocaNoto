@@ -54,6 +54,9 @@ _SYSTEM = {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG",
 _SYSTEM_PRAEFIX = ("PYTHON", "LC_", "HF_", "TRANSFORMERS_", "TORCH", "OMP_",
                    "MKL_", "CUDA", "NVIDIA", "XDG_", "PROGRAMFILES",
                    "COMMONPROGRAMFILES")
+# A Postgres server for the enterprise store, test-only. The test creates
+# its own database there and drops it at the end.
+_SELFTEST_DB = os.environ.get("SELFTEST_DATABASE", "").strip()
 _entfernt = sorted(v for v in os.environ
                    if v.upper() not in _SYSTEM
                    and not v.upper().startswith(_SYSTEM_PRAEFIX))
@@ -62,6 +65,28 @@ for _v in _entfernt:
 tmp = tempfile.mkdtemp(prefix="ende_")
 os.environ["ADMIN_USERS"] = "markus"
 import paths
+import database
+if _SELFTEST_DB:
+    import psycopg
+    from urllib.parse import urlsplit, urlunsplit
+    _db_name = "selftest_" + os.urandom(4).hex()
+    with psycopg.connect(_SELFTEST_DB, autocommit=True) as _admin:
+        _admin.execute(f'CREATE DATABASE "{_db_name}"')
+    _u = urlsplit(_SELFTEST_DB)
+    database.DIMENSIONS = 32  # the fake vectors below (DIM)
+    database.URL = urlunsplit((_u.scheme, _u.netloc, "/" + _db_name,
+                               _u.query, _u.fragment))
+
+    def _drop_test_db():
+        database.close()
+        try:
+            with psycopg.connect(_SELFTEST_DB, autocommit=True) as _admin:
+                _admin.execute(f'DROP DATABASE IF EXISTS "{_db_name}" '
+                               f'WITH (FORCE)')
+        except Exception as _e:
+            print(f"(test database {_db_name} not dropped: {_e})")
+    import atexit
+    atexit.register(_drop_test_db)
 for n, u in (("CONFIG_DIR", "konfig"), ("DATA_DIR", "daten")):
     setattr(paths, n, os.path.join(tmp, u)); os.makedirs(getattr(paths, n))
 paths.DOCS_DIR = os.path.join(paths.DATA_DIR, "dokumente"); os.makedirs(paths.DOCS_DIR)
@@ -83,13 +108,18 @@ store._client = None
 store.vergiss()
 
 _ablage = store.beschreibung()
-if "Dateiablage" not in _ablage:
+if database.active():
+    # Enterprise store: only ever a database this test created itself.
+    if "/selftest_" not in _ablage:
+        print("ABBRUCH: Dieser Test wuerde gegen " + _ablage + " schreiben.")
+        sys.exit(2)
+elif "Dateiablage" not in _ablage:
     print("ABBRUCH: Dieser Test wuerde gegen " + _ablage
           + " schreiben.")
     print("Er darf ausschliesslich auf einer eigenen Dateiablage "
           "laufen -- niemals gegen den Betrieb.")
     sys.exit(2)
-if not _ablage.endswith(paths.CHROMA_DIR):
+if not database.active() and not _ablage.endswith(paths.CHROMA_DIR):
     print(f"ABBRUCH: Ablage {_ablage} liegt nicht im Testverzeichnis.")
     sys.exit(2)
 import owncloud as _oc_wache
@@ -464,12 +494,15 @@ def _einmal_kaputt(kennung, sml, gesamt, fortschritt=None, versuche=4):
     return _echt_lesen(kennung, ersatz, gesamt, fortschritt, versuche)
 
 
-sicherung._lies_raum = _einmal_kaputt
-_nach = sicherung.sichere()
-sicherung._lies_raum = _echt_lesen
-pruef("einmaliger Lesefehler kostet keinen Raum",
-      not _nach["fehler"] and len(_nach["raeume"]) == 3,
-      f"{sorted(_nach['raeume'])} {str(_nach['fehler'])[:60]}")
+# The segment failure is Chroma's alone. On Postgres there is nothing to
+# reconnect, so store.hole passes the error on, like with a Chroma server.
+if not database.active():
+    sicherung._lies_raum = _einmal_kaputt
+    _nach = sicherung.sichere()
+    sicherung._lies_raum = _echt_lesen
+    pruef("einmaliger Lesefehler kostet keinen Raum",
+          not _nach["fehler"] and len(_nach["raeume"]) == 3,
+          f"{sorted(_nach['raeume'])} {str(_nach['fehler'])[:60]}")
 
 sicherung._lies_raum = _immer_kaputt
 _schlecht = sicherung.sichere()
@@ -679,6 +712,12 @@ pruef("die Kennung verraet den Namen nicht",
 # still an zwei weiteren Stellen: der Dokumentfilter kommt mit
 # Klarnamen und traf nichts, das Loeschen liess die Abschnitte stehen.
 _verdeckt = raumschluessel.verschluessele_text("einkauf", _n)
+if database.active():
+    # The Postgres index holds no text; a hit needs its passage.
+    store.schreibe(store.sammlung(raeume.sammlung("einkauf")),
+                   ["namensprobe_1"], documents=["Ein Abschnitt zur Probe"],
+                   metadatas=[{"file_name": _n, "raum": "einkauf",
+                               "page": 1}], embeddings=[vek()])
 keyword_index.add_chunks([("namensprobe_1", "Ein Abschnitt zur Probe",
                            {"file_name": _verdeckt, "raum": "einkauf",
                             "page": 1})])
@@ -2935,15 +2974,34 @@ for _datei_name in ("ingest_images.py", "bildtext.py"):
 _falscher_raum = "dimensionsprobe"
 raeume.anlegen(_falscher_raum, "Dimensionsprobe", mitglieder=["markus"])
 _falsche_sml = store.sammlung(raeume.sammlung(_falscher_raum))
-_ANDERE_DIM = DIM * 2
+if database.active():
+    # Postgres holds one dimension for all vectors; a longer query vector
+    # is shortened (Matryoshka). What still breaks is a shorter one -- a
+    # smaller embedding model behind the same name.
+    _ANDERE_DIM = DIM // 2
+    _gespeichert = [vek()]
+
+    class _DimEmb:
+        class embeddings:
+            @staticmethod
+            def create(input, model, timeout=None, encoding_format=None,
+                       extra_body=None):
+                return types.SimpleNamespace(data=[
+                    types.SimpleNamespace(index=i, embedding=[0.5] * _ANDERE_DIM)
+                    for i in range(len(input))])
+    _dim_emb = _DimEmb()
+else:
+    _ANDERE_DIM = DIM * 2
+    _gespeichert = [[0.5] * _ANDERE_DIM]
+    _dim_emb = FakeEmb()
 store.schreibe(_falsche_sml, ["fremd_p1_c0"],
                documents=["Ein Abschnitt mit fremder Dimension."],
                metadatas=[{"file_name": "Fremd.pdf", "page": 1,
                            "raum": _falscher_raum, "type": "text"}],
-               embeddings=[[0.5] * _ANDERE_DIM])
+               embeddings=_gespeichert)
 
 _treffer_d, _zahlen_d = pipeline.suche(
-    [(_falscher_raum, _falsche_sml)], FakeEmb(), "modell",
+    [(_falscher_raum, _falsche_sml)], _dim_emb, "modell",
     ["Dimension"], "markus", 5, bewerter=bewerter)
 
 pruef("ein Suchweg mit falscher Dimension wird gemeldet",
@@ -2974,7 +3032,7 @@ pruef("ein gesunder Bestand meldet keinen Ausfall",
 import bestandsliste as _bl
 
 pruef("die Bestandsliste liest die Dimension einer Sammlung",
-      _bl._dimension(_falsche_sml) == _ANDERE_DIM,
+      _bl._dimension(_falsche_sml) == len(_gespeichert[0]),
       _bl._dimension(_falsche_sml))
 pruef("und die des gewachsenen Bestands",
       _bl._dimension(store.sammlung(raeume.sammlung(raeume.ALLGEMEIN),
@@ -5049,7 +5107,8 @@ pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
 # Fehlermeldung von api.py ausdruecklich empfiehlt.
 #
 # Die eine echte Ausnahme setzt Kubernetes selbst, nicht der Betreiber.
-_NICHT_IN_DER_VORLAGE = {"KUBERNETES_SERVICE_HOST"}
+# SELFTEST_DATABASE is read by this test only; operators never set it.
+_NICHT_IN_DER_VORLAGE = {"KUBERNETES_SERVICE_HOST", "SELFTEST_DATABASE"}
 
 # Gesucht wird ein EINTRAG, nicht eine Erwaehnung: "NAME=" am
 # Zeilenanfang, auskommentiert erlaubt. Die erste Fassung suchte den
