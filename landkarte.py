@@ -31,7 +31,8 @@ SCHICHT = {
         "create_user", "create_token", "manage_users", "bestandsliste",
         "packe_umzug", "rebuild_index", "raum_diagnose",
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env",
-        "landkarte", "lizenzen",
+        "landkarte", "lizenzen", "migrate_to_postgres", "compare_search",
+        "test_migration",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",

@@ -112,7 +112,7 @@ class PgCollection:
             sql = (f"SELECT id, document, metadata, embedding, "
                    f"(embedding <-> %s::{vtype}) ^ 2 AS distance "
                    f"FROM passage WHERE {cond} AND embedding IS NOT NULL "
-                   f"ORDER BY embedding <-> %s::{vtype} LIMIT %s")
+                   f"ORDER BY embedding <-> %s::{vtype}, id LIMIT %s")
             rows = con.execute(sql, [vec] + args + [vec, int(n_results)]).fetchall()
             results.append(rows)
         return _result(results, include, nested=True)
