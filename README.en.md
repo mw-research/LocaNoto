@@ -11,8 +11,8 @@ At runtime the application talks only to the model servers you configure.
 **Your documents never leave your network.**
 
 *Deutsch: [README.md](README.md) is the complete reference. The user
-interface, the [user and admin handbook](HANDBUCH.md) and the default
-prompt templates are in German.*
+interface is available in English and German; the handbook in
+[English](HANDBUCH.en.md) and [German](HANDBUCH.md).*
 
 | | |
 |---|---|
@@ -142,6 +142,19 @@ Endpoints: `GET /gesundheit`, `GET /status`, `GET /dokumente`,
 `GET /raeume`, `POST /frage`, `POST /rueckmeldung`, `POST /aufnehmen`,
 `DELETE /dokumente`, `GET /voreinstellungen`. The API applies the same room
 permissions as the user interface.
+
+### Languages
+
+Every user switches the interface between English and German in the
+sidebar (**🌐 Sprache / Language**), also on the login page; the choice is
+remembered per account. `LOCANOTO_SPRACHE=en` makes English the default
+for everyone else. **Answers come in the language of the question**, even
+when the documents are German — file names, values and quotations stay
+as they are. For a question in another language, two of the three search
+probes are written in German, because keyword search only finds words as
+they appear in the documents. Citations with "page" are linked like
+those with "Seite". The prompt templates themselves are German and carry
+these rules; the HTTP API reports in German.
 
 ### Learning from use
 

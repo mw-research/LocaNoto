@@ -7,6 +7,8 @@ Generiere exakt 3 verschiedene Suchanfragen für die aktuelle Nutzerfrage, um so
 {GLOSSAR}
 Loese Abkuerzungen auf. Dokumente schreiben aus, was im Betrieb abgekuerzt wird -- nach der Kurzform allein findet die Suche nichts. Steht die Abkuerzung oben im Sprachgebrauch, nimm die dortige Zuordnung; steht sie nicht dort, loese sie selbst auf, wenn sie im Fach ueblich ist, und nimm beide Formen in die Sonden auf -- die ausgeschriebene zuerst.
 
+Ist die Frage in einer anderen Sprache als Deutsch gestellt, schreibe Anfrage 1 in der Sprache der Frage und die Anfragen 2 und 3 auf Deutsch -- die Stichwortsuche findet nur Woerter, die so in den Dokumenten stehen, und die sind im Zweifel deutsch. Fachbegriffe, Normnummern und Eigennamen aus der Frage uebernimmst du unveraendert.
+
 {HISTORY}
 
 Aktuelle Frage: {FRAGE}

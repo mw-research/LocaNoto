@@ -51,6 +51,7 @@ import time
 
 import dateisperre
 import paths
+import sprache
 
 # Ab welchem Alter ein Gruppenstand nicht mehr gilt, in Minuten. 0 heisst:
 # kein Hoechstalter.
@@ -218,9 +219,14 @@ def raum(kennung):
 
 
 def bezeichnung(kennung):
+    """Der Anzeigename, in der Sprache der Oberflaeche.
+
+    Gespeichert ist er deutsch ("Privat (anna)", "Allgemein"); uebersetzt
+    wird erst bei der Anzeige, wie jeder andere Text.
+    """
     r = raum(kennung)
     if r:
-        return r.get("bezeichnung") or kennung
+        return sprache.t(r.get("bezeichnung") or kennung)
     return kennung
 
 

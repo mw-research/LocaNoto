@@ -445,10 +445,11 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `api`, `app` +48 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `api`, `app` +49 |
 | `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +13 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +11 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +12 |
+| `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `uebersetzen`, `verwaltung` |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `LLM_VERSUCHE`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `api`, `app`, `aufnehmen`, `ingest` +3 |
 | **Bestand** | | | |
 | `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `api`, `app` +20 |
@@ -498,6 +499,7 @@ Dateien importieren sie.
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
 | `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
+| `uebersetzen.py` | Oberflaechentexte fuer die Uebersetzung einwickeln und einsammeln. | — | — |
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
 | `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `altbestand`, `selbsttest` |
@@ -2598,6 +2600,38 @@ Datei. Compose: `SEARXNG_SECRET` setzen (`openssl rand -hex 32`), dann
 *Verwaltung → 📬 Postfächer* einen Server der Art **Websuche** anlegen,
 Adresse `http://websuche:8000/mcp`. Prüfen ohne LocaNoto:
 `python websuche.py --probe "suchbegriff"` im Websuche-Container.
+
+## 🌐 Sprache
+
+Die Oberfläche gibt es auf Deutsch und Englisch. Jeder Nutzer schaltet in
+der Seitenleiste unter **🌐 Sprache / Language** um, ebenso auf der
+Anmeldeseite; die Wahl wird je Zugang in `config/sprachen.json` gemerkt.
+Wer nichts gewählt hat, bekommt `LOCANOTO_SPRACHE` (Vorgabe `de`).
+
+**Antworten kommen in der Sprache der Frage**, auch wenn die Dokumente
+deutsch sind; Dateinamen, Werte und Zitate bleiben im Original. Dafür
+sorgen zwei Regeln in den mitgelieferten Vorlagen: `system_prompt.txt`
+(*ANTWORTSPRACHE*) und `search_prompt.txt` — bei einer fremdsprachigen
+Frage werden zwei der drei Suchsonden auf Deutsch formuliert, weil die
+Stichwortsuche nur Wörter findet, die so in den Dokumenten stehen. Wer
+unter `config/` eigene Fassungen der Vorlagen führt, übernimmt die Regeln
+dort. Zitate mit „page“ statt „Seite“ werden ebenso verlinkt.
+
+**Wie übersetzt wird.** Der deutsche Text ist der Schlüssel:
+Oberflächentexte stehen in `tx("…")`, die englischen Fassungen in
+`sprache_en.json`. Texte mit eingesetzten Werten sind Muster mit `{}`.
+Fehlt eine Übersetzung, erscheint der deutsche Text.
+
+```bash
+python uebersetzen.py --einwickeln app.py verwaltung.py   # neue Texte einwickeln
+python uebersetzen.py --fehlend                            # was noch fehlt
+```
+
+Der Selbsttest prüft, dass nichts fehlt und jedes Muster dieselben
+Platzhalter hat. Das Handbuch gibt es als
+[HANDBUCH.en.md](HANDBUCH.en.md); eingelesen beantwortet LocaNoto damit
+auch englische Fragen zu seiner Bedienung. Die Schnittstelle meldet auf
+Deutsch.
 
 ---
 

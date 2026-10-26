@@ -58,6 +58,10 @@ data:
   # Verwalter nichts ueber fremde -- nicht einmal die Dateinamen.
   PRIVAT_STRENG: "0"
 
+  # Sprache der Oberflaeche fuer alle, die nichts anderes gewaehlt haben.
+  # Jeder Nutzer schaltet in der Seitenleiste selbst um.
+  # LOCANOTO_SPRACHE: "de"
+
   # Abzug der Vektordatenbank. Innerhalb des Datenvolumes ist er der
   # Rueckweg nach einem Fehlgriff; gegen den Verlust des Volumes selbst
   # hilft nur ein eigenes Ziel -- ein zweites PVC oder ein eingehaengtes

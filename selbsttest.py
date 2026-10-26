@@ -882,8 +882,38 @@ print("=== 14. Griff ohne Einsicht ===")
 # unueblich und hier richtig: die betroffene Stelle liegt in einem
 # Streamlit-Skript, das sich nicht importieren laesst, und die Regel
 # ist einfach genug, um sie am Text zu pruefen.
-_quelle = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "app.py"), encoding="utf-8").read()
+def _ohne_tx(quelle):
+    """Der Quelltext ohne die Uebersetzungshuellen tx(...).
+
+    Die Oberflaeche wickelt ihre Texte in tx() -- siehe uebersetzen.py.
+    Die Pruefungen hier lesen den Code, wie er gemeint ist: mit den
+    deutschen Texten an der Stelle, an der sie stehen. Und Funktionen,
+    die einzeln herausgeloest und ausgefuehrt werden, brauchen tx dann
+    nicht.
+    """
+    import ast as _a_tx
+    roh = quelle.encode("utf-8")
+    zeilen = roh.splitlines(keepends=True)
+    anfang, summe = [], 0
+    for z in zeilen:
+        anfang.append(summe)
+        summe += len(z)
+    stellen = []
+    for k in _a_tx.walk(_a_tx.parse(quelle)):
+        if (isinstance(k, _a_tx.Call) and isinstance(k.func, _a_tx.Name)
+                and k.func.id == "tx" and len(k.args) == 1 and not k.keywords):
+            a = k.args[0]
+            stellen.append((anfang[k.lineno - 1] + k.col_offset,
+                            anfang[k.end_lineno - 1] + k.end_col_offset,
+                            anfang[a.lineno - 1] + a.col_offset,
+                            anfang[a.end_lineno - 1] + a.end_col_offset))
+    for s0, e0, s1, e1 in sorted(stellen, reverse=True):
+        roh = roh[:s0] + roh[s1:e1] + roh[e0:]
+    return roh.decode("utf-8")
+
+
+_quelle = _ohne_tx(io.open(os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "app.py"), encoding="utf-8").read())
 _a = _quelle.index("def list_foreign_private_documents(")
 _rumpf = _quelle[_a:_quelle.index("\ndef ", _a + 10)]
 pruef("die Verwaltungsansicht zeigt Kennungen statt Namen",
@@ -1345,8 +1375,10 @@ if _treffer:
 # Der Grund, warum es durchrutschte, ist der Stammbaum: app.py fing an
 # der Suche nur ValueError. Ueberzogen ist keiner -- also flog es
 # vorbei. Genau das haelt die erste Pruefung fest.
-_datei = lambda n: io.open(os.path.join(
+_datei_roh = lambda n: io.open(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), n), encoding="utf-8").read()
+_datei = lambda n: (_ohne_tx(_datei_roh(n))
+                    if n in ("app.py", "verwaltung.py") else _datei_roh(n))
 
 # Die Oberflaeche besteht aus zwei Dateien, seit der
 # Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
@@ -4411,6 +4443,97 @@ if os.path.exists(_k98):
           and "searxng/searxng:latest" not in _k98q)
 else:
     pruef("es gibt eine k8s-Vorlage fuer die Websuche", False)
+
+# --- ZWEI SPRACHEN ---
+#
+# Der deutsche Text ist der Schluessel; fehlt eine Uebersetzung, bleibt
+# er stehen. Muster tragen eingesetzte Werte. Jeder Nutzer waehlt selbst.
+import re
+try:
+    import sprache as _spr
+    import uebersetzen as _ueb
+    _spr_alt = (_spr.TABELLE, _spr.WAHL)
+    _spr_tab = os.path.join(tmp, "sprache_probe.json")
+    io.open(_spr_tab, "w", encoding="utf-8").write(json.dumps({
+        "texte": {"Gespeichert.": "Saved."},
+        "muster": {"{} Dateien in {}": "{1}: {0} files",
+                   "Raum {} entfernt": "Room {} removed",
+                   "{}": "passt auf alles"}}))
+    _spr.TABELLE, _spr.WAHL = _spr_tab, os.path.join(tmp, "sprachen.json")
+    _spr._tabelle.cache_clear()
+    _spr._englisch.cache_clear()
+    try:
+        _spr.setze("en")
+        pruef("Englisch: fester Text, Muster mit Werten, andere Reihenfolge",
+              _spr.t("Gespeichert.") == "Saved."
+              and _spr.t("Raum Einkauf entfernt") == "Room Einkauf removed"
+              and _spr.t("3 Dateien in Einkauf") == "Einkauf: 3 files",
+              (_spr.t("3 Dateien in Einkauf"),))
+        pruef("ohne Uebersetzung bleibt der deutsche Text, und ein Muster "
+              "nur aus Platzhaltern gilt nicht",
+              _spr.t("Voellig unbekannt") == "Voellig unbekannt")
+        _spr.setze("de")
+        pruef("auf Deutsch wird nichts angefasst",
+              _spr.t("Gespeichert.") == "Gespeichert.")
+        _spr.setze("xx")
+        pruef("eine unbekannte Sprache wird die Vorgabe",
+              _spr.aktuell() == _spr.VORGABE)
+        _spr.speichere("anna", "en")
+        pruef("die Wahl wird je Nutzer gemerkt",
+              _spr.gewaehlt("Anna") == "en"
+              and _spr.gewaehlt("bernd") == _spr.VORGABE
+              and not _spr.speichere("anna", "fr")[0])
+    finally:
+        _spr.TABELLE, _spr.WAHL = _spr_alt
+        _spr._tabelle.cache_clear()
+        _spr._englisch.cache_clear()
+        _spr.setze("de")
+
+    _spr_echt = json.loads(io.open(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "sprache_en.json"),
+        encoding="utf-8").read())
+    _spr_kaputt = []
+    for _de_s, _en_s in _spr_echt.get("muster", {}).items():
+        _n_s = _de_s.count("{}")
+        _num = sorted({int(x) for x in re.findall(r"\{(\d+)\}", _en_s)})
+        if (_num != list(range(_n_s)) or "{}" in _en_s) if _num else \
+                _en_s.count("{}") != _n_s:
+            _spr_kaputt.append(_de_s)
+    _spr_kaputt += [k for k, v in _spr_echt.get("texte", {}).items()
+                    if not str(v).strip()]
+    pruef("jede Uebersetzung hat dieselben Platzhalter und ist nicht leer",
+          not _spr_kaputt, _spr_kaputt[:5])
+    _spr_fehlt = _ueb.fehlend()
+    pruef("jeder Oberflaechentext hat eine englische Fassung",
+          not _spr_fehlt, _spr_fehlt[:5])
+    _spr_offen = {n: len(_ueb.stellen(__import__("ast").parse(_datei_roh(n))))
+                  for n in ("app.py", "verwaltung.py")}
+    pruef("jeder Oberflaechentext ist eingewickelt (tx)",
+          not any(_spr_offen.values()), _spr_offen)
+except Exception as e:
+    pruef("die Uebersetzung laesst sich pruefen", False,
+          f"{type(e).__name__}: {e}")
+
+_spr_sys = _datei("system_prompt.txt")
+pruef("Antworten kommen in der Sprache der Frage",
+      "ANTWORTSPRACHE" in _spr_sys and "[Dateiname, page X]" in _spr_sys
+      and "Sprache der Frage" in _datei("search_prompt.txt"))
+_spr_q = _datei("app.py")
+_spr_m = re.search(r"_QUELLENMUSTER = re\.compile\(\s*(r\"[^\n]+\")\)", _spr_q)
+pruef("Zitate mit 'page' werden verlinkt wie mit 'Seite'",
+      bool(_spr_m) and re.search(eval(_spr_m.group(1)),
+                                 "[a.pdf, page 3]") is not None
+      and re.search(eval(_spr_m.group(1)), "[a.pdf, Seite 3]") is not None)
+pruef("gemerkt wird nur, was auf der Anmeldeseite gewaehlt wurde",
+      '"_sprache_vor_anmeldung"' in _spr_q)
+_hb_de = re.findall(r"^### .*$", _datei("HANDBUCH.md"), re.M)
+try:
+    _hb_en = re.findall(r"^### .*$", _datei("HANDBUCH.en.md"), re.M)
+except OSError:
+    _hb_en = []
+pruef("das englische Handbuch hat dieselben Abschnitte, jeder nennt LocaNoto",
+      len(_hb_de) == len(_hb_en) and all("LocaNoto" in h for h in _hb_en),
+      (len(_hb_de), len(_hb_en)))
 
 # Und die Oberflaeche ruft es an allen fuenf Stellen.
 _vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")

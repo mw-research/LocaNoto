@@ -27,7 +27,7 @@ SCHICHT = {
     "Einstiege": (
         "app", "verwaltung", "api", "ingest", "ingest_images", "abgleich",
         "einrichten", "sicherung", "selbsttest", "lasttest", "spiegeln",
-        "altbestand", "websuche",
+        "altbestand", "websuche", "uebersetzen",
         "create_user", "create_token", "manage_users", "bestandsliste",
         "packe_umzug", "rebuild_index", "raum_diagnose",
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env",
@@ -47,7 +47,7 @@ SCHICHT = {
         "budget",
     ),
     "Grundlage": ("paths", "geheim", "llm", "embedding",
-                  "dateisperre"),
+                  "dateisperre", "sprache"),
 }
 
 

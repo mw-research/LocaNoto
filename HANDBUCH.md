@@ -38,6 +38,15 @@ erneut anmelden.
 Zeigt die Seite nach einem Update keine Reaktion mehr, ist die Verbindung
 zum Server neu aufgebaut worden: Seite neu laden und erneut anmelden.
 
+### Wie stelle ich LocaNoto auf Englisch um?
+
+In der Seitenleiste unter **🌐 Sprache / Language** zwischen Deutsch und
+English wählen; das gilt sofort und wird für deinen Zugang gemerkt. Auf
+der Anmeldeseite steht derselbe Umschalter. Gefragt werden kann in jeder
+Sprache: LocaNoto antwortet in der Sprache der Frage, auch wenn die
+Dokumente deutsch sind. Dateinamen, Werte und Zitate bleiben, wie sie im
+Dokument stehen.
+
 ### Wie stelle ich LocaNoto eine Frage?
 
 Die Frage ins Eingabefeld unten schreiben (**Frage an die Datenbank**) und

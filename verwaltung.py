@@ -24,6 +24,8 @@ Funktion.
 import os
 import time
 import streamlit as st
+import sprache
+from sprache import t as tx
 import auth
 import benutzer
 import chats
@@ -61,12 +63,12 @@ def _oc_bericht(bericht, was):
     if not owncloud.eingerichtet():
         return
     if bericht.get("schritte"):
-        st.caption("ownCloud: " + " · ".join(bericht["schritte"]))
+        st.caption(tx("ownCloud: ") + " · ".join(bericht["schritte"]))
     for f in bericht.get("fehler") or []:
-        st.warning("ownCloud: " + f)
+        st.warning(tx("ownCloud: ") + f)
     if bericht.get("fehler"):
-        st.caption(f"{was} ist in LocaNoto angelegt. Die Ablage in ownCloud "
-                   f"laesst sich unter *ownCloud* nachholen.")
+        st.caption(tx(f"{was} ist in LocaNoto angelegt. Die Ablage in ownCloud "
+                   f"laesst sich unter *ownCloud* nachholen."))
 
 
 def _unvollstaendig(stand):
@@ -111,54 +113,54 @@ def zeichne(*, is_admin,
     _vw = False
     if is_admin():
         st.markdown("---")
-        _vw = st.toggle("\U0001f6e0\ufe0f Verwaltung", value=False,
+        _vw = st.toggle(tx("\U0001f6e0\ufe0f Verwaltung"), value=False,
                         key="verwaltung_offen", disabled=_antwortet,
-                        help="Benutzer, Raeume, Sicherung, Prompts und "
-                             "alles Weitere zum Einrichten."
-                             + (" -- gesperrt, solange eine Antwort laeuft."
+                        help=tx("Benutzer, Raeume, Sicherung, Prompts und "
+                             "alles Weitere zum Einrichten.")
+                             + (tx(" -- gesperrt, solange eine Antwort laeuft.")
                                 if _antwortet else ""))
     if _vw:
         zahlen = _verwaltungsstand()["rueckmeldungen"]
         gesamt = sum(zahlen.values())
         if gesamt:
-            with st.expander(f"\U0001f4dd Rueckmeldungen ({gesamt})"):
+            with st.expander(tx(f"\U0001f4dd Rueckmeldungen ({gesamt})")):
                 st.caption(
-                    f"ohne Treffer: {zahlen['leer']} \u00b7 "
+                    tx(f"ohne Treffer: {zahlen['leer']} \u00b7 "
                     f"hat geholfen: {zahlen['daumen_hoch']} \u00b7 "
-                    f"hat nicht geholfen: {zahlen['daumen_runter']}")
-                st.caption("**Fragen ohne Treffer** -- Kandidaten fuer "
-                           "glossar.txt:")
+                    f"hat nicht geholfen: {zahlen['daumen_runter']}"))
+                st.caption(tx("**Fragen ohne Treffer** -- Kandidaten fuer "
+                           "glossar.txt:"))
                 leer = feedback.lese(grenze=15, art="leer")
                 if leer:
                     st.code(chr(10).join(
                         f"{e['zeitpunkt'][:10]}  {e['frage'][:70]}"
                         for e in leer), language="text")
                 else:
-                    st.caption("keine")
+                    st.caption(tx("keine"))
                 schlecht = feedback.lese(grenze=15, art="daumen_runter")
                 if schlecht:
-                    st.caption("**Als nicht hilfreich gemeldet** -- Treffer "
-                               "kamen, aber die falschen:")
+                    st.caption(tx("**Als nicht hilfreich gemeldet** -- Treffer "
+                               "kamen, aber die falschen:"))
                     st.code(chr(10).join(
                         f"{e['zeitpunkt'][:10]}  {e['frage'][:70]}"
                         for e in schlecht), language="text")
-                st.caption("Vollstaendig in `data/feedback.jsonl`.")
+                st.caption(tx("Vollstaendig in `data/feedback.jsonl`."))
 
                 # Beiseitelegen statt loeschen: die Arbeitsliste soll leer
                 # werden, nicht die Ueberlieferung. Was Nutzer nicht
                 # gefunden haben, ist die einzige Quelle fuer die Frage, ob
                 # der Bestand mit der Zeit besser wird.
-                if st.button("Liste abschliessen", use_container_width=True,
-                             help="Legt das Protokoll unter einem Datum ab "
+                if st.button(tx("Liste abschliessen"), use_container_width=True,
+                             help=tx("Legt das Protokoll unter einem Datum ab "
                                   "und beginnt ein neues. Es wird nichts "
-                                  "geloescht."):
+                                  "geloescht.")):
                     ziel = feedback.archiviere()
                     if ziel:
-                        st.success(f"Abgelegt als `{os.path.basename(ziel)}`.")
+                        st.success(tx(f"Abgelegt als `{os.path.basename(ziel)}`."))
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.info("Nichts abzulegen.")
+                        st.info(tx("Nichts abzulegen."))
 
                 # Herunterladen statt auf den Server steigen: die Liste
                 # wird ausgewertet, nicht nur angesehen, und dafuer braucht
@@ -167,20 +169,20 @@ def zeichne(*, is_admin,
                     # Entschluesselt: auf der Platte liegt es
                     # verschluesselt, ausgewertet wird es im Klartext.
                     st.download_button(
-                        "Protokoll herunterladen", feedback.als_text(),
+                        tx("Protokoll herunterladen"), feedback.als_text(),
                         file_name="feedback.jsonl",
                         mime="application/x-ndjson",
                         use_container_width=True)
 
                 alte = feedback.ablagen()
                 if alte:
-                    st.caption("Frueher abgelegt:")
-                    wahl = st.selectbox("Ablage", alte, label_visibility="collapsed")
+                    st.caption(tx("Frueher abgelegt:"))
+                    wahl = st.selectbox(tx("Ablage"), alte, label_visibility="collapsed", format_func=sprache.uebersetzt())
                     pfad = os.path.join(os.path.dirname(feedback.DATEI), wahl)
                     if os.path.exists(pfad):
                         with open(pfad, "rb") as f:
                             st.download_button(
-                                f"{wahl} herunterladen", f.read(),
+                                tx(f"{wahl} herunterladen"), f.read(),
                                 file_name=wahl, mime="application/x-ndjson",
                                 use_container_width=True)
 
@@ -199,19 +201,19 @@ def zeichne(*, is_admin,
     # Vorgang steht hier, weil ein Verwalter dafuer nicht auf den Server
     # steigen sollte.
     if _vw:
-        st.caption("**Zugaenge**")
+        st.caption(tx("**Zugaenge**"))
     if _vw:
-        with st.expander("👥 Benutzer verwalten"):
+        with st.expander(tx("👥 Benutzer verwalten")):
             _zustand = benutzer.zustand()
             _gesperrt = benutzer.ungueltige()
 
             if _zustand == benutzer.UNSIGNIERT:
                 st.warning(
-                    "Die Benutzerdatei stammt aus der Zeit vor den "
+                    tx("Die Benutzerdatei stammt aus der Zeit vor den "
                     "Signaturen. Bis sie signiert ist, gilt weiter "
                     "`ADMIN_USERS` aus der `.env`, und ein von Hand "
-                    "eingetragener Zugang käme herein.")
-                if st.button("Jetzt signieren", use_container_width=True):
+                    "eingetragener Zugang käme herein."))
+                if st.button(tx("Jetzt signieren"), use_container_width=True):
                     ok, meldung = benutzer.neu_signieren(
                         von=st.session_state["username"])
                     (st.success if ok else st.error)(meldung)
@@ -219,11 +221,11 @@ def zeichne(*, is_admin,
                     st.rerun()
             elif _zustand == benutzer.MANIPULIERT:
                 st.error(
-                    "Die Benutzerdatei wurde außerhalb der Anwendung "
-                    "geändert."
-                    + (f" Gesperrt, weil ohne gültige Signatur: "
-                       f"{', '.join(_gesperrt)}." if _gesperrt else
-                       " Es fehlt oder es kam ein Eintrag hinzu."))
+                    tx("Die Benutzerdatei wurde außerhalb der Anwendung "
+                    "geändert.")
+                    + (tx(f" Gesperrt, weil ohne gültige Signatur: "
+                       f"{', '.join(_gesperrt)}.") if _gesperrt else
+                       tx(" Es fehlt oder es kam ein Eintrag hinzu.")))
 
             # Kollidierende Kennungen: zwei Nutzer, ein persoenlicher
             # Raum. Beim Anlegen wird das jetzt abgewiesen -- ein
@@ -231,12 +233,12 @@ def zeichne(*, is_admin,
             _konflikte = raeume.konflikte(benutzer.namen())
             if _konflikte:
                 st.error(
-                    "Diese Kennungen teilen sich einen persoenlichen Raum "
-                    "und sehen damit die Unterlagen des jeweils anderen: "
+                    tx("Diese Kennungen teilen sich einen persoenlichen Raum "
+                    "und sehen damit die Unterlagen des jeweils anderen: ")
                     + "; ".join(
                         f"{', '.join(n)} -> {k}" for k, n in _konflikte)
-                    + ". Eine der Kennungen umbenennen (neu anlegen, "
-                    + "Dokumente verschieben, alte loeschen).")
+                    + tx(". Eine der Kennungen umbenennen (neu anlegen, ")
+                    + tx("Dokumente verschieben, alte loeschen)."))
 
             for _n in benutzer.namen():
                 _e = benutzer.eintrag(_n) or {}
@@ -246,8 +248,8 @@ def zeichne(*, is_admin,
 
             st.markdown("---")
             _wahl = st.selectbox(
-                "Bearbeiten", ["(neu anlegen)"] + benutzer.namen(),
-                key="benutzer_wahl")
+                tx("Bearbeiten"), ["(neu anlegen)"] + benutzer.namen(),
+                key="benutzer_wahl", format_func=sprache.uebersetzt())
 
             if _wahl == "(neu anlegen)":
                 # In einem Formular, damit alle Felder MIT dem Klick
@@ -258,26 +260,26 @@ def zeichne(*, is_admin,
                 with st.form(
                         f"benutzer_neu_{_feldschluessel('benutzer_neu', 'runde')}"):
                     _name = st.text_input(
-                        "Kennung", key=_feldschluessel("benutzer_neu", "name"))
+                        tx("Kennung"), key=_feldschluessel("benutzer_neu", "name"))
                     _rolle = st.selectbox(
-                        "Rolle", list(benutzer.ROLLEN),
+                        tx("Rolle"), list(benutzer.ROLLEN),
                         index=list(benutzer.ROLLEN).index("nutzer"),
                         key=_feldschluessel("benutzer_neu", "rolle"),
-                        help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
+                        help=tx("admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist."), format_func=sprache.uebersetzt())
                     _pw1 = st.text_input(
-                        f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+                        tx(f"Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)"),
                         type="password",
                         key=_feldschluessel("benutzer_neu", "pw1"))
                     _pw2 = st.text_input(
-                        "Passwort wiederholen", type="password",
+                        tx("Passwort wiederholen"), type="password",
                         key=_feldschluessel("benutzer_neu", "pw2"))
                     _anlegen = st.form_submit_button(
-                        "Benutzer anlegen", use_container_width=True)
+                        tx("Benutzer anlegen"), use_container_width=True)
                 if _anlegen:
                     if not (_name or "").strip() or not _pw1:
-                        st.error("Kennung und Passwort eintragen.")
+                        st.error(tx("Kennung und Passwort eintragen."))
                     elif _pw1 != _pw2:
-                        st.error("Die Eingaben stimmen nicht überein.")
+                        st.error(tx("Die Eingaben stimmen nicht überein."))
                     else:
                         ok, meldung = benutzer.anlege(
                             _name, _pw1, _rolle,
@@ -289,7 +291,7 @@ def zeichne(*, is_admin,
                             # gemeinsame Ordner. Der Nutzer muss dort
                             # nichts einrichten -- das ist der Sinn von
                             # "eingebettet".
-                            with st.spinner("Richte die Ablage ein ..."):
+                            with st.spinner(tx("Richte die Ablage ein ...")):
                                 _b = owncloud.richte_nutzer_ein(
                                     _name, _pw1, _name)
                             _oc_bericht(_b, "Der Zugang")
@@ -300,20 +302,20 @@ def zeichne(*, is_admin,
                             st.rerun()
             else:
                 _e = benutzer.eintrag(_wahl) or {}
-                st.caption(f"Angelegt: {_e.get('angelegt', 'unbekannt')} "
-                           f"· von: {_e.get('von', 'unbekannt')}")
+                st.caption(tx(f"Angelegt: {_e.get('angelegt', 'unbekannt')} "
+                           f"· von: {_e.get('von', 'unbekannt')}"))
                 # Der Rueckfall geht ueber den NAMEN und nicht ueber eine
                 # Zahl: als "notzugang" dazukam, waere aus dem frueheren
                 # Index 1 ("nutzer") still die neue Rolle geworden.
                 _neue_rolle = st.selectbox(
-                    "Rolle", list(benutzer.ROLLEN),
+                    tx("Rolle"), list(benutzer.ROLLEN),
                     index=(list(benutzer.ROLLEN).index(_e.get("rolle"))
                            if _e.get("rolle") in benutzer.ROLLEN
                            else list(benutzer.ROLLEN).index("nutzer")),
                     key=f"benutzer_rolle_{_wahl}",
-                    help="admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist.")
+                    help=tx("admin verwaltet Nutzer, Räume und den gemeinsamen Bestand. notzugang darf NICHTS davon — die Rolle bestätigt nur den Notzugang eines Verwalters zu einem persönlichen Raum, und gehört deshalb an jemanden, der kein Verwalter ist."), format_func=sprache.uebersetzt())
                 if _neue_rolle != _e.get("rolle"):
-                    if st.button("Rolle übernehmen", use_container_width=True,
+                    if st.button(tx("Rolle übernehmen"), use_container_width=True,
                                  key=f"benutzer_rs_{_wahl}"):
                         ok, meldung = benutzer.rolle_setzen(
                             _wahl, _neue_rolle,
@@ -330,17 +332,17 @@ def zeichne(*, is_admin,
                 # Felder kommen mit dem Klick an, nicht einen Durchlauf
                 # spaeter.
                 with st.form(f"{_pwb}_{_feldschluessel(_pwb, 'runde')}"):
-                    _pw1 = st.text_input("Neues Passwort", type="password",
+                    _pw1 = st.text_input(tx("Neues Passwort"), type="password",
                                          key=_feldschluessel(_pwb, "pw1"))
-                    _pw2 = st.text_input("Wiederholen", type="password",
+                    _pw2 = st.text_input(tx("Wiederholen"), type="password",
                                          key=_feldschluessel(_pwb, "pw2"))
                     _pw_setzen = st.form_submit_button(
-                        "Passwort setzen", use_container_width=True)
+                        tx("Passwort setzen"), use_container_width=True)
                 if _pw_setzen:
                     if not _pw1:
-                        st.error("Bitte ein Passwort eintragen.")
+                        st.error(tx("Bitte ein Passwort eintragen."))
                     elif _pw1 != _pw2:
-                        st.error("Die Eingaben stimmen nicht überein.")
+                        st.error(tx("Die Eingaben stimmen nicht überein."))
                     else:
                         ok, meldung = benutzer.passwort_setzen(
                             _wahl, _pw1, von=st.session_state["username"])
@@ -364,7 +366,7 @@ def zeichne(*, is_admin,
                             # aussperrt, was sonst daran haengt.
                             _b = {}
                             if owncloud.eingerichtet():
-                                with st.spinner("Richte die Ablage ein ..."):
+                                with st.spinner(tx("Richte die Ablage ein ...")):
                                     _b = owncloud.richte_nutzer_ein(
                                         _wahl, _pw1, _wahl)
                                 _oc_bericht(_b, "Der Zugang")
@@ -386,9 +388,9 @@ def zeichne(*, is_admin,
                 # Loeschen entfernt den Zugang, nicht die Daten. Chats und
                 # der persoenliche Raum bleiben -- wer beides in einem Klick
                 # zusammenlegt, loescht irgendwann mehr als gemeint.
-                _sicher = st.checkbox(f"'{_wahl}' wirklich löschen",
+                _sicher = st.checkbox(tx(f"'{_wahl}' wirklich löschen"),
                                       key=f"benutzer_x_{_wahl}")
-                if st.button("Benutzer löschen", use_container_width=True,
+                if st.button(tx("Benutzer löschen"), use_container_width=True,
                              disabled=not _sicher,
                              key=f"benutzer_del_{_wahl}"):
                     ok, meldung = benutzer.loesche(
@@ -416,10 +418,10 @@ def zeichne(*, is_admin,
             st.markdown("---")
             _kette_ok, _zeilen = benutzer.protokoll_pruefen()
             if _kette_ok:
-                st.caption(f"Protokoll: {_zeilen} Einträge, Kette in Ordnung.")
+                st.caption(tx(f"Protokoll: {_zeilen} Einträge, Kette in Ordnung."))
             else:
-                st.error(f"Das Protokoll ist ab Zeile {_zeilen} verändert "
-                         f"oder es fehlt eine Zeile.")
+                st.error(tx(f"Das Protokoll ist ab Zeile {_zeilen} verändert "
+                         f"oder es fehlt eine Zeile."))
             _log = benutzer.protokoll(letzte=20)
             if _log:
                 st.code(chr(10).join(
@@ -440,14 +442,14 @@ def zeichne(*, is_admin,
         # create_token.py im Terminal benutzt. Wer ein Token fuer die
         # Schnittstelle brauchte, musste an eine Konsole im Pod -- fuer
         # eine Aufgabe, die dem Verwalter gehoert, ein Umweg.
-        with st.expander("🎫 Zugangstoken für die Schnittstelle"):
+        with st.expander(tx("🎫 Zugangstoken für die Schnittstelle")):
             st.caption(
-                "Ein Token weist einen Nutzer aus. Was er darf, steht in "
+                tx("Ein Token weist einen Nutzer aus. Was er darf, steht in "
                 "der signierten Benutzerdatei — nicht im Token. Für einen "
                 "Masseningest in den **allgemeinen Raum** braucht es "
                 "deshalb das Token eines Verwalters; mit dem eines "
                 "gewöhnlichen Nutzers antwortet die Schnittstelle dort "
-                "mit 403.")
+                "mit 403."))
 
             # ZUERST das frisch angelegte Token, falls eines aussteht.
             # Genau einmal zu zeigen heisst in Streamlit: den Wert einen
@@ -455,11 +457,11 @@ def zeichne(*, is_admin,
             # bestaetigt hat, ihn zu haben.
             _frisch = st.session_state.get("_neues_token")
             if _frisch:
-                st.success("Angelegt. **Dieser Wert erscheint nur "
+                st.success(tx("Angelegt. **Dieser Wert erscheint nur "
                            "dieses eine Mal** — gespeichert ist nur sein "
-                           "Hashwert.")
+                           "Hashwert."))
                 st.code(_frisch, language="text")
-                if st.button("Habe ich notiert", key="token_weg",
+                if st.button(tx("Habe ich notiert"), key="token_weg",
                              use_container_width=True):
                     del st.session_state["_neues_token"]
                     st.rerun()
@@ -467,7 +469,7 @@ def zeichne(*, is_admin,
 
             _namen = benutzer.namen()
             if not _namen:
-                st.caption("Noch kein Benutzer angelegt.")
+                st.caption(tx("Noch kein Benutzer angelegt."))
             else:
                 # Im Formular, aus demselben Grund wie beim
                 # Passwortaendern: ein Textfeld uebergibt seinen Inhalt
@@ -476,19 +478,19 @@ def zeichne(*, is_admin,
                 _tk = "token_neu"
                 with st.form(f"token_{_feldschluessel(_tk, 'runde')}"):
                     _t_wer = st.selectbox(
-                        "Für wen", _namen,
-                        key=_feldschluessel(_tk, "wer"))
+                        tx("Für wen"), _namen,
+                        key=_feldschluessel(_tk, "wer"), format_func=sprache.uebersetzt())
                     _t_bez = st.text_input(
-                        "Bezeichnung", key=_feldschluessel(_tk, "bez"),
-                        help="Wofür es gedacht ist, etwa "
+                        tx("Bezeichnung"), key=_feldschluessel(_tk, "bez"),
+                        help=tx("Wofür es gedacht ist, etwa "
                              "'Masseningest Laptop'. Erscheint in der "
-                             "Liste unten.")
+                             "Liste unten."))
                     _t_tage = st.number_input(
-                        "Gültig für Tage (0 = unbegrenzt)",
+                        tx("Gültig für Tage (0 = unbegrenzt)"),
                         min_value=0, max_value=3650, value=0, step=30,
                         key=_feldschluessel(_tk, "tage"))
                     _t_ab = st.form_submit_button(
-                        "Token anlegen", use_container_width=True,
+                        tx("Token anlegen"), use_container_width=True,
                         disabled=_antwortet)
                 if _t_ab:
                     try:
@@ -498,13 +500,13 @@ def zeichne(*, is_admin,
                         _leeren()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Nicht angelegt: {type(e).__name__}: {e}")
+                        st.error(tx(f"Nicht angelegt: {type(e).__name__}: {e}"))
 
             # --- die vorhandenen ---
             st.markdown("---")
             _tokens = auth.liste()
             if not _tokens:
-                st.caption("Keine Token angelegt.")
+                st.caption(tx("Keine Token angelegt."))
             for _h, _e in _tokens:
                 _bis = _e.get("gueltig_bis")
                 _zusatz = _e.get("bezeichnung") or "ohne Bezeichnung"
@@ -520,15 +522,15 @@ def zeichne(*, is_admin,
                     st.markdown(
                         f"`{_h[:8]}` · **{_e.get('benutzer', '?')}** · "
                         f"{_zusatz}")
-                    st.caption(f"angelegt {_e.get('erstellt', '?')[:19]}")
+                    st.caption(tx(f"angelegt {_e.get('erstellt', '?')[:19]}"))
                 with _z2:
                     if st.button("🗑️", key=f"token_weg_{_h[:12]}",
-                                 help="Widerrufen", disabled=_antwortet):
+                                 help=tx("Widerrufen"), disabled=_antwortet):
                         _anzahl = auth.widerrufe(_h)
                         if _anzahl == 1:
-                            st.info("Widerrufen.")
+                            st.info(tx("Widerrufen."))
                         else:
-                            st.error("Nicht widerrufen.")
+                            st.error(tx("Nicht widerrufen."))
                         _leeren()
                         time.sleep(1)
                         st.rerun()
@@ -538,12 +540,12 @@ def zeichne(*, is_admin,
         # Ein Werkzeugserver stellt dem Modell Funktionen bereit, die es
         # waehrend einer Antwort aufrufen kann. Eingerichtet wird hier
         # statt in einer Datei von Hand.
-        with st.expander("📬 Postfächer (Werkzeugserver)"):
+        with st.expander(tx("📬 Postfächer (Werkzeugserver)")):
             _pf = mcp.lies_konfiguration()
             if not _pf:
-                st.caption("Kein Postfach eingerichtet. Ohne eines bleibt "
+                st.caption(tx("Kein Postfach eingerichtet. Ohne eines bleibt "
                            "der Werkzeugkreis aus — keine Werkzeugliste, "
-                           "kein zusätzlicher Modellaufruf.")
+                           "kein zusätzlicher Modellaufruf."))
             for _name, _a in sorted(_pf.items()):
                 _art = "persönlich" if _a.get("persoenlich") else "Funktion"
                 _wie = ("antwortet selbständig" if _a.get("automatisch")
@@ -561,27 +563,27 @@ def zeichne(*, is_admin,
                                  if _a.get("transport") == "exchange" else "—"))
                     st.caption(
                         f"{_ziel}"
-                        + (f" · Postfach: {_a['postfach']}"
+                        + (tx(f" · Postfach: {_a['postfach']}")
                            if _a.get("postfach") else "")
-                        + f" · Anmeldung: {mcp.anmeldeart(_name)}"
+                        + tx(f" · Anmeldung: {mcp.anmeldeart(_name)}")
                         + ("" if not _a.get("automatisch") else
-                           (" · mit Hinweis" if mcp.hinweis_an(_name)
-                            else " · OHNE Hinweis")))
+                           (tx(" · mit Hinweis") if mcp.hinweis_an(_name)
+                            else tx(" · OHNE Hinweis"))))
                 with _z2:
                     if st.button("🗑️", key=f"pf_weg_{_name}",
-                                 help="Entfernen", disabled=_antwortet):
+                                 help=tx("Entfernen"), disabled=_antwortet):
                         _ok, _m = mcp.entferne_postfach(_name)
                         (st.info if _ok else st.error)(_m)
                         _leeren()
                         time.sleep(1)
                         st.rerun()
-                if st.button("Werkzeuge abfragen", key=f"pf_test_{_name}",
+                if st.button(tx("Werkzeuge abfragen"), key=f"pf_test_{_name}",
                              disabled=_antwortet):
                     _v = mcp.verbinde(
                         st.session_state.get("_postfach_koepfe"))
                     try:
                         _w = _v[_name].werkzeuge()
-                        st.success(f"{len(_w)} Werkzeuge")
+                        st.success(tx(f"{len(_w)} Werkzeuge"))
                         for _x in _w:
                             _marke = ("**[SENDET]**"
                                       if mcp.sendet(_name, _x.get("name"))
@@ -601,61 +603,61 @@ def zeichne(*, is_admin,
             # --- anlegen ---
             _pk = "postfach_neu"
             with st.form(f"postfach_{_feldschluessel(_pk, 'runde')}"):
-                st.markdown("**Neues Postfach**")
+                st.markdown(tx("**Neues Postfach**"))
                 st.caption(
-                    "Für die persönlichen Postfächer genügt **ein Eintrag "
+                    tx("Für die persönlichen Postfächer genügt **ein Eintrag "
                     "für alle**, etwa mit dem Namen `postfach`: jeder "
                     "Nutzer meldet sich darin unter „📬 Meine Postfächer“ "
                     "mit seiner eigenen Mailadresse an. Jedes "
                     "Funktionspostfach (info@, service@ …) bekommt einen "
-                    "eigenen Eintrag.")
+                    "eigenen Eintrag."))
                 _v_wahl = st.selectbox(
-                    "Art des Servers", sorted(mcp.VORLAGEN),
-                    format_func=lambda v: mcp.VORLAGEN[v]["beschreibung"],
+                    tx("Art des Servers"), sorted(mcp.VORLAGEN),
+                    format_func=sprache.uebersetzt(lambda v: mcp.VORLAGEN[v]["beschreibung"]),
                     key=_feldschluessel(_pk, "vorlage"))
                 _v_name = st.text_input(
-                    "Name", key=_feldschluessel(_pk, "name"),
-                    help="Erscheint im Werkzeugnamen, den das Modell sieht. "
+                    tx("Name"), key=_feldschluessel(_pk, "name"),
+                    help=tx("Erscheint im Werkzeugnamen, den das Modell sieht. "
                          "Kurz und sprechend: 'postfach' für den "
                          "gemeinsamen Eintrag der persönlichen Postfächer, "
-                         "'info' für info@ und so weiter.")
+                         "'info' für info@ und so weiter."))
                 _v_ziel = st.text_input(
-                    "Adresse oder Befehl", key=_feldschluessel(_pk, "ziel"),
-                    help="Bei Exchange der Server, etwa `owa.firma.de` — "
+                    tx("Adresse oder Befehl"), key=_feldschluessel(_pk, "ziel"),
+                    help=tx("Bei Exchange der Server, etwa `owa.firma.de` — "
                          "den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. "
                          "Leer lassen sucht den Server selbst. Bei HTTP die "
                          "Adresse des Servers, bei einem lokalen Prozess "
                          "der Startbefehl. Bei der Websuche "
-                         "`http://websuche:8000/mcp`.")
+                         "`http://websuche:8000/mcp`."))
                 _v_pers = st.radio(
-                    "Postfach", ["persönlich", "Funktionspostfach"],
+                    tx("Postfach"), ["persönlich", "Funktionspostfach"],
                     key=_feldschluessel(_pk, "pers"),
-                    help="Ein persönliches Postfach antwortet nie "
-                         "selbständig — jede Nachricht wird vorgelegt.")
+                    help=tx("Ein persönliches Postfach antwortet nie "
+                         "selbständig — jede Nachricht wird vorgelegt."), format_func=sprache.uebersetzt())
                 # Nur bei Exchange gefuellt. Ohne diese Adresse oeffnet
                 # ein Funktionspostfach das Postfach dessen, der sich
                 # gerade anmeldet -- deshalb weist lege_an() es ab.
                 _v_adr = st.text_input(
-                    "Mailadresse des Postfachs (nur Exchange)",
+                    tx("Mailadresse des Postfachs (nur Exchange)"),
                     key=_feldschluessel(_pk, "adr"),
-                    placeholder="info@firma.de",
-                    help="Bei einem Funktionspostfach Pflicht. Bei "
+                    placeholder=tx("info@firma.de"),
+                    help=tx("Bei einem Funktionspostfach Pflicht. Bei "
                          "persönlichen Postfächern leer — dann gilt die "
                          "Adresse, mit der sich der jeweilige Nutzer "
                          "anmeldet, und ein Eintrag reicht für alle. "
-                         "Exchange entscheidet, wer hineindarf.")
-                st.caption("Nur für Funktionspostfächer:")
+                         "Exchange entscheidet, wer hineindarf."))
+                st.caption(tx("Nur für Funktionspostfächer:"))
                 _v_auto = st.checkbox(
-                    "darf selbständig antworten",
+                    tx("darf selbständig antworten"),
                     key=_feldschluessel(_pk, "auto"))
                 _v_hin = st.checkbox(
-                    "Hinweis unter automatische Antworten setzen",
+                    tx("Hinweis unter automatische Antworten setzen"),
                     value=True, key=_feldschluessel(_pk, "hin"))
                 _v_htext = st.text_input(
-                    "Text des Hinweises", key=_feldschluessel(_pk, "htext"),
+                    tx("Text des Hinweises"), key=_feldschluessel(_pk, "htext"),
                     placeholder=mcp.HINWEIS_VORGABE)
                 _pf_ab = st.form_submit_button(
-                    "Anlegen", use_container_width=True, disabled=_antwortet)
+                    tx("Anlegen"), use_container_width=True, disabled=_antwortet)
             if _pf_ab:
                 _pers = _v_pers == "persönlich"
                 _ok, _m = mcp.lege_an(
@@ -671,42 +673,42 @@ def zeichne(*, is_admin,
                     time.sleep(1)
                     st.rerun()
 
-        with st.expander("🔐 Verschlüsselung"):
-            st.caption(f"Zustand: **{geheim.beschreibung()}**")
+        with st.expander(tx("🔐 Verschlüsselung")):
+            st.caption(tx(f"Zustand: **{geheim.beschreibung()}**"))
             if not geheim.verfuegbar():
                 st.error(
-                    "Chats, Anhänge und Rückmeldungen liegen im Klartext. "
+                    tx("Chats, Anhänge und Rückmeldungen liegen im Klartext. "
                     "Ohne das Paket `cryptography` im Image kann nicht "
                     "verschlüsselt werden — `requirements.txt` prüfen und "
-                    "neu bauen.")
+                    "neu bauen."))
             else:
                 st.caption(
-                    "Verschlüsselt: Chatverläufe samt Titeln, angehängte "
+                    tx("Verschlüsselt: Chatverläufe samt Titeln, angehängte "
                     "Bilder, das Rückmeldungsprotokoll. Signiert: "
-                    "Benutzerdatei und Zugangstoken, je Eintrag einzeln.")
+                    "Benutzerdatei und Zugangstoken, je Eintrag einzeln."))
                 st.caption(
-                    "**Nicht** verschlüsselt: der Text der Dokumente in der "
+                    tx("**Nicht** verschlüsselt: der Text der Dokumente in der "
                     "Vektordatenbank. Er muss durchsuchbar bleiben und liegt "
                     "neben dem Vektor. Dafür ist die Verschlüsselung des "
-                    "Datenträgers zuständig.")
+                    "Datenträgers zuständig."))
 
             _offen_chats = chats.zaehle_klartext(st.session_state["username"])
             if _offen_chats:
-                st.warning(f"{_offen_chats} eigene Chatdateien noch im "
+                st.warning(tx(f"{_offen_chats} eigene Chatdateien noch im "
                            f"Klartext. Sie werden beim nächsten Öffnen "
-                           f"übernommen.")
+                           f"übernommen."))
 
             _offen_fb = feedback.klartextzeilen()
             if _offen_fb:
-                st.warning(f"Im Rückmeldungsprotokoll stehen {_offen_fb} "
-                           f"Zeilen noch im Klartext.")
-                if st.button("Protokoll neu verschlüsseln",
+                st.warning(tx(f"Im Rückmeldungsprotokoll stehen {_offen_fb} "
+                           f"Zeilen noch im Klartext."))
+                if st.button(tx("Protokoll neu verschlüsseln"),
                              use_container_width=True):
                     ok, anzahl = feedback.neu_verschluesseln()
                     if ok:
-                        st.success(f"{anzahl} Zeilen neu geschrieben.")
+                        st.success(tx(f"{anzahl} Zeilen neu geschrieben."))
                     else:
-                        st.error("Konnte nicht geschrieben werden.")
+                        st.error(tx("Konnte nicht geschrieben werden."))
                     time.sleep(1)
                     st.rerun()
 
@@ -714,11 +716,11 @@ def zeichne(*, is_admin,
             # die Verschluesselung schuetze auch gegen jemanden mit
             # Serverzugang, traegt eine falsche Auskunft weiter.
             st.caption(
-                "Der Schlüssel gehört der Installation, nicht dem Nutzer: "
+                tx("Der Schlüssel gehört der Installation, nicht dem Nutzer: "
                 "ein Passwortwechsel lässt die Chats lesbar, und wer "
                 "Dateizugriff auf `config/` hat, kann entschlüsseln. Das "
                 "schützt gegen eine abgeflossene Sicherung oder ein "
-                "kopiertes Volume, nicht gegen Serverzugang.")
+                "kopiertes Volume, nicht gegen Serverzugang."))
 
     # --- NOTZUGANG ---
     #
@@ -736,26 +738,26 @@ def zeichne(*, is_admin,
             _marke = f" — {len(_antraege)} zu bestätigen"
         elif _offen:
             _marke = f" — {len(_offen)} offen"
-        with st.expander("🔓 Notzugang" + _marke):
+        with st.expander(tx("🔓 Notzugang") + _marke):
             st.caption(
-                "Ein persönlicher Raum ist auch für Verwalter zu. Ist "
+                tx("Ein persönlicher Raum ist auch für Verwalter zu. Ist "
                 "sein Besitzer nicht mehr erreichbar, führt der Weg "
                 "hinein über **zwei Personen**: ein Verwalter beantragt, "
                 "ein Träger der Rolle *notzugang* bestätigt. Danach gilt "
                 f"er {notzugang.STUNDEN} Stunden. Beide Namen stehen im "
-                "Protokoll.")
-            st.caption(f"Stand: {notzugang.beschreibung()}")
+                "Protokoll."))
+            st.caption(tx(f"Stand: {notzugang.beschreibung()}"))
 
             # --- offene Zugaenge, fuer beide Seiten sichtbar ---
             if _offen:
-                st.markdown("**Gerade offen**")
+                st.markdown(tx("**Gerade offen**"))
                 for _z in _offen:
                     _rest = max(0, (_z["bis"] - int(time.time())) // 60)
                     st.warning(
-                        f"`{_z['raum']}` — {_z['von']}, bestätigt von "
-                        f"{_z['durch']}, noch {_rest // 60} h {_rest % 60} min"
+                        tx(f"`{_z['raum']}` — {_z['von']}, bestätigt von "
+                        f"{_z['durch']}, noch {_rest // 60} h {_rest % 60} min")
                         + (f"\n\n„{_z['grund']}\"" if _z.get("grund") else ""))
-                    if st.button("Jetzt schließen",
+                    if st.button(tx("Jetzt schließen"),
                                  key=f"nzs_{_z['raum']}_{_z['von']}",
                                  use_container_width=True):
                         _ok, _m = notzugang.schliesse(
@@ -769,16 +771,16 @@ def zeichne(*, is_admin,
             # --- bestaetigen ---
             if _kann_bestaetigen:
                 st.markdown("---")
-                st.markdown("**Anträge**")
+                st.markdown(tx("**Anträge**"))
                 if not _antraege:
-                    st.caption("Keine offenen Anträge.")
+                    st.caption(tx("Keine offenen Anträge."))
                 for _a in _antraege:
-                    st.info(f"**{_a['von']}** möchte in `{_a['raum']}`"
+                    st.info(tx(f"**{_a['von']}** möchte in `{_a['raum']}`")
                             + (f"\n\n„{_a['grund']}\"" if _a.get("grund")
                                else ""))
                     _s1, _s2 = st.columns(2)
                     with _s1:
-                        if st.button("Bestätigen",
+                        if st.button(tx("Bestätigen"),
                                      key=f"nzb_{_a['raum']}_{_a['von']}",
                                      use_container_width=True):
                             _ok, _m = notzugang.bestaetige(
@@ -789,7 +791,7 @@ def zeichne(*, is_admin,
                             time.sleep(1)
                             st.rerun()
                     with _s2:
-                        if st.button("Ablehnen",
+                        if st.button(tx("Ablehnen"),
                                      key=f"nza_{_a['raum']}_{_a['von']}",
                                      use_container_width=True):
                             _ok, _m = notzugang.lehne_ab(
@@ -803,30 +805,30 @@ def zeichne(*, is_admin,
             # --- beantragen ---
             if is_admin():
                 st.markdown("---")
-                st.markdown("**Zugang beantragen**")
+                st.markdown(tx("**Zugang beantragen**"))
                 if not notzugang.moeglich():
                     st.error(
-                        "Niemand trägt die Rolle *notzugang*. Ohne eine "
+                        tx("Niemand trägt die Rolle *notzugang*. Ohne eine "
                         "zweite Person lässt sich kein Notzugang "
                         "bestätigen — das ist der Sinn der Sache. Vergib "
                         "die Rolle unter *Benutzer verwalten*, und zwar "
-                        "an jemanden, der KEIN Verwalter ist.")
+                        "an jemanden, der KEIN Verwalter ist."))
                 else:
                     _fremde_privat = sorted(
                         k for k in raeume.liste() if raeume.ist_privat(k)
                         and k != raeume.privat_kennung(
                             st.session_state["username"]))
                     if not _fremde_privat:
-                        st.caption("Es gibt keine fremden persönlichen "
-                                   "Räume.")
+                        st.caption(tx("Es gibt keine fremden persönlichen "
+                                   "Räume."))
                     else:
-                        _ziel = st.selectbox("Raum", _fremde_privat,
-                                             key="nz_ziel")
+                        _ziel = st.selectbox(tx("Raum"), _fremde_privat,
+                                             key="nz_ziel", format_func=sprache.uebersetzt())
                         _grund = st.text_area(
-                            "Grund", key="nz_grund",
-                            help="Steht im Protokoll und ist das, was die "
-                                 "zweite Person beurteilt.")
-                        if st.button("Notzugang beantragen",
+                            tx("Grund"), key="nz_grund",
+                            help=tx("Steht im Protokoll und ist das, was die "
+                                 "zweite Person beurteilt."))
+                        if st.button(tx("Notzugang beantragen"),
                                      use_container_width=True):
                             _ok, _m = notzugang.beantrage(
                                 _ziel, st.session_state["username"], _grund)
@@ -837,12 +839,12 @@ def zeichne(*, is_admin,
                                 st.rerun()
 
             st.caption(
-                "**Die ehrliche Grenze:** das ist eine Kontrolle in der "
+                tx("**Die ehrliche Grenze:** das ist eine Kontrolle in der "
                 "Anwendung. Wer Serverzugang hat, liest die Sammlung eines "
                 "persönlichen Raums, ohne diese Freigabe zu beachten — die "
                 "Abschnitte liegen dort im Klartext, weil sie durchsuchbar "
                 "sein müssen. Der Notzugang schützt gegen den Verwalter, "
-                "der im Alltag klickt, nicht gegen den, der sich einloggt.")
+                "der im Alltag klickt, nicht gegen den, der sich einloggt."))
 
     # --- RAEUME VERWALTEN ---
     #
@@ -851,7 +853,7 @@ def zeichne(*, is_admin,
     # keine Sammlung, und eine leere anzulegen wuerde jede Suche mit einer
     # weiteren Abfrage belasten.
     if _vw:
-        with st.expander("🚪 Räume verwalten"):
+        with st.expander(tx("🚪 Räume verwalten")):
             _alle = raeume.liste()
             _bekannt = benutzer.namen()
             _mit_daten = {r: sml.count()
@@ -862,36 +864,36 @@ def zeichne(*, is_admin,
                 _wer = "alle" if "*" in _m else f"{len(_m)} Mitglieder"
                 if _e.get("gruppe"):
                     _wer += f" + Gruppe {_e['gruppe']}"
-                st.caption(f"**{_e.get('bezeichnung') or _k}** · "
+                st.caption(tx(f"**{_e.get('bezeichnung') or _k}** · "
                            f"{_wer} · "
                            f"{_mit_daten.get(_k, 0):,} Abschnitte "
-                           f"· `{_k}`")
+                           f"· `{_k}`"))
 
             st.markdown("---")
             _bearbeiten = st.selectbox(
-                "Bearbeiten", ["(neu anlegen)"] + sorted(_alle),
-                format_func=lambda n: (
+                tx("Bearbeiten"), ["(neu anlegen)"] + sorted(_alle),
+                format_func=sprache.uebersetzt(lambda n: (
                     n if n == "(neu anlegen)"
-                    else (_alle.get(n, {}).get("bezeichnung") or n)),
+                    else (_alle.get(n, {}).get("bezeichnung") or n))),
                 key="raum_bearbeiten")
 
             if _bearbeiten == "(neu anlegen)":
                 _name = st.text_input(
-                    "Bezeichnung", key=_feldschluessel("raum_neu", "name"))
+                    tx("Bezeichnung"), key=_feldschluessel("raum_neu", "name"))
                 _besch = st.text_input(
-                    "Beschreibung (optional)",
+                    tx("Beschreibung (optional)"),
                     key=_feldschluessel("raum_neu", "besch"))
                 _mitglieder = st.multiselect(
-                    "Mitglieder", _bekannt,
+                    tx("Mitglieder"), _bekannt,
                     key=_feldschluessel("raum_neu", "mit"),
-                    help="Nur diese Nutzer sehen die Dokumente des Raums.")
-                if st.button("Raum anlegen", use_container_width=True,
+                    help=tx("Nur diese Nutzer sehen die Dokumente des Raums."), format_func=sprache.uebersetzt())
+                if st.button(tx("Raum anlegen"), use_container_width=True,
                              disabled=not _name.strip()):
                     ok, meldung = raeume.anlegen(_name, _name, _besch,
                                                  _mitglieder)
                     if ok:
-                        st.success(f"Raum '{_name}' angelegt.")
-                        with st.spinner("Richte die Ablage ein ..."):
+                        st.success(tx(f"Raum '{_name}' angelegt."))
+                        with st.spinner(tx("Richte die Ablage ein ...")):
                             _b = owncloud.richte_raum_ein(meldung)
                         _oc_bericht(_b, "Der Raum")
                         refresh_document_index()
@@ -899,17 +901,17 @@ def zeichne(*, is_admin,
                         time.sleep(2 if _b.get("fehler") else 1)
                         st.rerun()
                     else:
-                        st.error(meldung)
+                        st.error(tx(meldung))
             else:
                 _e = _alle.get(_bearbeiten, {})
                 _m = _e.get("mitglieder") or []
                 if "*" in _m:
-                    st.caption("Dieser Raum ist für alle sichtbar. Eine "
-                               "Mitgliederliste gilt hier nicht.")
-                _name = st.text_input("Bezeichnung",
+                    st.caption(tx("Dieser Raum ist für alle sichtbar. Eine "
+                               "Mitgliederliste gilt hier nicht."))
+                _name = st.text_input(tx("Bezeichnung"),
                                       value=_e.get("bezeichnung") or "",
                                       key=f"raum_b_{_bearbeiten}")
-                _besch = st.text_input("Beschreibung",
+                _besch = st.text_input(tx("Beschreibung"),
                                        value=_e.get("beschreibung") or "",
                                        key=f"raum_d_{_bearbeiten}")
                 # Ein persoenlicher Raum gehoert genau einem Nutzer.
@@ -918,42 +920,42 @@ def zeichne(*, is_admin,
                 _ist_privat = raeume.ist_privat(_bearbeiten)
                 if _ist_privat:
                     st.caption(
-                        "Persönlicher Raum – nur sein Eigentümer sieht "
-                        "ihn. Eine Mitgliederliste gibt es hier nicht."
-                        + (" Löschbar als Ganzes unter *fremde "
-                           "persönliche Räume*." if raeume.PRIVAT_STRENG
+                        tx("Persönlicher Raum – nur sein Eigentümer sieht "
+                        "ihn. Eine Mitgliederliste gibt es hier nicht.")
+                        + (tx(" Löschbar als Ganzes unter *fremde "
+                           "persönliche Räume*.") if raeume.PRIVAT_STRENG
                            else ""))
                     _neu_m = [x for x in _m if x != "*"]
                 else:
                     _neu_m = st.multiselect(
-                        "Mitglieder",
+                        tx("Mitglieder"),
                         sorted(set(_bekannt) | {x for x in _m if x != "*"}),
                         default=[x for x in _m if x != "*"],
                         key=f"raum_m_{_bearbeiten}",
-                        disabled=("*" in _m))
+                        disabled=("*" in _m), format_func=sprache.uebersetzt())
                     # "Fuer alle sichtbar" ist eine Vorgabe, keine
                     # Notwendigkeit. Wo der Grundsatz "nur was man wissen
                     # muss" gilt, bekommt auch der allgemeine Raum eine
                     # Liste.
                     if "*" in _m:
-                        if st.button("Auf eine Mitgliederliste umstellen",
+                        if st.button(tx("Auf eine Mitgliederliste umstellen"),
                                      use_container_width=True,
                                      key=f"raum_zu_{_bearbeiten}",
-                                     help="Danach sehen nur noch die "
+                                     help=tx("Danach sehen nur noch die "
                                           "eingetragenen Nutzer diesen "
-                                          "Raum."):
+                                          "Raum.")):
                             raeume.mitglieder_setzen(
                                 _bearbeiten,
                                 [st.session_state["username"]])
-                            st.success("Umgestellt. Jetzt Mitglieder "
-                                       "eintragen.")
+                            st.success(tx("Umgestellt. Jetzt Mitglieder "
+                                       "eintragen."))
                             time.sleep(1)
                             st.rerun()
-                    elif st.button("Wieder für alle öffnen",
+                    elif st.button(tx("Wieder für alle öffnen"),
                                    use_container_width=True,
                                    key=f"raum_auf_{_bearbeiten}"):
                         raeume.fuer_alle_oeffnen(_bearbeiten)
-                        st.success("Für alle sichtbar.")
+                        st.success(tx("Für alle sichtbar."))
                         time.sleep(1)
                         st.rerun()
                 # --- MITGLIEDSCHAFT AUS OWNCLOUD ---
@@ -966,35 +968,35 @@ def zeichne(*, is_admin,
                 _web = _web_alt
                 if not _ist_privat:
                     _web = st.checkbox(
-                        "🌐 Websuche neben diesem Raum erlauben",
+                        tx("🌐 Websuche neben diesem Raum erlauben"),
                         value=_web_alt, key=f"raum_w_{_bearbeiten}",
-                        help="Erst dann kann ein Nutzer im Chat die "
+                        help=tx("Erst dann kann ein Nutzer im Chat die "
                              "Websuche einschalten, wenn er in diesem "
                              "Raum fragt. Der Suchbegriff entsteht mit "
                              "den Abschnitten des Raums im Kontext und "
-                             "geht an Suchmaschinen.")
+                             "geht an Suchmaschinen."))
                 _gruppe = st.text_input(
-                    "ownCloud-Gruppe (optional)", value=_gruppe_alt,
+                    tx("ownCloud-Gruppe (optional)"), value=_gruppe_alt,
                     key=f"raum_g_{_bearbeiten}",
-                    help="Ihre Mitglieder kommen zu den oben "
+                    help=tx("Ihre Mitglieder kommen zu den oben "
                          "eingetragenen hinzu. Leer lassen, um die "
-                         "Mitgliedschaft nur hier zu pflegen.")
+                         "Mitgliedschaft nur hier zu pflegen."))
                 if _gruppe.strip():
                     _von_hand, _aus_gruppe = raeume.mitglieder_gesamt(
                         _bearbeiten)
                     _gueltig, _alter, _grund = raeume.stand_gueltig()
                     if not _gueltig:
                         st.warning(
-                            f"Der Gruppenstand gilt nicht ({_grund}) -- "
+                            tx(f"Der Gruppenstand gilt nicht ({_grund}) -- "
                             f"die Mitglieder dieser Gruppe kommen gerade "
                             f"NICHT herein. Der Abgleich laeuft unter "
-                            f"*Nachtragen und neu einlesen*.")
+                            f"*Nachtragen und neu einlesen*."))
                     else:
                         st.caption(
-                            "Aus der Gruppe: "
+                            tx("Aus der Gruppe: ")
                             + (", ".join(_aus_gruppe) if _aus_gruppe
-                               else "niemand")
-                            + (f" -- Stand {_alter:.0f} min alt"
+                               else tx("niemand"))
+                            + (tx(f" -- Stand {_alter:.0f} min alt")
                                if _alter is not None else ""))
                         _unbekannt = [x for x in _aus_gruppe
                                       if x not in _bekannt]
@@ -1002,8 +1004,8 @@ def zeichne(*, is_admin,
                             # Der Fall, in dem alles richtig aussieht und
                             # trotzdem niemand hereinkommt.
                             st.warning(
-                                f"Nicht als Benutzer angelegt und damit "
-                                f"wirkungslos: {', '.join(_unbekannt)}")
+                                tx(f"Nicht als Benutzer angelegt und damit "
+                                f"wirkungslos: {', '.join(_unbekannt)}"))
 
                 # --- LISTENORDNER ---
                 #
@@ -1014,15 +1016,15 @@ def zeichne(*, is_admin,
                 # fuer diesen Raum entsteht nie.
                 _lq_alt = listenquellen.pfad_von(_bearbeiten)
                 _lq = st.text_input(
-                    "Listenordner (xlsx, csv)", value=_lq_alt,
+                    tx("Listenordner (xlsx, csv)"), value=_lq_alt,
                     key=f"raum_lq_{_bearbeiten}",
-                    help="Vollstaendiger Pfad, wie er im Container gilt "
+                    help=tx("Vollstaendiger Pfad, wie er im Container gilt "
                          "-- etwa /mnt/abteilungen/einkauf/listen. Die "
                          "Dateien bleiben, wo sie sind; niemand muss sie "
                          "ein zweites Mal ablegen. Leer = keine Listen "
-                         "fuer diesen Raum.")
+                         "fuer diesen Raum."))
                 if listenquellen.WURZELN:
-                    st.caption("Erlaubt unterhalb von: "
+                    st.caption(tx("Erlaubt unterhalb von: ")
                                + ", ".join(f"`{w}`"
                                            for w in listenquellen.WURZELN))
 
@@ -1032,30 +1034,30 @@ def zeichne(*, is_admin,
                 # kommt auch das Schema mit diesen Rechten, und das
                 # Sprachmodell sieht nur Tabellen, die es lesen darf.
                 _sqz = sqlquellen.zugang(_bearbeiten) or {}
-                with st.expander("Datenbankzugang dieses Raums",
+                with st.expander(tx("Datenbankzugang dieses Raums"),
                                  expanded=False):
                     st.caption(
-                        "Ein Konto mit genau den Rechten, die dieser "
+                        tx("Ein Konto mit genau den Rechten, die dieser "
                         "Raum haben soll -- idealerweise nur lesend. "
                         "Leer = der Raum benutzt den Zugang aus der "
-                        "Umgebung.")
-                    _sq_b = st.text_input("Benutzer",
+                        "Umgebung."))
+                    _sq_b = st.text_input(tx("Benutzer"),
                                           value=_sqz.get("benutzer", ""),
                                           key=f"sqb_{_bearbeiten}")
                     _sq_p = st.text_input(
-                        "Passwort", value=_sqz.get("passwort", ""),
+                        tx("Passwort"), value=_sqz.get("passwort", ""),
                         type="password", key=f"sqp_{_bearbeiten}")
                     _sq_d = st.text_input(
-                        "Datenbank (leer = Vorgabe)",
+                        tx("Datenbank (leer = Vorgabe)"),
                         value=_sqz.get("datenbank", ""),
                         key=f"sqd_{_bearbeiten}")
                     st.caption(
-                        "Das Passwort wird mit dem Schluessel dieses "
+                        tx("Das Passwort wird mit dem Schluessel dieses "
                         "Raums verschluesselt abgelegt. Ohne "
                         "Installationsschluessel wird es gar nicht "
-                        "gespeichert.")
+                        "gespeichert."))
 
-                if st.button("Speichern", use_container_width=True,
+                if st.button(tx("Speichern"), use_container_width=True,
                              key=f"raum_s_{_bearbeiten}"):
                     if (_sq_b != _sqz.get("benutzer", "")
                             or _sq_p != _sqz.get("passwort", "")
@@ -1073,12 +1075,12 @@ def zeichne(*, is_admin,
                             benutzer=st.session_state.get("username", "?"),
                             ist_verwalter=True)
                         if not _ok_lq:
-                            st.error(_m_lq)
+                            st.error(tx(_m_lq))
                         else:
-                            with st.spinner("Lese die Listen ein ..."):
+                            with st.spinner(tx("Lese die Listen ein ...")):
                                 _k, _f = tabellen.baue_katalog()
-                            st.caption(f"{len(_k['eintraege'])} Blaetter "
-                                       f"im Katalog.")
+                            st.caption(tx(f"{len(_k['eintraege'])} Blaetter "
+                                       f"im Katalog."))
                     raeume.beschriften(_bearbeiten, _name, _besch)
                     if "*" not in _m and not _ist_privat:
                         raeume.mitglieder_setzen(_bearbeiten, _neu_m)
@@ -1086,14 +1088,14 @@ def zeichne(*, is_admin,
                         raeume.gruppe_setzen(_bearbeiten, _gruppe)
                     if _web != _web_alt:
                         raeume.websuche_setzen(_bearbeiten, _web)
-                    st.success("Gespeichert.")
+                    st.success(tx("Gespeichert."))
                     # Die Freigabe zieht mit -- SETZEN, nicht ergaenzen.
                     # Ein Mitglied zu entfernen und die Freigabe stehen zu
                     # lassen waere die haeufigste Art, eine
                     # Rechteaenderung wirkungslos zu machen: die Suche
                     # fragt den Raum nicht mehr, die Dateien liegen aber
                     # weiter im ownCloud des Ausgeschiedenen.
-                    with st.spinner("Ziehe die Freigaben nach ..."):
+                    with st.spinner(tx("Ziehe die Freigaben nach ...")):
                         _b = owncloud.richte_raum_ein(_bearbeiten)
                     _oc_bericht(_b, "Der Raum")
                     refresh_document_index()
@@ -1108,12 +1110,12 @@ def zeichne(*, is_admin,
                     st.markdown("---")
                     _sp1, _sp2 = st.columns(2)
                     with _sp1:
-                        if st.button("Raum entfernen",
+                        if st.button(tx("Raum entfernen"),
                                      use_container_width=True,
                                      key=f"raum_e_{_bearbeiten}",
-                                     help="Nimmt den Raum aus der "
+                                     help=tx("Nimmt den Raum aus der "
                                           "Verwaltung. Die Dokumente "
-                                          "bleiben erhalten."):
+                                          "bleiben erhalten.")):
                             ok, meldung = raeume.entfernen(_bearbeiten)
                             (st.success if ok else st.error)(meldung)
                             refresh_document_index()
@@ -1130,7 +1132,7 @@ def zeichne(*, is_admin,
                         # traegt man zur staerkeren hinueber.
                         _sicher = _loeschfreigabe(
                             _bearbeiten, _zahl, f"raum_x_{_bearbeiten}")
-                        if st.button("Daten löschen",
+                        if st.button(tx("Daten löschen"),
                                      use_container_width=True,
                                      disabled=not _sicher,
                                      key=f"raum_l_{_bearbeiten}"):
@@ -1144,13 +1146,13 @@ def zeichne(*, is_admin,
                             _n_oc, _f_oc = owncloud.leere_raumordner(
                                 _bearbeiten)
                             if _n_oc:
-                                st.info(f"{_n_oc} Eintraege aus dem "
-                                        f"ownCloud-Ordner in den Papierkorb.")
+                                st.info(tx(f"{_n_oc} Eintraege aus dem "
+                                        f"ownCloud-Ordner in den Papierkorb."))
                             if _f_oc:
-                                st.warning("In ownCloud nicht geloescht: "
+                                st.warning(tx("In ownCloud nicht geloescht: ")
                                            + ", ".join(_f_oc[:5])
-                                           + " -- der naechste Abgleich holt "
-                                             "das zurueck.")
+                                           + tx(" -- der naechste Abgleich holt "
+                                             "das zurueck."))
                             refresh_document_index()
                             time.sleep(1)
                             st.rerun()
@@ -1167,12 +1169,12 @@ def zeichne(*, is_admin,
             if _alt_zahl:
                 st.markdown("---")
                 st.warning(
-                    f"In der alten, gemeinsamen Sammlung liegen noch "
+                    tx(f"In der alten, gemeinsamen Sammlung liegen noch "
                     f"{_alt_zahl:,} Abschnitte. Sie werden nicht mehr "
                     f"durchsucht — die Suche fragt nur Raumsammlungen. "
                     f"Die Dokumente in den gewünschten Raum legen und neu "
                     f"einlesen; die alte Sammlung lässt sich danach unter "
-                    f"*Räume verwalten* leeren.")
+                    f"*Räume verwalten* leeren."))
 
     # --- OWNCLOUD ---
     #
@@ -1181,15 +1183,15 @@ def zeichne(*, is_admin,
     # Ordner sind die von ownCloud -- die Mitgliedschaft des Raums
     # entscheidet dann, wer die daraus gebauten Abschnitte sieht.
     if _vw:
-        st.caption("**Betrieb**")
+        st.caption(tx("**Betrieb**"))
     if _vw:
-        with st.expander("☁️ ownCloud"):
+        with st.expander(tx("☁️ ownCloud")):
             _ok, _meldung = _owncloud_stand()
             (st.success if _ok else st.warning)(_meldung)
 
             if not owncloud.eingerichtet():
                 st.caption(
-                    "Einzurichten in der `.env`: `OWNCLOUD_URL` (die Wurzel, "
+                    tx("Einzurichten in der `.env`: `OWNCLOUD_URL` (die Wurzel, "
                     "etwa `https://cloud.firma.de`), `OWNCLOUD_USER` und "
                     "`OWNCLOUD_PASSWORT`. Bei aktiver Zwei-Faktor-Anmeldung "
                     "braucht es ein **App-Passwort**, nicht das "
@@ -1200,7 +1202,7 @@ def zeichne(*, is_admin,
                     "ownCloud **Verwalterrechte**. Das ist viel Macht in "
                     "einem Dienstkonto; wer sie nicht geben will, richtet "
                     "Konten und Ordner dort von Hand ein und trägt hier "
-                    "nur die Zuordnung ein.")
+                    "nur die Zuordnung ein."))
             else:
                 _zu = owncloud.zuordnung()
                 _wirksam = owncloud.zuordnung_wirksam()
@@ -1211,46 +1213,46 @@ def zeichne(*, is_admin,
                               if _b else "noch nicht abgeglichen")
                     st.caption(f"**{raeume.bezeichnung(_r)}** "
                                f"· `{_o}`"
-                               + ("" if _r in _zu else " *(Standard)*")
+                               + ("" if _r in _zu else tx(" *(Standard)*"))
                                + f" · {_stand}")
                 st.caption(
-                    "Ohne eigenen Eintrag gilt der Standardbaum unter "
+                    tx("Ohne eigenen Eintrag gilt der Standardbaum unter "
                     f"`/{owncloud.WURZEL}/`. Eine Zuordnung von Hand "
                     "geht vor — für Bestände, die seit Jahren woanders "
-                    "liegen.")
+                    "liegen."))
 
                 st.markdown("---")
                 _raum_wahl = st.selectbox(
-                    "Raum", sorted(raeume.liste()),
-                    format_func=raeume.bezeichnung, key="oc_raum")
+                    tx("Raum"), sorted(raeume.liste()),
+                    format_func=sprache.uebersetzt(raeume.bezeichnung), key="oc_raum")
                 _ordner = st.text_input(
-                    "Ordner in ownCloud", value=_zu.get(_raum_wahl, ""),
-                    placeholder="/Abteilungen/Einkauf/Handbücher",
+                    tx("Ordner in ownCloud"), value=_zu.get(_raum_wahl, ""),
+                    placeholder=tx("/Abteilungen/Einkauf/Handbücher"),
                     key=f"oc_ordner_{_raum_wahl}",
-                    help="Pfad relativ zum Wurzelverzeichnis des "
+                    help=tx("Pfad relativ zum Wurzelverzeichnis des "
                          "angemeldeten Kontos. Unterordner werden zu "
-                         "Sachgebieten.")
+                         "Sachgebieten."))
                 _sp1, _sp2 = st.columns(2)
                 with _sp1:
-                    if st.button("Zuordnung speichern",
+                    if st.button(tx("Zuordnung speichern"),
                                  use_container_width=True,
                                  disabled=not _ordner.strip()):
                         _zu[_raum_wahl] = _ordner.strip()
                         owncloud.setze_zuordnung(_zu)
-                        st.success("Gespeichert.")
+                        st.success(tx("Gespeichert."))
                         time.sleep(1)
                         st.rerun()
                 with _sp2:
-                    if st.button("Zuordnung entfernen",
+                    if st.button(tx("Zuordnung entfernen"),
                                  use_container_width=True,
                                  disabled=_raum_wahl not in _zu,
-                                 help="Der Raum wird nicht mehr "
+                                 help=tx("Der Raum wird nicht mehr "
                                       "abgeglichen. Bereits geholte "
                                       "Dateien und ihre Abschnitte "
-                                      "bleiben."):
+                                      "bleiben.")):
                         _zu.pop(_raum_wahl, None)
                         owncloud.setze_zuordnung(_zu)
-                        st.success("Entfernt.")
+                        st.success(tx("Entfernt."))
                         time.sleep(1)
                         st.rerun()
 
@@ -1263,46 +1265,46 @@ def zeichne(*, is_admin,
             # Stand gebracht, nicht ergaenzt.
             if owncloud.eingerichtet():
                 st.markdown("---")
-                st.markdown("**Konten**")
+                st.markdown(tx("**Konten**"))
                 _verw = owncloud.verwaltete_konten()
                 _offen_k = [n for n in benutzer.namen()
                             if n not in _verw and not owncloud.geschuetzt(n)]
                 st.caption(
-                    f"LocaNoto verwaltet {len(_verw)} ownCloud-Konten: es "
+                    tx(f"LocaNoto verwaltet {len(_verw)} ownCloud-Konten: es "
                     f"löscht sie mit dem Benutzer und ändert ihr Passwort "
                     f"mit. Konten, die es in ownCloud schon vorher gab, "
                     f"bleiben unangetastet, bis sie hier übernommen werden. "
-                    f"Das Dienst- und Verwalterkonto ist immer ausgenommen.")
+                    f"Das Dienst- und Verwalterkonto ist immer ausgenommen."))
                 if _offen_k:
-                    st.caption("Nicht übernommen: "
+                    st.caption(tx("Nicht übernommen: ")
                                + ", ".join(_offen_k[:20])
                                + (" …" if len(_offen_k) > 20 else ""))
-                    if st.button("Bestehende Konten übernehmen",
+                    if st.button(tx("Bestehende Konten übernehmen"),
                                  use_container_width=True,
-                                 help="Nur, wenn die ownCloud-Konten dieser "
+                                 help=tx("Nur, wenn die ownCloud-Konten dieser "
                                       "Benutzer LocaNoto gehören und nicht "
                                       "auch anderweitig im Haus genutzt "
-                                      "werden."):
-                        with st.spinner("Frage ownCloud ab ..."):
+                                      "werden.")):
+                        with st.spinner(tx("Frage ownCloud ab ...")):
                             _dazu, _aus = owncloud.konten_uebernehmen(_offen_k)
-                        st.success(f"{len(_dazu)} Konten übernommen.")
+                        st.success(tx(f"{len(_dazu)} Konten übernommen."))
                         if _aus:
-                            st.caption("Nicht übernommen: " + ", ".join(_aus))
+                            st.caption(tx("Nicht übernommen: ") + ", ".join(_aus))
                         time.sleep(2)
                         st.rerun()
 
                 st.markdown("---")
-                st.markdown("**Ablage einrichten**")
+                st.markdown(tx("**Ablage einrichten**"))
                 st.caption(
-                    f"Legt unter `/{owncloud.WURZEL}/` je Raum einen Ordner "
+                    tx(f"Legt unter `/{owncloud.WURZEL}/` je Raum einen Ordner "
                     f"an und teilt ihn mit seinen Mitgliedern — den "
                     f"gemeinsamen mit allen (nur lesend, schreiben dürfen "
                     f"Verwalter), einen persönlichen nur mit seinem "
-                    f"Besitzer. Wiederholbar: was schon steht, bleibt.")
-                if st.button("Für alle Räume einrichten",
+                    f"Besitzer. Wiederholbar: was schon steht, bleibt."))
+                if st.button(tx("Für alle Räume einrichten"),
                              use_container_width=True):
                     _gut, _schlecht = 0, []
-                    with st.spinner("Richte ein ..."):
+                    with st.spinner(tx("Richte ein ...")):
                         for _r in sorted(raeume.liste()):
                             _b = owncloud.richte_raum_ein(_r)
                             if _b.get("fehler"):
@@ -1310,18 +1312,18 @@ def zeichne(*, is_admin,
                                     f"{_r}: {_b['fehler'][0]}")
                             else:
                                 _gut += 1
-                    st.success(f"{_gut} Räume eingerichtet.")
+                    st.success(tx(f"{_gut} Räume eingerichtet."))
                     for _f in _schlecht[:10]:
-                        st.warning(_f)
+                        st.warning(tx(_f))
                     _leeren()
 
                 _wer = st.selectbox(
-                    "Einzelnen Zugang nachziehen",
-                    ["-"] + benutzer.namen(), key="oc_nutzer")
+                    tx("Einzelnen Zugang nachziehen"),
+                    ["-"] + benutzer.namen(), key="oc_nutzer", format_func=sprache.uebersetzt())
                 if _wer != "-" and st.button(
-                        "Persönliche Ablage einrichten",
+                        tx("Persönliche Ablage einrichten"),
                         use_container_width=True):
-                    with st.spinner("Richte ein ..."):
+                    with st.spinner(tx("Richte ein ...")):
                         # Ohne Passwort: das Konto gibt es entweder schon,
                         # oder es wird beim Anlegen erzeugt. Hier ein
                         # Passwort zu erfinden waere ein zweites Geheimnis
@@ -1329,7 +1331,7 @@ def zeichne(*, is_admin,
                         _b = owncloud.richte_nutzer_ein(_wer)
                     _oc_bericht(_b, "Der Zugang")
                     if not _b.get("fehler"):
-                        st.success(f"Ablage für '{_wer}' steht.")
+                        st.success(tx(f"Ablage für '{_wer}' steht."))
 
                 # --- PRUEFEN ---
                 #
@@ -1340,14 +1342,14 @@ def zeichne(*, is_admin,
                 # die Abschnitte weg.
                 if _raum_wahl in _zu:
                     st.markdown("---")
-                    if st.button("Änderungen prüfen",
+                    if st.button(tx("Änderungen prüfen"),
                                  use_container_width=True,
                                  key=f"oc_pruef_{_raum_wahl}"):
                         try:
-                            with st.spinner("Frage ownCloud ab ..."):
+                            with st.spinner(tx("Frage ownCloud ab ...")):
                                 _neu, _geae, _entf, _unv = owncloud.plane(
                                     _raum_wahl)
-                            st.caption(f"unverändert: {len(_unv)}")
+                            st.caption(tx(f"unverändert: {len(_unv)}"))
                             for _titel, _liste in (("neu", _neu),
                                                    ("geändert", _geae),
                                                    ("entfallen", _entf)):
@@ -1357,9 +1359,9 @@ def zeichne(*, is_admin,
                                     st.code(chr(10).join(_liste[:30]),
                                             language="text")
                             if not (_neu or _geae or _entf):
-                                st.info("Nichts zu tun.")
+                                st.info(tx("Nichts zu tun."))
                         except Exception as e:
-                            st.error(f"Abfrage fehlgeschlagen: {e}")
+                            st.error(tx(f"Abfrage fehlgeschlagen: {e}"))
 
                 # --- MITGLIEDSCHAFTEN ---
                 st.markdown("---")
@@ -1368,49 +1370,49 @@ def zeichne(*, is_admin,
                 if _gz:
                     for _r, _g in sorted(_gz.items()):
                         _vh, _ag = raeume.mitglieder_gesamt(_r)
-                        st.caption(f"**{raeume.bezeichnung(_r)}** "
+                        st.caption(tx(f"**{raeume.bezeichnung(_r)}** "
                                    f"· Gruppe `{_g}` · "
                                    f"{len(_ag)} aus der Gruppe, "
-                                   f"{len(_vh)} von Hand")
+                                   f"{len(_vh)} von Hand"))
                     if _gueltig:
-                        st.caption("Gruppenstand: "
-                                   + (f"{_alter:.0f} Minuten alt"
+                        st.caption(tx("Gruppenstand: ")
+                                   + (tx(f"{_alter:.0f} Minuten alt")
                                       if _alter is not None
-                                      else "unbekannt"))
+                                      else tx("unbekannt")))
                     else:
-                        st.warning(f"Gruppenstand gilt nicht: {_grund}. "
+                        st.warning(tx(f"Gruppenstand gilt nicht: {_grund}. "
                                    f"Bis zum nächsten Abgleich wirken "
                                    f"nur die von Hand eingetragenen "
-                                   f"Mitglieder.")
-                    if st.button("Mitgliedschaften jetzt nachziehen",
+                                   f"Mitglieder."))
+                    if st.button(tx("Mitgliedschaften jetzt nachziehen"),
                                  use_container_width=True):
-                        with st.spinner("Frage ownCloud ab ..."):
+                        with st.spinner(tx("Frage ownCloud ab ...")):
                             _b = owncloud.gruppen_abgleich()
                         (st.success if _b["geschrieben"]
                          else st.warning)(_b["meldung"])
                         for _f in _b["fehler"]:
-                            st.error(f"Gruppe '{_f['gruppe']}': "
-                                     f"{_f['grund']}")
+                            st.error(tx(f"Gruppe '{_f['gruppe']}': "
+                                     f"{_f['grund']}"))
                         time.sleep(1)
                         st.rerun()
                 else:
                     st.caption(
-                        "Noch keine Raumgruppe eingetragen. Sie gehört "
+                        tx("Noch keine Raumgruppe eingetragen. Sie gehört "
                         "in den Raum selbst — unter *Räume "
                         "verwalten*, Feld ownCloud-Gruppe. Die "
                         "Gruppenabfrage braucht in ownCloud ein Konto mit "
                         "Verwalterrechten (`OWNCLOUD_ADMIN_USER`); "
-                        "für die Dateien genügt Lesen.")
+                        "für die Dateien genügt Lesen."))
 
                 st.caption(
-                    "Der eigentliche Abgleich läuft abgekoppelt — unter "
+                    tx("Der eigentliche Abgleich läuft abgekoppelt — unter "
                     "*Nachtragen und neu einlesen*, Eintrag „Aus ownCloud "
                     "abgleichen“. Er holt neue und geänderte Dateien, "
                     "entfernt die Abschnitte entfallener und liest "
                     "anschließend ein. Für den Dauerbetrieb gehört das in "
                     "einen Zeitplan auf dem Server: "
                     "`docker compose exec -T locanoto_bot python "
-                    "abgleich.py`")
+                    "abgleich.py`"))
 
     # --- SICHERUNG DER VEKTORDATENBANK ---
     #
@@ -1423,20 +1425,20 @@ def zeichne(*, is_admin,
     # Kopie mitten in einem Schreibvorgang ist ein Abzug, der sich nicht
     # zurueckholen laesst -- und das zeigt sich erst beim Zurueckholen.
     if _vw:
-        with st.expander("🗃️ Sicherung der Vektordatenbank"):
+        with st.expander(tx("🗃️ Sicherung der Vektordatenbank")):
             _abzuege = _verwaltungsstand()["abzuege"]
-            st.caption(f"Ablage: `{sicherung.ORDNER}`"
-                       + (f" · es werden "
-                          f"{sicherung.BEHALTEN} Abzüge behalten"
+            st.caption(tx(f"Ablage: `{sicherung.ORDNER}`")
+                       + (tx(f" · es werden "
+                          f"{sicherung.BEHALTEN} Abzüge behalten")
                           if sicherung.BEHALTEN else
-                          " · alle Abzüge werden behalten"))
+                          tx(" · alle Abzüge werden behalten")))
 
             if not _abzuege:
                 st.warning(
-                    "Noch kein Abzug. Ohne einen wäre der Verlust der "
+                    tx("Noch kein Abzug. Ohne einen wäre der Verlust der "
                     "Vektordatenbank ein vollständiges Neueinlesen — "
                     "Stunden Modellzeit für ein Ergebnis, das schon "
-                    "vorlag.")
+                    "vorlag."))
             else:
                 st.code(chr(10).join(
                     f"{_n:<22} {_gr / 1e6:9.1f} MB  "
@@ -1446,20 +1448,20 @@ def zeichne(*, is_admin,
                     for _n, _p, _gr, _st in _abzuege), language="text")
                 if any(_unvollstaendig(_st) for _n, _p, _gr, _st in _abzuege):
                     st.warning(
-                        "Bei einem Abzug ließen sich nicht alle Räume "
+                        tx("Bei einem Abzug ließen sich nicht alle Räume "
                         "lesen. Er ist von außen nicht von einem "
                         "vollständigen zu unterscheiden — deshalb steht es "
                         "hier. Ein neuer Abzug behebt es; der letzte "
-                        "vollständige wird nicht weggeräumt.")
+                        "vollständige wird nicht weggeräumt."))
 
             _laeuft = hintergrund.laeuft("sicherung")
             if _laeuft:
-                st.caption("Ein Abzug läuft gerade.")
+                st.caption(tx("Ein Abzug läuft gerade."))
                 st.code(hintergrund.protokoll("sicherung", 6) or "...",
                         language="text")
-            elif st.button("Jetzt sichern", use_container_width=True,
-                           help="Läuft abgekoppelt weiter, auch wenn die "
-                                "Oberfläche neu lädt."):
+            elif st.button(tx("Jetzt sichern"), use_container_width=True,
+                           help=tx("Läuft abgekoppelt weiter, auch wenn die "
+                                "Oberfläche neu lädt.")):
                 _ok, _meldung = hintergrund.starte("sicherung")
                 (st.success if _ok else st.error)(_meldung)
                 time.sleep(1)
@@ -1473,49 +1475,49 @@ def zeichne(*, is_admin,
             if _abzuege:
                 st.markdown("---")
                 _wahl = st.selectbox(
-                    "Abzug einspielen", [_n for _n, _p, _g, _s in _abzuege],
-                    key="sich_wahl")
+                    tx("Abzug einspielen"), [_n for _n, _p, _g, _s in _abzuege],
+                    key="sich_wahl", format_func=sprache.uebersetzt())
                 _st = dict(_abzuege[[_n for _n, _p, _g, _s
                                      in _abzuege].index(_wahl)][3])
                 st.caption(
-                    f"{_st.get('abschnitte', '?')} Abschnitte in "
+                    tx(f"{_st.get('abschnitte', '?')} Abschnitte in ")
                     + ", ".join(sorted((_st.get('raeume') or {}))))
                 if _unvollstaendig(_st):
                     _fehlten = ", ".join(
                         _f.get("raum", "?") for _f in (_st.get("fehler") or [])
                     ) or "unbekannt"
                     st.error(
-                        f"Dieser Abzug ist unvollständig — beim Sichern "
+                        tx(f"Dieser Abzug ist unvollständig — beim Sichern "
                         f"ließen sich diese Räume nicht lesen: {_fehlten}. "
                         f"Eingespielt wird nur, was er hat. Gibt es einen "
-                        f"neueren vollständigen, nimm den.")
+                        f"neueren vollständigen, nimm den."))
                 _sicher = st.checkbox(
-                    "Vorhandene Abschnitte dürfen überschrieben werden",
+                    tx("Vorhandene Abschnitte dürfen überschrieben werden"),
                     key="sich_ok")
-                if st.button("Einspielen", use_container_width=True,
+                if st.button(tx("Einspielen"), use_container_width=True,
                              disabled=not _sicher):
-                    with st.spinner("Spiele ein — das dauert länger als "
+                    with st.spinner(tx("Spiele ein — das dauert länger als "
                                     "das Sichern, weil der Suchindex neu "
-                                    "gebaut wird ..."):
+                                    "gebaut wird ...")):
                         _b = sicherung.hole_zurueck(_wahl)
                     for _r, _n2 in sorted(_b["raeume"].items()):
-                        st.caption(f"{_r}: {_n2} Abschnitte")
+                        st.caption(tx(f"{_r}: {_n2} Abschnitte"))
                     for _f in _b["fehler"]:
-                        st.error(str(_f))
+                        st.error(tx(str(_f)))
                     if not _b["fehler"]:
-                        st.success("Eingespielt. Der Stichwortindex baut "
-                                   "sich beim nächsten Start neu auf.")
+                        st.success(tx("Eingespielt. Der Stichwortindex baut "
+                                   "sich beim nächsten Start neu auf."))
                     refresh_document_index()
 
             st.caption(
-                "Der Abzug enthält Abschnitte, Metadaten **und die "
+                tx("Der Abzug enthält Abschnitte, Metadaten **und die "
                 "Vektoren** — ein Einspielen braucht kein Modell und "
                 "keinen Endpunkt. Gemessen: 20.500 Abschnitte in 2,6 s "
                 "(112 MB), Einspielen 29 s. Hochgerechnet auf 324.000 "
                 "Abschnitte: rund 40 s und 1,8 GB, Einspielen etwa acht "
                 "Minuten. Der Schlüssel geht **nicht** mit in den Abzug — "
                 "er gehört in eine andere Aufbewahrung als die Daten, die "
-                "er lesbar macht.")
+                "er lesbar macht."))
 
     # --- SICHERHEITSLAGE ---
     #
@@ -1525,21 +1527,21 @@ def zeichne(*, is_admin,
     # "kaputt", sondern "hier ist die Zusage schwaecher, als sie
     # aussieht".
     if _vw:
-        st.caption("**Lage**")
+        st.caption(tx("**Lage**"))
     if _vw:
         _lage = sicherheit.lage()
         _offen = [n for n, _ok, _t in _lage if not _ok]
-        with st.expander(f"\U0001f512 Sicherheitslage "
-                         f"({len(_lage) - len(_offen)}/{len(_lage)})"):
+        with st.expander(tx(f"\U0001f512 Sicherheitslage "
+                         f"({len(_lage) - len(_offen)}/{len(_lage)})")):
             for _name, _ok, _text in _lage:
                 st.markdown(("✅ " if _ok else "⚠️ ") + f"**{_name}**")
-                st.caption(_text)
+                st.caption(tx(_text))
             st.caption(
-                "Die letzten drei Punkte lassen sich nicht schließen, "
+                tx("Die letzten drei Punkte lassen sich nicht schließen, "
                 "sondern nur eingrenzen: Vektoren müssen vergleichbar "
                 "bleiben, und wer den laufenden Prozess hat, hat den "
                 "Klartext. Dagegen hilft ein verschlüsselter Datenträger "
-                "und wenige Menschen mit Serverzugang.")
+                "und wenige Menschen mit Serverzugang."))
 
     # --- SPEICHERORTE ---
     #
@@ -1547,11 +1549,11 @@ def zeichne(*, is_admin,
     # der Datenhaltung ist "schau in die docker-compose.yaml und in fuenf
     # Module" keine Antwort.
     if _vw:
-        with st.expander("💾 Speicherorte"):
+        with st.expander(tx("💾 Speicherorte")):
             for _name, _pfad, _gesetzt in paths.wurzeln():
                 st.caption(f"**{_name}** · `{_pfad}` · "
-                           + ("von außen gesetzt" if _gesetzt
-                              else "Standard neben dem Code"))
+                           + (tx("von außen gesetzt") if _gesetzt
+                              else tx("Standard neben dem Code")))
 
             st.markdown("---")
             # BEI EINGERICHTETEM OWNCLOUD IST DAS KEINE QUELLE.
@@ -1584,13 +1586,13 @@ def zeichne(*, is_admin,
 
             if _mit_cloud:
                 st.caption(
-                    "Der Abgleich legt unter `dokumente` ab, was in "
+                    tx("Der Abgleich legt unter `dokumente` ab, was in "
                     "ownCloud steht — der Ingest liest nur von der "
                     "Platte, nie über das Netz. Dateien hier sind also "
                     "kein alter Ablageweg, sondern die Arbeitskopie. "
                     "Was von Hand hierher gelegt wird, bleibt liegen und "
                     "wird eingelesen, taucht in ownCloud aber nie auf — "
-                    "und ist damit für alle anderen unsichtbar.")
+                    "und ist damit für alle anderen unsichtbar."))
 
             _modus = _verwaltungsstand()["journal"]
             if _modus.lower() != "wal":
@@ -1599,28 +1601,28 @@ def zeichne(*, is_admin,
                 # bleibt beim alten Modus und sagt nichts. Genau das
                 # passiert auf einem Netzlaufwerk.
                 st.error(
-                    f"Der Stichwortindex läuft im Journalmodus `{_modus}` "
+                    tx(f"Der Stichwortindex läuft im Journalmodus `{_modus}` "
                     f"statt `wal`. Das heißt fast immer: er liegt auf "
                     f"einem Netzlaufwerk, wo SQLite den WAL-Betrieb nicht "
                     f"aufsetzen kann. Setze `LOCANOTO_INDEX` auf ein "
                     f"containerlokales Verzeichnis — der Index baut sich "
-                    f"dort in Sekunden neu auf.")
+                    f"dort in Sekunden neu auf."))
             else:
-                st.caption(f"Stichwortindex: Journalmodus `{_modus}`.")
+                st.caption(tx(f"Stichwortindex: Journalmodus `{_modus}`."))
 
             st.caption(
-                "Ableitbares gehört nicht auf den Netzspeicher: "
+                tx("Ableitbares gehört nicht auf den Netzspeicher: "
                 "Vektordatenbank und Stichwortindex sind SQLite-Dateien, "
                 "und der WAL-Betrieb braucht gemeinsamen Speicher im "
                 "selben Dateisystem — über NFS oder SMB gibt es den nicht, "
                 "und die Dateisperren sind unzuverlässig. Der Verlust "
                 "kostet nichts: der Stichwortindex baut sich mit rund "
-                "18.600 Abschnitten je Sekunde neu auf.")
+                "18.600 Abschnitten je Sekunde neu auf."))
 
     if _vw:
-        st.caption("**Inhalte**")
+        st.caption(tx("**Inhalte**"))
     if _vw:
-        with st.expander("\U0001f5e3\ufe0f Glossar bearbeiten"):
+        with st.expander(tx("\U0001f5e3\ufe0f Glossar bearbeiten")):
             pfad = paths.resolve_glossar()
             try:
                 with open(pfad, "r", encoding="utf-8") as f:
@@ -1636,24 +1638,24 @@ def zeichne(*, is_admin,
                     inhalt = ""
 
             neu = st.text_area(
-                "Je Zeile eine Zuordnung. Zeilen mit # sind Erlaeuterungen "
-                "und kommen nicht in den Prompt.",
+                tx("Je Zeile eine Zuordnung. Zeilen mit # sind Erlaeuterungen "
+                "und kommen nicht in den Prompt."),
                 value=inhalt, height=320, key="glossar_text")
 
             wirksam = pipeline.glossar()
-            st.caption(f"Wirksam: {len(wirksam.splitlines()) if wirksam else 0} "
-                       f"Zuordnungen \u00b7 `{os.path.relpath(pfad, paths.BASE_DIR)}`")
+            st.caption(tx(f"Wirksam: {len(wirksam.splitlines()) if wirksam else 0} "
+                       f"Zuordnungen \u00b7 `{os.path.relpath(pfad, paths.BASE_DIR)}`"))
 
-            if st.button("Glossar speichern", use_container_width=True):
+            if st.button(tx("Glossar speichern"), use_container_width=True):
                 try:
                     # Erst daneben schreiben, dann umbenennen: bricht der
                     # Vorgang ab, steht die alte Datei noch vollstaendig da.
                     dateisperre.schreibe_atomar(paths.GLOSSAR_FILE, neu)
-                    st.success("Gespeichert. Wirkt ab der naechsten Frage.")
+                    st.success(tx("Gespeichert. Wirkt ab der naechsten Frage."))
                     time.sleep(1)
                     st.rerun()
                 except OSError as e:
-                    st.error(f"Konnte nicht gespeichert werden: {e}")
+                    st.error(tx(f"Konnte nicht gespeichert werden: {e}"))
 
     # --- VOREINSTELLUNGEN VERWALTEN ---
     #
@@ -1661,66 +1663,66 @@ def zeichne(*, is_admin,
     # Voreinstellung buendelt, was zusammengehoert -- wer das jedes Mal von
     # Hand umstellt, macht es entweder selten oder falsch.
     if _vw:
-        with st.expander("🎛️ Voreinstellungen verwalten"):
+        with st.expander(tx("🎛️ Voreinstellungen verwalten")):
             vorhanden = presets.namen()
             bearbeiten = st.selectbox(
-                "Bearbeiten", ["(neu anlegen)"] + vorhanden,
-                format_func=lambda n: (n if n == "(neu anlegen)"
-                                       else presets.lese(n)["bezeichnung"]),
+                tx("Bearbeiten"), ["(neu anlegen)"] + vorhanden,
+                format_func=sprache.uebersetzt(lambda n: (n if n == "(neu anlegen)"
+                                       else presets.lese(n)["bezeichnung"])),
                 key="preset_bearbeiten")
             neu = bearbeiten == "(neu anlegen)"
             werte = presets.lese(None if neu else bearbeiten)
 
-            bez = st.text_input("Bezeichnung", value="" if neu
+            bez = st.text_input(tx("Bezeichnung"), value="" if neu
                                 else werte["bezeichnung"],
                                 key=f"pb_{bearbeiten}")
-            beschr = st.text_input("Beschreibung", value=werte["beschreibung"],
+            beschr = st.text_input(tx("Beschreibung"), value=werte["beschreibung"],
                                    key=f"pd_{bearbeiten}",
-                                   help="Eine Zeile, die unter der Auswahl "
-                                        "steht.")
+                                   help=tx("Eine Zeile, die unter der Auswahl "
+                                        "steht."))
             modell = st.text_input(
-                "Chat-Modell", value=werte["chat_modell"],
+                tx("Chat-Modell"), value=werte["chat_modell"],
                 key=f"pm_{bearbeiten}",
-                help="Leer = das Modell aus der .env. Der Name muss dem "
-                     "eingetragenen Endpunkt bekannt sein.")
-            k = st.number_input("Relevante Abschnitte", min_value=0,
+                help=tx("Leer = das Modell aus der .env. Der Name muss dem "
+                     "eingetragenen Endpunkt bekannt sein."))
+            k = st.number_input(tx("Relevante Abschnitte"), min_value=0,
                                 max_value=30, value=int(werte["top_k"] or 0),
                                 key=f"pk_{bearbeiten}",
-                                help="0 = Vorgabe aus TOP_K.")
+                                help=tx("0 = Vorgabe aus TOP_K."))
             bereiche = st.multiselect(
-                "Listenbereiche", options=tabellen.bereiche(_eintraege),
+                tx("Listenbereiche"), options=tabellen.bereiche(_eintraege),
                 default=[b for b in werte["listen_bereiche"]
                          if b in tabellen.bereiche(_eintraege)],
                 key=f"pl_{bearbeiten}",
-                help="Unterordner des Listenordners. Leer = alle. Der "
+                help=tx("Unterordner des Listenordners. Leer = alle. Der "
                      "Wurzelordner selbst steht in der .env "
-                     "(TABELLEN_PFAD).") if _eintraege else []
+                     "(TABELLEN_PFAD)."), format_func=sprache.uebersetzt()) if _eintraege else []
 
             links, rechts = st.columns(2)
             with links:
-                if st.button("Speichern", key=f"psp_{bearbeiten}",
+                if st.button(tx("Speichern"), key=f"psp_{bearbeiten}",
                              use_container_width=True):
                     ok, meldung = presets.speichern(bez, {
                         "bezeichnung": bez, "beschreibung": beschr,
                         "chat_modell": modell, "top_k": int(k),
                         "listen_bereiche": bereiche})
                     if ok:
-                        st.success(f"Gespeichert als `{meldung}`.")
+                        st.success(tx(f"Gespeichert als `{meldung}`."))
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(meldung)
+                        st.error(tx(meldung))
             with rechts:
-                if st.button("Entfernen", key=f"pdl_{bearbeiten}",
+                if st.button(tx("Entfernen"), key=f"pdl_{bearbeiten}",
                              disabled=neu, use_container_width=True):
                     if presets.loesche(bearbeiten):
-                        st.success("Entfernt.")
+                        st.success(tx("Entfernt."))
                         time.sleep(1)
                         st.rerun()
 
-            st.caption("Eigene Prompts und ein eigenes Glossar bekommt eine "
+            st.caption(tx("Eigene Prompts und ein eigenes Glossar bekommt eine "
                        "Voreinstellung ueber die Auswahl unter "
-                       "\u201cPrompts bearbeiten\u201d.")
+                       "\u201cPrompts bearbeiten\u201d."))
 
     # --- PROMPT-VORLAGEN ---
     #
@@ -1732,10 +1734,10 @@ def zeichne(*, is_admin,
     # Nur fuer Verwalter: eine unglueckliche Formulierung wirkt auf jede
     # Antwort, die danach gegeben wird.
     if _vw:
-        with st.expander("📜 Prompts bearbeiten"):
+        with st.expander(tx("📜 Prompts bearbeiten")):
             namen = prompts.verfuegbar()
             if not namen:
-                st.caption("Keine Vorlagen gefunden.")
+                st.caption(tx("Keine Vorlagen gefunden."))
             else:
                 # Fuer wen gilt die Fassung: fuer die ganze Installation
                 # oder nur fuer eine Voreinstellung? Genau hier bekommt ein
@@ -1743,52 +1745,52 @@ def zeichne(*, is_admin,
                 # "welche Maske, welches Feld" die richtige zweite Sonde,
                 # fuer Regelwerke "welcher Anhang, welche Tabelle".
                 geltung = st.selectbox(
-                    "Gilt fuer", ["Alle"] + presets.namen(),
-                    format_func=lambda n: (n if n == "Alle"
-                                           else presets.lese(n)["bezeichnung"]),
+                    tx("Gilt fuer"), ["Alle"] + presets.namen(),
+                    format_func=sprache.uebersetzt(lambda n: (n if n == "Alle"
+                                           else presets.lese(n)["bezeichnung"])),
                     key="prompt_geltung")
                 fuer = None if geltung == "Alle" else geltung
 
                 gewaehlt = st.selectbox(
-                    "Vorlage", namen,
-                    format_func=lambda n: f"{prompts.VORLAGEN[n]['titel']} ({n})")
+                    tx("Vorlage"), namen,
+                    format_func=sprache.uebersetzt(lambda n: f"{prompts.VORLAGEN[n]['titel']} ({n})"))
                 angaben = prompts.VORLAGEN[gewaehlt]
-                st.caption(angaben["zweck"])
+                st.caption(tx(angaben["zweck"]))
 
                 inhalt, herkunft = prompts.lese(gewaehlt, fuer)
                 text = st.text_area(
-                    "Platzhalter: " + ", ".join(
+                    tx("Platzhalter: ") + ", ".join(
                         list(angaben["pflicht"]) + list(angaben["optional"])),
                     value=inhalt, height=340,
                     key=f"prompt_{gewaehlt}_{fuer}")
 
-                st.caption({
+                st.caption(tx({
                     "preset": "Eigene Fassung dieser Voreinstellung",
                     "eigen": "Bearbeitete Fassung aus `config/`",
                     "vorlage": "Mitgelieferte Vorlage",
-                }[herkunft])
+                }[herkunft]))
 
                 links, rechts = st.columns(2)
                 with links:
-                    if st.button("Speichern", key=f"sp_{gewaehlt}_{fuer}",
+                    if st.button(tx("Speichern"), key=f"sp_{gewaehlt}_{fuer}",
                                  use_container_width=True):
                         ok, meldung = prompts.speichern(gewaehlt, text, fuer)
                         if ok:
-                            st.success(meldung)
+                            st.success(tx(meldung))
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.error(meldung)
+                            st.error(tx(meldung))
                 with rechts:
                     # Zuruecksetzen entfernt nur die Fassung dieser Stufe.
                     # Darunter gilt dann wieder, was ohnehin gelten wuerde.
                     eigene_stufe = (herkunft == "preset" if fuer
                                     else herkunft == "eigen")
-                    if st.button("Zuruecksetzen", key=f"zr_{gewaehlt}_{fuer}",
+                    if st.button(tx("Zuruecksetzen"), key=f"zr_{gewaehlt}_{fuer}",
                                  disabled=not eigene_stufe,
                                  use_container_width=True):
                         if prompts.zuruecksetzen(gewaehlt, fuer):
-                            st.success("Zurueckgesetzt.")
+                            st.success(tx("Zurueckgesetzt."))
                             time.sleep(1)
                             st.rerun()
 
@@ -1809,16 +1811,16 @@ def zeichne(*, is_admin,
         except Exception:
             fehlend, abweichend, unbekannt = [], [], []
         if fehlend or abweichend or unbekannt:
-            with st.expander(f"⚙️ Konfiguration ({len(fehlend) + len(abweichend) + len(unbekannt)})"):
+            with st.expander(tx(f"⚙️ Konfiguration ({len(fehlend) + len(abweichend) + len(unbekannt)})")):
                 if abweichend:
-                    st.caption("**Abweichend von der Vorlage** -- gewollt oder "
-                               "beim letzten Update uebersehen:")
+                    st.caption(tx("**Abweichend von der Vorlage** -- gewollt oder "
+                               "beim letzten Update uebersehen:"))
                     st.code(chr(10).join(abweichend), language="text")
                 if fehlend:
-                    st.caption("**Nicht in der eigenen .env** -- es greift der "
-                               "Standard aus dem Code:")
+                    st.caption(tx("**Nicht in der eigenen .env** -- es greift der "
+                               "Standard aus dem Code:"))
                     st.code(chr(10).join(fehlend), language="text")
                 if unbekannt:
-                    st.caption("**Nur in der eigenen .env** -- veraltet, oder "
-                               "die Vorlage hat den Eintrag verloren:")
+                    st.caption(tx("**Nur in der eigenen .env** -- veraltet, oder "
+                               "die Vorlage hat den Eintrag verloren:"))
                     st.code(chr(10).join(unbekannt), language="text")

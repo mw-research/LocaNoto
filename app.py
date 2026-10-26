@@ -10,6 +10,8 @@ pipeline.py und ist von der Oberflaeche unabhaengig -- api.py
 benutzt dieselbe.
 """
 import streamlit as st
+import sprache
+from sprache import t as tx
 import pymupdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import contextlib
@@ -71,12 +73,12 @@ paths.bootstrap()
 # damit ein Datenverlust geworden.
 _schl_zustand, _schl_meldung = geheim.zustand()
 if _schl_zustand == "unlesbar":
-    st.error("Der Installationsschluessel ist nicht lesbar.")
+    st.error(tx("Der Installationsschluessel ist nicht lesbar."))
     st.code(_schl_meldung, language="text")
-    st.caption("Die Anwendung haelt hier an. Liefe sie weiter, "
+    st.caption(tx("Die Anwendung haelt hier an. Liefe sie weiter, "
                "wuerde sie vorhandene Chatverlaeufe fuer leer "
                "halten und beim naechsten Speichern im Klartext "
-               "ueberschreiben.")
+               "ueberschreiben."))
     st.stop()
 
 # 1. Werte aus der docker-compose.yml holen
@@ -86,8 +88,38 @@ firma = os.getenv("COMPANY_NAME", "LocaNoto")
 # 2. Page Config (Browser-Tab-Titel) dynamisch machen
 st.set_page_config(page_title=f"{firma} - {thema}", layout="wide")
 
+
+def _sprache_festlegen():
+    """Die Sprache dieses Laufs: in der Sitzung gewaehlt, sonst die
+    gespeicherte des Nutzers, sonst die Vorgabe der Installation."""
+    _wer_s = st.session_state.get("username")
+    if _wer_s and "_sprache" not in st.session_state:
+        st.session_state["_sprache"] = sprache.gewaehlt(_wer_s)
+    sprache.setze(st.session_state.get("_sprache") or sprache.VORGABE)
+
+
+def _sprachwahl(schluessel, speichern_fuer=None):
+    """Umschalter Deutsch/English. Gespeichert, sobald jemand angemeldet ist."""
+    _jetzt = sprache.aktuell()
+    _neu = st.radio(tx("🌐 Sprache / Language"), list(sprache.SPRACHEN),
+                    index=list(sprache.SPRACHEN).index(_jetzt),
+                    format_func=sprache.uebersetzt(sprache.SPRACHEN.get),
+                    horizontal=True, key=schluessel)
+    if _neu != _jetzt:
+        st.session_state["_sprache"] = _neu
+        if speichern_fuer:
+            sprache.speichere(speichern_fuer, _neu)
+        else:
+            # Vor der Anmeldung umgeschaltet: gilt fuer den, der sich
+            # gleich anmeldet -- und nur dann wird es gemerkt.
+            st.session_state["_sprache_vor_anmeldung"] = True
+        st.rerun()
+
+
+_sprache_festlegen()
+
 # 3. Nur EINMAL die Überschrift auf der Seite setzen!
-st.title(f"{firma} - {thema} Assistent")
+st.title(tx(f"{firma} - {thema} Assistent"))
 
 # --- ZEITLIMITS ---
 # Der OpenAI-Client wartet ohne timeout= bis zu 600 s. Haengt ein Aufruf,
@@ -168,6 +200,7 @@ if "username" not in st.session_state:
     if _wer:
         st.session_state["username"] = _wer
         st.session_state["letzte_tat"] = time.time()
+        _sprache_festlegen()
 
 
 SITZUNGSSCHLUESSEL = ("username", "letzte_tat", "current_chat_id",
@@ -198,32 +231,33 @@ if "username" in st.session_state and sitzung_abgelaufen():
     st.session_state["sitzung_lief_ab"] = True
 
 if "username" not in st.session_state:
-    st.markdown("<h1 style='text-align: center; margin-top: 10vh;'>🔐 LocaNoto Login</h1>", unsafe_allow_html=True)
+    st.markdown(tx("<h1 style='text-align: center; margin-top: 10vh;'>🔐 LocaNoto Login</h1>"), unsafe_allow_html=True)
 
     if st.session_state.pop("sitzung_lief_ab", False):
-        st.info(f"Die Sitzung war laenger als {SITZUNG_MINUTEN} Minuten "
-                f"ohne Eingabe und wurde beendet.")
+        st.info(tx(f"Die Sitzung war laenger als {SITZUNG_MINUTEN} Minuten "
+                f"ohne Eingabe und wurde beendet."))
 
     zustand = benutzer.zustand()
     if zustand == benutzer.LEER:
-        st.warning("Keine Benutzer gefunden. Bitte führe zuerst "
-                   "'create_user.py' auf dem Server aus.")
+        st.warning(tx("Keine Benutzer gefunden. Bitte führe zuerst "
+                   "'create_user.py' auf dem Server aus."))
         st.stop()
     if zustand == benutzer.MANIPULIERT:
         # Kein Abbruch: die Anmeldung der bestehenden Nutzer funktioniert
         # weiter. Was nicht funktioniert, ist die Anmeldung eines von Hand
         # eingetragenen Zugangs -- und genau das soll hier stehen.
         gesperrt = benutzer.ungueltige()
-        st.error("Die Benutzerdatei wurde ausserhalb der Anwendung "
-                 "geändert."
-                 + (f" Gesperrt: {', '.join(gesperrt)}." if gesperrt else ""))
+        st.error(tx("Die Benutzerdatei wurde ausserhalb der Anwendung "
+                 "geändert.")
+                 + (tx(f" Gesperrt: {', '.join(gesperrt)}.") if gesperrt else ""))
 
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
+        _sprachwahl("sprache_anmeldung")
         with st.form("login_form"):
-            login_user = st.text_input("Benutzername").strip().lower()
-            login_pass = st.text_input("Passwort", type="password")
-            submit_button = st.form_submit_button("Einloggen", use_container_width=True)
+            login_user = st.text_input(tx("Benutzername")).strip().lower()
+            login_pass = st.text_input(tx("Passwort"), type="password")
+            submit_button = st.form_submit_button(tx("Einloggen"), use_container_width=True)
 
             if submit_button:
                 # Eine Meldung fuer beide Faelle. "Benutzer existiert nicht"
@@ -232,6 +266,15 @@ if "username" not in st.session_state:
                 if benutzer.pruefe(login_user, login_pass):
                     st.session_state["username"] = login_user
                     st.session_state["letzte_tat"] = time.time()
+                    # Auf der Anmeldeseite umgeschaltet: das gilt und
+                    # wird gemerkt. Sonst die gespeicherte Wahl.
+                    if st.session_state.pop("_sprache_vor_anmeldung",
+                                            False):
+                        sprache.speichere(login_user,
+                                          st.session_state["_sprache"])
+                    else:
+                        st.session_state["_sprache"] = \
+                            sprache.gewaehlt(login_user)
                     # Befristete Bescheinigung in die Adresszeile, damit
                     # ein Neuladen nicht wieder vor der Anmeldemaske
                     # endet. Nur wenn der Betreiber es eingeschaltet
@@ -242,7 +285,7 @@ if "username" not in st.session_state:
                         st.query_params["sitzung"] = _zettel
                     st.rerun()
                 else:
-                    st.error("Anmeldung fehlgeschlagen.")
+                    st.error(tx("Anmeldung fehlgeschlagen."))
 
     st.stop()
 
@@ -271,10 +314,11 @@ def is_admin():
 # --- SIDEBAR (UI) ---
 with st.sidebar:
     # --- NEU: LOGOUT HIER OBEN ---
-    st.caption(f"👤 Angemeldet als: **{st.session_state['username']}**")
-    if st.button("🚪 Ausloggen", use_container_width=True):
+    st.caption(tx(f"👤 Angemeldet als: **{st.session_state['username']}**"))
+    if st.button(tx("🚪 Ausloggen"), use_container_width=True):
         beende_sitzung()
         st.rerun()
+    _sprachwahl("sprache_leiste", st.session_state["username"])
     st.markdown("---")
     
     
@@ -601,10 +645,10 @@ try:
     init_keyword_index()
 except Exception as _index_fehler:
     st.warning(
-        "Der Stichwortindex konnte nicht aufgebaut werden. Gesucht wird "
+        tx("Der Stichwortindex konnte nicht aufgebaut werden. Gesucht wird "
         "vorerst nur ueber die Vektoren -- Antworten kommen, woertliche "
         "Treffer koennen fehlen. Nachholen mit `python rebuild_index.py`."
-        "\n\nGrund: " + str(_index_fehler)[:400])
+        "\n\nGrund: ") + str(_index_fehler)[:400])
 
 # --- RERANKER SETUP ---
 @st.cache_resource(show_spinner="Richte Rangfolge ein ...")
@@ -754,8 +798,9 @@ def _verschiebe_datei(filename, von_raum, nach_raum):
     return ""
 
 
+# "Seite" und "page": antwortet das Modell auf Englisch, zitiert es so.
 _QUELLENMUSTER = re.compile(
-    r"\[([^\[\]]{1,120}?),\s*(?:Seite|S\.)\s*(\d+)\]")
+    r"\[([^\[\]]{1,120}?),\s*(Seite|S\.|[Pp]age|[Pp]\.)\s*(\d+)\]")
 
 
 def _quellen_klickbar(text, quellen, nr):
@@ -783,7 +828,8 @@ def _quellen_klickbar(text, quellen, nr):
             wohin[(name, seite)] = k
 
     def ersetze(treffer):
-        name, seite = treffer.group(1).strip(), treffer.group(2).strip()
+        name, wort, seite = (treffer.group(1).strip(), treffer.group(2),
+                             treffer.group(3).strip())
         k = wohin.get((name.lower(), seite))
         if k is None:
             return treffer.group(0)
@@ -803,7 +849,7 @@ def _quellen_klickbar(text, quellen, nr):
             (quellen[k] or {}).get("raum") or raeume.ALLGEMEIN,
             name, seite, st.session_state.get("username", ""))
         if _tk:
-            return f"[{name}, Seite {seite}](quelle?t={_tk})"
+            return f"[{name}, {wort} {seite}](quelle?t={_tk})"
         # Ohne Schluessel kein Ticket -- dann bleibt die Sprungmarke.
         #
         # Mit "?quelle=..." war es fuer den Browser ein Verweis auf
@@ -817,7 +863,7 @@ def _quellen_klickbar(text, quellen, nr):
         # Server den Klick, und ein Klick, der den Server erreicht, ist
         # eine Navigation. Springen und einmal klicken ist besser als
         # springen, sich neu anmelden und dann suchen.
-        return f"[{name}, Seite {seite}](#q{nr}-{k})"
+        return f"[{name}, {wort} {seite}](#q{nr}-{k})"
 
     # NICHT in Codebloecke hineinschreiben. Dort ist "[a, Seite 3]"
     # kein Beleg, sondern Code -- ein Markdown-Verweis mittendrin
@@ -847,18 +893,18 @@ def _loeschfreigabe(kennung, zahl, key):
     Ein Abzug ist die einzige Umkehr. Deshalb steht sein Alter dabei --
     "vor drei Wochen" ist eine andere Auskunft als "heute Nacht".
     """
-    st.warning(f"{zahl:,} Abschnitte. Nicht rueckgaengig zu machen.")
+    st.warning(tx(f"{zahl:,} Abschnitte. Nicht rueckgaengig zu machen."))
     try:
         _abz = sicherung.liste()
         if _abz:
-            st.caption(f"Neuester Abzug: {_abz[0][0]}")
+            st.caption(tx(f"Neuester Abzug: {_abz[0][0]}"))
         else:
-            st.caption("KEIN Abzug vorhanden. Danach ist es endgueltig.")
+            st.caption(tx("KEIN Abzug vorhanden. Danach ist es endgueltig."))
     except Exception:
         pass
-    st.caption("Zum Bestaetigen die Kennung des Raums eintippen:")
+    st.caption(tx("Zum Bestaetigen die Kennung des Raums eintippen:"))
     st.code(kennung, language=None)
-    eingabe = st.text_input("Kennung", key=f"{key}_text",
+    eingabe = st.text_input(tx("Kennung"), key=f"{key}_text",
                             label_visibility="collapsed",
                             placeholder=kennung)
     return eingabe.strip() == kennung
@@ -1258,32 +1304,32 @@ def _web_vorschau(treffer, schluessel):
     l, r = st.columns(2)
     with l:
         if adresse in offen:
-            if st.button("Schließen", key=f"zu_{schluessel}",
+            if st.button(tx("Schließen"), key=f"zu_{schluessel}",
                          use_container_width=True):
                 offen.discard(adresse)
                 st.rerun()
-        elif st.button("👁️ Lesen", key=f"lesen_{schluessel}",
+        elif st.button(tx("👁️ Lesen"), key=f"lesen_{schluessel}",
                        use_container_width=True,
-                       help="Die Seite als reiner Text, über den "
-                            "Websuche-Dienst geholt."):
+                       help=tx("Die Seite als reiner Text, über den "
+                            "Websuche-Dienst geholt.")):
             offen.add(adresse)
             st.rerun()
     with r:
-        st.link_button("Original ↗", adresse, use_container_width=True,
-                       help="Öffnet die Seite direkt in deinem Browser -- "
-                            "dann sieht sie dich, nicht den Server.")
+        st.link_button(tx("Original ↗"), adresse, use_container_width=True,
+                       help=tx("Öffnet die Seite direkt in deinem Browser -- "
+                            "dann sieht sie dich, nicht den Server."))
     if adresse in offen:
-        with st.spinner("Lese ..."):
+        with st.spinner(tx("Lese ...")):
             text, fehler = _web_lesen(adresse)
         if text is None:
-            st.warning(f"Nicht lesbar: {fehler}")
+            st.warning(tx(f"Nicht lesbar: {fehler}"))
         else:
             # Ein Textfeld und kein Markdown: fremder Text darf hier
             # nichts nachladen und nichts formatieren.
-            st.text_area("Inhalt", text, height=420, disabled=True,
+            st.text_area(tx("Inhalt"), text, height=420, disabled=True,
                          key=f"inhalt_{schluessel}",
                          label_visibility="collapsed")
-            st.caption(f"{len(text):,} Zeichen".replace(",", "."))
+            st.caption(tx(f"{len(text):,} Zeichen".replace(",", ".")))
 
 
 def _web_uebernehmen(treffer):
@@ -1310,8 +1356,8 @@ def _web_uebernehmen(treffer):
 
 with st.sidebar, _bedienung_gesperrt(_antwortet):
     if _antwortet:
-        st.warning("Antwort laeuft. Die Bedienung ist gesperrt, bis sie "
-                   "fertig ist -- ein Klick jetzt wuerde sie abreissen.")
+        st.warning(tx("Antwort laeuft. Die Bedienung ist gesperrt, bis sie "
+                   "fertig ist -- ein Klick jetzt wuerde sie abreissen."))
 
     # --- VOREINSTELLUNG ---
     #
@@ -1322,24 +1368,24 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     _namen = presets.namen()
     if _namen:
         _wahl = st.selectbox(
-            "🎛️ Voreinstellung", ["(Standard)"] + _namen,
-            format_func=lambda n: (n if n == "(Standard)"
-                                   else presets.lese(n)["bezeichnung"]),
-            help="Buendel aus Chat-Modell, Trefferzahl, Sachgebieten und "
-                 "Formulierung. Angelegt werden sie im Verwalterbereich.")
+            tx("🎛️ Voreinstellung"), ["(Standard)"] + _namen,
+            format_func=sprache.uebersetzt(lambda n: (n if n == "(Standard)"
+                                   else presets.lese(n)["bezeichnung"])),
+            help=tx("Buendel aus Chat-Modell, Trefferzahl, Sachgebieten und "
+                 "Formulierung. Angelegt werden sie im Verwalterbereich."))
         aktives_preset = None if _wahl == "(Standard)" else _wahl
         _p = presets.lese(aktives_preset)
         if _p.get("beschreibung"):
-            st.caption(_p["beschreibung"])
+            st.caption(tx(_p["beschreibung"]))
         st.markdown("---")
     else:
         aktives_preset = None
         _p = presets.lese(None)
 
-    st.header("💬 Chats")
+    st.header(tx("💬 Chats"))
     
     # 1. Neuer Chat Button
-    if st.button("➕ Neuer Chat", use_container_width=True):
+    if st.button(tx("➕ Neuer Chat"), use_container_width=True):
         st.session_state.current_chat_id = chats.neue_kennung()
         st.session_state.messages = []
         st.rerun()
@@ -1365,10 +1411,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _titel.setdefault(st.session_state.current_chat_id, "Neuer Chat")
 
         selected_chat = st.selectbox(
-            "Vorherige Chats laden:",
+            tx("Vorherige Chats laden:"),
             existing_chats,
             index=existing_chats.index(st.session_state.current_chat_id),
-            format_func=lambda x: _titel.get(x, "Chat")
+            format_func=sprache.uebersetzt(lambda x: _titel.get(x, "Chat"))
         )
         
         # Wechselt den Chat, wenn ein anderer im Dropdown ausgewählt wurde
@@ -1377,10 +1423,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             st.rerun()
             
         # 3. Aktuellen Chat löschen
-        if st.button("🗑️ Aktuellen Chat löschen", use_container_width=True):
+        if st.button(tx("🗑️ Aktuellen Chat löschen"), use_container_width=True):
             delete_chat(st.session_state.current_chat_id)
             del st.session_state.current_chat_id # Zwingt das Skript, beim Rerun einen neuen Chat anzulegen oder den nächstbesten zu laden
-            st.success("Chat gelöscht!")
+            st.success(tx("Chat gelöscht!"))
             time.sleep(0.5)
             st.rerun()
             
@@ -1388,7 +1434,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # kam sofort der Trennstrich und die naechste Ueberschrift. Ein
     # Ueberbleibsel, in allen drei Fassungen.
     st.markdown("---")
-    st.header("🎯 Dokumenten-Filter")
+    st.header(tx("🎯 Dokumenten-Filter"))
 
     # --- RAUM ---
     #
@@ -1398,12 +1444,12 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # und soll keine Klicks kosten.
     raum_optionen = [r for r, _s in meine_sammlungen()]
     selected_raeume = st.multiselect(
-        "Raum:",
+        tx("Raum:"),
         options=raum_optionen,
         default=[],
-        format_func=raeume.bezeichnung,
-        help="Leer lassen, um alle Räume zu durchsuchen, die du sehen "
-             "darfst."
+        format_func=sprache.uebersetzt(raeume.bezeichnung),
+        help=tx("Leer lassen, um alle Räume zu durchsuchen, die du sehen "
+             "darfst.")
     ) if len(raum_optionen) > 1 else []
 
     # --- WEBSUCHE ---
@@ -1417,17 +1463,17 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     _web_server = mcp.websuche_server()
     _web_frei = False
     if _web_server:
-        if st.toggle("🌐 Websuche", key="_websuche_an",
-                     help="Das Modell darf im Netz nachsehen, wenn die "
+        if st.toggle(tx("🌐 Websuche"), key="_websuche_an",
+                     help=tx("Das Modell darf im Netz nachsehen, wenn die "
                           "Dokumente nicht reichen. Hinaus geht nur der "
-                          "Suchbegriff."):
+                          "Suchbegriff.")):
             _web_zu = [r for r in (selected_raeume or raum_optionen)
                        if not raeume.websuche_erlaubt(r)]
             if _web_zu:
-                st.caption("🌐 Nicht freigegeben neben: "
+                st.caption(tx("🌐 Nicht freigegeben neben: ")
                            + ", ".join(raeume.bezeichnung(r)
                                        for r in _web_zu)
-                           + " — oben nur freigegebene Räume wählen.")
+                           + tx(" — oben nur freigegebene Räume wählen."))
             else:
                 _web_frei = True
     # --- PROJEKT ---
@@ -1449,9 +1495,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     _projekt_dateien = []
     if _projekte:
         _gewaehlt_p = st.multiselect(
-            "Projekt:", options=sorted(_projekte), default=[],
-            help="Nur im eigenen Raum. Leer lassen, um alles zu "
-                 "durchsuchen.")
+            tx("Projekt:"), options=sorted(_projekte), default=[],
+            help=tx("Nur im eigenen Raum. Leer lassen, um alles zu "
+                 "durchsuchen."), format_func=sprache.uebersetzt())
         # NICHT _p: das ist zwanzig Zeilen weiter oben die
         # Voreinstellung (presets.lese) und wird weiter unten als
         # Wörterbuch gebraucht. Eine Schleifenvariable desselben
@@ -1477,13 +1523,13 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     else:
         _auswahl = all_available_files
     selected_docs = st.multiselect(
-        "Suche beschränken auf:", 
+        tx("Suche beschränken auf:"), 
         options=_auswahl,
         default=[],
-        help="Leer lassen, um in allen Dokumenten der Auswahl oben zu "
+        help=tx("Leer lassen, um in allen Dokumenten der Auswahl oben zu "
              "suchen. Die Liste zeigt nur, was zu Raum und Projekt "
-             "darueber passt."
-    )
+             "darueber passt.")
+    , format_func=sprache.uebersetzt())
     # Ein gewaehltes Projekt wirkt wie eine Dateiauswahl. Beides
     # zugleich waere ein Widerspruch, den niemand aufloest -- deshalb
     # gewinnt die ausdrueckliche Dateiauswahl.
@@ -1523,7 +1569,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                                          notzugang=mein_notzugang())
     if _zugaenge or sqldb.ist_konfiguriert():
         st.markdown("---")
-        st.header("\U0001f5c4\ufe0f Datenbank")
+        st.header(tx("\U0001f5c4\ufe0f Datenbank"))
 
         # DER EIGENE ZUGANG STEHT VORN und ist die Vorgabe. Ein
         # persoenliches Konto umfasst in aller Regel die Rechte der
@@ -1539,54 +1585,54 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _wahlen.append("")
         if len(_wahlen) > 1:
             sql_raum = st.selectbox(
-                "Zugang", _wahlen,
-                format_func=lambda r: (raeume.bezeichnung(r) if r
-                                       else "Vorgabe aus der Umgebung"),
+                tx("Zugang"), _wahlen,
+                format_func=sprache.uebersetzt(lambda r: (raeume.bezeichnung(r) if r
+                                       else "Vorgabe aus der Umgebung")),
                 key="sql_zugang")
         else:
             sql_raum = _wahlen[0] if _wahlen else ""
         _z = sqlquellen.zugang(sql_raum) if sql_raum else None
         if _z:
-            st.caption(f"Angemeldet als `{_z.get('benutzer')}`")
+            st.caption(tx(f"Angemeldet als `{_z.get('benutzer')}`"))
 
         sql_schema, sql_fehler = lade_sql_schema(sql_raum)
         if sql_fehler:
             # Kurz und im Klartext. Die Meldung des Treibers nennt
             # Adresse und Zustand der Verbindung -- das gehoert nicht
             # auf den Bildschirm jedes Nutzers.
-            st.warning("Keine Verbindung zur Datenbank. Die Antworten "
-                       "stammen allein aus den Dokumenten.")
+            st.warning(tx("Keine Verbindung zur Datenbank. Die Antworten "
+                       "stammen allein aus den Dokumenten."))
             if is_admin():
-                with st.expander("Meldung des Treibers"):
+                with st.expander(tx("Meldung des Treibers")):
                     st.code(sql_fehler, language="text")
-            if st.button("Erneut verbinden", use_container_width=True):
+            if st.button(tx("Erneut verbinden"), use_container_width=True):
                 lade_sql_schema.clear()
                 st.rerun()
         elif sql_schema:
             sql_aktiv = st.toggle(
-                "Datenbank einbeziehen",
+                tx("Datenbank einbeziehen"),
                 value=paths.env_flag("SQL_DEFAULT_ON", False),
                 key="sql_an",
-                help="Das Modell formuliert eine SELECT-Abfrage. "
-                     "Ausgefuehrt wird sie mit dem Konto oben.")
+                help=tx("Das Modell formuliert eine SELECT-Abfrage. "
+                     "Ausgefuehrt wird sie mit dem Konto oben."))
 
     if (_eintraege or tabellen.vorhanden() or is_admin()
             or listenquellen.liste()):
         st.markdown("---")
-        st.header("\U0001f4ca Listen")
+        st.header(tx("\U0001f4ca Listen"))
 
         if _eintraege:
             _gross = [e for e in _eintraege if e.get("gross")]
             _klein = [e for e in _eintraege if not e.get("gross")]
             tabellen_aktiv = st.checkbox(
-                "Listen mit abfragen",
+                tx("Listen mit abfragen"),
                 value=os.getenv("TABELLEN_DEFAULT_ON", "1").strip().lower()
                 not in ("0", "false", "nein", "no"),
-                help="Das Modell waehlt die passende Liste und formuliert "
+                help=tx("Das Modell waehlt die passende Liste und formuliert "
                      "eine lesende Abfrage darauf. Die Zeilen werden bei "
-                     "jeder Frage frisch gelesen.")
-            st.caption(f"{len(_klein)} Blaetter bereit"
-                       + (f", {len(_gross)} zu gross" if _gross else ""))
+                     "jeder Frage frisch gelesen."))
+            st.caption(tx(f"{len(_klein)} Blaetter bereit")
+                       + (tx(f", {len(_gross)} zu gross") if _gross else ""))
 
             # Bereiche sind die Unterordner des Listenordners -- fuer Listen
             # dasselbe, was Sachgebiete fuer Dokumente sind. Ein Pfad wird
@@ -1596,24 +1642,24 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _bereiche = tabellen.bereiche(_eintraege)
             if len(_bereiche) > 1 and tabellen_aktiv:
                 tabellen_bereiche = st.multiselect(
-                    "Bereich", options=_bereiche,
+                    tx("Bereich"), options=_bereiche,
                     default=[b for b in _p["listen_bereiche"]
                              if b in _bereiche],
                     key=f"listenbereich_{aktives_preset}",
-                    help="Leer lassen, um alle Listen einzubeziehen.")
+                    help=tx("Leer lassen, um alle Listen einzubeziehen."), format_func=sprache.uebersetzt())
 
             if _gross and tabellen_aktiv:
                 tabellen_gross = st.checkbox(
-                    f"Grosse Listen einbeziehen ({len(_gross)})",
+                    tx(f"Grosse Listen einbeziehen ({len(_gross)})"),
                     value=False,
-                    help="Diese Blaetter haben sehr viele Zeilen und werden "
+                    help=tx("Diese Blaetter haben sehr viele Zeilen und werden "
                          "bei jeder Frage vollstaendig geladen. Das kann "
-                         "sehr lange dauern.")
+                         "sehr lange dauern."))
                 if tabellen_gross:
-                    st.warning("Grosse Listen sind einbezogen -- eine Frage "
-                               "kann dadurch deutlich laenger dauern.")
+                    st.warning(tx("Grosse Listen sind einbezogen -- eine Frage "
+                               "kann dadurch deutlich laenger dauern."))
         else:
-            st.caption("Dateien vorhanden, aber noch nicht eingelesen.")
+            st.caption(tx("Dateien vorhanden, aber noch nicht eingelesen."))
 
         # --- ERKANNTE BLAETTER ---
         #
@@ -1622,7 +1668,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         # "Bezeichnung", und das Modell antwortet zwar richtig, kann seine
         # Auskunft aber nicht benennen. Deshalb sichtbar und korrigierbar.
         if _eintraege:
-            with st.expander(f"Erkannte Blaetter ({len(_eintraege)})"):
+            with st.expander(tx(f"Erkannte Blaetter ({len(_eintraege)})")):
                 for _e in _eintraege:
                     _kenn = _e["datei"] + (f"#{_e['blatt']}" if _e["blatt"]
                                            else "")
@@ -1632,34 +1678,34 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                                     if not s["name"] or
                                     s["name"].lower().startswith(
                                         ("unnamed", "spalte ")))
-                    st.markdown(f"**{_kenn}** · Kopfzeile {_kopf + 1} "
-                                f"· {_e['zeilen']} Zeilen")
+                    st.markdown(tx(f"**{_kenn}** · Kopfzeile {_kopf + 1} "
+                                f"· {_e['zeilen']} Zeilen"))
                     if _namenlos:
-                        st.warning(f"{_namenlos} von {len(_felder)} Spalten "
+                        st.warning(tx(f"{_namenlos} von {len(_felder)} Spalten "
                                    f"ohne Namen -- vermutlich die falsche "
-                                   f"Kopfzeile.")
-                    st.caption(", ".join(_felder[:10])
-                               + (" ..." if len(_felder) > 10 else ""))
+                                   f"Kopfzeile."))
+                    st.caption(tx(", ".join(_felder[:10])
+                               + (" ..." if len(_felder) > 10 else "")))
 
                     if is_admin():
                         _neu = st.number_input(
-                            "Kopfzeile", min_value=1, max_value=50,
+                            tx("Kopfzeile"), min_value=1, max_value=50,
                             value=_kopf + 1, key=f"kopf_{_kenn}",
-                            help="Die Zeile mit den Spaltennamen, von 1 "
-                                 "gezaehlt.")
+                            help=tx("Die Zeile mit den Spaltennamen, von 1 "
+                                 "gezaehlt."))
                         if int(_neu) - 1 != _kopf:
-                            if st.button("Uebernehmen und neu einlesen",
+                            if st.button(tx("Uebernehmen und neu einlesen"),
                                          key=f"kopfb_{_kenn}",
                                          use_container_width=True):
                                 tabellen.setze_kopfzeile(
                                     _e["datei"], _e["blatt"], int(_neu) - 1)
-                                with st.spinner("Lese neu ein ..."):
+                                with st.spinner(tx("Lese neu ein ...")):
                                     tabellen.baue_katalog()
                                 st.rerun()
                     st.markdown("---")
 
         if _katalog.get("fehler"):
-            with st.expander(f"Nicht lesbar ({len(_katalog['fehler'])})"):
+            with st.expander(tx(f"Nicht lesbar ({len(_katalog['fehler'])})")):
                 for datei, grund in _katalog["fehler"]:
                     st.caption(f"`{datei}` -- {grund}")
 
@@ -1680,26 +1726,26 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         _mein_bereich = listenquellen.eigener_bereich(
             st.session_state.get("username", ""))
         if _mein_bereich:
-            with st.expander("\U0001f4c1 Mein Listenordner", expanded=False):
+            with st.expander(tx("\U0001f4c1 Mein Listenordner"), expanded=False):
                 st.caption(
-                    f"Nur du siehst die Listen aus diesem Ordner. Er "
+                    tx(f"Nur du siehst die Listen aus diesem Ordner. Er "
                     f"muss innerhalb von `{_mein_bereich}` liegen -- ein "
                     f"anderer waere ein Zugriff, den dir niemand "
-                    f"gegeben hat.")
+                    f"gegeben hat."))
                 _mp_alt = listenquellen.pfad_von(_mein_raum) or _mein_bereich
-                _mp = st.text_input("Ordner", value=_mp_alt,
+                _mp = st.text_input(tx("Ordner"), value=_mp_alt,
                                     key="mein_listenordner")
-                if st.button("Uebernehmen", use_container_width=True,
+                if st.button(tx("Uebernehmen"), use_container_width=True,
                              key="mein_listenordner_b"):
                     _ok_mp, _m_mp = listenquellen.setze_raum(
                         _mein_raum, _mp,
                         benutzer=st.session_state.get("username", "?"))
                     if not _ok_mp:
-                        st.error(_m_mp)
+                        st.error(tx(_m_mp))
                     else:
-                        with st.spinner("Lese die Listen ein ..."):
+                        with st.spinner(tx("Lese die Listen ein ...")):
                             tabellen.baue_katalog()
-                        st.success("Uebernommen.")
+                        st.success(tx("Uebernommen."))
                         time.sleep(1)
                         st.rerun()
 
@@ -1711,19 +1757,19 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         # Konto geworden, nur muehsamer.
         if sqldb.ist_konfiguriert() or sqlquellen.liste():
             _mz = sqlquellen.zugang(_mein_raum) or {}
-            with st.expander("\U0001f5c4\ufe0f Mein Datenbankzugang",
+            with st.expander(tx("\U0001f5c4\ufe0f Mein Datenbankzugang"),
                              expanded=False):
                 st.caption(
-                    "Dein eigenes Konto an der Fachdatenbank. Fragen "
+                    tx("Dein eigenes Konto an der Fachdatenbank. Fragen "
                     "laufen dann mit DEINEN Rechten -- und das Modell "
-                    "sieht nur die Tabellen, die du sehen darfst.")
-                _mz_b = st.text_input("Benutzer",
+                    "sieht nur die Tabellen, die du sehen darfst."))
+                _mz_b = st.text_input(tx("Benutzer"),
                                       value=_mz.get("benutzer", ""),
                                       key="mein_sql_b")
-                _mz_p = st.text_input("Passwort",
+                _mz_p = st.text_input(tx("Passwort"),
                                       value=_mz.get("passwort", ""),
                                       type="password", key="mein_sql_p")
-                if st.button("Uebernehmen", use_container_width=True,
+                if st.button(tx("Uebernehmen"), use_container_width=True,
                              key="mein_sql_ok"):
                     _ok_mz, _m_mz = sqlquellen.setze(
                         _mein_raum, {"benutzer": _mz_b, "passwort": _mz_p},
@@ -1744,34 +1790,34 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             # danach jahrelang nicht anfassen -- und weil sich so das
             # Ganze auf einen Blick lesen laesst, statt sich durch
             # aufgeklappte Zeilen zu arbeiten.
-            with st.expander("Listenquellen je Raum", expanded=False):
+            with st.expander(tx("Listenquellen je Raum"), expanded=False):
                 st.caption(
-                    "Eine Zeile je Quelle: **raum = pfad**. Der Raum "
+                    tx("Eine Zeile je Quelle: **raum = pfad**. Der Raum "
                     "entscheidet, wer die Listen sieht -- dieselbe "
                     "Berechtigung wie bei den Dokumenten. "
                     f"`{listenquellen.MUSTER_RAUM}` steht fuer den "
                     "persoenlichen Raum JEDES Nutzers; der Pfad braucht "
                     f"dann `{listenquellen.PLATZHALTER}`, das durch den "
-                    "jeweiligen Anmeldenamen ersetzt wird.")
+                    "jeweiligen Anmeldenamen ersetzt wird."))
                 _vorlage = "\n".join(
                     f"{q['raum']} = {q['pfad']}"
                     for q in listenquellen.liste())
                 _eingabe = st.text_area(
-                    "Quellen", value=_vorlage, height=140,
-                    placeholder="allgemein = /mnt/listen/allgemein\n"
-                                "einkauf = /srv/abteilung/einkauf\n"
+                    tx("Quellen"), value=_vorlage, height=140,
+                    placeholder=tx("allgemein = /mnt/listen/allgemein\n"
+                                "einkauf = /srv/abteilung/einkauf\n")
                                 + listenquellen.MUSTER_RAUM
-                                + " = /mnt/heim/"
-                                + listenquellen.PLATZHALTER + "/Listen",
+                                + tx(" = /mnt/heim/")
+                                + listenquellen.PLATZHALTER + tx("/Listen"),
                     key="listenquellen_text")
                 st.caption(
-                    "Das persoenliche Laufwerk ist gegenueber Kollegen "
+                    tx("Das persoenliche Laufwerk ist gegenueber Kollegen "
                     "am Dateiserver privat, gegenueber dieser Anwendung "
                     "nicht: sie liest es mit ihrem Dienstkonto. Die "
                     "Trennung zwischen den Nutzern macht ab hier "
                     "LocaNoto -- derselbe Grad an Zusicherung wie beim "
-                    "persoenlichen Raum.")
-                if st.button("Quellen speichern und einlesen",
+                    "persoenlichen Raum."))
+                if st.button(tx("Quellen speichern und einlesen"),
                              use_container_width=True,
                              key="listenquellen_speichern"):
                     _neu = []
@@ -1781,8 +1827,8 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                             continue
                         _r, _t, _pf = _z.partition("=")
                         if not _t:
-                            st.error(f"'{_z}' hat kein '=' -- erwartet "
-                                     f"wird 'raum = pfad'.")
+                            st.error(tx(f"'{_z}' hat kein '=' -- erwartet "
+                                     f"wird 'raum = pfad'."))
                             _neu = None
                             break
                         _neu.append({"raum": _r.strip(),
@@ -1790,16 +1836,16 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     if _neu is not None:
                         ok, meldung = listenquellen.speichere(_neu)
                         if not ok:
-                            st.error(meldung)
+                            st.error(tx(meldung))
                         else:
-                            with st.spinner("Lese Listen ein ..."):
+                            with st.spinner(tx("Lese Listen ein ...")):
                                 _k, _f = tabellen.baue_katalog()
-                            st.success(f"{meldung} "
-                                       f"{len(_k['eintraege'])} Blaetter.")
+                            st.success(tx(f"{meldung} "
+                                       f"{len(_k['eintraege'])} Blaetter."))
                             time.sleep(1)
                             st.rerun()
                 if listenquellen.WURZELN:
-                    st.caption("Erlaubte Wurzeln (LISTEN_WURZELN): "
+                    st.caption(tx("Erlaubte Wurzeln (LISTEN_WURZELN): ")
                                + ", ".join(f"`{w}`"
                                            for w in listenquellen.WURZELN))
 
@@ -1817,10 +1863,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             # Hier steht nur, dass es ihn gibt.
             if tabellen.alter_ordner():
                 st.caption(
-                    f"Aus frueherer Einrichtung gilt zusaetzlich "
+                    tx(f"Aus frueherer Einrichtung gilt zusaetzlich "
                     f"`allgemein = {tabellen.pfad()}`. Um ihn zu "
                     f"ersetzen, oben eine Zeile fuer `allgemein` "
-                    f"eintragen.")
+                    f"eintragen."))
 
             # --- HOCHLADEN ---
             #
@@ -1833,53 +1879,53 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # als sei nichts geschehen.
                 _nr = st.session_state.setdefault("listen_upload_nr", 0)
                 _hoch = st.file_uploader(
-                    "Liste hochladen", accept_multiple_files=True,
+                    tx("Liste hochladen"), accept_multiple_files=True,
                     type=[e.lstrip(".") for e in tabellen.ENDUNGEN],
                     key=f"listen_upload_{_nr}")
                 if _hoch:
                     _bekannt = [b for b in tabellen.bereiche(_eintraege)
                                 if b != "(Basis)"]
                     _bwahl = st.selectbox(
-                        "Bereich fuer den Upload",
+                        tx("Bereich fuer den Upload"),
                         ["(Basis)"] + _bekannt + ["+ neues anlegen"],
-                        key="listen_upload_bereich")
+                        key="listen_upload_bereich", format_func=sprache.uebersetzt())
                     if _bwahl == "+ neues anlegen":
                         _bneu = st.text_input(
-                            "Name des neuen Bereichs",
+                            tx("Name des neuen Bereichs"),
                             key=_feldschluessel("listen_neu", "bereich"))
                         _ziel_bereich = _bneu.strip()
                     else:
                         _ziel_bereich = "" if _bwahl == "(Basis)" else _bwahl
 
-                    if st.button(f"{len(_hoch)} Datei(en) ablegen und einlesen",
+                    if st.button(tx(f"{len(_hoch)} Datei(en) ablegen und einlesen"),
                                  use_container_width=True):
                         _abgelegt, _misslungen = [], []
                         for _f in _hoch:
                             ok, meldung = tabellen.lege_ab(
                                 _f.getvalue(), _f.name, _ziel_bereich)
                             (_abgelegt if ok else _misslungen).append(meldung)
-                        with st.spinner("Lese Listen ein ..."):
+                        with st.spinner(tx("Lese Listen ein ...")):
                             neu, fehler = tabellen.baue_katalog()
                         if _abgelegt:
-                            st.success("Abgelegt: " + ", ".join(_abgelegt))
+                            st.success(tx("Abgelegt: ") + ", ".join(_abgelegt))
                         for m in _misslungen:
-                            st.error(m)
+                            st.error(tx(m))
                         if _abgelegt:
                             st.session_state["listen_upload_nr"] = _nr + 1
                             _felder_leeren("listen_neu", "bereich")
                             time.sleep(1)
                             st.rerun()
             else:
-                st.caption("Der Ordner ist nicht beschreibbar -- die Dateien "
-                           "werden dort gepflegt, wo sie liegen.")
+                st.caption(tx("Der Ordner ist nicht beschreibbar -- die Dateien "
+                           "werden dort gepflegt, wo sie liegen."))
 
-            if st.button("Listen neu einlesen", use_container_width=True,
-                         help="Liest den Ordner vollstaendig neu ein. "
-                              "Fuer geaenderte Zeilen nicht noetig."):
-                with st.spinner("Lese Listen ein ..."):
+            if st.button(tx("Listen neu einlesen"), use_container_width=True,
+                         help=tx("Liest den Ordner vollstaendig neu ein. "
+                              "Fuer geaenderte Zeilen nicht noetig.")):
+                with st.spinner(tx("Lese Listen ein ...")):
                     neu, fehler = tabellen.baue_katalog()
-                st.success(f"{len(neu['eintraege'])} Blaetter eingelesen"
-                           + (f", {len(fehler)} nicht lesbar" if fehler else ""))
+                st.success(tx(f"{len(neu['eintraege'])} Blaetter eingelesen")
+                           + (tx(f", {len(fehler)} nicht lesbar") if fehler else ""))
                 time.sleep(1)
                 st.rerun()
 
@@ -1893,18 +1939,18 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # gelten dann fuer den ganzen Stapel. Wer je Datei etwas anderes
     # will, laedt einzeln -- das geht weiterhin.
     hochgeladen = st.file_uploader(
-        "Dokumente hochladen", key=f"pdf_upload_{_pdf_nr}",
+        tx("Dokumente hochladen"), key=f"pdf_upload_{_pdf_nr}",
         type=["pdf", "PDF", "docx", "md", "markdown", "txt",
               "tif", "tiff", "TIF", "TIFF", "jpg", "jpeg", "JPG", "JPEG",
               "png", "PNG"],
         accept_multiple_files=True,
-        help="PDF, Word, Markdown, Text oder ein Scan als TIFF, JPG, PNG. "
+        help=tx("PDF, Word, Markdown, Text oder ein Scan als TIFF, JPG, PNG. "
              "Gescannte Seiten liest die Texterkennung. Mehrere auf einmal "
-             "moeglich; Raum und Projekt gelten dann fuer alle.")
+             "moeglich; Raum und Projekt gelten dann fuer alle."))
     if hochgeladen:
         if len(hochgeladen) > 1:
-            st.caption(f"{len(hochgeladen)} Dateien. Sie werden "
-                       f"nacheinander verarbeitet.")
+            st.caption(tx(f"{len(hochgeladen)} Dateien. Sie werden "
+                       f"nacheinander verarbeitet."))
         # --- RAUM ---
         #
         # Der Raum entscheidet, wer das Dokument sehen kann. Vorgabe ist
@@ -1918,15 +1964,15 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         if _mein not in _ziele:
             _ziele.insert(0, _mein)
         ziel_raum = st.selectbox(
-            "Raum", _ziele, index=_ziele.index(_mein),
-            format_func=raeume.bezeichnung,
-            help="Bestimmt, wer das Dokument finden kann.")
+            tx("Raum"), _ziele, index=_ziele.index(_mein),
+            format_func=sprache.uebersetzt(raeume.bezeichnung),
+            help=tx("Bestimmt, wer das Dokument finden kann."))
         if ziel_raum == _mein:
-            st.caption("Nur für dich sichtbar.")
+            st.caption(tx("Nur für dich sichtbar."))
         else:
             _m = (raeume.raum(ziel_raum) or {}).get("mitglieder") or []
-            st.caption("Sichtbar für alle." if "*" in _m
-                       else f"Sichtbar für {len(_m)} Mitglieder.")
+            st.caption(tx("Sichtbar für alle.") if "*" in _m
+                       else tx(f"Sichtbar für {len(_m)} Mitglieder."))
 
         # PROJEKT -- nur im eigenen Raum, und nur zum Sortieren.
         #
@@ -1943,20 +1989,20 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _bekannt = [p for p in pipeline.projekte(
                 st.session_state["username"], _mein) if p]
             _projekt = st.text_input(
-                "Projekt (optional)", value="", key="upload_projekt",
-                help="Sortiert im eigenen Raum. Vorhandene: "
-                     + (", ".join(_bekannt) if _bekannt else "noch keine"))
+                tx("Projekt (optional)"), value="", key="upload_projekt",
+                help=tx("Sortiert im eigenen Raum. Vorhandene: ")
+                     + (", ".join(_bekannt) if _bekannt else tx("noch keine")))
 
         # Ein Schalter und keine Selbstverstaendlichkeit: ein
         # Modellaufruf je Bild, bei einem 200-Seiten-Scan also
         # Minuten. Wer das nicht erwartet, haelt die Anwendung fuer
         # haengengeblieben.
         _bilder = st.checkbox(
-            "Abbildungen und gescannte Seiten beschreiben",
+            tx("Abbildungen und gescannte Seiten beschreiben"),
             value=False, key="upload_bilder",
-            help="Fuer Schaubilder in Textdokumenten und fuer gescannte "
+            help=tx("Fuer Schaubilder in Textdokumenten und fuer gescannte "
                  "Seiten, die die Texterkennung nicht lesen kann. Kostet "
-                 "einen Modellaufruf je Bild.")
+                 "einen Modellaufruf je Bild."))
         _pdfs = [d for d in hochgeladen if d.name.lower().endswith(".pdf")]
         if _bilder and _pdfs:
             # Die Schaetzung VOR der Zustimmung, und ueber den GANZEN
@@ -1978,17 +2024,17 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     # das Sehmodell bekommt nur die, an denen sie
                     # scheitert. Die Zahl ist deshalb eine Obergrenze.
                     st.caption(
-                        f"\u2192 {_a} Abbildung(en) -- {_a} Modellaufrufe."
-                        + (f" Dazu {_s} gescannte Seite(n): die liest "
+                        tx(f"\u2192 {_a} Abbildung(en) -- {_a} Modellaufrufe.")
+                        + (tx(f" Dazu {_s} gescannte Seite(n): die liest "
                            f"die Texterkennung, das Sehmodell nur die, die "
                            f"sie nicht lesen kann (hoechstens {_s} "
-                           f"weitere Aufrufe)." if _s else ""))
+                           f"weitere Aufrufe).") if _s else ""))
                 else:
-                    st.caption("\u2192 Nichts Bildliches gefunden.")
+                    st.caption(tx("\u2192 Nichts Bildliches gefunden."))
             except Exception as _e:
-                st.caption(f"Nicht abschaetzbar: {_e}")
+                st.caption(tx(f"Nicht abschaetzbar: {_e}"))
 
-        if st.button("Hochladen & Vektorisieren"):
+        if st.button(tx("Hochladen & Vektorisieren")):
             raeume.sichere_anlage_privat(st.session_state["username"])
             _stand = st.empty()
             # Die Fortschrittszeile der Bildbeschreibung:
@@ -2010,7 +2056,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # oder an welcher Stelle es haengt.
                 _stand.caption(f"{_i} von {len(hochgeladen)}: {_datei.name}")
                 _bericht = {}
-                with st.spinner(f"Verarbeite '{_datei.name}' ..."):
+                with st.spinner(tx(f"Verarbeite '{_datei.name}' ...")):
                     _n, _hinweis = process_uploaded_pdf(
                         _datei, ziel_raum, _projekt, _bilder,
                         benutzer_=st.session_state["username"],
@@ -2035,11 +2081,11 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _schlecht = [e for e in _ergebnisse if not e[1]]
             for _name, _n, _hinweis in _ergebnisse:
                 if _n:
-                    st.success(f"'{_name}' in "
+                    st.success(tx(f"'{_name}' in "
                                f"'{raeume.bezeichnung(ziel_raum)}' — "
-                               f"{_n} Abschnitte durchsuchbar.")
+                               f"{_n} Abschnitte durchsuchbar."))
                 else:
-                    st.error(f"'{_name}' wurde NICHT durchsuchbar.")
+                    st.error(tx(f"'{_name}' wurde NICHT durchsuchbar."))
                 if _hinweis:
                     st.warning(f"{_name}: {_hinweis}")
 
@@ -2061,10 +2107,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # upsert, und die Kennungen sind aus Dateiname und Seite
                 # gebildet.
                 if _schlecht and not _scan_offen:
-                    st.caption(f"{len(_schlecht)} von {len(_ergebnisse)} "
+                    st.caption(tx(f"{len(_schlecht)} von {len(_ergebnisse)} "
                                f"liegen in der Ablage, aber kein Abschnitt "
                                f"davon steht in der Suche. Behebe die "
-                               f"Ursache und lade sie erneut hoch.")
+                               f"Ursache und lade sie erneut hoch."))
             else:
                 st.session_state["pdf_upload_nr"] = _pdf_nr + 1
                 time.sleep(1)
@@ -2081,18 +2127,18 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         _zu_lesen = [d for d in hochgeladen
                      if d.name in (_offen_s.get("namen") or [])]
         if _zu_lesen:
-            st.info(f"{len(_zu_lesen)} Datei(en) mit gescannten Seiten, die "
-                    f"die Texterkennung nicht lesen konnte.")
-            if st.button(f"\U0001f50d Mit Sehmodell lesen ({len(_zu_lesen)})",
+            st.info(tx(f"{len(_zu_lesen)} Datei(en) mit gescannten Seiten, die "
+                    f"die Texterkennung nicht lesen konnte."))
+            if st.button(tx(f"\U0001f50d Mit Sehmodell lesen ({len(_zu_lesen)})"),
                          use_container_width=True,
-                         help="Ein Modellaufruf je Seite. Die Fundstellen "
+                         help=tx("Ein Modellaufruf je Seite. Die Fundstellen "
                               "werden als 'vom Sehmodell gelesen' "
-                              "gekennzeichnet."):
+                              "gekennzeichnet.")):
                 _sm_melder = st.empty()
                 _alle_gut = True
                 for _datei in _zu_lesen:
                     _bericht = {}
-                    with st.spinner(f"Sehmodell liest '{_datei.name}' ..."):
+                    with st.spinner(tx(f"Sehmodell liest '{_datei.name}' ...")):
                         _n, _hinweis = process_uploaded_pdf(
                             _datei, _offen_s["raum"],
                             _offen_s.get("projekt", ""), False,
@@ -2106,8 +2152,8 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                         _alle_gut = False
                         st.warning(f"{_datei.name}: {_hinweis}")
                     else:
-                        st.success(f"'{_datei.name}' — {_n} Abschnitte "
-                                   f"durchsuchbar.")
+                        st.success(tx(f"'{_datei.name}' — {_n} Abschnitte "
+                                   f"durchsuchbar."))
                 _sm_melder.empty()
                 st.session_state.pop("_scan_offen", None)
                 refresh_document_index()
@@ -2125,37 +2171,37 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     #
     # Deshalb hier, als eigener Prozess, der die Sitzung ueberlebt.
     if is_admin():
-        with st.expander("🔄 Nachtragen und neu einlesen"):
+        with st.expander(tx("🔄 Nachtragen und neu einlesen")):
             for _name, (_skript, _log, _titel) in hintergrund.LAEUFE.items():
                 _aktiv = hintergrund.laeuft(_name)
                 if _aktiv:
-                    st.caption(f"**{_titel}** laeuft.")
+                    st.caption(tx(f"**{_titel}** laeuft."))
                     st.code(hintergrund.protokoll(_name, 8) or "(noch keine "
                             "Ausgabe)", language="text")
-                    if st.button("Abbrechen", key=f"stop_{_name}",
+                    if st.button(tx("Abbrechen"), key=f"stop_{_name}",
                                  use_container_width=True):
                         hintergrund.abbrechen(_name)
                         st.rerun()
                 else:
                     if st.button(_titel, key=f"start_{_name}",
                                  use_container_width=True,
-                                 help=f"Startet {_skript} als eigenen "
+                                 help=tx(f"Startet {_skript} als eigenen "
                                       f"Vorgang. Bereits Verarbeitetes wird "
                                       f"uebersprungen; die Oberflaeche "
-                                      f"bleibt benutzbar."):
+                                      f"bleibt benutzbar.")):
                         ok, meldung = hintergrund.starte(_name)
                         if ok:
-                            st.success(meldung)
+                            st.success(tx(meldung))
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.error(meldung)
+                            st.error(tx(meldung))
                     _letzte = hintergrund.protokoll(_name, 3)
                     if _letzte:
-                        st.caption("Zuletzt:")
+                        st.caption(tx("Zuletzt:"))
                         st.code(_letzte, language="text")
                 st.markdown("---")
-            st.caption("Die Anzeige aktualisiert sich beim naechsten Klick.")
+            st.caption(tx("Die Anzeige aktualisiert sich beim naechsten Klick."))
 
     # --- DOKUMENTE JE RAUM ---
     #
@@ -2163,16 +2209,16 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # privaten Dokumente", und dazu ein Admin-Bereich fuer die privaten
     # Dokumente anderer. Das waren drei Sonderfaelle eines einzigen
     # Gedankens: in welchem Raum liegt das Dokument.
-    st.subheader("Dokumente")
+    st.subheader(tx("Dokumente"))
     _raum_liste = [r for r, _s in meine_sammlungen()]
     if not _raum_liste:
-        st.caption("Noch keine Dokumente.")
+        st.caption(tx("Noch keine Dokumente."))
     for _r in _raum_liste:
         _dateien = dateien_je_raum.get(_r, [])
         with st.expander(f"{raeume.bezeichnung(_r)} ({len(_dateien)})",
                          expanded=(len(_raum_liste) == 1)):
             if not _dateien:
-                st.caption("Leer.")
+                st.caption(tx("Leer."))
                 continue
             for f in _dateien:
                 # Das Projekt dazu, wo es eines gibt. Es steht in den
@@ -2181,7 +2227,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # vorhanden. Die Zuordnung liegt fuer den eigenen Raum
                 # schon vor; der Filter oben hat sie berechnet.
                 _pj = _projekt_von.get(f, "") if _r == _mein_raum_f else ""
-                st.caption(f"📄 {f}" + (f"  ·  {_pj}" if _pj else ""))
+                st.caption(tx(f"📄 {f}" + (f"  ·  {_pj}" if _pj else "")))
 
             # Verwalten darf, wer den Raum schreiben darf -- und dazu
             # gehoert ein bestaetigter Notzugang.
@@ -2200,24 +2246,24 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                                           is_admin(),
                                           tuple(mein_notzugang()))
             if not _darf:
-                st.caption("Nur lesen.")
+                st.caption(tx("Nur lesen."))
                 continue
 
             st.markdown("---")
-            _datei = st.selectbox("Dokument verwalten:", _dateien,
-                                  key=f"verw_{_r}")
+            _datei = st.selectbox(tx("Dokument verwalten:"), _dateien,
+                                  key=f"verw_{_r}", format_func=sprache.uebersetzt())
             _spalte1, _spalte2 = st.columns(2)
             with _spalte1:
                 _andere = [x for x in raeume.schreibbar(
                     st.session_state["username"], is_admin(),
                     tuple(mein_notzugang())) if x != _r]
-                _nach = st.selectbox("verschieben nach:",
+                _nach = st.selectbox(tx("verschieben nach:"),
                                      ["-"] + _andere,
-                                     format_func=lambda x: (
+                                     format_func=sprache.uebersetzt(lambda x: (
                                          "-" if x == "-"
-                                         else raeume.bezeichnung(x)),
+                                         else raeume.bezeichnung(x))),
                                      key=f"nach_{_r}")
-                if st.button("Verschieben", key=f"vsch_{_r}",
+                if st.button(tx("Verschieben"), key=f"vsch_{_r}",
                              disabled=(_nach == "-"),
                              use_container_width=True):
                     ok, meldung = verschiebe_dokument(_datei, _r, _nach)
@@ -2225,7 +2271,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     time.sleep(1)
                     st.rerun()
             with _spalte2:
-                if st.button("🗑️ Löschen", key=f"del_{_r}",
+                if st.button(tx("🗑️ Löschen"), key=f"del_{_r}",
                              use_container_width=True):
                     ok, meldung = loesche_dokument(_datei, _r)
                     (st.success if ok else st.error)(meldung)
@@ -2246,9 +2292,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
 
         if foreign:
             st.markdown("---")
-            st.caption("👑 **Admin: Dokumente in fremden Räumen**")
-            st.caption("Nur zur Verwaltung – diese Dokumente werden für "
-                       "dich nicht durchsucht.")
+            st.caption(tx("👑 **Admin: Dokumente in fremden Räumen**"))
+            st.caption(tx("Nur zur Verwaltung – diese Dokumente werden für "
+                       "dich nicht durchsucht."))
             # ZWEISTUFIG, nach Raum. Eine flache Liste aller Dateien
             # aller Nutzer ist bei zwanzig Kollegen keine Uebersicht
             # mehr, sondern eine Wand -- und sie zeigt jedem Verwalter
@@ -2259,23 +2305,23 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             for _r, _f in foreign:
                 _je_raum.setdefault(_r, []).append(_f)
             _wahl_r = st.selectbox(
-                "Raum", sorted(_je_raum),
-                format_func=lambda r: (f"{raeume.bezeichnung(r)} "
-                                       f"({len(_je_raum[r])})"),
+                tx("Raum"), sorted(_je_raum),
+                format_func=sprache.uebersetzt(lambda r: (f"{raeume.bezeichnung(r)} "
+                                       f"({len(_je_raum[r])})")),
                 key="fremd_raum")
             _name_f = st.selectbox(
-                "Eintrag", sorted(_je_raum[_wahl_r]),
-                format_func=lambda k: k[:16] + "...", key="fremd_datei")
+                tx("Eintrag"), sorted(_je_raum[_wahl_r]),
+                format_func=sprache.uebersetzt(lambda k: k[:16] + "..."), key="fremd_datei")
             st.caption(
-                "Kennungen statt Namen: ein Dateiname verraet den "
+                tx("Kennungen statt Namen: ein Dateiname verraet den "
                 "Vorgang. Wer den Inhalt braucht, geht ueber den "
-                "Notzugang -- dann stehen zwei Namen im Protokoll.")
+                "Notzugang -- dann stehen zwei Namen im Protokoll."))
             # Kein Zusammensetzen und Wiederzerlegen einer Beschriftung:
             # ein Dateiname mit " / " darin zerbrach das vorher, und
             # zwar still -- geloescht wurde dann etwas anderes oder
             # nichts.
             _raum_f = _wahl_r
-            if st.button("🗑️ Endgültig löschen", use_container_width=True):
+            if st.button(tx("🗑️ Endgültig löschen"), use_container_width=True):
                 ok, meldung = loesche_dokument(_name_f, _raum_f,
                                                kennung_statt_name=True)
                 (st.success if ok else st.error)(meldung)
@@ -2290,19 +2336,19 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         # der Raum als Ganzes, mit Anzahl, ohne Inhalt.
         if _stille:
             st.markdown("---")
-            st.caption("👑 **Admin: fremde persönliche Räume**")
-            st.caption("Ohne Dateinamen – der strenge Betrieb "
+            st.caption(tx("👑 **Admin: fremde persönliche Räume**"))
+            st.caption(tx("Ohne Dateinamen – der strenge Betrieb "
                        "(`PRIVAT_STRENG`) ist eingeschaltet. Löschbar nur "
-                       "als Ganzes.")
+                       "als Ganzes."))
             _zahlen = dict(_stille)
             _wahl_s = st.selectbox(
-                "Raum", [r for r, _n in _stille],
-                format_func=lambda r: (raeume.bezeichnung(r) + " – "
+                tx("Raum"), [r for r, _n in _stille],
+                format_func=sprache.uebersetzt(lambda r: (raeume.bezeichnung(r) + " – "
                                        + format(_zahlen[r], ",")
-                                       + " Abschnitte"),
+                                       + " Abschnitte")),
                 key="streng_wahl")
             _ok_s = _loeschfreigabe(_wahl_s, _zahlen[_wahl_s], "streng")
-            if st.button("🗑️ Raum leeren",
+            if st.button(tx("🗑️ Raum leeren"),
                          use_container_width=True, disabled=not _ok_s):
                 ok, meldung = store.loesche(raeume.sammlung(_wahl_s))
                 keyword_index.delete_document_by_raum(_wahl_s)
@@ -2312,9 +2358,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # ueberall im strengen Betrieb.
                 _n_oc, _f_oc = owncloud.leere_raumordner(_wahl_s)
                 if _f_oc:
-                    st.warning(f"{len(_f_oc)} Eintraege in ownCloud nicht "
+                    st.warning(tx(f"{len(_f_oc)} Eintraege in ownCloud nicht "
                                f"geloescht -- der naechste Abgleich holt "
-                               f"sie zurueck.")
+                               f"sie zurueck."))
                 refresh_document_index()
                 time.sleep(1)
                 st.rerun()
@@ -2330,10 +2376,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # zitiert die falschen Stellen. Es gehoert zum Index, nicht zur
     # Bedienung, und ein Wechsel verlangt einen neuen Ingest.
     chat_model = st.text_input(
-        "Chat Modell", value=_p["chat_modell"] or llm.modell("CHAT"),
+        tx("Chat Modell"), value=_p["chat_modell"] or llm.modell("CHAT"),
         key=f"chatmodell_{aktives_preset}")
     embed_model = llm.modell("EMBEDDING")
-    with st.expander("🔌 Modell-Endpunkte"):
+    with st.expander(tx("🔌 Modell-Endpunkte")):
         # beschreibung() statt rerank_info: der Schnappschuss vom Start
         # wuerde "Endpunkt" zeigen, wenn der laengst ausgefallen ist -- oder
         # "Modell aus dem Image", wenn der Endpunkt laengst wieder da ist.
@@ -2342,9 +2388,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         st.code(llm.uebersicht() + "\nRANGFOLGE   " + _rangfolge,
                 language="text")
         if getattr(reranker, "endpunkt_erreichbar", lambda: True)() is False:
-            st.warning("Der Rerank-Endpunkt antwortet gerade nicht. Die "
+            st.warning(tx("Der Rerank-Endpunkt antwortet gerade nicht. Die "
                        "Rangfolge kommt vorlaeufig aus der Fusion; der "
-                       "Endpunkt wird von selbst wieder versucht.")
+                       "Endpunkt wird von selbst wieder versucht."))
 
     # --- RUECKMELDUNGEN ---
     #
@@ -2367,7 +2413,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # -- und eines, das jemand anders kennt. Wer sich damit anmeldet,
     # ist im Protokoll nicht von seinem Besitzer zu unterscheiden.
     st.markdown("---")
-    with st.expander("\U0001f511 Passwort aendern"):
+    with st.expander(tx("\U0001f511 Passwort aendern")):
         # EIN FORMULAR, und das ist der Kern. Ein Textfeld uebergibt
         # seinen Inhalt erst, wenn es verlassen wird. Wer tippt und
         # dann auf einen gewoehnlichen Knopf klickt, loest beides
@@ -2381,30 +2427,30 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
         # es seit jeher so.
         _pwe = "eigenes_pw"
         with st.form(f"eigenes_pw_{_feldschluessel(_pwe, 'runde')}"):
-            _alt = st.text_input("Bisheriges Passwort", type="password",
+            _alt = st.text_input(tx("Bisheriges Passwort"), type="password",
                                  key=_feldschluessel(_pwe, "alt"))
             _neu1 = st.text_input(
-                f"Neues Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)",
+                tx(f"Neues Passwort (mindestens {benutzer.MIN_PASSWORT} Zeichen)"),
                 type="password", key=_feldschluessel(_pwe, "neu1"))
-            _neu2 = st.text_input("Wiederholen", type="password",
+            _neu2 = st.text_input(tx("Wiederholen"), type="password",
                                   key=_feldschluessel(_pwe, "neu2"))
             _pw_ab = st.form_submit_button(
-                "Aendern", use_container_width=True, disabled=_antwortet)
+                tx("Aendern"), use_container_width=True, disabled=_antwortet)
         if _pw_ab:
             _ich = st.session_state["username"]
             if not (_alt and _neu1):
-                st.error("Bitte das bisherige und das neue Passwort "
-                         "eintragen.")
+                st.error(tx("Bitte das bisherige und das neue Passwort "
+                         "eintragen."))
             elif _neu1 != _neu2:
-                st.error("Die Eingaben stimmen nicht ueberein.")
+                st.error(tx("Die Eingaben stimmen nicht ueberein."))
             elif _neu1 == _alt:
-                st.error("Das ist das bisherige Passwort.")
+                st.error(tx("Das ist das bisherige Passwort."))
             elif not benutzer.pruefe(_ich, _alt):
                 # Geprueft und nicht geglaubt: sonst genuegt ein
                 # unbeaufsichtigter Bildschirm, um jemanden dauerhaft
                 # auszusperren -- und im Protokoll stuende dabei sein
                 # eigener Name.
-                st.error("Das bisherige Passwort stimmt nicht.")
+                st.error(tx("Das bisherige Passwort stimmt nicht."))
             else:
                 _ok, _m = benutzer.passwort_setzen(_ich, _neu1, von=_ich)
                 (st.success if _ok else st.error)(_m)
@@ -2415,7 +2461,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     # Ein vorhandenes bleibt unangetastet.
                     _bo = {}
                     if owncloud.eingerichtet():
-                        with st.spinner("Richte die Ablage ein ..."):
+                        with st.spinner(tx("Richte die Ablage ein ...")):
                             _bo = owncloud.richte_nutzer_ein(_ich, _neu1,
                                                              _ich)
                         if any("gab es schon" in _t for _t
@@ -2436,16 +2482,16 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # beim Verwalter -- sie wirken auf alle Antworten. Die Anweisung hier
     # wirkt nur auf die eigenen und haengt an der Vorlage an, statt sie zu
     # ersetzen.
-    with st.expander("\U0001f5d2\ufe0f Meine Anweisung"):
+    with st.expander(tx("\U0001f5d2\ufe0f Meine Anweisung")):
         st.caption(
-            "Wie LocaNoto dir antworten soll, zum Beispiel: „Antworte "
+            tx("Wie LocaNoto dir antworten soll, zum Beispiel: „Antworte "
             "knapp, mit Tabellen, und nenne immer die Norm.“ Gilt für "
             "alle deine Antworten, auch über die Schnittstelle. Die Regeln "
-            "des Hauses – Quellen nennen, nichts erfinden – gelten weiter.")
+            "des Hauses – Quellen nennen, nichts erfinden – gelten weiter."))
         _anw = "anweisung"
         with st.form(f"anweisung_{_feldschluessel(_anw, 'runde')}"):
             _anw_text = st.text_area(
-                "Anweisung", value=prompts.anweisung(
+                tx("Anweisung"), value=prompts.anweisung(
                     st.session_state["username"]),
                 max_chars=prompts.ANWEISUNG_MAX, height=140,
                 key=_feldschluessel(_anw, "text"),
@@ -2453,10 +2499,10 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
             _a1, _a2 = st.columns(2)
             with _a1:
                 _anw_ok = st.form_submit_button(
-                    "Speichern", use_container_width=True)
+                    tx("Speichern"), use_container_width=True)
             with _a2:
                 _anw_weg = st.form_submit_button(
-                    "Entfernen", use_container_width=True)
+                    tx("Entfernen"), use_container_width=True)
         if _anw_ok or _anw_weg:
             _ok, _m = prompts.anweisung_speichern(
                 st.session_state["username"], "" if _anw_weg else _anw_text)
@@ -2485,18 +2531,18 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     _koepfe = st.session_state.setdefault("_postfach_koepfe", {})
     _offen = sum(1 for n in _pf_login if n not in _koepfe)
     with st.expander(
-            "\U0001f4ec Meine Postfächer"
-            + (f" ({_offen} offen)" if _offen else "")):
+            tx("\U0001f4ec Meine Postfächer")
+            + (tx(f" ({_offen} offen)") if _offen else "")):
         if not _pf_alle:
             st.caption(
-                "Noch kein Postfach eingerichtet. Ein Verwalter hinterlegt "
+                tx("Noch kein Postfach eingerichtet. Ein Verwalter hinterlegt "
                 "unter 🛠️ Verwaltung → 📬 Postfächer einmal den "
                 "Exchange-Server; danach verbindest du hier dein eigenes "
-                "Postfach mit deiner Mailadresse.")
+                "Postfach mit deiner Mailadresse."))
         else:
             if not _pf_login:
-                st.caption("Kein Postfach verlangt eine eigene Anmeldung — "
-                           "alle sind ohne dein Zutun erreichbar.")
+                st.caption(tx("Kein Postfach verlangt eine eigene Anmeldung — "
+                           "alle sind ohne dein Zutun erreichbar."))
             for _n in _pf_login:
                 _ang = _pf_alle[_n]
                 _was = ("dein persönliches Postfach"
@@ -2504,9 +2550,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 if _n in _koepfe:
                     _s1, _s2 = st.columns([3, 1])
                     with _s1:
-                        st.markdown(f"**{_n}** · {_was} · verbunden")
+                        st.markdown(tx(f"**{_n}** · {_was} · verbunden"))
                     with _s2:
-                        if st.button("Trennen", key=f"pfab_{_n}",
+                        if st.button(tx("Trennen"), key=f"pfab_{_n}",
                                      use_container_width=True):
                             _koepfe.pop(_n, None)
                             st.rerun()
@@ -2518,7 +2564,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                     if _art == "bearer":
                         _pf_u = ""
                         _pf_g = st.text_input(
-                            "Token", type="password",
+                            tx("Token"), type="password",
                             key=_feldschluessel("postfach", f"{_n}_tok"))
                     else:
                         # Exchange will die vollstaendige Mailadresse.
@@ -2526,19 +2572,19 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                         # scheitert erst beim Verbinden.
                         _ist_ex = _ang.get("transport") == "exchange"
                         _pf_u = st.text_input(
-                            "Mailadresse" if _ist_ex else "Benutzer",
-                            placeholder=("vorname.nachname@firma.de"
+                            tx("Mailadresse") if _ist_ex else tx("Benutzer"),
+                            placeholder=(tx("vorname.nachname@firma.de")
                                          if _ist_ex else ""),
                             key=_feldschluessel("postfach", f"{_n}_ben"))
                         _pf_g = st.text_input(
-                            "Passwort", type="password",
+                            tx("Passwort"), type="password",
                             key=_feldschluessel("postfach", f"{_n}_pw"))
                     _pf_ok = st.form_submit_button(
-                        "Verbinden", use_container_width=True,
+                        tx("Verbinden"), use_container_width=True,
                         disabled=_antwortet)
                 if _pf_ok:
                     if not _pf_g:
-                        st.error("Bitte die Anmeldedaten eintragen.")
+                        st.error(tx("Bitte die Anmeldedaten eintragen."))
                     else:
                         _k = mcp.kopf_fuer(_n, _pf_u, _pf_g)
                         # ERST PROBIEREN, dann merken. Sonst faellt eine
@@ -2550,12 +2596,12 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                             _w = _probe[_n].werkzeuge()
                             _koepfe[_n] = _k
                             _felder_leeren("postfach")
-                            st.success(f"Verbunden. {len(_w)} Werkzeuge.")
+                            st.success(tx(f"Verbunden. {len(_w)} Werkzeuge."))
                             time.sleep(1)
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Nicht verbunden: "
-                                     f"{type(e).__name__}: {e}")
+                            st.error(tx(f"Nicht verbunden: "
+                                     f"{type(e).__name__}: {e}"))
                         finally:
                             for _v in _probe.values():
                                 try:
@@ -2563,8 +2609,8 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                                 except Exception:
                                     pass
 
-            st.caption("Die Anmeldedaten liegen nur in dieser Sitzung und "
-                       "verschwinden beim Abmelden.")
+            st.caption(tx("Die Anmeldedaten liegen nur in dieser Sitzung und "
+                       "verschwinden beim Abmelden."))
 
     # --- EIGENE ZUGANGSTOKEN ---
     #
@@ -2583,13 +2629,13 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     _meine_token = [(_h, _e) for _h, _e in auth.liste()
                     if _e.get("benutzer") == st.session_state["username"]]
     if _meine_token:
-        with st.expander(f"\U0001f3ab Meine Zugangstoken "
-                         f"({len(_meine_token)})"):
+        with st.expander(tx(f"\U0001f3ab Meine Zugangstoken "
+                         f"({len(_meine_token)})")):
             st.caption(
-                "Ein Token gilt fuer die HTTP-Schnittstelle und traegt "
+                tx("Ein Token gilt fuer die HTTP-Schnittstelle und traegt "
                 "deine Rechte. Den Wert selbst zeigt niemand mehr an — "
                 "gespeichert ist nur sein Hashwert. Was du nicht mehr "
-                "brauchst, widerrufe.")
+                "brauchst, widerrufe."))
             for _h, _e in _meine_token:
                 _bis = _e.get("gueltig_bis")
                 _was = _e.get("bezeichnung") or "ohne Bezeichnung"
@@ -2603,17 +2649,17 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 _t1, _t2 = st.columns([4, 1])
                 with _t1:
                     st.markdown(f"`{_h[:8]}` · {_was}")
-                    st.caption(f"angelegt {_e.get('erstellt', '?')[:19]}")
+                    st.caption(tx(f"angelegt {_e.get('erstellt', '?')[:19]}"))
                 with _t2:
                     if st.button("🗑️", key=f"eig_token_{_h[:12]}",
-                                 help="Widerrufen"):
+                                 help=tx("Widerrufen")):
                         # Der volle Hashwert und nicht sein Anfang:
                         # auth.widerrufe trifft bei einem mehrdeutigen
                         # Anfang absichtlich keinen.
                         if auth.widerrufe(_h) == 1:
-                            st.info("Widerrufen.")
+                            st.info(tx("Widerrufen."))
                         else:
-                            st.error("Nicht widerrufen.")
+                            st.error(tx("Nicht widerrufen."))
                         _leeren()
                         time.sleep(1)
                         st.rerun()
@@ -2642,7 +2688,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # gleichzeitig, und die wenigen Plaetze sind nach zwei Fundstellen
     # aufgebraucht. Der Standard bleibt dennoch 5; wer mehr braucht, zieht
     # den Regler oder setzt TOP_K.
-    top_k = st.slider("Relevante Abschnitte abrufen", min_value=1, max_value=30,
+    top_k = st.slider(tx("Relevante Abschnitte abrufen"), min_value=1, max_value=30,
                       value=_p["top_k"] or paths.env_int("TOP_K", 5),
                       key=f"topk_{aktives_preset}")
 
@@ -2658,9 +2704,9 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
     # von MIT auf AGPL mit sich bringt.
     st.markdown("---")
     st.caption(
-        "LocaNoto \u00b7 "
+        tx("LocaNoto \u00b7 "
         "[AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html) \u00b7 "
-        "[Quelltext](https://github.com/mw-research/LocaNoto)")
+        "[Quelltext](https://github.com/mw-research/LocaNoto)"))
 
 # --- QUELLEN IM NETZ SUCHEN ---
 #
@@ -2671,27 +2717,27 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
 # Uebernommen wird immer in den eigenen Raum. Vor dem Chat und
 # unabhaengig vom Bestand: gerade wer noch nichts hat, sammelt.
 if _web_server:
-    with st.expander("🌐 Quellen im Netz suchen"):
+    with st.expander(tx("🌐 Quellen im Netz suchen")):
         with st.form("quellen_suche"):
             _qs_anfrage = st.text_input(
-                "Thema", placeholder="Stichworte, z. B. DIN EN 1090 "
-                                     "Ausführungsklassen",
-                help="Geht an Suchmaschinen. Stichworte, keine "
-                     "Namen oder Zahlen aus internen Unterlagen.")
-            _qs_los = st.form_submit_button("Suchen",
+                tx("Thema"), placeholder=tx("Stichworte, z. B. DIN EN 1090 "
+                                     "Ausführungsklassen"),
+                help=tx("Geht an Suchmaschinen. Stichworte, keine "
+                     "Namen oder Zahlen aus internen Unterlagen."))
+            _qs_los = st.form_submit_button(tx("Suchen"),
                                             disabled=_antwortet)
         if _qs_los and (_qs_anfrage or "").strip():
             _qs_vb = mcp.verbinde(ohne=set(mcp.lies_konfiguration())
                                   - _web_server)
             try:
-                with st.spinner("Suche ..."):
+                with st.spinner(tx("Suche ...")):
                     _qs_text = next(iter(_qs_vb.values())).rufe(
                         "web_suchen", {"anfrage": _qs_anfrage,
                                        "anzahl": 10, "lesen": 0})
                 st.session_state["_quellen"] = \
                     pipeline.webtreffer_aus_text(_qs_text)
             except Exception as e:
-                st.error(f"Suche nicht möglich: {type(e).__name__}: {e}")
+                st.error(tx(f"Suche nicht möglich: {type(e).__name__}: {e}"))
             finally:
                 for _v in _qs_vb.values():
                     try:
@@ -2705,15 +2751,15 @@ if _web_server:
                 if st.checkbox(f"**{_md_roh(_q['titel'])}**",
                                key=f"qs_{_q['adresse']}"):
                     _qs_wahl.append(_q)
-                st.caption(_md_roh(_q["adresse"]) + "  \n"
-                           + _md_roh(_q["text"][:300]))
+                st.caption(tx(_md_roh(_q["adresse"]) + "  \n"
+                           + _md_roh(_q["text"][:300])))
                 _web_vorschau(_q, f"qs_{_qk}")
                 st.divider()
-            st.caption("Übernommen wird in deinen eigenen Raum, Ordner "
+            st.caption(tx("Übernommen wird in deinen eigenen Raum, Ordner "
                        "Suchergebnisse. Von dort verschiebst du, was "
-                       "in einen geteilten Raum gehört.")
+                       "in einen geteilten Raum gehört."))
             if _qs_wahl and st.button(
-                    f"{len(_qs_wahl)} in meinen Raum übernehmen",
+                    tx(f"{len(_qs_wahl)} in meinen Raum übernehmen"),
                     key="qs_ueb", disabled=_antwortet):
                 _web_uebernehmen(_qs_wahl)
 
@@ -2746,8 +2792,8 @@ if _bestand > 0:
                 # diesen Hinweis saehe ein mitten im Satz endender Text
                 # wie eine fertige Antwort aus -- und das waere
                 # schlimmer als der Verlust, weil es niemand bemerkt.
-                st.caption("\u26a0\ufe0f Abgebrochen -- die Antwort ist "
-                           "unvollstaendig. Frage noch einmal stellen.")
+                st.caption(tx("\u26a0\ufe0f Abgebrochen -- die Antwort ist "
+                           "unvollstaendig. Frage noch einmal stellen."))
             
             # --- RUECKMELDUNG ---
             #
@@ -2764,7 +2810,7 @@ if _bestand > 0:
                 gegeben = st.session_state.setdefault("rueckmeldungen", set())
                 schluessel = f"{st.session_state.current_chat_id}:{i}"
                 if schluessel in gegeben:
-                    st.caption("Danke -- vermerkt.")
+                    st.caption(tx("Danke -- vermerkt."))
                 else:
                     hoch, runter, _ = st.columns([1, 1, 8])
                     for spalte, zeichen, art, text in (
@@ -2792,18 +2838,18 @@ if _bestand > 0:
             for _ei, _entw in enumerate(msg.get("entwuerfe") or []):
                 _eschl = f"entw_{i}_{_ei}"
                 if _eschl in st.session_state.get("_gesendet", set()):
-                    st.success(f"Gesendet: {_entw['werkzeug']}")
+                    st.success(tx(f"Gesendet: {_entw['werkzeug']}"))
                     continue
                 with st.expander(
-                        f"\u270d\ufe0f Entwurf: {_entw['werkzeug']} "
-                        f"({_entw['server']}) — wartet auf dich",
+                        tx(f"\u270d\ufe0f Entwurf: {_entw['werkzeug']} "
+                        f"({_entw['server']}) — wartet auf dich"),
                         expanded=True):
                     for _k, _w in (_entw.get("argumente") or {}).items():
                         st.markdown(f"**{_k}**")
                         st.code(str(_w), language="text")
                     _s1, _s2 = st.columns(2)
                     with _s1:
-                        if st.button("Senden", key=f"snd_{_eschl}",
+                        if st.button(tx("Senden"), key=f"snd_{_eschl}",
                                      use_container_width=True):
                             _vb = mcp.verbinde(
                                 st.session_state.get("_postfach_koepfe"))
@@ -2812,7 +2858,7 @@ if _bestand > 0:
                                     _entw["werkzeug"], _entw["argumente"])
                                 st.session_state.setdefault(
                                     "_gesendet", set()).add(_eschl)
-                                st.success(str(_erg)[:300])
+                                st.success(tx(str(_erg)[:300]))
                             except Exception as e:
                                 st.error(f"{type(e).__name__}: {e}")
                             finally:
@@ -2824,7 +2870,7 @@ if _bestand > 0:
                             time.sleep(1)
                             st.rerun()
                     with _s2:
-                        if st.button("Verwerfen", key=f"vrw_{_eschl}",
+                        if st.button(tx("Verwerfen"), key=f"vrw_{_eschl}",
                                      use_container_width=True):
                             st.session_state.setdefault(
                                 "_gesendet", set()).add(_eschl)
@@ -2833,7 +2879,7 @@ if _bestand > 0:
             # --- QUELLEN DAUERHAFT ANZEIGEN ---
             if "sources" in msg and msg["sources"]:
                 st.markdown("---")
-                st.markdown("📚 **Verwendete Quellen:**")
+                st.markdown(tx("📚 **Verwendete Quellen:**"))
                 
                 # Kein Abfrageparameter mehr (siehe _quellen_klickbar).
                 # Der erste Aufklapper steht offen: nach dem Sprung
@@ -2856,11 +2902,11 @@ if _bestand > 0:
                     _herk = {"ocr": " · aus Texterkennung",
                              "sehmodell": " · vom Sehmodell gelesen"}.get(
                         source.get("herkunft"), "")
-                    with st.expander(f"📄 {file_n} (Seite {page_n}){_herk}",
+                    with st.expander(tx(f"📄 {file_n} (Seite {page_n}){_herk}"),
                                      expanded=(_gewuenscht == _ziel
                                                or _k == 0)):
                         for t in source["texts"]:
-                            st.info(t)
+                            st.info(tx(t))
                         
                         # Nicht join(DOCS_DIR, name): mit Sachgebieten und
                         # erst recht mit aus ownCloud geholten Ordnern liegt
@@ -2878,7 +2924,7 @@ if _bestand > 0:
                             # Einzigartiger Key für diese Nachricht und diese Seite
                             chk_key = f"chk_{file_n}_{page_n}_{i}"
                             
-                            if st.checkbox(f"👁️ Original-Seite {page_n} als Bild laden", key=chk_key):
+                            if st.checkbox(tx(f"👁️ Original-Seite {page_n} als Bild laden"), key=chk_key):
                                 try:
                                     src_doc = pymupdf.open(pdf_path)
                                     src_page = src_doc.load_page(page_n - 1)
@@ -2886,7 +2932,7 @@ if _bestand > 0:
                                     st.image(pix.tobytes(), caption=f"Originalansicht: {file_n} - Seite {page_n}")
                                     src_doc.close()
                                 except Exception as e:
-                                    st.error(f"Konnte PDF nicht rendern: {e}")
+                                    st.error(tx(f"Konnte PDF nicht rendern: {e}"))
 
             # --- AUS DEM NETZ ---
             #
@@ -2895,24 +2941,24 @@ if _bestand > 0:
             # Suchergebnisse, mit Quelle und Abrufdatum. In einen
             # geteilten Raum nur durch Verschieben.
             if msg.get("web"):
-                st.markdown("🌐 **Aus dem Netz:**")
+                st.markdown(tx("🌐 **Aus dem Netz:**"))
                 _web_wahl = []
                 for _wk, _w in enumerate(msg["web"]):
                     with st.expander(f"🌐 [{_w['nr']}] "
                                      f"{_md_roh(_w['titel'])}"):
-                        st.caption(_md_roh(_w["adresse"]))
+                        st.caption(tx(_md_roh(_w["adresse"])))
                         st.text(_w["text"][:600])
                         _web_vorschau(_w, f"{i}_{_wk}")
-                    if st.checkbox(f"[{_w['nr']}] übernehmen",
+                    if st.checkbox(tx(f"[{_w['nr']}] übernehmen"),
                                    key=f"web_{i}_{_wk}"):
                         _web_wahl.append(_w)
                 if _web_wahl and st.button(
-                        f"{len(_web_wahl)} in meinen Raum übernehmen",
+                        tx(f"{len(_web_wahl)} in meinen Raum übernehmen"),
                         key=f"webueb_{i}", disabled=_antwortet):
                     _web_uebernehmen(_web_wahl)
 
     eingabe = st.chat_input(
-        "Frage an die Datenbank -- Bilder koennen angehaengt werden ...",
+        tx("Frage an die Datenbank -- Bilder koennen angehaengt werden ..."),
         accept_file="multiple", file_type=vision.ERLAUBTE_TYPEN,
         disabled=_antwortet)
 
@@ -2942,8 +2988,8 @@ if _bestand > 0:
                     datei.getvalue(), st.session_state["username"], name))
                 _namen.append(datei.name)
             except Exception as e:
-                st.warning(f"Bild '{datei.name}' konnte nicht gelesen "
-                           f"werden: {e}")
+                st.warning(tx(f"Bild '{datei.name}' konnte nicht gelesen "
+                           f"werden: {e}"))
         if not _text and not _pfade:
             st.stop()
         st.session_state["_auftrag"] = {"frage": _text, "bilder": _pfade,
@@ -2967,14 +3013,14 @@ if _bestand > 0:
         bild_texte = []
         for n, (pfad, anzeige) in enumerate(zip(bild_pfade,
                                                 _auftrag["namen"])):
-            with st.spinner(f"Lese Bild {n + 1} von {len(bild_pfade)} ..."):
+            with st.spinner(tx(f"Lese Bild {n + 1} von {len(bild_pfade)} ...")):
                 try:
                     with open(pfad, "rb") as _f:
                         bild_texte.append(vision.beschreibe(_f.read(),
                                                             user_query))
                 except Exception as e:
-                    st.warning(f"Bild '{anzeige}' konnte nicht gelesen "
-                               f"werden: {e}")
+                    st.warning(tx(f"Bild '{anzeige}' konnte nicht gelesen "
+                               f"werden: {e}"))
 
         if not user_query and not bild_texte:
             st.session_state["_laeuft"] = False
@@ -3007,21 +3053,21 @@ if _bestand > 0:
             try:
                 # --- 1. SUCHSONDEN ---
                 verlauf = pipeline.verlaufstext(st.session_state.messages)
-                with st.spinner("Analysiere Frage und generiere Such-Sonden..."):
+                with st.spinner(tx("Analysiere Frage und generiere Such-Sonden...")):
                     search_queries, sonden_hinweis = pipeline.sonden(
                         chat_client, chat_model, user_query,
                         verlauf=verlauf, bild_texte=bild_texte,
                         preset=aktives_preset)
 
                 if sonden_hinweis:
-                    st.caption("\U0001f9e0 *Nutze Standard-Suche -- Sonden "
-                               f"fehlgeschlagen: {sonden_hinweis}*")
+                    st.caption(tx("\U0001f9e0 *Nutze Standard-Suche -- Sonden "
+                               f"fehlgeschlagen: {sonden_hinweis}*"))
                 else:
-                    st.caption("\U0001f9e0 *Multi-Query Sonden:* \n- `"
+                    st.caption(tx("\U0001f9e0 *Multi-Query Sonden:* \n- `")
                                + "`\n- `".join(search_queries) + "`")
 
                 # --- 2. HYBRIDE SUCHE UND RANGFOLGE ---
-                with st.spinner("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch..."):
+                with st.spinner(tx("Führe hybride Suche (Bedeutung + Exakte Stichworte) durch...")):
                     try:
                         treffer, zahlen = pipeline.suche(
                             meine_sammlungen(nur=selected_raeume or None),
@@ -3039,10 +3085,10 @@ if _bestand > 0:
                         #
                         # Eigene Klausel und nicht die darunter: Ueberzogen
                         # ist kein ValueError, es waere vorbeigeflogen.
-                        st.warning(str(e))
+                        st.warning(tx(str(e)))
                         st.stop()
                     except ValueError as e:
-                        st.error(str(e))
+                        st.error(tx(str(e)))
                         st.stop()
 
                 if not treffer:
@@ -3062,22 +3108,22 @@ if _bestand > 0:
                 # liefert 4096 -- und von aussen war nichts zu sehen.
                 if zahlen.get("vektorausfall"):
                     st.error(
-                        "**Die Vektorsuche hat für "
+                        tx("**Die Vektorsuche hat für ")
                         + ", ".join(f"`{_r}`" for _r
                                     in sorted(zahlen["vektorausfall"]))
-                        + " nicht geantwortet.** Diese Antwort stützt "
+                        + tx(" nicht geantwortet.** Diese Antwort stützt "
                           "sich allein auf die Stichwortsuche und ist "
                           "damit schlechter, als sie sein müsste. "
-                          "Grund: "
+                          "Grund: ")
                         + "; ".join(sorted(
                             set(zahlen["vektorausfall"].values()))))
 
                 if treffer:
                     verfahren = ("Reranker" if reranker is not None
                                  else "Rangfolge-Fusion")
-                    st.caption(f"\U0001f3af *{verfahren}: {zahlen['kandidaten']} "
+                    st.caption(tx(f"\U0001f3af *{verfahren}: {zahlen['kandidaten']} "
                                f"Treffer aus {zahlen['ranglisten']} Ranglisten "
-                               f"auf die besten {len(treffer)} destilliert.*")
+                               f"auf die besten {len(treffer)} destilliert.*"))
 
                 # --- DATENBANK ABFRAGEN ---
                 #
@@ -3094,7 +3140,7 @@ if _bestand > 0:
                     _sqz = (sqlquellen.zugang(sql_raum) if sql_raum
                             else None)
                     abfrage, sql_ergebnis, sql_grund = "", "", ""
-                    with st.spinner("Frage die Datenbank ab..."):
+                    with st.spinner(tx("Frage die Datenbank ab...")):
                         try:
                             abfrage = sqldb.formuliere(
                                 sql_client, llm.modell("SQL", chat_model),
@@ -3120,13 +3166,13 @@ if _bestand > 0:
                     if sql_ergebnis:
                         bloecke += [("datenbank_abfrage", abfrage),
                                     ("datenbank_ergebnis", sql_ergebnis)]
-                        with st.expander("\U0001f5c4\ufe0f Datenbankabfrage"):
+                        with st.expander(tx("\U0001f5c4\ufe0f Datenbankabfrage")):
                             st.code(abfrage, language="sql")
                             st.caption(
-                                f"Konto: "
-                                f"{(_sqz or {}).get('benutzer') or 'Vorgabe'}")
+                                tx(f"Konto: "
+                                f"{(_sqz or {}).get('benutzer') or 'Vorgabe'}"))
                     elif sql_grund:
-                        st.caption("\U0001f5c4\ufe0f *" + sql_grund + "*")
+                        st.caption(tx("\U0001f5c4\ufe0f *" + sql_grund + "*"))
 
                 # --- LISTEN ABFRAGEN ---
                 #
@@ -3146,7 +3192,7 @@ if _bestand > 0:
                         # je Datei. Ein einziges zu waehlen beantwortet
                         # sie halb, und man sieht es der Antwort nicht an.
                         _erg, _grund = [], ""
-                        with st.spinner("Suche in den Listen ..."):
+                        with st.spinner(tx("Suche in den Listen ...")):
                             try:
                                 _erg = tabellen.abfragen(
                                     chat_client, chat_model, user_query,
@@ -3162,8 +3208,8 @@ if _bestand > 0:
                             quelle = _t["datei"] + (f"#{_t['blatt']}"
                                                     if _t["blatt"] else "")
                             if _t["grund"]:
-                                st.caption("\U0001f4ca *" + quelle + ": "
-                                           + _t["grund"] + "*")
+                                st.caption(tx("\U0001f4ca *" + quelle + ": "
+                                           + _t["grund"] + "*"))
                                 continue
                             if not _t["zeilen"]:
                                 # Kein Treffer ist eine Auskunft, aber
@@ -3172,7 +3218,7 @@ if _bestand > 0:
                                 # das Modell wie ein Beleg fuer "gibt es
                                 # nicht".
                                 st.caption("\U0001f4ca *" + quelle
-                                           + ": keine passende Zeile.*")
+                                           + tx(": keine passende Zeile.*"))
                                 continue
                             _mit += 1
                             _tab = sqlpruefung.als_tabelle(_t["spalten"],
@@ -3182,32 +3228,32 @@ if _bestand > 0:
                                  quelle + chr(10) + _t["sql"]),
                                 ("liste_ergebnis", _tab)]
                             with st.expander(
-                                    f"\U0001f4ca Liste: {quelle} "
-                                    f"({len(_t['zeilen'])} Zeilen)"
+                                    tx(f"\U0001f4ca Liste: {quelle} "
+                                    f"({len(_t['zeilen'])} Zeilen)")
                                     + ("" if _t.get("gewaehlt")
-                                       else " — zusätzlich gefunden")):
+                                       else tx(" — zusätzlich gefunden"))):
                                 st.code(_t["sql"], language="sql")
                                 st.markdown(_tab)
                         if not _mit and _grund:
-                            st.caption("\U0001f4ca *Listen nicht verwendet: "
+                            st.caption(tx("\U0001f4ca *Listen nicht verwendet: ")
                                        + _grund + "*")
 
                 # --- 3. KONTEXT FÜR DAS LLM ---
                 dynamic_context = pipeline.kontext(treffer, bild_texte,
                                                    bloecke=bloecke)
 
-                with st.expander("\U0001f6e0\ufe0f Debug-Röntgenblick (Was sieht das LLM?)"):
-                    st.write(f"**Generierte Sonden:** {search_queries}")
+                with st.expander(tx("\U0001f6e0\ufe0f Debug-Röntgenblick (Was sieht das LLM?)")):
+                    st.write(tx(f"**Generierte Sonden:** {search_queries}"))
                     if treffer:
                         for rang, eintrag in enumerate(treffer, 1):
                             meta = eintrag["meta"]
                             st.markdown(
-                                f"**Rang {rang}** | \U0001f4c4 "
+                                tx(f"**Rang {rang}** | \U0001f4c4 "
                                 f"`{meta.get('file_name', '?')}` | "
-                                f"\U0001f3af Sonde: *{meta.get('found_by_query', '?')}*")
+                                f"\U0001f3af Sonde: *{meta.get('found_by_query', '?')}*"))
                             st.caption(f"{eintrag['text'][:250]}...")
                     else:
-                        st.write("Keine Chunks gefunden.")
+                        st.write(tx("Keine Chunks gefunden."))
 
                 # --- 3b. WERKZEUGE ---
                 #
@@ -3237,8 +3283,8 @@ if _bestand > 0:
                     except Exception as e:
                         # Ein Postfach, das klemmt, darf die Frage nach
                         # einem Dokument nicht mitnehmen.
-                        st.warning(f"Werkzeuge nicht verfügbar: "
-                                   f"{type(e).__name__}: {e}")
+                        st.warning(tx(f"Werkzeuge nicht verfügbar: "
+                                   f"{type(e).__name__}: {e}"))
                     finally:
                         for _v in _verb.values():
                             try:
@@ -3287,7 +3333,7 @@ if _bestand > 0:
                 # Auch hier loesen: eine Sperre, die einen Fehler
                 # ueberlebt, macht die Anwendung unbedienbar.
                 st.session_state["_laeuft"] = False
-                st.error(f"Fehler bei der Verarbeitung: {e}")
+                st.error(tx(f"Fehler bei der Verarbeitung: {e}"))
 
 else:
-    st.info("Die Datenbank ist leer. Bitte nutze dein Hintergrund-Skript, um PDFs einzulesen.")
+    st.info(tx("Die Datenbank ist leer. Bitte nutze dein Hintergrund-Skript, um PDFs einzulesen."))

@@ -160,6 +160,7 @@ x-umgebung: &umgebung
   - LOCANOTO_STICHWORTINDEX=${LOCANOTO_STICHWORTINDEX:-}
   # Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud. Bei
   # OpenCloud und oCIS ein App-Token, nicht das Anmeldepasswort.
+  - LOCANOTO_SPRACHE=${LOCANOTO_SPRACHE:-}
   - OWNCLOUD_URL=${OWNCLOUD_URL:-}
   - OWNCLOUD_USER=${OWNCLOUD_USER:-}
   - OWNCLOUD_PASSWORT=${OWNCLOUD_PASSWORT:-}
