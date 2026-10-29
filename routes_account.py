@@ -80,6 +80,63 @@ def login(body: Login, request: Request, response: Response):
     return {"user": name, "expires": s["expires"] if s else None}
 
 
+@router.get("/auth/methods", tags=["account"])
+def sign_in_methods():
+    """Which ways to sign in this installation offers (no sign-in needed)."""
+    import oidc
+    return {"password": True, "oidc": oidc.enabled()}
+
+
+OIDC_FLOW_COOKIE = "locanoto_oidc"
+
+
+@router.get("/auth/oidc/login", tags=["account"])
+def oidc_login(next: str = "/"):
+    """Start the sign-in at the company directory (redirect)."""
+    import oidc
+    from fastapi.responses import RedirectResponse
+    if not oidc.enabled():
+        raise HTTPException(404, "No directory sign-in configured.")
+    url, flow = oidc.start(next)
+    response = RedirectResponse(url, status_code=302)
+    # SameSite=Lax: the directory sends the browser back with a top-level
+    # GET, and a Strict cookie would not come along.
+    response.set_cookie(OIDC_FLOW_COOKIE, flow, max_age=oidc.FLOW_SECONDS,
+                        httponly=True, secure=COOKIE_SECURE, samesite="lax",
+                        path="/api/v1/auth/oidc")
+    return response
+
+
+@router.get("/auth/oidc/callback", tags=["account"])
+def oidc_callback(request: Request, code: str = "", state: str = "",
+                  error: str = ""):
+    """Where the directory sends the browser back. Ends in a session."""
+    import oidc
+    from fastapi.responses import RedirectResponse
+    if not oidc.enabled():
+        raise HTTPException(404, "No directory sign-in configured.")
+    if error or not code:
+        raise HTTPException(401, "The directory did not sign you in.")
+    try:
+        name, next_path = oidc.finish(code, state,
+                                      request.cookies.get(OIDC_FLOW_COOKIE))
+    except oidc.Refused as e:
+        raise HTTPException(403, str(e))
+    # Not a redirect: a navigation chain that started at the directory
+    # counts as cross-site, and the browser would not send the new
+    # SameSite=Strict session cookie with it. A page of our own that moves
+    # on is a same-site navigation.
+    import html
+    from fastapi.responses import HTMLResponse
+    target = html.escape(next_path, quote=True)
+    response = HTMLResponse(
+        f'<!doctype html><meta http-equiv="refresh" content="0;url={target}">'
+        f'<a href="{target}">Continue</a>')
+    response.delete_cookie(OIDC_FLOW_COOKIE, path="/api/v1/auth/oidc")
+    set_session_cookies(response, sessions.issue(name))
+    return response
+
+
 @router.post("/auth/logout", tags=["account"])
 def logout(response: Response):
     clear_session_cookies(response)

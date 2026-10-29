@@ -90,11 +90,13 @@ def upload(file: UploadFile = File(...), room: str = Form(...),
     if not content:
         raise HTTPException(400, "Empty file.")
     report = {}
+    import llm
     try:
-        passages, note = aufnehmen.process_uploaded_pdf(
-            aufnehmen.Datei(file.filename or "unnamed", content), room,
-            project, images, benutzer_=p.name, ist_verwalter=p.is_admin,
-            streng=True, sehmodell=vision, bericht=report)
+        with llm.acting_for(p.name):
+            passages, note = aufnehmen.process_uploaded_pdf(
+                aufnehmen.Datei(file.filename or "unnamed", content), room,
+                project, images, benutzer_=p.name, ist_verwalter=p.is_admin,
+                streng=True, sehmodell=vision, bericht=report)
     except aufnehmen.KeinRecht as e:
         raise HTTPException(403, str(e))
     return {"file": file.filename, "room": room, "passages": passages,

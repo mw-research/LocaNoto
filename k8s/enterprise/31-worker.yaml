@@ -1,0 +1,46 @@
+# --- WORKERS FOR BACKGROUND JOBS (worker.py) ---
+#
+# Ingest, image descriptions, storage sync, backups. Each worker takes one
+# queued job at a time from Postgres (FOR UPDATE SKIP LOCKED); replicas =
+# how many jobs run at once. A pod that is moved stops its script and the
+# job is marked failed, so an admin can start it again.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto-worker
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: worker}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: worker}
+    spec:
+      # Long jobs: give the script time to stop cleanly.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: worker
+          image: locanoto:enterprise
+          command: ["python", "-u", "worker.py"]
+          envFrom:
+            - configMapRef: {name: locanoto}
+            - secretRef: {name: locanoto}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {memory: 1Gi, cpu: 250m}
+            limits: {memory: 4Gi}
+          volumeMounts:
+            - {name: documents, mountPath: /app/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: documents
+          persistentVolumeClaim: {claimName: locanoto-documents}
+        - {name: tmp, emptyDir: {}}

@@ -89,11 +89,17 @@ def _eintrag_daten(name, e):
     brechen. Der Name gehoert dazu, damit ein Eintrag nicht unter einem
     anderen Namen wiederverwendet werden kann.
     """
-    return geheim.kanonisch({
+    felder = {
         "name": name,
         "passwort": e.get("passwort") or "",
         "rolle": e.get("rolle") or "nutzer",
-    })
+    }
+    # The directory identity of an SSO account (oidc.py) is signed too:
+    # it decides who may sign in as this name. Only when present, so the
+    # signatures of all other entries stay as they were.
+    if e.get("extern"):
+        felder["extern"] = e["extern"]
+    return geheim.kanonisch(felder)
 
 
 def lade():
@@ -376,6 +382,28 @@ def passwort_setzen(name, passwort, von="?"):
     _speichere(nutzer)
     protokolliere("passwort", name, von)
     return True, f"Passwort von '{name}' geändert."
+
+
+@_unter_sperre
+def anmeldung_setzen(name, art, von="?", extern=None):
+    """How this account signs in: "lokal" (password) or "oidc" (directory).
+
+    An "oidc" account cannot sign in with a password. extern is the
+    directory identity (issuer|sub) the account is bound to; it is signed
+    (see _eintrag_daten). The kind is not: changing it by hand only
+    switches the way in, and the password of an "oidc" account is random
+    and unknown.
+    """
+    name = (name or "").strip().lower()
+    nutzer, _z = lade()
+    if name not in nutzer:
+        return False, f"'{name}' gibt es nicht."
+    nutzer[name]["anmeldung"] = art
+    if extern is not None:
+        nutzer[name]["extern"] = extern
+    _speichere(nutzer)
+    protokolliere("anmeldung_art", name, von, art)
+    return True, art
 
 
 @_unter_sperre

@@ -1,0 +1,125 @@
+# --- API SERVER (server.py), AS MANY PODS AS NEEDED ---
+#
+# Stateless: sessions are signed cookies, mailbox logins are sealed in the
+# browser, everything else is in Postgres. Any pod answers any request,
+# so no sticky sessions, and the HorizontalPodAutoscaler adds pods under
+# load. The time of an answer is model time; a pod mostly waits, so CPU
+# is a weak signal -- the HPA below scales on CPU and keeps a minimum of
+# two for availability.
+#
+# Uploaded documents lie on a ReadWriteMany volume shared by all pods
+# (written once, read often, no locking needed). Without RWX storage, set
+# replicas to 1 or put documents into OpenCloud only.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: locanoto-documents
+  labels: {app.kubernetes.io/name: locanoto}
+spec:
+  accessModes: [ReadWriteMany]
+  resources: {requests: {storage: 100Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto-server
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}
+spec:
+  selector: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}
+  ports:
+    - {name: http, port: 8700, targetPort: 8700}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto-server
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: server
+          image: locanoto:enterprise
+          command:
+            - uvicorn
+            - server:app
+            - --host=0.0.0.0
+            - --port=8700
+            # The client address for rate limits comes from the ingress;
+            # only trust it from there (adjust to your ingress pods).
+            - --proxy-headers
+            - --forwarded-allow-ips=*
+            # Streamed answers hold a connection for a minute or more.
+            - --timeout-keep-alive=75
+          envFrom:
+            - configMapRef: {name: locanoto}
+            - secretRef: {name: locanoto}
+          ports:
+            - {containerPort: 8700}
+          readinessProbe:
+            httpGet: {path: /api/v1/ready, port: 8700}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/v1/health, port: 8700}
+            periodSeconds: 20
+            failureThreshold: 6
+          startupProbe:
+            httpGet: {path: /api/v1/health, port: 8700}
+            periodSeconds: 5
+            failureThreshold: 60
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {memory: 1Gi, cpu: 250m}
+            # The reranker model in the image is the biggest item; with
+            # RERANKER_BASE_URL (a reranker behind the gateway) 1-2 GiB do.
+            limits: {memory: 6Gi}
+          volumeMounts:
+            - {name: documents, mountPath: /app/data}
+            - {name: tmp, mountPath: /tmp}
+            - {name: config, mountPath: /app/config}
+      volumes:
+        - name: documents
+          persistentVolumeClaim: {claimName: locanoto-documents}
+        - {name: tmp, emptyDir: {}}
+        # State is in Postgres; config/ only holds the key file when no
+        # LOCANOTO_SCHLUESSEL is set -- which must not happen with several
+        # pods. An emptyDir makes that visible instead of silently
+        # creating a key per pod.
+        - {name: config, emptyDir: {}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: locanoto-server
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: locanoto-server}
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: locanoto-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: server}

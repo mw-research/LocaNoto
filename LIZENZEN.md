@@ -1,6 +1,6 @@
 # Lizenzen der Abhängigkeiten
 
-169 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
+172 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
 gelten für die jeweils gepinnte Fassung.
 
 LocaNoto selbst steht unter AGPL-3.0 (siehe `LICENSE`).
@@ -14,10 +14,12 @@ Sie ist keine Rechtsauskunft.
 |---|---|---|
 | `pymupdf` | 1.28.2 | Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial Lic … |
 
-## LGPL (schwaches Copyleft) — 1
+## LGPL (schwaches Copyleft) — 3
 
 | Paket | Fassung | Lizenz |
 |---|---|---|
+| `psycopg` | 3.3.6 | GNU Lesser General Public License v3 (LGPLv3) |
+| `psycopg-binary` | 3.3.6 | GNU Lesser General Public License v3 (LGPLv3) |
 | `pymssql` | 2.2.11 | GNU Library or Lesser General Public License (LGPL) |
 
 ## proprietaer — 11
@@ -56,7 +58,7 @@ Sie ist keine Rechtsauskunft.
 | `nvidia-nvjitlink` | 13.3.33 | ? |
 | `nvidia-nvshmem-cu13` | 3.4.5 | ? |
 
-## freizuegig (MIT/BSD/Apache/PSF/ISC) — 146
+## freizuegig (MIT/BSD/Apache/PSF/ISC) — 147
 | Paket | Fassung | Lizenz |
 |---|---|---|
 ---
@@ -152,6 +154,7 @@ Sie ist keine Rechtsauskunft.
 | `pydantic_core` | 2.46.4 | MIT |
 | `pydeck` | 0.9.3 | Apache License 2.0 |
 | `Pygments` | 2.20.0 | BSD-2-Clause |
+| `PyJWT` | 2.10.1 | MIT License |
 | `PyPika` | 0.51.1 | Apache Software License |
 | `pyproject_hooks` | 1.2.0 | MIT License |
 | `pyspnego` | 0.12.2 | MIT |

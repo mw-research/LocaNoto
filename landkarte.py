@@ -42,7 +42,7 @@ SCHICHT = {
         "sqlpruefung", "sqlquellen", "chats", "feedback", "notzugang",
         "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
         "postfach", "ocr", "answering", "doc_actions", "web_sources",
-        "mailboxes", "accounts", "sessions", "jobs",
+        "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
         "auth", "sicherheit", "datentraeger",
     ),
     "Bestand": (

@@ -1,0 +1,49 @@
+# --- CONFIGURATION AND SECRETS ---
+#
+# The ConfigMap holds what is not secret, the Secrets what is. Every pod
+# (server, worker, pages) gets both, so they see the same settings.
+#
+# Secrets are created from the command line, never from a file in a
+# repository:
+#
+#   kubectl create secret generic locanoto-postgres \
+#     --from-literal=password="$(openssl rand -base64 32)"
+#   kubectl create secret generic locanoto \
+#     --from-literal=LOCANOTO_SCHLUESSEL="$(python -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" \
+#     --from-literal=DATABASE_URL="postgresql://locanoto:<password>@locanoto-postgres:5432/locanoto" \
+#     --from-literal=OPENAI_API_KEY="<virtual key of the gateway>" \
+#     --from-literal=METRICS_TOKEN="$(openssl rand -hex 24)"
+#
+# LOCANOTO_SCHLUESSEL is the installation key: the same for every pod,
+# never in the database, never in a backup. Lose it and the encrypted
+# chats, passages and file names are gone. Keep a copy offline.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locanoto
+  labels: {app.kubernetes.io/name: locanoto}
+data:
+  # Models through the gateway (40-gateway.yaml). Several addresses per
+  # task are possible without a gateway, see llm.py.
+  OPENAI_BASE_URL: "http://locanoto-gateway:4000/v1"
+  CHAT_MODEL: "qwen3.8:27b"
+  CHAT_MODELLE: "qwen3.8:27b"
+  EMBEDDING_MODEL: "qwen3-embedding:8b"
+  VISION_MODEL: "qwen3-vl:32b"
+  # A pseudonym per user goes to the gateway, never the name.
+  LLM_SEND_USER: "pseudonym"
+  LLM_RATE_MAX_WAIT: "60"
+  # Set once, before the first start (see database.py, VECTOR SIZE).
+  DATABASE_DIMENSIONS: "2048"
+  # Sessions and limits (sessions.py).
+  SITZUNG_MINUTEN: "240"
+  SESSION_MAX_HOURS: "12"
+  LOGIN_ATTEMPTS: "10"
+  LOGIN_ATTEMPTS_PER_ADDRESS: "100"
+  API_RATE_PER_MINUTE: "240"
+  # Where uploaded documents lie: the shared volume (30-server.yaml).
+  LOCANOTO_DATEN: "/app/data"
+  LOCANOTO_KONFIG: "/app/config"
+  LOCANOTO_INDEX: "/tmp/locanoto-index"
+  ANONYMIZED_TELEMETRY: "False"

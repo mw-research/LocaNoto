@@ -40,6 +40,7 @@ import benutzer
 import budget
 import database
 import geheim
+import metrics
 import paths
 import sessions
 
@@ -50,6 +51,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1").strip() != "0"
 SESSION_COOKIE = "locanoto_session"
 CSRF_COOKIE = "locanoto_csrf"
 SEALED_COOKIE = "locanoto_sealed"
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "").strip()
 
 paths.bootstrap()
 _key_state, _key_message = geheim.zustand()
@@ -155,6 +157,9 @@ async def _headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Cache-Control", "no-store")
     response.headers["Server-Timing"] = f"app;dur={(time.time() - started) * 1000:.0f}"
+    route = request.scope.get("route")
+    metrics.record_request(getattr(route, "path", "(none)"),
+                           response.status_code, time.time() - started)
     return response
 
 
@@ -211,6 +216,17 @@ def ready():
                                 content={"status": "database",
                                          "detail": type(e).__name__})
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus(authorization: str = Header(default="")):
+    """Counters for Prometheus. With METRICS_TOKEN set, only with that bearer."""
+    from fastapi.responses import PlainTextResponse
+    if METRICS_TOKEN and not secrets.compare_digest(
+            _bearer(authorization), METRICS_TOKEN):
+        raise HTTPException(401, "Metrics token required.")
+    return PlainTextResponse(metrics.render(),
+                             media_type="text/plain; version=0.0.4")
 
 
 # --- ROUTES ---

@@ -177,3 +177,8 @@ lxml==6.1.3
 pyspnego==0.12.2
 requests-ntlm==1.3.0
 tzlocal==5.4.4
+# Enterprise edition (DATABASE_URL): Postgres driver, and PyJWT for
+# checking the ID tokens of an OIDC provider (oidc.py).
+psycopg==3.3.6
+psycopg-binary==3.3.6
+PyJWT==2.10.1

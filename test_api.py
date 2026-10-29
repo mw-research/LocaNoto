@@ -33,7 +33,12 @@ os.environ.update({"LOCANOTO_KONFIG": os.path.join(TMP, "config"),
                    "LOCANOTO_DATEN": os.path.join(TMP, "data"),
                    "COOKIE_SECURE": "0", "CHAT_MODELLE": "fake-a,fake-b",
                    "CHAT_MODEL": "fake-a", "LOGIN_ATTEMPTS": "5",
-                   "API_RATE_PER_MINUTE": "100000"})
+                   "API_RATE_PER_MINUTE": "100000",
+                   "OIDC_ISSUER": "https://idp.test",
+                   "OIDC_CLIENT_ID": "locanoto",
+                   "OIDC_REDIRECT_URI":
+                       "http://testserver/api/v1/auth/oidc/callback",
+                   "OIDC_ADMIN_GROUPS": "locanoto-admins"})
 _db_name = None
 if _SERVER_DB:
     import psycopg
@@ -80,7 +85,7 @@ import pipeline  # noqa: E402
 
 aufnehmen.embed_batch = _fake_embed
 pipeline.embed_batch = _fake_embed
-answering.client = lambda task: _FakeChat()
+answering.client = lambda task, user="": _FakeChat()
 answering._reranker = (None, "fusion")
 
 import auth  # noqa: E402
@@ -110,6 +115,91 @@ def check(name, condition, detail=""):
           + ("" if condition else f"  {str(detail)[:300]}"))
     if not condition:
         failures.append(name)
+
+
+# --- llm.GuardedClient: several endpoints, rate limits ---
+import llm  # noqa: E402
+
+
+class _Limited(Exception):
+    def __init__(self, status, retry_after=None):
+        super().__init__(f"status {status}")
+        self.status_code = status
+        self.response = types.SimpleNamespace(
+            status_code=status,
+            headers={"retry-after": str(retry_after)} if retry_after else {})
+
+
+def _endpoint(name, script):
+    """A fake endpoint that answers from script: "ok" or an exception."""
+    log = []
+
+    def create(**kw):
+        log.append(kw)
+        step = script.pop(0) if script else "ok"
+        if step != "ok":
+            raise step
+        return name
+    c = types.SimpleNamespace(
+        chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=create)),
+        embeddings=types.SimpleNamespace(create=create))
+    return c, log
+
+
+print("=== model access ===")
+llm.RATE_MAX_WAIT, llm.COOLDOWN = 3, 30
+a, log_a = _endpoint("a", [_Limited(429)])
+b, log_b = _endpoint("b", [])
+g = llm.GuardedClient("T1", [("a", a), ("b", b)])
+check("429 at one endpoint goes to the next",
+      g.chat.completions.create(model="m") == "b")
+check("the limited endpoint rests",
+      g.chat.completions.create(model="m") == "b" and len(log_a) == 1)
+c1, log_c = _endpoint("c", [_Limited(429, 0.2), _Limited(429, 0.2)])
+g = llm.GuardedClient("T2", [("c", c1)])
+check("a single endpoint waits a rate limit out",
+      g.embeddings.create(input=["x"], model="m") == "c" and len(log_c) == 3)
+d, log_d = _endpoint("d", [_Limited(500)])
+g = llm.GuardedClient("T3", [("d", d)])
+try:
+    g.chat.completions.create(model="m")
+    check("a broken single endpoint is not retried", False)
+except _Limited:
+    check("a broken single endpoint is not retried", len(log_d) == 1)
+e, log_e = _endpoint("e", [ValueError("bad request")])
+f, log_f = _endpoint("f", [])
+g = llm.GuardedClient("T4", [("e", e), ("f", f)])
+try:
+    g.chat.completions.create(model="m")
+    check("a request error is not sent elsewhere", False)
+except ValueError:
+    check("a request error is not sent elsewhere", not log_f)
+h, log_h = _endpoint("h", [_Limited(429, 5)] * 5)
+g = llm.GuardedClient("T5", [("h", h)])
+llm.RATE_MAX_WAIT = 0.5
+try:
+    g.chat.completions.create(model="m")
+    check("waiting stops at LLM_RATE_MAX_WAIT", False)
+except _Limited:
+    check("waiting stops at LLM_RATE_MAX_WAIT", llm.STATS["T5"]["rate_limited"] >= 1)
+k, log_k = _endpoint("k", [])
+g = llm.GuardedClient("T6", [("k", k)])
+llm.SEND_USER = "pseudonym"
+with llm.acting_for("anna"):
+    g.chat.completions.create(model="m")
+llm.SEND_USER = "off"
+alias = log_k[0].get("user", "")
+check("pseudonym instead of the name", alias.startswith("u-")
+      and "anna" not in alias and alias == llm.pseudonym("anna"), log_k)
+k2, log_k2 = _endpoint("k2", [])
+llm.SEND_USER = "pseudonym"
+llm.for_user(llm.GuardedClient("T7", [("k2", k2)]), "bert").embeddings.create(
+    input=["x"], model="m")
+llm.SEND_USER = "off"
+check("a client for a user sends his pseudonym",
+      log_k2[0].get("user") == llm.pseudonym("bert"), log_k2)
+check("several addresses from the settings", llm.endpoints("CHAT") ==
+      [(llm.basis_url("CHAT"), llm.api_key("CHAT"))])
 
 
 API = "/api/v1"
@@ -471,6 +561,80 @@ check("delete chat", anna.delete(f"{API}/chats/{chat_id}").status_code == 200)
 check("delete document", markus.delete(f"{API}/documents", params={
     "room": "einkauf", "file": "Kessel.txt"}).status_code == 200)
 check("logout", anna.post(f"{API}/auth/logout").status_code == 200)
+
+# --- sign-in through the directory (OIDC), with a stand-in provider ---
+import time as _time  # noqa: E402
+from urllib.parse import parse_qs, urlsplit as _split  # noqa: E402
+
+import jwt as _jwt  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric import rsa as _rsa  # noqa: E402
+
+import oidc  # noqa: E402
+
+_idp_key = _rsa.generate_private_key(public_exponent=65537, key_size=2048)
+oidc.discovery = lambda: {"issuer": "https://idp.test",
+                          "authorization_endpoint": "https://idp.test/auth",
+                          "token_endpoint": "https://idp.test/token",
+                          "jwks_uri": "https://idp.test/keys"}
+oidc.signing_key = lambda token: _idp_key.public_key()
+_next_claims = {}
+oidc.exchange = lambda code, verifier: {"id_token": _jwt.encode(
+    dict({"iss": "https://idp.test", "aud": "locanoto",
+          "iat": int(_time.time()), "exp": int(_time.time()) + 300},
+         **_next_claims), _idp_key, algorithm="RS256")}
+
+
+def directory_sign_in(claims, next_path="/", tamper_state=False):
+    c = TestClient(server.app, follow_redirects=False)
+    r = c.get(f"{API}/auth/oidc/login", params={"next": next_path})
+    q = parse_qs(_split(r.headers["location"]).query)
+    _next_claims.clear()
+    _next_claims.update(claims, nonce=q["nonce"][0])
+    state = "falsch" if tamper_state else q["state"][0]
+    return c, c.get(f"{API}/auth/oidc/callback",
+                    params={"code": "abc", "state": state})
+
+
+print("=== directory sign-in ===")
+check("methods", anon.get(f"{API}/auth/methods").json() == {
+    "password": True, "oidc": True})
+r = TestClient(server.app, follow_redirects=False).get(f"{API}/auth/oidc/login")
+loc = r.headers.get("location", "")
+check("login sends to the directory with PKCE",
+      r.status_code == 302 and loc.startswith("https://idp.test/auth?")
+      and "code_challenge_method=S256" in loc, loc)
+dora, r = directory_sign_in({"sub": "s-dora", "preferred_username":
+                             "Dora@firma.de",
+                             "groups": ["locanoto-admins", "grp-einkauf"]},
+                            next_path="//evil.example/x")
+check("callback signs in", r.status_code == 200 and "locanoto_session" in r.cookies,
+      r.text)
+check("no open redirect", 'url=/"' in r.text, r.text)
+dora.headers["X-LocaNoto-CSRF"] = dora.cookies.get("locanoto_csrf")
+me_d = dora.get(f"{API}/me").json()
+check("account from the directory, role from its groups",
+      me_d.get("user") == "dora" and me_d.get("admin")
+      and me_d.get("sign_in") == "oidc", me_d)
+markus.patch(f"{API}/admin/workspaces/einkauf", json={"group": "grp-einkauf"})
+check("workspace membership through a directory group",
+      "einkauf" in dora.get(f"{API}/me").json()["readable_rooms"])
+check("directory account cannot use a password", anon.post(
+    f"{API}/auth/login", json={"username": "dora", "password": "x" * 12})
+    .status_code == 401)
+_c, r = directory_sign_in({"sub": "s-other", "preferred_username": "dora"})
+check("same name, other directory identity is refused", r.status_code == 403,
+      r.text)
+_c, r = directory_sign_in({"sub": "s-anna", "preferred_username": "anna"})
+check("a local account is not taken over", r.status_code == 403, r.text)
+_c, r = directory_sign_in({"sub": "s-dora", "preferred_username": "dora"},
+                          tamper_state=True)
+check("wrong state is refused", r.status_code == 403, r.text)
+_c, r = directory_sign_in({"sub": "s-dora", "preferred_username": "dora",
+                           "groups": []})
+check("role follows the directory (no admin group: user)",
+      not _c.get(f"{API}/me").json().get("admin"))
+check("and the workspace goes with the group",
+      "einkauf" not in _c.get(f"{API}/me").json()["readable_rooms"])
 
 # --- every route called? ---
 routes = {(m, r.path) for r in server.app.routes

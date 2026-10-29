@@ -1,0 +1,73 @@
+# --- POSTGRES WITH PGVECTOR ---
+#
+# One database for vectors, keyword index, state, rate limits and jobs
+# (database.py). This file is the simple variant: one instance as a
+# StatefulSet with the official pgvector image. For production with
+# failover and point-in-time recovery use an operator instead, e.g.
+# CloudNativePG (a Cluster with 3 instances, image with pgvector, backups
+# to object storage) -- the application only needs DATABASE_URL.
+#
+# pgvector >= 0.7 (halfvec) indexes up to 4000 dimensions; older versions
+# 2000. database.py picks the type itself.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto-postgres
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+spec:
+  selector: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: locanoto-postgres
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+spec:
+  serviceName: locanoto-postgres
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          # Pin an exact tag in production (e.g. 0.8.0-pg16).
+          image: pgvector/pgvector:pg16
+          env:
+            - {name: POSTGRES_DB, value: locanoto}
+            - {name: POSTGRES_USER, value: locanoto}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: locanoto-postgres, key: password}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          args:
+            # HNSW builds and large sorts need memory; vectors are cached
+            # in shared buffers. Size to the bestand: ~2 KB per passage at
+            # 2048 halfvec dimensions, plus the keyword index.
+            - -c
+            - shared_buffers=2GB
+            - -c
+            - maintenance_work_mem=1GB
+            - -c
+            - max_connections=300
+          ports:
+            - {containerPort: 5432}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "locanoto", "-d", "locanoto"]}
+            periodSeconds: 10
+          resources:
+            requests: {memory: 4Gi, cpu: "1"}
+            limits: {memory: 8Gi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 50Gi}}

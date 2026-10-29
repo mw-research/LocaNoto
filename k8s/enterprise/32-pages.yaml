@@ -1,0 +1,57 @@
+# --- THE STREAMLIT PAGES (optional, during the change-over) ---
+#
+# With DATABASE_URL the pages share all state with the server, so they
+# can run next to the new interface on the same data. Streamlit keeps a
+# session in the memory of its pod: with more than one replica the
+# service must send a browser always to the same pod (sessionAffinity).
+# A pod that goes away ends the sessions on it -- users sign in again.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto-pages
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: pages}
+spec:
+  selector: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: pages}
+  sessionAffinity: ClientIP
+  sessionAffinityConfig: {clientIP: {timeoutSeconds: 28800}}
+  ports:
+    - {name: http, port: 8501, targetPort: 8501}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto-pages
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: pages}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: pages}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: pages}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      containers:
+        - name: pages
+          image: locanoto:enterprise
+          command: ["streamlit", "run", "app.py",
+                    "--server.port=8501", "--server.address=0.0.0.0"]
+          envFrom:
+            - configMapRef: {name: locanoto}
+            - secretRef: {name: locanoto}
+          ports:
+            - {containerPort: 8501}
+          readinessProbe:
+            httpGet: {path: /_stcore/health, port: 8501}
+            periodSeconds: 10
+          resources:
+            requests: {memory: 1Gi, cpu: 250m}
+            limits: {memory: 6Gi}
+          volumeMounts:
+            - {name: documents, mountPath: /app/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: documents
+          persistentVolumeClaim: {claimName: locanoto-documents}
+        - {name: tmp, emptyDir: {}}

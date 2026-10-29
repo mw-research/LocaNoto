@@ -65,12 +65,17 @@ _clients_lock = threading.Lock()
 _reranker = None
 
 
-def client(task):
-    """One OpenAI-compatible client per task and process."""
+def client(task, user=""):
+    """The client of a task; with user, its calls are made on his behalf.
+
+    The user goes in explicitly and not through a context variable: the
+    streamed answer resumes this generator in a fresh context per piece.
+    """
     with _clients_lock:
         if task not in _clients:
             _clients[task] = llm.client(task)
-        return _clients[task]
+        c = _clients[task]
+    return llm.for_user(c, user) if user else c
 
 
 def reranker():
@@ -160,7 +165,7 @@ def resolve(user, req):
 
 # --- CHAT TITLE ---
 
-def chat_title(question, model):
+def chat_title(question, model, user=""):
     """A short title for the chat list; the first words when the model fails."""
     words = ""
     try:
@@ -169,7 +174,7 @@ def chat_title(question, model):
                   "der Frage. Antworte NUR mit dem Titel, ohne "
                   "Anfuehrungszeichen.\n"
                   f"Frage: {question}")
-        resp = client("TITLE").chat.completions.create(
+        resp = client("TITLE", user).chat.completions.create(
             model=llm.modell("TITLE", model),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=64, temperature=0.3, timeout=HELPER_TIMEOUT)
@@ -235,7 +240,7 @@ def _sql_block(user, req, question, model, history_text):
                     else "The database has no readable tables."}
     access = sqlquellen.zugang(room) if room else None
     try:
-        query = sqldb.formuliere(client("SQL"), llm.modell("SQL", model),
+        query = sqldb.formuliere(client("SQL", user), llm.modell("SQL", model),
                                  question, schema, history_text)
     except Exception as e:
         return [], {"reason": f"Query not generated: {e}"}
@@ -264,7 +269,7 @@ def _list_blocks(user, req, question, model, history_text, areas):
     if not entries:
         return [], None
     try:
-        results = tabellen.abfragen(client("CHAT"), model, question,
+        results = tabellen.abfragen(client("CHAT", user), model, question,
                                     entries, history_text)
     except Exception as e:
         return [], {"reason": f"Query not generated: {e}"}
@@ -351,14 +356,14 @@ def _ask(user, req):
     title = None
     if req.save:
         if len(messages) == 1:
-            title = chat_title(question, model)
+            title = chat_title(question, model, user)
         chats.speichere(user, chat_id, messages, title)
         yield "chat", {"chat_id": chat_id, "new": new_chat,
                        "title": title or chats.titel(user, chat_id)}
 
     # 1. probes
     history_text = pipeline.verlaufstext(messages)
-    probes, note = pipeline.sonden(client("CHAT"), model, question,
+    probes, note = pipeline.sonden(client("CHAT", user), model, question,
                                    verlauf=history_text,
                                    bild_texte=image_texts, preset=req.preset)
     yield "probes", {"probes": probes, "note": note}
@@ -366,7 +371,7 @@ def _ask(user, req):
     # 2. hybrid search
     try:
         hits, numbers = pipeline.suche(
-            settings["pairs"], client("EMBEDDING"), llm.modell("EMBEDDING"),
+            settings["pairs"], client("EMBEDDING", user), llm.modell("EMBEDDING"),
             probes, user, settings["top_k"], dateien=settings["files"],
             bewerter=reranker())
     except ValueError as e:
@@ -403,7 +408,7 @@ def _ask(user, req):
             ohne=(() if req.web else settings["web_servers"]))
         try:
             extra, drafts = pipeline.werkzeuglauf(
-                client("CHAT"), model, system, messages, connections,
+                client("CHAT", user), model, system, messages, connections,
                 fortschritt=lambda t: progress.append(str(t)))
         except Exception as e:
             progress.append(f"Tools not available: {type(e).__name__}: {e}")
@@ -418,7 +423,7 @@ def _ask(user, req):
 
     # 5. the answer, saved every few seconds while it grows
     parts, last = [], time.time()
-    for piece in pipeline.antwort(client("CHAT"), model, system, messages,
+    for piece in pipeline.antwort(client("CHAT", user), model, system, messages,
                                   zusatz=extra):
         piece = piece if isinstance(piece, str) else str(piece)
         parts.append(piece)

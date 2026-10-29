@@ -1,0 +1,49 @@
+# --- ONE-TIME MOVE OF AN EXISTING INSTALLATION (migrate_to_postgres.py) ---
+#
+# Mounts the OLD volumes read-only next to the new database and copies
+# state files, collections and the keyword index. Stop the old pages
+# first (kubectl scale deploy/locanoto --replicas=0) so nothing changes
+# during the copy. The old data stays untouched -- the way back is to
+# scale the old deployment up again.
+#
+#   kubectl apply -f 60-migrate.yaml
+#   kubectl logs -f job/locanoto-migrate
+#
+# Before deciding DATABASE_DIMENSIONS for good, compare the search on a
+# list of real questions (compare_search.py, see the README).
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: locanoto-migrate
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: migrate}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: migrate}
+    spec:
+      restartPolicy: Never
+      securityContext: {fsGroup: 1000}
+      containers:
+        - name: migrate
+          image: locanoto:enterprise
+          command: ["sh", "-c",
+                    "python migrate_to_postgres.py check && python migrate_to_postgres.py run"]
+          envFrom:
+            - configMapRef: {name: locanoto}
+            - secretRef: {name: locanoto}
+          env:
+            # Read the old installation where it lies.
+            - {name: LOCANOTO_DATEN, value: /old/data}
+            - {name: LOCANOTO_KONFIG, value: /old/config}
+            - {name: LOCANOTO_INDEX, value: /old/data}
+          volumeMounts:
+            - {name: old-data, mountPath: /old/data, readOnly: true}
+            - {name: old-config, mountPath: /old/config, readOnly: true}
+      volumes:
+        # Names of the volumes of the old installation (k8s/10-speicher.yaml).
+        - name: old-data
+          persistentVolumeClaim: {claimName: locanoto-daten, readOnly: true}
+        - name: old-config
+          persistentVolumeClaim: {claimName: locanoto-konfig, readOnly: true}

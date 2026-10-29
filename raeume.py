@@ -277,16 +277,50 @@ def stand_gueltig():
 
 
 def gruppenmitglieder(kennung):
-    """Die Mitglieder, die dieser Raum aus seiner ownCloud-Gruppe zieht."""
+    """Die Mitglieder, die dieser Raum aus seiner Gruppe zieht.
+
+    Two sources, joined: the ownCloud groups (owncloud.py, only while
+    fresh enough) and the groups the company directory reported at the
+    last sign-in (oidc.py, see oidc_gruppen()).
+    """
     eintrag = liste().get(kennung) or {}
     gruppe = str(eintrag.get("gruppe") or "").strip()
     if not gruppe:
         return []
+    aus = set(oidc_gruppen().get(gruppe) or [])
     ok, _alter, _grund = stand_gueltig()
-    if not ok:
-        return []
-    gruppen, _alter = gruppenstand()
-    return list(gruppen.get(gruppe) or [])
+    if ok:
+        gruppen, _alter = gruppenstand()
+        aus |= set(gruppen.get(gruppe) or [])
+    return sorted(aus)
+
+
+OIDC_GRUPPEN_DATEI = os.path.join(paths.DATA_DIR, "oidc_gruppen.json")
+
+
+def oidc_gruppen():
+    """{group: [user]} as reported by the directory at each user's last sign-in."""
+    try:
+        with statefiles.open(OIDC_GRUPPEN_DATEI, "r", encoding="utf-8") as f:
+            daten = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return daten if isinstance(daten, dict) else {}
+
+
+def oidc_gruppen_setzen(benutzer, gruppen):
+    """Replace the groups of one user (called at sign-in)."""
+    with dateisperre.gesperrt(OIDC_GRUPPEN_DATEI):
+        daten = oidc_gruppen()
+        for g in list(daten):
+            daten[g] = [u for u in daten[g] if u != benutzer]
+            if not daten[g]:
+                del daten[g]
+        for g in gruppen:
+            daten.setdefault(str(g), []).append(benutzer)
+        dateisperre.schreibe_atomar(
+            OIDC_GRUPPEN_DATEI, json.dumps(daten, ensure_ascii=False,
+                                           indent=1, sort_keys=True))
 
 
 def mitglieder_gesamt(kennung):

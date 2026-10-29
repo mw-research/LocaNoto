@@ -1,0 +1,64 @@
+# --- INGRESS AND NETWORK POLICIES ---
+#
+# From outside only the ingress reaches LocaNoto, and only the server.
+# Postgres and the gateway answer LocaNoto pods only: whoever reaches
+# Postgres reads everything except plain text (passages and names are
+# encrypted, the keyword index is blind) -- still, it stays closed.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: locanoto
+  annotations:
+    # Streamed answers: no buffering, long reads (ingress-nginx).
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+spec:
+  tls:
+    - hosts: ["locanoto.example.com"]
+      secretName: locanoto-tls
+  rules:
+    - host: locanoto.example.com
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend: {service: {name: locanoto-server, port: {number: 8700}}}
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: locanoto-server, port: {number: 8700}}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: locanoto-postgres
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: postgres}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: In,
+                 values: [server, worker, pages, migrate]}
+      ports:
+        - {port: 5432}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: locanoto-gateway
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - {key: app.kubernetes.io/component, operator: In,
+                 values: [server, worker, pages, migrate]}
+      ports:
+        - {port: 4000}

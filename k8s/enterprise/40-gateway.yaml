@@ -1,0 +1,122 @@
+# --- MODEL GATEWAY (LiteLLM proxy) ---
+#
+# Why: one company, many users, a few model servers or provider keys.
+# Each key and each server has its own limits. The gateway sits in front
+# of all of them and
+#
+#   * spreads calls over every server/key of a model (least busy first),
+#   * waits out or reroutes rate limits, falls back to another model,
+#   * holds rpm/tpm limits for ALL LocaNoto pods together,
+#   * counts usage per pseudonymous user (LLM_SEND_USER=pseudonym) and,
+#     with its own database, per team with budgets (virtual keys).
+#
+# DATA PROTECTION. The gateway sees every prompt. It runs in this cluster,
+# message logging and telemetry are switched off below, and nothing is
+# stored except counters. Provider keys live in the Secret
+# locanoto-gateway, never in LocaNoto. LocaNoto gets a virtual key of the
+# gateway (OPENAI_API_KEY in the Secret locanoto) and can be cut off
+# without touching the provider keys.
+#
+#   kubectl create secret generic locanoto-gateway \
+#     --from-literal=LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)" \
+#     --from-literal=VLLM_KEY="<key of the model servers, if any>" \
+#     --from-literal=AZURE_KEY_EU1="<provider key>" ...
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locanoto-gateway
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+data:
+  config.yaml: |
+    # Several entries with the SAME model_name form one pool.
+    model_list:
+      - model_name: "qwen3.8:27b"
+        litellm_params:
+          model: "openai/qwen3.8:27b"
+          api_base: "http://model-server-a:8000/v1"
+          api_key: "os.environ/VLLM_KEY"
+          rpm: 120
+      - model_name: "qwen3.8:27b"
+        litellm_params:
+          model: "openai/qwen3.8:27b"
+          api_base: "http://model-server-b:8000/v1"
+          api_key: "os.environ/VLLM_KEY"
+          rpm: 120
+      - model_name: "qwen3-embedding:8b"
+        litellm_params:
+          model: "openai/qwen3-embedding:8b"
+          api_base: "http://embedding-server:8000/v1"
+          api_key: "os.environ/VLLM_KEY"
+      - model_name: "qwen3-vl:32b"
+        litellm_params:
+          model: "openai/qwen3-vl:32b"
+          api_base: "http://vision-server:8000/v1"
+          api_key: "os.environ/VLLM_KEY"
+      # A hosted model as overflow, e.g. two regions with own keys:
+      # - model_name: "gpt-4.1"
+      #   litellm_params: {model: "azure/<deployment>", api_base: "https://<eu1>.openai.azure.com",
+      #                    api_key: "os.environ/AZURE_KEY_EU1", api_version: "2024-10-21", tpm: 200000}
+    router_settings:
+      routing_strategy: "least-busy"
+      num_retries: 2
+      timeout: 300
+      allowed_fails: 3
+      cooldown_time: 30
+      # fallbacks: [{"qwen3.8:27b": ["gpt-4.1"]}]   only if allowed to leave the house
+    litellm_settings:
+      turn_off_message_logging: true
+      redact_user_api_key_info: true
+      telemetry: false
+      drop_params: true
+    general_settings:
+      master_key: "os.environ/LITELLM_MASTER_KEY"
+      # Virtual keys, teams and budgets need a database:
+      # database_url: "os.environ/LITELLM_DATABASE_URL"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locanoto-gateway
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+spec:
+  selector: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+  ports:
+    - {name: http, port: 4000, targetPort: 4000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locanoto-gateway
+  labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: gateway}
+    spec:
+      containers:
+        - name: litellm
+          # Pin an exact, tested release tag.
+          image: ghcr.io/berriai/litellm:main-stable
+          args: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+          envFrom:
+            - secretRef: {name: locanoto-gateway}
+          ports:
+            - {containerPort: 4000}
+          readinessProbe:
+            httpGet: {path: /health/readiness, port: 4000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health/liveliness, port: 4000}
+            periodSeconds: 20
+          resources:
+            requests: {memory: 512Mi, cpu: 250m}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/litellm}
+      volumes:
+        - name: config
+          configMap: {name: locanoto-gateway}

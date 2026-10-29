@@ -42,7 +42,7 @@ import paths
 # DATA_DIR entries that are state. Everything else under DATA_DIR stays
 # on disk (documents, backups, the derived index if INDEX_DIR is unset).
 DATA_STATE = ("chats", "anweisungen", "owncloud", "benutzer.log",
-              "owncloud_gruppen.json", "feedback")
+              "owncloud_gruppen.json", "feedback", "oidc_gruppen.json")
 
 # Files under CONFIG_DIR that stay on disk.
 _CONFIG_LOCAL = ("schluessel.key",)
