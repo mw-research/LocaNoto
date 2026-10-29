@@ -32,10 +32,10 @@
 #   <name>-<commit>                  both, fixed -- pin this in production
 #   <name>                           both, moves with every good build
 #
-# "voll" on arm64 needs CUDA wheels of the pinned torch for aarch64; it is
-# built only when asked (input arm64_voll). On a DGX Spark the models run
-# in their own servers anyway, and "schlank" with a rerank endpoint is
-# the intended image there.
+# "voll" is built for arm64 too: every CUDA package pinned in
+# requirements.txt (torch, triton, nvidia-*, cuda-*) has an aarch64
+# wheel, so it runs on a DGX Spark with its GPU. The input arm64_voll
+# switches arm64 off for "voll" if a build should fail there.
 #
 # The enterprise branch builds under its own names (enterprise-schlank,
 # enterprise-voll): installations that pull "schlank" must never get the
@@ -60,9 +60,9 @@ on:
         options: [schlank, voll]
         default: schlank
       arm64_voll:
-        description: "voll auch fuer arm64 bauen (CUDA-Raeder fuer aarch64 noetig)"
+        description: "voll auch fuer arm64 bauen"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: abbild-${{ github.ref }}
@@ -98,7 +98,7 @@ jobs:
           if [ "$V" = "voll" ]; then
             echo "nur_cpu=0" >> "$GITHUB_OUTPUT"
             echo "reranker=BAAI/bge-reranker-v2-m3" >> "$GITHUB_OUTPUT"
-            echo "arm64=${{ github.event.inputs.arm64_voll == 'true' && '1' || '0' }}" >> "$GITHUB_OUTPUT"
+            echo "arm64=${{ github.event.inputs.arm64_voll == 'false' && '0' || '1' }}" >> "$GITHUB_OUTPUT"
           else
             echo "nur_cpu=1" >> "$GITHUB_OUTPUT"
             echo "reranker=" >> "$GITHUB_OUTPUT"

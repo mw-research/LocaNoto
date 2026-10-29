@@ -11,6 +11,9 @@ x-bau: &bau
     RERANKER_MODEL: ${RERANKER_MODEL-BAAI/bge-reranker-v2-m3}
     # Auf 0 setzen, wenn der Xet-Weg in eurem Netz schneller ist.
     HF_HUB_DISABLE_XET: ${HF_HUB_DISABLE_XET:-1}
+    # 1: torch without CUDA. For machines without an NVIDIA GPU, e.g. a
+    # Mac with Apple Silicon -- saves several GB that would do nothing.
+    NUR_CPU: ${NUR_CPU:-0}
 
 x-umgebung: &umgebung
   - APP_TOPIC=${APP_TOPIC:-Allgemein}
