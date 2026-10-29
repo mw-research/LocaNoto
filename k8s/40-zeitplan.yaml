@@ -86,13 +86,13 @@ spec:
           restartPolicy: Never
           containers:
             - name: exec
-              # Irgendein Abbild mit kubectl. Version festgelegt und
-              # nicht "latest": ein Zeitplan, der sich beim naechsten Lauf
-              # ein anderes Werkzeug holt, faellt irgendwann nachts aus.
-              # Nimm das Abbild, das in deiner Umgebung freigegeben ist --
-              # dieses hier ist ein Platzhalter, den ich nicht pruefen
-              # konnte.
-              image: bitnami/kubectl:1.31
+              # An image with kubectl AND a shell (the command below is
+              # sh -c), for amd64 and arm64. Fixed version, not "latest":
+              # a schedule that pulls another tool tomorrow fails at night.
+              # bitnami/kubectl was used here until Bitnami removed its free
+              # images from Docker Hub; registry.k8s.io/kubectl has no shell.
+              # Use the image cleared in your environment if there is one.
+              image: alpine/k8s:1.31.13
               command:
                 - /bin/sh
                 - -c
@@ -129,13 +129,13 @@ spec:
           restartPolicy: Never
           containers:
             - name: exec
-              # Irgendein Abbild mit kubectl. Version festgelegt und
-              # nicht "latest": ein Zeitplan, der sich beim naechsten Lauf
-              # ein anderes Werkzeug holt, faellt irgendwann nachts aus.
-              # Nimm das Abbild, das in deiner Umgebung freigegeben ist --
-              # dieses hier ist ein Platzhalter, den ich nicht pruefen
-              # konnte.
-              image: bitnami/kubectl:1.31
+              # An image with kubectl AND a shell (the command below is
+              # sh -c), for amd64 and arm64. Fixed version, not "latest":
+              # a schedule that pulls another tool tomorrow fails at night.
+              # bitnami/kubectl was used here until Bitnami removed its free
+              # images from Docker Hub; registry.k8s.io/kubectl has no shell.
+              # Use the image cleared in your environment if there is one.
+              image: alpine/k8s:1.31.13
               command:
                 - /bin/sh
                 - -c
