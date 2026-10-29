@@ -1,0 +1,211 @@
+# Installs LocaNoto with deploy/locanoto-setup.py -- the way an admin
+# would, without questions -- and checks the result from the outside:
+# HTTPS with the internal root certificate, sign-in, a question answered
+# end to end (by a stand-in model server), and doctor.py inside.
+#
+# Runs after every successful image build of the enterprise branch, on
+# the image of that very commit, and by hand.
+#
+#   docker-minimal   this machine, core only
+#   docker-full      + web search, OpenCloud, model gateway, classic pages
+#   kind             Kubernetes (kind), internal CA, certificate issued by
+#                    the installer
+#   kind-certmanager Kubernetes, the installer installs cert-manager and it
+#                    issues the certificate from the internal CA
+name: Installation
+
+on:
+  workflow_run:
+    workflows: [Abbild]
+    types: [completed]
+    branches: [enterprise]
+  workflow_dispatch:
+
+jobs:
+  docker:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [minimal, full]
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Stand-in model server
+        run: |
+          nohup python3 deploy/fake_models.py 8099 64 > /tmp/models.log 2>&1 &
+          sleep 1; curl -fs http://127.0.0.1:8099/v1/models
+
+      - name: Answers
+        run: |
+          IP=$(hostname -I | awk '{print $1}')
+          echo "IP=$IP" >> "$GITHUB_ENV"
+          FULL=${{ matrix.variant == 'full' && 'true' || 'false' }}
+          cat > answers.json <<EOF
+          {"target": "docker", "dir": "$HOME/locanoto", "host": "$IP",
+           "tls": "internal", "model_url": "http://$IP:8099/v1",
+           "chat_model": "fake-chat", "embedding_model": "fake-embed",
+           "vision_model": "", "dimensions": 64, "admin_name": "admin",
+           "cloud_host": "cloud.$IP.nip.io",
+           "features": {"websearch": $FULL, "opencloud": $FULL,
+                        "gateway": $FULL, "oidc": false, "pages": $FULL}}
+          EOF
+          cat answers.json
+
+      - name: Install
+        env:
+          LOCANOTO_ADMIN_PASSWORD: Installtest-Passwort-1
+        run: |
+          python3 deploy/locanoto-setup.py --answers answers.json --yes \
+            --state "$HOME/.locanoto" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/locanoto:enterprise-schlank-$SHA"
+
+      - name: From the outside
+        run: |
+          CA="$HOME/.locanoto/ca.crt"
+          curl -fsS --cacert "$CA" "https://$IP/api/v1/health"
+          curl -fsS --cacert "$CA" -c jar -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Installtest-Passwort-1"}' \
+            "https://$IP/api/v1/auth/login"
+          CSRF=$(awk '$6=="locanoto_csrf"{print $7}' jar)
+          curl -fsS --cacert "$CA" -b jar -H "X-LocaNoto-CSRF: $CSRF" \
+            -F room=allgemein -F "file=@README.en.md" "https://$IP/api/v1/documents"
+          ANSWER=$(curl -fsS --cacert "$CA" -b jar -H "X-LocaNoto-CSRF: $CSRF" \
+            -H 'Content-Type: application/json' -d '{"question":"Wie lange ist die Prüffrist?"}' \
+            "https://$IP/api/v1/ask")
+          echo "$ANSWER" | head -c 600; echo
+          echo "$ANSWER" | grep -q "vier Jahre"
+          curl -fsS --cacert "$CA" -o /dev/null "https://$IP/login"
+
+      - name: Upgrade without questions
+        run: |
+          python3 deploy/locanoto-setup.py --upgrade --yes --state "$HOME/.locanoto"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose -f "$HOME/locanoto/compose.yaml" ps -a || true
+          docker compose -f "$HOME/locanoto/compose.yaml" logs --tail 80 || true
+          cat /tmp/models.log || true
+
+  kind:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        certmanager: [false, true]
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      HOST: locanoto.test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Cluster config
+        run: |
+          cat > kind.yaml <<'EOF'
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+            - role: control-plane
+              kubeadmConfigPatches:
+                - |
+                  kind: InitConfiguration
+                  nodeRegistration:
+                    kubeletExtraArgs:
+                      node-labels: "ingress-ready=true"
+              extraPortMappings:
+                - {containerPort: 80, hostPort: 80, protocol: TCP}
+                - {containerPort: 443, hostPort: 443, protocol: TCP}
+          EOF
+
+      - uses: helm/kind-action@v1
+        with:
+          config: kind.yaml
+          cluster_name: locanoto
+
+      - name: Ingress controller and stand-in models
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml
+          kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=300s
+          kubectl create configmap fake-models --from-file=deploy/fake_models.py
+          kubectl apply -f - <<'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata: {name: fake-models}
+          spec:
+            selector: {matchLabels: {app: fake-models}}
+            template:
+              metadata: {labels: {app: fake-models}}
+              spec:
+                containers:
+                  - name: m
+                    image: python:3.12-slim
+                    command: ["python", "/m/fake_models.py", "8099", "64"]
+                    volumeMounts: [{name: m, mountPath: /m}]
+                volumes: [{name: m, configMap: {name: fake-models}}]
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata: {name: fake-models}
+          spec:
+            selector: {app: fake-models}
+            ports: [{port: 8099, targetPort: 8099}]
+          EOF
+          kubectl rollout status deploy/fake-models --timeout=300s
+
+      - name: Answers
+        run: |
+          cat > answers.json <<EOF
+          {"target": "kubernetes", "namespace": "locanoto", "host": "$HOST",
+           "tls": "internal", "install_cert_manager": ${{ matrix.certmanager }},
+           "model_url": "http://fake-models.default.svc:8099/v1",
+           "chat_model": "fake-chat", "embedding_model": "fake-embed",
+           "vision_model": "", "dimensions": 64, "admin_name": "admin",
+           "ingress_class": "nginx", "replicas": 1, "public_check": false,
+           "features": {"websearch": true, "opencloud": false,
+                        "gateway": false, "oidc": false, "pages": false}}
+          EOF
+
+      - name: Install
+        env:
+          LOCANOTO_ADMIN_PASSWORD: Installtest-Passwort-1
+        run: |
+          python3 deploy/locanoto-setup.py --answers answers.json --yes \
+            --state "$HOME/.locanoto" \
+            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/locanoto:enterprise-schlank-$SHA"
+
+      - name: From the outside
+        run: |
+          CA="$HOME/.locanoto/ca.crt"
+          R="--resolve $HOST:443:127.0.0.1"
+          for i in $(seq 1 30); do curl -fsS $R --cacert "$CA" "https://$HOST/api/v1/health" && break; sleep 5; done
+          curl -fsS $R --cacert "$CA" -c jar -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"Installtest-Passwort-1"}' \
+            "https://$HOST/api/v1/auth/login"
+          CSRF=$(awk '$6=="locanoto_csrf"{print $7}' jar)
+          curl -fsS $R --cacert "$CA" -b jar -H "X-LocaNoto-CSRF: $CSRF" \
+            -F room=allgemein -F "file=@README.en.md" "https://$HOST/api/v1/documents"
+          ANSWER=$(curl -fsS $R --cacert "$CA" -b jar -H "X-LocaNoto-CSRF: $CSRF" \
+            -H 'Content-Type: application/json' -d '{"question":"Wie lange ist die Prüffrist?"}' \
+            "https://$HOST/api/v1/ask")
+          echo "$ANSWER" | head -c 600; echo
+          echo "$ANSWER" | grep -q "vier Jahre"
+
+      - name: Upgrade without questions
+        run: python3 deploy/locanoto-setup.py --upgrade --yes --state "$HOME/.locanoto"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n locanoto get pods,ingress,secret -o wide || true
+          kubectl -n locanoto describe pods | tail -80 || true
+          kubectl -n locanoto logs deploy/server --all-containers --tail 80 || true
+          kubectl get pods -A | grep -v Running || true

@@ -483,10 +483,10 @@ Dateien importieren sie.
 |---|---|---|---|
 | **Grundlage** | | | |
 | `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +62 |
-| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +12 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +17 |
+| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +13 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +18 |
 | `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `aufnehmen`, `auth`, `benutzer` +26 |
-| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `jobs`, `keyword_index`, `metrics`, `migrate_to_postgres` +12 |
+| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +13 |
 | `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +16 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `raeume`, `routes_account`, `selbsttest` +3 |
@@ -500,10 +500,10 @@ Dateien importieren sie.
 | `pg_keywords.py` | Keyword search on Postgres -- the enterprise counterpart of keyword_index. | — | `compare_search`, `keyword_index`, `raum_diagnose` |
 | `pg_collection.py` | Chroma-compatible collections on Postgres + pgvector. | — | `migrate_to_postgres`, `store` |
 | **Fachlogik** | | | |
-| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +11 |
+| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +12 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +4 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `answering`, `api`, `app`, `compare_search` +10 |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `mailboxes`, `pipeline` +5 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mailboxes` +6 |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `doc_actions`, `routes_chat` +5 |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
@@ -523,7 +523,7 @@ Dateien importieren sie.
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `app`, `create_token` +7 |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `app`, `routes_account`, `routes_admin` +2 |
-| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `routes_account`, `routes_admin`, `routes_chat`, `server` +2 |
+| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `doctor`, `routes_account`, `routes_admin`, `routes_chat` +3 |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `app`, `bildtext`, `routes_chat` +1 |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `routes_documents`, `selbsttest` |
 | `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `app`, `sqldb` +1 |
@@ -565,18 +565,21 @@ Dateien importieren sie.
 | `migrate_to_postgres.py` | Move an installation from files, SQLite and Chroma to Postgres. | — | — |
 | `test_migration.py` | End-to-end check of the move to Postgres, without a model server. | `SELFTEST_DATABASE` | — |
 | `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
+| `doctor.py` | Is this installation complete? One check per part, in plain words. | `LOCANOTO_LANG`, `LOCANOTO_PUBLIC_URL`, `SSL_CERT_FILE` | — |
 | `compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `test_api`, `test_migration`, `test_multipod` |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
 | `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
 | `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
 | `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
 | `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
+| `make_ca.py` | A small certificate authority for installations without a public one. | — | — |
 | `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
 | `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
 | `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
 | `worker.py` | Runs the background jobs queued in Postgres (see jobs.py). | `WORKER_POLL_SECONDS` | — |
 | `lizenzen.py` | Die Lizenzen der Abhaengigkeiten -- gegen die GEPINNTEN Fassungen. | — | — |
 | `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
+| `trustbundle.py` | One list of trusted certificate authorities for every container. | — | — |
 
 ---
 
