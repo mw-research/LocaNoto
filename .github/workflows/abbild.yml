@@ -72,6 +72,7 @@ jobs:
   name:
     runs-on: ubuntu-latest
     outputs:
+      abbild: ${{ steps.v.outputs.abbild }}
       variante: ${{ steps.v.outputs.variante }}
       name: ${{ steps.v.outputs.name }}
       nur_cpu: ${{ steps.v.outputs.nur_cpu }}
@@ -81,6 +82,12 @@ jobs:
       - name: Variante bestimmen
         id: v
         run: |
+          # Der Abbildname kommt aus der Ablage selbst und nicht aus
+          # einer festen Zeichenkette. Stuende hier "locanoto", schrieben
+          # alle Ablagen auf dasselbe Abbild und ueberschrieben sich
+          # gegenseitig -- ohne Fehler und ohne Warnung. Kleingeschrieben,
+          # weil die Registry keine Grossbuchstaben annimmt.
+          echo "abbild=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           V="${{ github.event.inputs.variante || 'schlank' }}"
           echo "variante=$V" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_name }}" = "enterprise" ]; then
@@ -116,7 +123,7 @@ jobs:
       packages: write
     env:
       AKTIV: ${{ matrix.arch == 'amd64' || needs.name.outputs.arm64 == '1' }}
-      ABBILD: ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}-${{ github.sha }}-${{ matrix.arch }}
+      ABBILD: ${{ needs.name.outputs.abbild }}:${{ needs.name.outputs.name }}-${{ github.sha }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
         if: env.AKTIV == 'true'
@@ -227,7 +234,7 @@ jobs:
 
       - name: Architekturen zu einem Namen verbinden
         run: |
-          BASIS="ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}"
+          BASIS="${{ needs.name.outputs.abbild }}:${{ needs.name.outputs.name }}"
           QUELLEN="$BASIS-${{ github.sha }}-amd64"
           if [ "${{ needs.name.outputs.arm64 }}" = "1" ]; then
             QUELLEN="$QUELLEN $BASIS-${{ github.sha }}-arm64"
@@ -237,7 +244,9 @@ jobs:
 
       - name: Was danach zu tun ist
         run: |
-          echo "Abgelegt als ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}"
+          echo "Abgelegt als ${{ needs.name.outputs.abbild }}:${{ needs.name.outputs.name }}"
+          echo "Fuer das Manifest der feste Kennzeichner:"
+          echo "  ${{ needs.name.outputs.abbild }}:${{ needs.name.outputs.name }}-${{ github.sha }}"
           echo "Architekturen: amd64$([ "${{ needs.name.outputs.arm64 }}" = "1" ] && echo ", arm64")"
           echo
           echo "Das Paket ist beim ERSTEN Mal privat. Ohne eine Aenderung"
