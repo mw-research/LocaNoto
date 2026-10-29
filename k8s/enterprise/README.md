@@ -14,6 +14,16 @@ names, sizes and hosts are placeholders.
 | `50-network.yaml` | Ingress, NetworkPolicies for Postgres and the gateway |
 | `60-migrate.yaml` | one-time move of an existing installation |
 
+## Image
+
+Built by GitHub Actions (`.github/workflows/abbild.yml`) on every push to
+the `enterprise` branch, as `ghcr.io/mw-research/locanoto:enterprise-schlank`
+(CPU, no reranker model in the image) and, started by hand,
+`enterprise-voll`. Each build also carries a fixed tag
+`enterprise-schlank-<commit>`; pin that one in production. The build
+checks text recognition and that the server starts. Installations that
+pull `schlank` are not affected.
+
 ## New installation
 
 ```bash

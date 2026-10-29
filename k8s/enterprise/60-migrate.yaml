@@ -27,7 +27,7 @@ spec:
       securityContext: {fsGroup: 1000}
       containers:
         - name: migrate
-          image: locanoto:enterprise
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           command: ["sh", "-c",
                     "python migrate_to_postgres.py check && python migrate_to_postgres.py run"]
           envFrom:

@@ -34,7 +34,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
       containers:
         - name: pages
-          image: locanoto:enterprise
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           command: ["streamlit", "run", "app.py",
                     "--server.port=8501", "--server.address=0.0.0.0"]
           envFrom:

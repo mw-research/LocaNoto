@@ -26,7 +26,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: worker
-          image: locanoto:enterprise
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           command: ["python", "-u", "worker.py"]
           envFrom:
             - configMapRef: {name: locanoto}
