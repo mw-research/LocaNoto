@@ -1032,6 +1032,15 @@ def k8s_objects(a, sec, cert_manager):
                 volumes=[{"name": "data", "persistentVolumeClaim": {"claimName": "opencloud"}}],
                 security={"runAsUser": 1000, "runAsGroup": 1000, "fsGroup": 1000},
                 strategy={"type": "Recreate"})]
+        # Kubernetes creates subPath directories as root, and not every
+        # storage (hostPath, local-path, some NFS) applies fsGroup.
+        objs[-1]["spec"]["template"]["spec"]["initContainers"].append({
+            "name": "owner", "image": IMAGES["opencloud"],
+            "command": ["chown", "-R", "1000:1000", "/etc/opencloud", "/var/lib/opencloud"],
+            "securityContext": {"runAsUser": 0, "runAsGroup": 0, "runAsNonRoot": False},
+            "volumeMounts": [{"name": "data", "mountPath": "/etc/opencloud", "subPath": "config"},
+                             {"name": "data", "mountPath": "/var/lib/opencloud",
+                              "subPath": "daten"}]})
     if f["gateway"]:
         objs += [
             {"apiVersion": "v1", "kind": "Secret", "metadata": meta("litellm", a, "gateway"),

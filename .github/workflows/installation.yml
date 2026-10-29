@@ -154,6 +154,9 @@ jobs:
           echo "$ANSWER" | head -c 600; echo
           echo "$ANSWER" | grep -q "vier Jahre"
           curl -fsS --cacert "$CA" -o /dev/null "https://$IP/login"
+          if [ "${{ matrix.variant }}" = full ]; then
+            python3 deploy/ci_webdav.py "cloud.$IP.nip.io" "$HOME/.locanoto"
+          fi
 
       - name: Upgrade without questions
         run: |
@@ -239,16 +242,27 @@ jobs:
 
       - name: Answers
         run: |
+          # OpenCloud sends uploads to its own public address, so the name
+          # has to lead to the ingress from inside the cluster as well:
+          # nip.io resolves it to the controller's cluster IP for pods, and
+          # /etc/hosts sends the runner to the port mapping.
+          INGRESS=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+            -o jsonpath='{.spec.clusterIP}')
+          CLOUD="cloud.$INGRESS.nip.io"
+          echo "CLOUD=$CLOUD" >> "$GITHUB_ENV"
+          echo "127.0.0.1 $HOST $CLOUD" | sudo tee -a /etc/hosts
           cat > answers.json <<EOF
           {"target": "kubernetes", "namespace": "locanoto", "host": "$HOST",
+           "cloud_host": "$CLOUD",
            "tls": "internal", "install_cert_manager": ${{ matrix.certmanager }},
            "model_url": "http://fake-models.default.svc:8099/v1",
            "chat_model": "fake-chat", "embedding_model": "fake-embed",
            "vision_model": "", "dimensions": 64, "admin_name": "admin",
            "ingress_class": "nginx", "replicas": 1, "public_check": false,
-           "features": {"websearch": true, "opencloud": false,
+           "features": {"websearch": true, "opencloud": true,
                         "gateway": false, "oidc": false, "pages": false}}
           EOF
+          cat answers.json
 
       - name: Install
         env:
@@ -275,6 +289,7 @@ jobs:
             "https://$HOST/api/v1/ask")
           echo "$ANSWER" | head -c 600; echo
           echo "$ANSWER" | grep -q "vier Jahre"
+          python3 deploy/ci_webdav.py "$CLOUD" "$HOME/.locanoto"
 
       - name: Upgrade without questions
         run: python3 deploy/locanoto-setup.py --upgrade --yes --state "$HOME/.locanoto"
@@ -285,6 +300,7 @@ jobs:
           kubectl -n locanoto get pods,ingress,secret -o wide > /tmp/objects.log 2>&1 || true
           kubectl -n locanoto describe pods > /tmp/describe.log 2>&1 || true
           kubectl -n locanoto logs deploy/server --all-containers --tail 80 > /tmp/server.log 2>&1 || true
+          kubectl -n locanoto logs deploy/opencloud --tail 40 > /tmp/opencloud.log 2>&1 || true
           kubectl get pods -A > /tmp/pods.log 2>&1 || true
           python3 deploy/ci_annotate.py "kind ${{ matrix.certmanager }}" /tmp/install.log \
-            /tmp/objects.log /tmp/describe.log /tmp/server.log /tmp/pods.log
+            /tmp/opencloud.log /tmp/objects.log /tmp/server.log /tmp/pods.log /tmp/describe.log

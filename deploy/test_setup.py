@@ -211,6 +211,10 @@ check("server pulls the image on every rollout and builds the trust bundle first
 check("two server pods and shared documents storage",
       by[("Deployment", "server")]["spec"]["replicas"] == 2
       and by[("PersistentVolumeClaim", "locanoto-documents")]["spec"]["accessModes"] == ["ReadWriteMany"])
+oc_init = by[("Deployment", "opencloud")]["spec"]["template"]["spec"]["initContainers"]
+check("OpenCloud's directories belong to its user, whatever the storage",
+      [c["name"] for c in oc_init] == ["trust", "owner"]
+      and oc_init[1]["securityContext"]["runAsUser"] == 0, oc_init)
 ing = by[("Ingress", "locanoto")]
 check("Let's Encrypt certificate for both names",
       ing["metadata"]["annotations"]["cert-manager.io/issuer"] == "locanoto"
