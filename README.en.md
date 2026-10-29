@@ -256,6 +256,41 @@ The application runs as **one replica**.
 
 ---
 
+## Enterprise edition (several pods, Postgres, SSO)
+
+With `DATABASE_URL` set, LocaNoto keeps all shared state in **Postgres with
+pgvector** instead of files, SQLite and Chroma, and runs as any number of
+stateless pods. Without it, everything stays as described above.
+
+| part | what it does |
+|---|---|
+| `server.py` | API under `/api/v1` (every function of the pages, reference at `/api/v1/docs`) and the web interface (`web.py`) |
+| `worker.py` | background jobs (ingest, images, sync, backup) from a Postgres queue |
+| `database.py`, `pg_collection.py`, `pg_keywords.py` | vectors (shortened to `DATABASE_DIMENSIONS`), blind keyword index, schema |
+| `statefiles.py` | users, workspaces, chats, settings as rows instead of files; locks across pods |
+| `oidc.py` | sign-in through Entra ID, Keycloak, Authentik (OIDC); local accounts stay |
+| `llm.py` | several endpoints/keys per model, rate limits waited out, pseudonymous usage tags |
+| `k8s/enterprise/` | Postgres, server with autoscaling, workers, LiteLLM gateway, network policies, migration job |
+
+**What the database holds and what it does not.** Passages and file names
+are encrypted per workspace as before; the keyword index stores keyed
+hashes of words, never plain text. The installation key is never in the
+database (a Kubernetes Secret, the same for every pod). Mailbox logins are
+never stored on the server; browsers keep them sealed in a cookie.
+
+```bash
+python database.py --check                         # connect, create the schema, show it
+python migrate_to_postgres.py check|run|verify     # move an installation
+python compare_search.py run QUESTIONS.txt --user NAME --out old.json   # before and after
+uvicorn server:app --host 0.0.0.0 --port 8700 --proxy-headers
+python worker.py
+```
+
+Tests: `SELFTEST_DATABASE=<server url> python selbsttest.py` (the self-test
+against a throwaway database), `test_api.py` (every endpoint),
+`test_migration.py`, `test_multipod.py` (two servers and a worker on one
+database).
+
 ## Security model, honestly
 
 | encrypted by LocaNoto | readable on disk |

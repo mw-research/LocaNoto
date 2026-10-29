@@ -122,6 +122,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 COPY . .
 
-EXPOSE 8501
+EXPOSE 8501 8700
 
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]

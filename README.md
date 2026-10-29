@@ -299,6 +299,43 @@ Fragen flach.
 
 ---
 
+## 🏢 Enterprise-Fassung (mehrere Pods, Postgres, SSO)
+
+Ist `DATABASE_URL` gesetzt, liegt aller geteilte Zustand in **Postgres mit
+pgvector** statt in Dateien, SQLite und Chroma, und LocaNoto läuft in
+beliebig vielen zustandslosen Pods. Ohne die Variable bleibt alles wie in
+diesem README beschrieben.
+
+| Teil | Aufgabe |
+|---|---|
+| `server.py` | API unter `/api/v1` (jede Funktion der Oberfläche, Referenz unter `/api/v1/docs`) und die Weboberfläche (`web.py`) |
+| `worker.py` | Hintergrundläufe (Einlesen, Bilder, Abgleich, Sicherung) aus einer Warteschlange in Postgres |
+| `database.py`, `pg_collection.py`, `pg_keywords.py` | Vektoren (gekürzt auf `DATABASE_DIMENSIONS`), blinder Stichwortindex, Schema |
+| `statefiles.py` | Nutzer, Arbeitsbereiche, Chats, Einstellungen als Zeilen statt Dateien; Sperren über Pods hinweg |
+| `oidc.py` | Anmeldung über Entra ID, Keycloak, Authentik (OIDC); lokale Konten bleiben |
+| `llm.py` | mehrere Adressen/Schlüssel je Modell, Rate-Limits werden abgewartet, Nutzung pseudonym zugeordnet |
+| `k8s/enterprise/` | Postgres, Server mit Autoscaling, Worker, LiteLLM-Gateway, NetworkPolicies, Umzugs-Job |
+
+**Was in der Datenbank liegt und was nicht.** Abschnitte und Dateinamen
+sind wie bisher je Arbeitsbereich verschlüsselt; der Stichwortindex
+speichert verschlüsselte Fingerabdrücke der Wörter, nie Klartext. Der
+Installationsschlüssel liegt nie in der Datenbank (Kubernetes-Secret, für
+alle Pods derselbe). Postfach-Zugangsdaten werden nie auf dem Server
+gespeichert; Browser halten sie versiegelt im Cookie.
+
+```bash
+python database.py --check                         # verbinden, Schema anlegen, anzeigen
+python migrate_to_postgres.py check|run|verify     # eine Installation umziehen
+python compare_search.py run FRAGEN.txt --user NAME --out alt.json      # vorher und nachher
+uvicorn server:app --host 0.0.0.0 --port 8700 --proxy-headers
+python worker.py
+```
+
+Tests: `SELFTEST_DATABASE=<Server-URL> python selbsttest.py` (Selbsttest
+gegen eine Wegwerf-Datenbank), `test_api.py` (jeder Endpunkt),
+`test_migration.py`, `test_multipod.py` (zwei Server und ein Worker auf
+einer Datenbank).
+
 ## 🗺️ Die Landkarte
 
 Gut sechzig Dateien. Dieser Abschnitt nennt für jede, was sie tut,
