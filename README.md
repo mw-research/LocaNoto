@@ -465,12 +465,12 @@ Dateien importieren sie.
 | **Fachlogik** | | | |
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +10 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +4 |
-| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `answering`, `api`, `app`, `compare_search` +8 |
+| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `answering`, `api`, `app`, `compare_search` +9 |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `mailboxes`, `pipeline` +5 |
-| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `doc_actions`, `routes_chat` +4 |
+| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `doc_actions`, `routes_chat` +5 |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
-| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K` | `routes_account`, `routes_chat`, `server`, `test_api` +1 |
+| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K` | `routes_account`, `routes_chat`, `server`, `test_api` +2 |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +2 |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `app`, `routes_admin` +4 |
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `mailboxes`, `routes_chat` +4 |
@@ -518,15 +518,16 @@ Dateien importieren sie.
 | `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
-| `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +2 |
+| `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +3 |
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
+| `test_multipod.py` | Two server processes and a worker on one database -- as two pods would run. | `SELFTEST_DATABASE` | — |
 | `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `altbestand`, `selbsttest` |
 | `migrate_to_postgres.py` | Move an installation from files, SQLite and Chroma to Postgres. | — | — |
 | `test_migration.py` | End-to-end check of the move to Postgres, without a model server. | `SELFTEST_DATABASE` | — |
 | `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
-| `compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `test_api`, `test_migration` |
+| `compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `test_api`, `test_migration`, `test_multipod` |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
 | `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
 | `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |

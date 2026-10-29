@@ -34,6 +34,7 @@ SCHICHT = {
         "landkarte", "lizenzen", "migrate_to_postgres", "compare_search",
         "test_migration", "server", "routes_account", "routes_chat",
         "routes_documents", "routes_admin", "worker", "test_api", "web",
+        "test_multipod",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
