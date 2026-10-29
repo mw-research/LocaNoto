@@ -1,8 +1,9 @@
 """Store a file in OpenCloud through its public address and read it back.
 
-    python3 deploy/ci_webdav.py CLOUD_HOST STATE_DIR
+    python3 deploy/ci_webdav.py CLOUD_HOST STATE_DIR [CONNECT_IP]
 
-Uses the app token the installer saved in STATE_DIR/secrets.json and the
+CONNECT_IP sends this script, and only it, to that address for CLOUD_HOST
+(like curl --resolve). Uses the app token the installer saved in STATE_DIR/secrets.json and the
 installation's CA. A WebDAV PUT makes OpenCloud send the content to its
 own public address (OC_URL/data) -- the step that fails when the pod
 cannot reach that address or does not trust its certificate.
@@ -10,6 +11,7 @@ cannot reach that address or does not trust its certificate.
 import base64
 import json
 import os
+import socket
 import ssl
 import sys
 import time
@@ -19,6 +21,12 @@ import urllib.request
 
 def main():
     host, state = sys.argv[1], sys.argv[2]
+    if len(sys.argv) > 3:
+        resolve = socket.getaddrinfo
+
+        def pinned(name, *args, **kw):
+            return resolve(sys.argv[3] if name == host else name, *args, **kw)
+        socket.getaddrinfo = pinned
     with open(os.path.join(state, "secrets.json"), encoding="utf-8") as f:
         token = json.load(f).get("OPENCLOUD_APP_TOKEN", "")
     if not token:

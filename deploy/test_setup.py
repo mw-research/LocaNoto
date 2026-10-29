@@ -163,6 +163,8 @@ check("Caddy issues from the own CA, for both addresses",
       and "handle_path /klassisch*" in caddy)
 check("Caddy answers clients that send no SNI (an IP address)",
       "default_sni 192.168.10.20" in caddy)
+check("OpenCloud reaches its own address through Caddy, whatever the DNS says",
+      svc["caddy"]["networks"]["default"]["aliases"] == ["cloud.example.test"])
 extra_files = sorted(os.listdir(os.path.join(target, "trust-extra")))
 check("internal and company CA in the trust list",
       "locanoto-internal-ca.crt" in extra_files and "company-1.crt" in extra_files, extra_files)
@@ -188,7 +190,8 @@ answers = {"target": "kubernetes", "namespace": "lnt", "host": "locanoto.example
            "dimensions": 1024, "ingress_class": "nginx", "replicas": 2,
            "features": {"websearch": True, "opencloud": True, "gateway": False,
                         "oidc": True, "pages": False},
-           "cloud_host": "cloud.example.test", "oidc_issuer": "https://idp.example.test",
+           "cloud_host": "cloud.example.test", "cloud_internal_ip": "10.96.0.50",
+           "oidc_issuer": "https://idp.example.test",
            "oidc_client_id": "locanoto", "oidc_admin_groups": "it-admins"}
 r = run_setup(answers, state, {"LOCANOTO_OIDC_SECRET": "oidc-secret-value"})
 check("kubernetes render runs", r.returncode == 0, r.stderr[-800:])
@@ -215,6 +218,9 @@ oc_init = by[("Deployment", "opencloud")]["spec"]["template"]["spec"]["initConta
 check("OpenCloud's directories belong to its user, whatever the storage",
       [c["name"] for c in oc_init] == ["trust", "owner"]
       and oc_init[1]["securityContext"]["runAsUser"] == 0, oc_init)
+check("the ingress IP for OpenCloud's own address, when given",
+      by[("Deployment", "opencloud")]["spec"]["template"]["spec"]["hostAliases"]
+      == [{"ip": "10.96.0.50", "hostnames": ["cloud.example.test"]}])
 ing = by[("Ingress", "locanoto")]
 check("Let's Encrypt certificate for both names",
       ing["metadata"]["annotations"]["cert-manager.io/issuer"] == "locanoto"
@@ -275,6 +281,18 @@ with contextlib.redirect_stdout(shown):
 check("no working token within the time gives None, and the token is not shown",
       result is None and "early" not in shown.getvalue() and "token: ***" in shown.getvalue(),
       shown.getvalue())
+
+quiet = io.StringIO()
+with contextlib.redirect_stdout(quiet):
+    unreachable = setup.opencloud_reaches_itself(
+        {"cloud_host": "cloud.example.test", "target": "kubernetes"},
+        lambda *cmd: Done("wget: can't connect to remote host: Connection refused", 1))
+    no_wget = setup.opencloud_reaches_itself(
+        {"cloud_host": "cloud.example.test", "target": "docker"},
+        lambda *cmd: Done("exec: \"wget\": executable file not found in $PATH", 126))
+check("an unreachable own address is reported with what to do, a missing wget is not",
+      unreachable is False and no_wget is True and "cloud_internal_ip" in quiet.getvalue(),
+      quiet.getvalue())
 
 # --- doctor ---
 print("=== doctor ===")

@@ -52,6 +52,13 @@ Innerhalb der Installation sprechen die Dienste unverschlüsselt über ihre
 Dienstnamen; nach außen gibt es nur die eine Adresse (plus die der
 Dateiablage, falls gewählt).
 
+**Dateiablage:** OpenCloud schickt jedes Hochladen an seine eigene
+öffentliche Adresse. Unter Docker leitet der Installer diesen Namen intern
+direkt auf Caddy. In Kubernetes muss das Cluster-DNS den Namen zum Ingress
+führen – sonst bei der Frage „IP, unter der Pods den Ingress erreichen“ die
+Cluster-IP des Ingress-Controllers angeben
+(`kubectl get svc -A | grep -i ingress`). Der Installer prüft das am Ende.
+
 ## Danach
 
 ```bash
@@ -108,6 +115,12 @@ automatically. Company network only → an own certificate authority is
 created; distribute its root certificate `~/.locanoto/ca.crt` once.
 Existing certificate → give `.crt` and `.key`. Company proxy or CA → give
 its certificate; it reaches every container.
+
+**File store:** OpenCloud sends every upload to its own public address.
+With Docker the installer leads that name straight to Caddy inside. In
+Kubernetes the cluster DNS has to lead it to the ingress – otherwise give
+the ingress controller's cluster IP when asked for the IP at which pods
+reach the ingress. The installer checks this at the end.
 
 **Afterwards:** `--check`, `--upgrade`, or run again to change answers.
 **Keep an offline copy of `~/.locanoto/secrets.json`** – without the

@@ -184,6 +184,7 @@ jobs:
     env:
       IMAGE: ${{ needs.image.outputs.ref }}
       HOST: locanoto.test
+      CLOUD: cloud.locanoto.test
     steps:
       - uses: actions/checkout@v4
 
@@ -242,18 +243,16 @@ jobs:
 
       - name: Answers
         run: |
-          # OpenCloud sends uploads to its own public address, so the name
-          # has to lead to the ingress from inside the cluster as well:
-          # nip.io resolves it to the controller's cluster IP for pods, and
-          # /etc/hosts sends the runner to the port mapping.
+          # OpenCloud sends uploads to its own public address. No DNS in
+          # the cluster knows cloud.locanoto.test, so the installer gets the
+          # controller's cluster IP for the pod (cloud_internal_ip). Not
+          # /etc/hosts: kind's DNS reads the runner's and would send the
+          # pod to 127.0.0.1.
           INGRESS=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
             -o jsonpath='{.spec.clusterIP}')
-          CLOUD="cloud.$INGRESS.nip.io"
-          echo "CLOUD=$CLOUD" >> "$GITHUB_ENV"
-          echo "127.0.0.1 $HOST $CLOUD" | sudo tee -a /etc/hosts
           cat > answers.json <<EOF
           {"target": "kubernetes", "namespace": "locanoto", "host": "$HOST",
-           "cloud_host": "$CLOUD",
+           "cloud_host": "$CLOUD", "cloud_internal_ip": "$INGRESS",
            "tls": "internal", "install_cert_manager": ${{ matrix.certmanager }},
            "model_url": "http://fake-models.default.svc:8099/v1",
            "chat_model": "fake-chat", "embedding_model": "fake-embed",
@@ -289,7 +288,7 @@ jobs:
             "https://$HOST/api/v1/ask")
           echo "$ANSWER" | head -c 600; echo
           echo "$ANSWER" | grep -q "vier Jahre"
-          python3 deploy/ci_webdav.py "$CLOUD" "$HOME/.locanoto"
+          python3 deploy/ci_webdav.py "$CLOUD" "$HOME/.locanoto" 127.0.0.1
 
       - name: Upgrade without questions
         run: python3 deploy/locanoto-setup.py --upgrade --yes --state "$HOME/.locanoto"

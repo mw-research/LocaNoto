@@ -235,6 +235,16 @@ def interview(old):
         a["cloud_host"] = ask(T("Adresse der Dateiablage (eigener Hostname)",
                                 "Address of the file store (own host name)"),
                               default_cloud, check=_host_problem).lower()
+        if a["target"] == "kubernetes":
+            # OpenCloud sends every upload to its own public address. Where
+            # the cluster's DNS does not lead that name to the ingress, the
+            # pod gets the address here instead.
+            a["cloud_internal_ip"] = ask(
+                T("IP, unter der Pods den Ingress erreichen (leer: über DNS)",
+                  "IP at which pods reach the ingress (empty: via DNS)"),
+                a.get("cloud_internal_ip", ""),
+                check=lambda v: None if not v or _is_ip(v) else T("keine IP-Adresse",
+                                                                  "not an IP address"))
     f["gateway"] = yes(T("Modell-Gateway (LiteLLM) für viele Nutzer/mehrere Modellserver?",
                          "Model gateway (LiteLLM) for many users/several model servers?"),
                        f.get("gateway", False))
@@ -657,6 +667,11 @@ def docker_files(a, sec):
                          "ports": ["80:80", "443:443"], "volumes": caddy_vol,
                          "environment": compose_escape(proxy_env(a)),
                          "depends_on": ["server"]}
+    if f["opencloud"]:
+        # OpenCloud sends every upload to its own public address. Inside
+        # this network the name leads straight to Caddy, whatever the
+        # company DNS answers in here.
+        services["caddy"]["networks"] = {"default": {"aliases": [a["cloud_host"]]}}
     volumes = {n: {} for n in ("pgdata", "documents", "config", "trust",
                                "caddy-data", "caddy-config")}
     if f["opencloud"]:
@@ -750,6 +765,8 @@ def install_docker(a, sec, first):
             write_files(root, docker_files(a, sec))
             docker_compose(root, "up", "-d")
             wait(T("Warte auf den Server", "Waiting for the server"), server_ready)
+        opencloud_reaches_itself(a, lambda *cmd: docker_compose(
+            root, "exec", "-T", "opencloud", *cmd, check=False))
     app_setup(ex, a, first)
     return ex
 
@@ -762,6 +779,27 @@ TOKEN_LINE = re.compile(r"(?im)^[ \t]*token:[ \t]*(\S(?:[^\r\n]*\S)?)[ \t\r]*$")
 TOKEN_CHECK = ("read -r P; OWNCLOUD_PASSWORT=\"$P\" OWNCLOUD_ADMIN_PASSWORT=\"$P\" "
                "python -c 'import owncloud; ok, m = owncloud.pruefe(); print(m); "
                "raise SystemExit(0 if ok else 1)'")
+
+
+def opencloud_reaches_itself(a, run):
+    """Warn when OpenCloud cannot reach its own public address.
+
+    Every upload goes there; without it the file store answers logins
+    and listings but fails each upload with 500."""
+    r = run("wget", "-q", "-T", "10", "--no-check-certificate", "-O", "/dev/null",
+            f"https://{a['cloud_host']}/status.php")
+    if r.returncode == 0 or "not found" in (r.stdout + r.stderr).lower():
+        return True        # reachable, or no wget in the image to tell
+    print("  ! " + T(f"OpenCloud erreicht seine eigene Adresse https://{a['cloud_host']} "
+                     "nicht -- Hochladen in die Ablage wird scheitern.",
+                     f"OpenCloud cannot reach its own address https://{a['cloud_host']} "
+                     "-- uploads to the file store will fail."))
+    if a["target"] == "kubernetes":
+        print("    " + T("Den Namen im Cluster-DNS auf den Ingress zeigen lassen, oder die "
+                         "IP des Ingress als cloud_internal_ip eintragen und --upgrade.",
+                         "Point the name at the ingress in the cluster DNS, or enter the "
+                         "ingress IP as cloud_internal_ip and run --upgrade."))
+    return False
 
 
 def opencloud_token(sec, create, execute, seconds=300):
@@ -1034,6 +1072,9 @@ def k8s_objects(a, sec, cert_manager):
                 strategy={"type": "Recreate"})]
         # Kubernetes creates subPath directories as root, and not every
         # storage (hostPath, local-path, some NFS) applies fsGroup.
+        if a.get("cloud_internal_ip"):
+            objs[-1]["spec"]["template"]["spec"]["hostAliases"] = [
+                {"ip": a["cloud_internal_ip"], "hostnames": [a["cloud_host"]]}]
         objs[-1]["spec"]["template"]["spec"]["initContainers"].append({
             "name": "owner", "image": IMAGES["opencloud"],
             "command": ["chown", "-R", "1000:1000", "/etc/opencloud", "/var/lib/opencloud"],
@@ -1191,6 +1232,8 @@ def install_kubernetes(a, sec, first, runner):
             kubectl("-n", ns, "rollout", "restart", "deploy/server", "deploy/worker",
                     *(["deploy/pages"] if a["features"]["pages"] else []))
             kubectl("-n", ns, "rollout", "status", "deploy/server", "--timeout=900s")
+        opencloud_reaches_itself(a, lambda *cmd: kubectl(
+            "-n", ns, "exec", "deploy/opencloud", "--", *cmd, check=False))
     app_setup(ex, a, first)
     return ex
 
