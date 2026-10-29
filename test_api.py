@@ -471,6 +471,19 @@ for method, path, payload in (
 check("backups", "backups" in markus.get(f"{API}/admin/backups").json())
 r = markus.post(f"{API}/admin/backups")
 check("start backup", r.status_code == 200, r.text)
+import sicherung  # noqa: E402
+_backup = sicherung.sichere()
+check("backup written", _backup.get("name") and not _backup.get("fehler"),
+      _backup)
+if database.active():
+    check("backup holds the state (users, chats, settings)",
+          _backup.get("zustand", 0) > 0, _backup)
+r = markus.post(f"{API}/admin/backups/{_backup['name']}/restore",
+                json={"overwrite": True, "state": database.active()})
+check("restore", r.status_code == 200 and not r.json().get("fehler")
+      and (not database.active() or r.json().get("zustand", 0) > 0), r.text)
+check("still signed in after restoring the state",
+      markus.get(f"{API}/me").status_code == 200)
 check("restore needs overwrite", markus.post(
     f"{API}/admin/backups/x/restore", json={"overwrite": False}).status_code == 400)
 check("restore unknown backup fails cleanly", markus.post(

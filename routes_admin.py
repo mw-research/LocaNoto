@@ -420,6 +420,9 @@ def start_backup(p: Principal = Depends(admin)):
 class Restore(BaseModel):
     overwrite: bool = Field(description="must be true: replaces data")
     room: str | None = None
+    state: bool = Field(default=False,
+                        description="also users, chats and settings "
+                                    "(backups of a Postgres installation)")
 
 
 @router.post("/backups/{name}/restore", tags=["admin"])
@@ -427,7 +430,8 @@ def restore_backup(name: str, body: Restore, p: Principal = Depends(admin)):
     if not body.overwrite:
         raise HTTPException(400, "Set overwrite=true -- a restore replaces "
                                  "the current state.")
-    report = sicherung.hole_zurueck(name, nur_raum=body.room)
+    report = sicherung.hole_zurueck(name, nur_raum=body.room,
+                                    zustand=body.state)
     benutzer.protokolliere("sicherung_zurueck", name, p.name, body.room or "")
     return report
 

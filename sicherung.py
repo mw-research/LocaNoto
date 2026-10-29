@@ -45,8 +45,10 @@ import time
 
 import numpy as np
 
+import database
 import paths
 import raeume
+import statefiles
 import store
 
 # Wohin gesichert wird. Unter DATA_DIR und damit auf dem persistenten
@@ -299,8 +301,11 @@ def sichere(fortschritt=None):
     # macht.
     for datei in ("raeume.json", "owncloud.json", "raumschluessel.json"):
         quelle = os.path.join(paths.CONFIG_DIR, datei)
-        if os.path.exists(quelle):
-            shutil.copy(quelle, os.path.join(vorlaeufig, datei))
+        if statefiles.exists(quelle):
+            with open(os.path.join(vorlaeufig, datei), "wb") as f:
+                f.write(statefiles.read_bytes(quelle))
+    if database.active():
+        bericht["zustand"] = _sichere_zustand(vorlaeufig)
 
     shutil.rmtree(ziel, ignore_errors=True)
     os.replace(vorlaeufig, ziel)
@@ -431,8 +436,54 @@ def vollstaendige():
             and s.get("abschnitte")]
 
 
-def hole_zurueck(name, nur_raum=None, fortschritt=None):
+# --- STATE (Postgres) ---
+#
+# With DATABASE_URL users, chats, settings and room keys are rows of the
+# table state_file instead of files on a volume -- a volume snapshot no
+# longer has them. So the backup takes them along, byte for byte: what
+# is encrypted there stays encrypted here. The installation key is never
+# among them (statefiles.py keeps it out of the database).
+
+ZUSTAND = "zustand"
+
+
+def _sichere_zustand(ordner):
+    """Every state file into <backup>/zustand/<path>. Returns the count."""
+    rows = database.connect().execute(
+        "SELECT path, content FROM state_file ORDER BY path").fetchall()
+    for pfad, inhalt in rows:
+        teile = [t for t in pfad.split("/") if t not in ("", ".", "..")]
+        ziel = os.path.join(ordner, ZUSTAND, *teile)
+        os.makedirs(os.path.dirname(ziel), exist_ok=True)
+        with open(ziel, "wb") as f:
+            f.write(bytes(inhalt))
+    return len(rows)
+
+
+def _hole_zustand(quelle):
+    """State files of a backup back into the store. Returns the count."""
+    basis = os.path.join(quelle, ZUSTAND)
+    wurzeln = {"config": paths.CONFIG_DIR, "data": paths.DATA_DIR}
+    n = 0
+    for w, _u, dateien in os.walk(basis):
+        for d in dateien:
+            rel = os.path.relpath(os.path.join(w, d), basis).split(os.sep)
+            if rel[0] not in wurzeln or len(rel) < 2:
+                continue
+            ziel = os.path.join(wurzeln[rel[0]], *rel[1:])
+            if statefiles.key(ziel) is None and database.active():
+                continue  # only what belongs into the state store
+            with open(os.path.join(w, d), "rb") as f:
+                statefiles.write(ziel, f.read())
+            n += 1
+    return n
+
+
+def hole_zurueck(name, nur_raum=None, fortschritt=None, zustand=False):
     """Spielt einen Abzug in die Sammlungen zurueck.
+
+    zustand=True also restores the state files (users, chats, settings) a
+    Postgres backup holds -- they replace the current ones.
 
     upsert und nicht add: ein zweiter Lauf soll den Bestand nicht
     verdoppeln und nicht an bekannten Kennungen scheitern. Vorhandene
@@ -503,9 +554,24 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None):
             bericht["fehler"].append({"raum": kennung, "grund": str(e)})
         bericht["raeume"][kennung] = geschrieben
 
+    if zustand:
+        if os.path.isdir(os.path.join(quelle, ZUSTAND)):
+            bericht["zustand"] = _hole_zustand(quelle)
+        else:
+            bericht["fehler"].append({"raum": "-", "grund": (
+                "Dieser Abzug enthaelt keinen Zustand (er stammt nicht aus "
+                "einer Installation mit DATABASE_URL).")})
+
     # Der Stichwortindex wird NICHT aus dem Abzug geholt, sondern neu
     # gebaut: er ist ableitbar, und ein Abzug davon waere ein zweiter Ort,
     # der mit dem ersten aus dem Takt geraten kann.
+    #
+    # On Postgres nobody else would do it: the pages rebuild a local
+    # index when they start, the server keeps the shared one. So here.
+    if database.active():
+        import keyword_index
+        bericht["stichwortindex"] = keyword_index.rebuild_from_raeume(
+            _raum_sammlungen())
     return bericht
 
 
