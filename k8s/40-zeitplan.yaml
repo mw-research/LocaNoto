@@ -80,6 +80,15 @@ spec:
       # Wiederholen kostet dabei nichts: geholt wird nur, was neu oder
       # geaendert ist, und eingelesen nur, was fehlt.
       backoffLimit: 4
+      # Lifetime. A finished run, successful or not, is deleted with its
+      # pod after three days -- long enough to read the logs after a
+      # weekend; successfulJobsHistoryLimit alone keeps runs forever when
+      # the schedule stops. A run that hangs (image not pullable, exec
+      # without answer) is ended after 23 hours, before the next start;
+      # with concurrencyPolicy Forbid it would otherwise block every
+      # following run and stay in the cluster.
+      activeDeadlineSeconds: 82800
+      ttlSecondsAfterFinished: 259200
       template:
         spec:
           serviceAccountName: locanoto-zeitplan
@@ -123,6 +132,9 @@ spec:
       # hinterlaesst nichts Halbes: sicherung.py schreibt erst unter
       # vorlaeufigem Namen und benennt dann um.
       backoffLimit: 4
+      # Same lifetime as the sync above.
+      activeDeadlineSeconds: 82800
+      ttlSecondsAfterFinished: 259200
       template:
         spec:
           serviceAccountName: locanoto-zeitplan

@@ -19,6 +19,10 @@ metadata:
   labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: migrate}
 spec:
   backoffLimit: 0
+  # Deleted with its pod a week after it ends: time to read the log, and
+  # a second apply of this file then creates a fresh job instead of
+  # failing on the old one.
+  ttlSecondsAfterFinished: 604800
   template:
     metadata:
       labels: {app.kubernetes.io/name: locanoto, app.kubernetes.io/component: migrate}
