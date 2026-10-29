@@ -167,9 +167,9 @@ jobs:
           for s in trust postgres server worker caddy websuche searxng opencloud litellm pages; do
             $C logs --tail 40 $s > /tmp/$s.log 2>&1 || true
           done
-          python3 deploy/ci_annotate.py "${{ matrix.variant }}" /tmp/install.log /tmp/ps.log \
-            /tmp/trust.log /tmp/server.log /tmp/caddy.log /tmp/postgres.log /tmp/opencloud.log \
-            /tmp/models.log
+          python3 deploy/ci_annotate.py "${{ matrix.variant }}" /tmp/install.log \
+            /tmp/opencloud.log /tmp/server.log /tmp/caddy.log /tmp/ps.log /tmp/models.log \
+            /tmp/postgres.log
 
   kind:
     needs: image

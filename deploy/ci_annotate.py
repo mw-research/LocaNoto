@@ -8,6 +8,7 @@ installer output and of the container logs end up where anyone can see
 them -- secrets are not in these logs (the installer never prints them).
 """
 import os
+import re
 import sys
 
 LINES = 40
@@ -21,7 +22,11 @@ def main():
         with open(path, encoding="utf-8", errors="replace") as f:
             tail = f.read().splitlines()[-LINES:]
         text = "\n".join(tail)[-6000:]
-        text = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+        # Colour codes and other control characters make GitHub drop the
+        # whole annotation.
+        text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+        text = "".join(c for c in text if c == "\n" or c >= " ")
+        text = text.replace("%", "%25").replace("\n", "%0A")
         print(f"::error title={title} {os.path.basename(path)}::{text}")
 
 

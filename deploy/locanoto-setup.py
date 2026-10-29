@@ -582,6 +582,10 @@ def docker_files(a, sec):
     caddy = ["{"]
     if a["tls"] == "letsencrypt" and a.get("acme_email"):
         caddy.append(f"\temail {a['acme_email']}")
+    if a["tls"] != "none":
+        # Clients send no SNI when they are given an IP address; without a
+        # default Caddy has no certificate to offer and ends the handshake.
+        caddy.append(f"\tdefault_sni {a['host']}")
     if a["tls"] == "internal":
         caddy += ["\tpki {", "\t\tca local {", "\t\t\troot {",
                   "\t\t\t\tcert /certs/ca.crt", "\t\t\t\tkey /certs/ca.key",
@@ -731,28 +735,68 @@ def install_docker(a, sec, first):
     if not wait(T("Warte auf den Server", "Waiting for the server"), server_ready):
         raise SystemExit(docker_compose(root, "logs", "--tail", "40", "server",
                                         check=False).stdout)
-    if a["features"]["opencloud"] and not sec.get("OPENCLOUD_APP_TOKEN"):
+    def ex(*cmd, stdin=None):
+        return docker_compose(root, "exec", "-T", "server", *cmd, stdin=stdin, check=False)
+    if a["features"]["opencloud"]:
         def oc_ready():
             r = docker_compose(root, "exec", "-T", "opencloud", "sh", "-c",
                                "wget -qO- http://127.0.0.1:9200/status.php", check=False)
             return r.returncode == 0
         wait(T("Warte auf die Dateiablage", "Waiting for the file store"), oc_ready)
-        r = docker_compose(root, "exec", "-T", "opencloud", "opencloud", "auth-app",
-                           "create", "--user-name=admin", "--expiration=87600h",
-                           check=False)
-        m = re.search(r"token:\s*(\S+)", r.stdout + r.stderr)
-        if m:
-            sec["OPENCLOUD_APP_TOKEN"] = m.group(1)
+        token = opencloud_token(sec, lambda: docker_compose(
+            root, "exec", "-T", "opencloud", *TOKEN_CREATE, check=False), ex)
+        if token and token != sec.get("OPENCLOUD_APP_TOKEN"):
+            sec["OPENCLOUD_APP_TOKEN"] = token
             write_files(root, docker_files(a, sec))
-            docker_compose(root, "up", "-d", "server", "worker")
+            docker_compose(root, "up", "-d")
             wait(T("Warte auf den Server", "Waiting for the server"), server_ready)
+    app_setup(ex, a, first)
+    return ex
+
+
+TOKEN_CREATE = ("opencloud", "auth-app", "create", "--user-name=admin", "--expiration=87600h")
+TOKEN_LINE = re.compile(r"(?im)^\s*token:\s*(\S+)\s*$")
+# The same check doctor.py makes later, with the token on stdin instead of
+# in the container's environment.
+TOKEN_CHECK = ("read -r P; OWNCLOUD_PASSWORT=\"$P\" OWNCLOUD_ADMIN_PASSWORT=\"$P\" "
+               "python -c 'import owncloud; ok, m = owncloud.pruefe(); print(m); "
+               "raise SystemExit(0 if ok else 1)'")
+
+
+def opencloud_token(sec, create, execute, seconds=300):
+    """An app token the server has logged in with, or None.
+
+    A token is kept only after a login with it worked: right after start
+    the auth-app service may not answer yet, and a stored token may have
+    been revoked -- either would otherwise sit in the configuration
+    unnoticed."""
+    def works(token):
+        r = execute("sh", "-c", TOKEN_CHECK, stdin=token + "\n")
+        return r.returncode == 0, (r.stdout + r.stderr).strip()
+
+    old = sec.get("OPENCLOUD_APP_TOKEN")
+    if old and works(old)[0]:
+        return old
+    end, last = time.time() + seconds, ""
+    while True:
+        r = create()
+        out = r.stdout + r.stderr
+        m = TOKEN_LINE.search(out)
+        if m:
+            ok, message = works(m.group(1))
+            if ok:
+                return m.group(1)
+            last = out.replace(m.group(1), "***") + "\n" + message
         else:
-            print("  ! " + T("App-Token für OpenCloud nicht erzeugt -- später "
-                             "--upgrade wiederholen.",
-                             "OpenCloud app token not created -- repeat --upgrade later."))
-    app_setup(lambda *cmd, stdin=None: docker_compose(
-        root, "exec", "-T", "server", *cmd, stdin=stdin, check=False), a, first)
-    return lambda *cmd: docker_compose(root, "exec", "-T", "server", *cmd, check=False)
+            last = out
+        if time.time() > end:
+            break
+        time.sleep(10)
+    print("  ! " + T("Kein funktionierendes App-Token für OpenCloud -- später "
+                     "--upgrade wiederholen.",
+                     "No working OpenCloud app token -- repeat --upgrade later."))
+    print("\n".join("    " + line for line in last.strip().splitlines()[-15:]))
+    return None
 
 
 def app_setup(execute, a, first):
@@ -762,7 +806,16 @@ def app_setup(execute, a, first):
                     "LOCANOTO_ERSTES_PASSWORT=\"$P\" python einrichten.py"
                     + ("" if a["features"]["opencloud"] else " --ohne-owncloud"),
                     a["admin_name"], stdin=a.pop("_admin_password", "") + "\n")
-        print("\n".join("    " + line for line in r.stdout.strip().splitlines()[-12:]))
+        if r.returncode == 0 and "NOCH KEINEN ZUGANG" not in r.stdout:
+            # einrichten.py closes with hints for the classic compose setup
+            # (port 8501, service locanoto_bot) that do not apply here.
+            print("  " + T(f"Erstes Admin-Konto: {a['admin_name']}",
+                           f"First admin account: {a['admin_name']}"))
+        else:
+            print("  ! " + T("Erstes Admin-Konto nicht angelegt:",
+                             "First admin account not created:"))
+            print("\n".join("    " + line for line in
+                            (r.stdout + r.stderr).strip().splitlines()[-12:]))
     if a["features"]["websearch"]:
         execute("python", "-c", "import mcp; mcp.lies_konfiguration().get('websuche') "
                 "or print(mcp.lege_an('websuche', 'websuche', 'http://websuche:8000/mcp'))")
@@ -1116,15 +1169,15 @@ def install_kubernetes(a, sec, first, runner):
     def ex(*cmd, stdin=None):
         return kubectl("-n", ns, "exec", "-i", "deploy/server", "-c", "server", "--", *cmd,
                        stdin=stdin, check=False)
-    if a["features"]["opencloud"] and not sec.get("OPENCLOUD_APP_TOKEN"):
+    if a["features"]["opencloud"]:
         kubectl("-n", ns, "rollout", "status", "deploy/opencloud", "--timeout=900s", check=False)
-        r = kubectl("-n", ns, "exec", "deploy/opencloud", "--", "opencloud", "auth-app",
-                    "create", "--user-name=admin", "--expiration=87600h", check=False)
-        m = re.search(r"token:\s*(\S+)", r.stdout + r.stderr)
-        if m:
-            sec["OPENCLOUD_APP_TOKEN"] = m.group(1)
+        token = opencloud_token(sec, lambda: kubectl(
+            "-n", ns, "exec", "deploy/opencloud", "--", *TOKEN_CREATE, check=False), ex)
+        if token and token != sec.get("OPENCLOUD_APP_TOKEN"):
+            sec["OPENCLOUD_APP_TOKEN"] = token
             kubectl("apply", "-f", "-", stdin=docs(k8s_objects(a, sec, cm)))
-            kubectl("-n", ns, "rollout", "restart", "deploy/server", "deploy/worker")
+            kubectl("-n", ns, "rollout", "restart", "deploy/server", "deploy/worker",
+                    *(["deploy/pages"] if a["features"]["pages"] else []))
             kubectl("-n", ns, "rollout", "status", "deploy/server", "--timeout=900s")
     app_setup(ex, a, first)
     return ex

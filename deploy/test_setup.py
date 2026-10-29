@@ -158,6 +158,8 @@ check("Caddy issues from the own CA, for both addresses",
       "tls internal" in caddy and "cert /certs/ca.crt" in caddy
       and "192.168.10.20 {" in caddy and "cloud.example.test {" in caddy
       and "handle_path /klassisch*" in caddy)
+check("Caddy answers clients that send no SNI (an IP address)",
+      "default_sni 192.168.10.20" in caddy)
 extra_files = sorted(os.listdir(os.path.join(target, "trust-extra")))
 check("internal and company CA in the trust list",
       "locanoto-internal-ca.crt" in extra_files and "company-1.crt" in extra_files, extra_files)
@@ -212,6 +214,51 @@ check("Let's Encrypt certificate for both names",
       and set(ing["spec"]["tls"][0]["hosts"]) == {"locanoto.example.test", "cloud.example.test"})
 check("redirect address of the directory sign-in",
       cm["OIDC_REDIRECT_URI"] == "https://locanoto.example.test/api/v1/auth/oidc/callback")
+
+# --- OpenCloud app token ---
+print("=== OpenCloud app token ===")
+
+
+class Done:
+    def __init__(self, out, code=0):
+        self.stdout, self.stderr, self.returncode = out, "", code
+
+
+def fake_store(valid):
+    """create() and execute() against a store that accepts the tokens in valid."""
+    calls = {"create": 0, "seen": []}
+    outputs = iter(["could not create token: rpc error: unavailable",
+                    "App token created for admin lasting for 87600h\n token: early1",
+                    "App token created for admin lasting for 87600h\n token: good22"])
+
+    def create():
+        calls["create"] += 1
+        return Done(next(outputs))
+
+    def execute(*cmd, stdin=None):
+        token = stdin.strip()
+        calls["seen"].append(token)
+        return Done("Verbunden" if token in valid else "Anmeldung abgelehnt.",
+                    0 if token in valid else 1)
+    return create, execute, calls
+
+
+setup.time.sleep = lambda s: None
+create, execute, calls = fake_store({"good22"})
+token = setup.opencloud_token({}, create, execute)
+check("an error text is no token, and a rejected one is not kept",
+      token == "good22" and calls["create"] == 3 and calls["seen"] == ["early1", "good22"],
+      (token, calls))
+create, execute, calls = fake_store({"stored9"})
+check("a stored token that works is kept without a new one",
+      setup.opencloud_token({"OPENCLOUD_APP_TOKEN": "stored9"}, create, execute) == "stored9"
+      and calls["create"] == 0, calls)
+create, execute, calls = fake_store({"good22"})
+check("a revoked stored token is replaced",
+      setup.opencloud_token({"OPENCLOUD_APP_TOKEN": "gone"}, create, execute) == "good22", calls)
+create, execute, calls = fake_store(set())
+check("no working token within the time gives None",
+      setup.opencloud_token({}, create, execute, seconds=-1) is None)
 
 # --- doctor ---
 print("=== doctor ===")
