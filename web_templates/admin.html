@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ t('Admin') }}</h1>
+<p><a href="/api/v1/docs">{{ t('Full admin area in the API') }} →</a></p>
+{% if security %}<pre class="status">{{ security }}</pre>{% endif %}
+
+<section class="card">
+  <h2>{{ t('Users') }}</h2>
+  <table class="files">
+  {% for name, role, kind in users %}
+    <tr>
+      <td>{{ name }}</td><td class="muted">{{ kind }}</td>
+      <td>
+        <form hx-post="/ui/admin/users/{{ name }}/role" hx-target="#user-notice" class="inline">
+          <select name="role">{% for r in roles %}<option {{ 'selected' if r == role }}>{{ r }}</option>{% endfor %}</select>
+          <button type="submit">{{ t('Save') }}</button>
+        </form>
+      </td>
+      <td>
+        <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">
+          <button type="submit" class="danger">{{ t('Delete') }}</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </table>
+  <form hx-post="/ui/admin/users" hx-target="#user-notice" class="inline wide">
+    <input name="name" placeholder="{{ t('Name') }}" required>
+    <input name="password" type="password" placeholder="{{ t('Password') }}" minlength="8" required autocomplete="new-password">
+    <select name="role">{% for r in roles %}<option {{ 'selected' if r == 'nutzer' }}>{{ r }}</option>{% endfor %}</select>
+    <button type="submit" class="primary">{{ t('Create') }}</button>
+  </form>
+  <div id="user-notice"></div>
+</section>
+
+<section class="card">
+  <h2>{{ t('Workspaces') }}</h2>
+  <table class="files">
+  {% for id, label, members, group in workspaces %}
+    <tr><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ members }}</td><td class="muted">{{ group }}</td></tr>
+  {% endfor %}
+  </table>
+  <form hx-post="/ui/admin/workspaces" hx-target="#ws-notice" class="inline wide">
+    <input name="id" placeholder="id" required pattern="[a-z0-9_-]+">
+    <input name="label" placeholder="{{ t('Label') }}" required>
+    <input name="members" placeholder="{{ t('Members (comma separated)') }}">
+    <button type="submit" class="primary">{{ t('Create') }}</button>
+  </form>
+  <div id="ws-notice"></div>
+</section>
+
+<section class="card">
+  <h2>{{ t('Jobs') }}</h2>
+  <table class="files">
+  {% for j in jobs %}
+    <tr><td>{{ j.label }}</td><td class="muted">{{ j.state }}</td>
+      <td><form hx-post="/ui/admin/jobs/{{ j.name }}" hx-target="#job-{{ j.name }}" class="inline"><button type="submit">{{ t('Start') }}</button></form></td>
+      <td id="job-{{ j.name }}"></td></tr>
+  {% endfor %}
+  </table>
+</section>
+{% endblock %}

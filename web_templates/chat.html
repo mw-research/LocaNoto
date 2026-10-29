@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block head %}<script src="/static/chat.js" defer></script>{% endblock %}
+{% block mainclass %}chat{% endblock %}
+{% block main %}
+<aside id="chatlist" class="sidebar">
+{% include "chat_list.html" %}
+</aside>
+<section class="conversation">
+  {% if chat_id %}
+  <div class="chat-head">
+    <form hx-post="/ui/chats/{{ chat_id }}/rename" hx-target="#chatlist" class="inline">
+      <input name="title" aria-label="{{ t('Rename') }}" placeholder="{{ t('Rename') }}">
+      <button type="submit">{{ t('Rename') }}</button>
+    </form>
+    <form hx-post="/ui/chats/{{ chat_id }}/delete" hx-confirm="{{ t('Delete this chat?') }}" class="inline">
+      <button type="submit" class="danger">{{ t('Delete') }}</button>
+    </form>
+  </div>
+  {% endif %}
+  <div id="messages" class="messages" data-chat-id="{{ chat_id }}">
+    {% for m in messages %}{% include "message.html" %}{% endfor %}
+  </div>
+  <form id="ask" class="composer">
+    <textarea name="question" rows="3" placeholder="{{ t('Ask a question about your documents ...') }}" required></textarea>
+    <div class="composer-row">
+      <details class="options">
+        <summary>{{ t('Workspaces') }} · {{ t('Model') }}</summary>
+        <fieldset>
+          <legend>{{ t('Workspaces') }} ({{ t('all') }}, {{ t('or') }} …)</legend>
+          {% for id, label in options.workspaces %}
+          <label class="check"><input type="checkbox" name="rooms" value="{{ id }}"> {{ label }}</label>
+          {% endfor %}
+        </fieldset>
+        <label>{{ t('Model') }}
+          <select name="model">{% for m in options.models %}<option>{{ m }}</option>{% endfor %}</select>
+        </label>
+        <label>{{ t('Preset') }}
+          <select name="preset"><option value="">{{ t('none') }}</option>
+            {% for name, label in options.presets %}<option value="{{ name }}">{{ label }}</option>{% endfor %}</select>
+        </label>
+        {% if options.web %}<label class="check"><input type="checkbox" name="web"> {{ t('Web search') }}</label>{% endif %}
+      </details>
+      <input type="file" name="images" accept="image/*" multiple aria-label="images">
+      <button type="submit" class="primary">{{ t('Send') }}</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

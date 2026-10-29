@@ -33,7 +33,7 @@ SCHICHT = {
         "listen_diagnose", "was_sieht_die_platte", "pruefe_env",
         "landkarte", "lizenzen", "migrate_to_postgres", "compare_search",
         "test_migration", "server", "routes_account", "routes_chat",
-        "routes_documents", "routes_admin", "worker", "test_api",
+        "routes_documents", "routes_admin", "worker", "test_api", "web",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Sign in') }} · {{ brand }}{% endblock %}
+{% block mainclass %}login{% endblock %}
+{% block main %}
+<section class="card narrow">
+  <h1>{{ brand }}</h1>
+  <form data-login data-next="{{ next }}">
+    <label>{{ t('Name') }}<input name="username" autocomplete="username" required autofocus></label>
+    <label>{{ t('Password') }}<input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">{{ t('Sign in') }}</button>
+    <p class="error" data-error hidden></p>
+  </form>
+  {% if directory %}
+  <p class="or">{{ t('or') }}</p>
+  <a class="button wide" href="/api/v1/auth/oidc/login?next={{ next|urlencode }}">{{ t('Sign in with the company account') }}</a>
+  {% endif %}
+</section>
+{% endblock %}

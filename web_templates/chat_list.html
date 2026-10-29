@@ -1,0 +1,6 @@
+<a class="button wide" href="/">+ {{ t('New chat') }}</a>
+<ul class="chats">
+{% for id, title, changed in chats %}
+  <li class="{{ 'on' if id == chat_id }}"><a href="/c/{{ id }}">{{ title }}</a></li>
+{% endfor %}
+</ul>

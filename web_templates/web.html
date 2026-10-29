@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ t('Web sources') }}</h1>
+{% if not available %}
+<p class="muted">{{ t('Web search') }}: –</p>
+{% else %}
+<section class="card">
+  <form hx-post="/ui/web/search" hx-target="#webresults" class="inline wide">
+    <input name="query" required placeholder="DIN EN 1090 ...">
+    <button type="submit" class="primary">{{ t('Search') }}</button>
+  </form>
+  <p class="muted">{{ t('Keywords only -- they go to search engines.') }}</p>
+</section>
+<div id="webresults"></div>
+<div id="taken"></div>
+{% endif %}
+{% endblock %}

@@ -152,6 +152,14 @@ async def _headers(request: Request, call_next):
         response.set_cookie(SESSION_COOKIE, renewed, httponly=True,
                             secure=COOKIE_SECURE, samesite="strict",
                             path="/")
+    if not request.url.path.startswith(API_PREFIX + "/docs"):
+        # Pages: scripts, styles and requests only to this server, nothing
+        # inline. The API docs page loads its own assets and is excluded.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self' data: blob:; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
@@ -240,6 +248,14 @@ def _include():
                         (routes_documents, "documents"),
                         (routes_admin, "admin")):
         app.include_router(module.router, prefix=API_PREFIX)
+    # The web pages (web.py) on the same app, on top of the same modules.
+    import web
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/static", StaticFiles(directory=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "web_static")),
+        name="static")
+    app.add_exception_handler(web._ToLogin, web.to_login_handler)
+    app.include_router(web.router)
 
 
 _register_errors()

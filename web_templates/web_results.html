@@ -1,0 +1,22 @@
+<form id="takeover" hx-post="/ui/web/take-over" hx-target="#taken"></form>
+{% for h in hits %}
+<section class="card hit">
+  <label class="check">
+    <input type="checkbox" name="pick_{{ loop.index }}" value="1" form="takeover">
+    <strong>{{ h.titel }}</strong>
+  </label>
+  <input type="hidden" name="title_{{ loop.index }}" value="{{ h.titel }}" form="takeover">
+  <input type="hidden" name="url_{{ loop.index }}" value="{{ h.adresse }}" form="takeover">
+  <input type="hidden" name="text_{{ loop.index }}" value="{{ h.text }}" form="takeover">
+  <input type="hidden" name="query_{{ loop.index }}" value="{{ h.anfrage }}" form="takeover">
+  <div class="muted">{{ h.adresse }}</div>
+  <p>{{ h.text[:400] }}</p>
+  <form hx-post="/ui/web/read" hx-target="#read-{{ loop.index }}" class="inline">
+    <input type="hidden" name="url" value="{{ h.adresse }}">
+    <button type="submit">{{ t('Read') }}</button>
+    {% if h.adresse.startswith(('http://', 'https://')) %}<a href="{{ h.adresse }}" target="_blank" rel="noopener noreferrer">↗</a>{% endif %}
+  </form>
+  <div id="read-{{ loop.index }}"></div>
+</section>
+{% endfor %}
+{% if hits %}<button type="submit" form="takeover" class="primary">{{ t('Take over selected into my workspace') }}</button>{% endif %}

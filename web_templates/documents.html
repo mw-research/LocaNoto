@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ t('Documents') }}</h1>
+<section class="card">
+  <form data-upload class="upload" enctype="multipart/form-data">
+    <input type="file" name="file" required>
+    <label>{{ t('into') }}
+      <select name="room">{% for id, label in targets %}<option value="{{ id }}" {{ 'selected' if id == own }}>{{ label }}</option>{% endfor %}</select>
+    </label>
+    <input name="project" placeholder="{{ t('Project (optional)') }}">
+    <label class="check"><input type="checkbox" name="images" value="true"> {{ t('Describe images') }}</label>
+    <button type="submit" class="primary">{{ t('Upload') }}</button>
+    <p class="muted" data-progress hidden></p>
+  </form>
+</section>
+<div id="doclist">
+{% include "documents_list.html" %}
+</div>
+{% endblock %}

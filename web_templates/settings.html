@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ t('Settings') }}</h1>
+
+<section class="card">
+  <h2>{{ t('Language') }}</h2>
+  <form hx-post="/ui/settings/language" class="inline">
+    <select name="language">
+      <option value="de" {{ 'selected' if language == 'de' }}>Deutsch</option>
+      <option value="en" {{ 'selected' if language == 'en' }}>English</option>
+    </select>
+    <button type="submit">{{ t('Save') }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>{{ t('Personal instruction') }}</h2>
+  <p class="muted">{{ t('Applies to every question you ask.') }}</p>
+  <form hx-post="/ui/settings/instruction" hx-target="#instruction-notice">
+    <textarea name="text" rows="4" maxlength="4000">{{ instruction }}</textarea>
+    <button type="submit">{{ t('Save') }}</button>
+  </form>
+  <div id="instruction-notice"></div>
+</section>
+
+<section class="card">
+  <h2>{{ t('Presets') }}</h2>
+  {% if presets %}<ul>{% for name, label, own in presets %}<li>{{ label }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">{{ t('none') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>{{ t('Change password') }}</h2>
+  {% if sso %}
+  <p class="muted">{{ t('Your account signs in through the company directory.') }}</p>
+  {% else %}
+  <form hx-post="/ui/settings/password" hx-target="#password-notice">
+    <label>{{ t('Current password') }}<input type="password" name="current" autocomplete="current-password" required></label>
+    <label>{{ t('New password') }}<input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
+    <button type="submit">{{ t('Save') }}</button>
+  </form>
+  <div id="password-notice"></div>
+  {% endif %}
+</section>
+
+{% if mailboxes %}
+<section class="card">
+  <h2>{{ t('Mailboxes') }}</h2>
+  {% for m in mailboxes %}
+  <form hx-post="/ui/settings/mailbox/{{ m.name }}" hx-target="#mb-{{ loop.index }}" class="inline wide">
+    <strong>{{ m.name }}</strong>
+    {% if m.connected %}
+      <span class="ok">{{ t('connected') }}</span>
+      <input type="hidden" name="action" value="disconnect">
+      <button type="submit">{{ t('Disconnect') }}</button>
+    {% elif m.login != 'keine' %}
+      {% if m.login == 'basic' %}<input name="user" placeholder="name@example.com" autocomplete="off">{% endif %}
+      <input type="password" name="secret" placeholder="{{ t('Password') }}" autocomplete="off" required>
+      <button type="submit">{{ t('Connect') }}</button>
+    {% endif %}
+  </form>
+  <div id="mb-{{ loop.index }}"></div>
+  {% endfor %}
+  <p class="muted">{{ t('Logins are kept only in this browser session.') }}</p>
+</section>
+{% endif %}
+
+{% if tokens %}
+<section class="card">
+  <h2>{{ t('API tokens') }}</h2>
+  <table class="files">
+  {% for id, label, created in tokens %}
+    <tr><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ created }}</td>
+      <td><form hx-post="/ui/settings/token/{{ id }}/revoke" class="inline"><button class="danger">{{ t('Revoke') }}</button></form></td></tr>
+  {% endfor %}
+  </table>
+</section>
+{% endif %}
+{% endblock %}

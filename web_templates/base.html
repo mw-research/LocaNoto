@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="{{ lang }}" data-accent="{{ accent }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ brand }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/hx.js" defer></script>
+{% block head %}{% endblock %}
+</head>
+<body>
+{% if nav %}
+<header class="top">
+  <a class="brand" href="/">{{ brand }}</a>
+  <nav class="tabs">
+    <a href="/" class="{{ 'on' if nav.active == 'chat' }}">{{ t('Chat') }}</a>
+    <a href="/documents" class="{{ 'on' if nav.active == 'documents' }}">{{ t('Documents') }}</a>
+    <a href="/web" class="{{ 'on' if nav.active == 'web' }}">{{ t('Web sources') }}</a>
+    <a href="/settings" class="{{ 'on' if nav.active == 'settings' }}">{{ t('Settings') }}</a>
+    {% if nav.admin %}<a href="/admin" class="{{ 'on' if nav.active == 'admin' }}">{{ t('Admin') }}</a>{% endif %}
+  </nav>
+  <span class="who">{{ nav.user }}</span>
+  <button type="button" class="link" data-logout>{{ t('Sign out') }}</button>
+</header>
+{% endif %}
+<main class="{% block mainclass %}page{% endblock %}">
+{% block main %}{% endblock %}
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

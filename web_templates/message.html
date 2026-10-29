@@ -1,0 +1,52 @@
+<article class="msg {{ m.role }}" id="m{{ m.index }}">
+{% if m.role == 'user' %}
+  <div class="bubble">{{ m.content }}</div>
+  {% if m.images %}<div class="images">{% for j in range(m.images) %}<img src="/api/v1/chats/{{ chat_id }}/messages/{{ m.index }}/images/{{ j }}" alt="">{% endfor %}</div>{% endif %}
+{% else %}
+  <div class="answer">{{ m.content|markdown|safe }}</div>
+  {% if m.zahlen and m.zahlen.vektorausfall %}
+  <p class="warn">{{ t('Answer from the keyword search only -- the vector search did not answer for') }}: {{ m.zahlen.vektorausfall|join(', ') }}</p>
+  {% endif %}
+  {% if m.sources %}
+  <details class="sources">
+    <summary>{{ t('Sources') }} ({{ m.sources|length }})</summary>
+    {% for s in m.sources %}
+    <div class="source">
+      <div class="source-head">{{ s.file }} · {{ t('page') }} {{ s.page }}{% if s.herkunft %} · {{ s.herkunft }}{% endif %}</div>
+      {% for x in s.texts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+      {% if s.file.lower().endswith('.pdf') and s.page is number %}
+      <details class="page"><summary>{{ t('Show page') }}</summary>
+        <img loading="lazy" alt="" src="/api/v1/sources/page?room={{ s.raum|urlencode }}&amp;file={{ s.file|urlencode }}&amp;page={{ s.page }}">
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+  {% for d in m.entwuerfe or [] %}
+  <div class="draft" id="draft-{{ d.id }}">
+    {% if d.state %}<span class="muted">{{ d.state }}</span>{% else %}
+    <strong>{{ t('Draft waiting for you') }}: {{ d.werkzeug }} ({{ d.server }})</strong>
+    {% for k, v in (d.argumente or {}).items() %}<div class="arg"><span>{{ k }}</span><pre>{{ v }}</pre></div>{% endfor %}
+    <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" class="inline"><button class="primary">{{ t('Send draft') }}</button></form>
+    <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/discard" hx-target="#draft-{{ d.id }}" class="inline"><button>{{ t('Discard') }}</button></form>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% if m.web %}
+  <details class="sources web"><summary>{{ t('From the web') }} ({{ m.web|length }})</summary>
+    <ul>{% for w in m.web %}<li>{% if w.adresse.startswith(('http://', 'https://')) %}<a href="{{ w.adresse }}" target="_blank" rel="noopener noreferrer">{{ w.titel }}</a>{% else %}{{ w.titel }}{% endif %} <span class="muted">{{ w.adresse }}</span></li>{% endfor %}</ul>
+    <p class="muted"><a href="/web">{{ t('Web sources') }}</a> → {{ t('Take over') }}</p>
+  </details>
+  {% endif %}
+  {% if m.question %}
+  <div class="feedback" id="fb{{ m.index }}">
+    <form hx-post="/ui/feedback" hx-target="#fb{{ m.index }}" class="inline">
+      <input type="hidden" name="question" value="{{ m.question }}">
+      <button name="kind" value="daumen_hoch">{{ t('Helpful') }}</button>
+      <button name="kind" value="daumen_runter">{{ t('Not helpful') }}</button>
+    </form>
+  </div>
+  {% endif %}
+{% endif %}
+</article>

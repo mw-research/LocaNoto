@@ -1,0 +1,8 @@
+<section class="card">
+  <ul>
+  {% for r in result %}
+    <li class="{{ 'ok' if r.passages else 'error' }}">{{ r.file or r.title }} — {{ tm(r.note) }}</li>
+  {% endfor %}
+  </ul>
+  <p><a href="/documents">{{ t('Documents') }} →</a></p>
+</section>

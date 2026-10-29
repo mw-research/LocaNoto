@@ -68,8 +68,11 @@ class _FakeChat:
         self.chat = types.SimpleNamespace(
             completions=types.SimpleNamespace(create=self.create))
 
+    text_override = None
+
     def create(self, model=None, messages=None, stream=False, **kw):
-        text = "Die Pruefrist betraegt vier Jahre [Kessel.txt, Seite 1]."
+        text = (_FakeChat.text_override
+                or "Die Pruefrist betraegt vier Jahre [Kessel.txt, Seite 1].")
         if stream:
             return iter(types.SimpleNamespace(choices=[types.SimpleNamespace(
                 delta=types.SimpleNamespace(content=part))])
@@ -346,6 +349,38 @@ check("unknown draft is 404", anna.post(
     f"{API}/chats/{chat_id}/drafts/d9_9/send", json={}).status_code == 404)
 check("discard unknown draft is 404", anna.post(
     f"{API}/chats/{chat_id}/drafts/d9_9/discard").status_code == 404)
+# --- web pages (web.py) ---
+_FakeChat.text_override = "Antwort <script>alert(1)</script> **fett**"
+r = anna.post(f"{API}/ask", json={"question": "HTML?", "chat_id": chat_id})
+_FakeChat.text_override = None
+page = anon.get("/", follow_redirects=False)
+check("pages without sign-in go to /login",
+      page.status_code == 303 and page.headers["location"].startswith("/login"))
+check("login page", "data-login" in anon.get("/login").text)
+for path in ("/", f"/c/{chat_id}", "/documents", "/web", "/settings"):
+    r = anna.get(path)
+    check(f"page {path}", r.status_code == 200 and "<main" in r.text
+          and "script-src 'self'" in r.headers.get("content-security-policy", ""),
+          r.status_code)
+check("admin page only for admins",
+      anna.get("/admin", follow_redirects=False).status_code == 303
+      and markus.get("/admin").status_code == 200)
+frag = anna.get(f"/ui/chats/{chat_id}/messages/-1").text
+check("model HTML is never HTML", "<script>" not in frag
+      and "&lt;script&gt;" in frag and "<strong>fett</strong>" in frag, frag[:300])
+check("chat list fragment", chat_id in anna.get("/ui/chats").text)
+check("someone else's message fragment is 404",
+      markus.get(f"/ui/chats/{chat_id}/messages/0").status_code == 404)
+check("feedback form", "Danke" in anna.post("/ui/feedback", data={
+    "kind": "daumen_hoch", "question": "HTML?"}).text
+      or "Thanks" in anna.post("/ui/feedback", data={
+          "kind": "daumen_hoch", "question": "HTML?"}).text)
+check("form without CSRF header is refused",
+      nocsrf.post("/ui/feedback", data={"kind": "daumen_hoch",
+                                        "question": "x"}).status_code == 403)
+check("documents fragment", "Kessel.txt" in anna.get("/ui/documents").text)
+check("static files", anon.get("/static/hx.js").status_code == 200)
+
 check("feedback", anna.post(f"{API}/feedback", json={
     "kind": "daumen_runter", "question": "Wie lange?"}).status_code == 200)
 check("source page of a text file is 404", anna.get(
