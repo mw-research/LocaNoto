@@ -755,7 +755,8 @@ def install_docker(a, sec, first):
 
 
 TOKEN_CREATE = ("opencloud", "auth-app", "create", "--user-name=admin", "--expiration=87600h")
-TOKEN_LINE = re.compile(r"(?im)^\s*token:\s*(\S+)\s*$")
+# OpenCloud's tokens are several words separated by blanks.
+TOKEN_LINE = re.compile(r"(?im)^[ \t]*token:[ \t]*(\S(?:[^\r\n]*\S)?)[ \t\r]*$")
 # The same check doctor.py makes later, with the token on stdin instead of
 # in the container's environment.
 TOKEN_CHECK = ("read -r P; OWNCLOUD_PASSWORT=\"$P\" OWNCLOUD_ADMIN_PASSWORT=\"$P\" "
@@ -786,9 +787,11 @@ def opencloud_token(sec, create, execute, seconds=300):
             ok, message = works(m.group(1))
             if ok:
                 return m.group(1)
-            last = out.replace(m.group(1), "***") + "\n" + message
+            last = out + "\n" + message
         else:
             last = out
+        # Whatever came out, nothing after "token:" reaches the screen.
+        last = re.sub(r"(?im)(token:)[^\r\n]*", r"\1 ***", last)
         if time.time() > end:
             break
         time.sleep(10)

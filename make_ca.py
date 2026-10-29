@@ -51,7 +51,9 @@ def new_ca(name="LocaNoto internal CA"):
             .serial_number(x509.random_serial_number())
             .not_valid_before(_now() - datetime.timedelta(minutes=5))
             .not_valid_after(_now() + datetime.timedelta(days=CA_DAYS))
-            .add_extension(x509.BasicConstraints(ca=True, path_length=0),
+            # One intermediate below: Caddy issues from its own
+            # intermediate under this root. cert-manager signs directly.
+            .add_extension(x509.BasicConstraints(ca=True, path_length=1),
                            critical=True)
             .add_extension(x509.KeyUsage(
                 digital_signature=True, key_cert_sign=True, crl_sign=True,

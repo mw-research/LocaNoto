@@ -99,6 +99,9 @@ try:
 except Exception as e:
     chained = e
 check("server certificate chains to the CA", chained is True, chained)
+constraints = ca_cert.extensions.get_extension_for_class(x509.BasicConstraints).value
+check("the CA allows Caddy's intermediate below it", (constraints.path_length or 9) >= 1,
+      constraints)
 san = leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
 check("name and IP in the certificate",
       "locanoto.example.test" in san.get_values_for_type(x509.DNSName)
@@ -227,9 +230,10 @@ class Done:
 def fake_store(valid):
     """create() and execute() against a store that accepts the tokens in valid."""
     calls = {"create": 0, "seen": []}
+    # The way OpenCloud 7 prints it: several words in one token.
     outputs = iter(["could not create token: rpc error: unavailable",
-                    "App token created for admin lasting for 87600h\n token: early1",
-                    "App token created for admin lasting for 87600h\n token: good22"])
+                    "App token created for admin\n token: early one word\n",
+                    "App token created for admin\n token: good sound  token\n"])
 
     def create():
         calls["create"] += 1
@@ -244,21 +248,29 @@ def fake_store(valid):
 
 
 setup.time.sleep = lambda s: None
-create, execute, calls = fake_store({"good22"})
+GOOD = "good sound  token"
+create, execute, calls = fake_store({GOOD})
 token = setup.opencloud_token({}, create, execute)
-check("an error text is no token, and a rejected one is not kept",
-      token == "good22" and calls["create"] == 3 and calls["seen"] == ["early1", "good22"],
+check("an error text is no token, a rejected one is not kept, all words count",
+      token == GOOD and calls["create"] == 3 and calls["seen"] == ["early one word", GOOD],
       (token, calls))
 create, execute, calls = fake_store({"stored9"})
 check("a stored token that works is kept without a new one",
       setup.opencloud_token({"OPENCLOUD_APP_TOKEN": "stored9"}, create, execute) == "stored9"
       and calls["create"] == 0, calls)
-create, execute, calls = fake_store({"good22"})
+create, execute, calls = fake_store({GOOD})
 check("a revoked stored token is replaced",
-      setup.opencloud_token({"OPENCLOUD_APP_TOKEN": "gone"}, create, execute) == "good22", calls)
+      setup.opencloud_token({"OPENCLOUD_APP_TOKEN": "gone"}, create, execute) == GOOD, calls)
+import contextlib  # noqa: E402
+import io  # noqa: E402
 create, execute, calls = fake_store(set())
-check("no working token within the time gives None",
-      setup.opencloud_token({}, create, execute, seconds=-1) is None)
+next(iter([create()]))          # skip the error text: the next output has a token
+shown = io.StringIO()
+with contextlib.redirect_stdout(shown):
+    result = setup.opencloud_token({}, create, execute, seconds=-1)
+check("no working token within the time gives None, and the token is not shown",
+      result is None and "early" not in shown.getvalue() and "token: ***" in shown.getvalue(),
+      shown.getvalue())
 
 # --- doctor ---
 print("=== doctor ===")
