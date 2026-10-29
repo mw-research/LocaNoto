@@ -133,9 +133,10 @@ jobs:
         env:
           LOCANOTO_ADMIN_PASSWORD: Installtest-Passwort-1
         run: |
+          set -o pipefail
           python3 deploy/locanoto-setup.py --answers answers.json --yes \
             --state "$HOME/.locanoto" \
-            --image "$IMAGE"
+            --image "$IMAGE" 2>&1 | tee /tmp/install.log
 
       - name: From the outside
         run: |
@@ -161,9 +162,14 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: |
-          docker compose -f "$HOME/locanoto/compose.yaml" ps -a || true
-          docker compose -f "$HOME/locanoto/compose.yaml" logs --tail 80 || true
-          cat /tmp/models.log || true
+          C="docker compose -f $HOME/locanoto/compose.yaml --project-directory $HOME/locanoto"
+          $C ps -a > /tmp/ps.log 2>&1 || true
+          for s in trust postgres server worker caddy websuche searxng opencloud litellm pages; do
+            $C logs --tail 40 $s > /tmp/$s.log 2>&1 || true
+          done
+          python3 deploy/ci_annotate.py "${{ matrix.variant }}" /tmp/install.log /tmp/ps.log \
+            /tmp/trust.log /tmp/server.log /tmp/caddy.log /tmp/postgres.log /tmp/opencloud.log \
+            /tmp/models.log
 
   kind:
     needs: image
@@ -248,9 +254,10 @@ jobs:
         env:
           LOCANOTO_ADMIN_PASSWORD: Installtest-Passwort-1
         run: |
+          set -o pipefail
           python3 deploy/locanoto-setup.py --answers answers.json --yes \
             --state "$HOME/.locanoto" \
-            --image "$IMAGE"
+            --image "$IMAGE" 2>&1 | tee /tmp/install.log
 
       - name: From the outside
         run: |
@@ -275,7 +282,9 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: |
-          kubectl -n locanoto get pods,ingress,secret -o wide || true
-          kubectl -n locanoto describe pods | tail -80 || true
-          kubectl -n locanoto logs deploy/server --all-containers --tail 80 || true
-          kubectl get pods -A | grep -v Running || true
+          kubectl -n locanoto get pods,ingress,secret -o wide > /tmp/objects.log 2>&1 || true
+          kubectl -n locanoto describe pods > /tmp/describe.log 2>&1 || true
+          kubectl -n locanoto logs deploy/server --all-containers --tail 80 > /tmp/server.log 2>&1 || true
+          kubectl get pods -A > /tmp/pods.log 2>&1 || true
+          python3 deploy/ci_annotate.py "kind ${{ matrix.certmanager }}" /tmp/install.log \
+            /tmp/objects.log /tmp/describe.log /tmp/server.log /tmp/pods.log
