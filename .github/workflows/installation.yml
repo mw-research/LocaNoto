@@ -3,8 +3,12 @@
 # HTTPS with the internal root certificate, sign-in, a question answered
 # end to end (by a stand-in model server), and doctor.py inside.
 #
-# Runs after every successful image build of the enterprise branch, on
-# the image of that very commit, and by hand.
+# Runs on every push to the enterprise branch that touches the code or
+# the installer, and by hand. A first job waits for the image: the one of
+# this very commit when the commit changed what goes into the image, else
+# the newest one, once a running image build has finished. (A
+# workflow_run trigger would be simpler, but it only fires for workflow
+# files of the default branch.)
 #
 #   docker-minimal   this machine, core only
 #   docker-full      + web search, OpenCloud, model gateway, classic pages
@@ -15,26 +19,94 @@
 name: Installation
 
 on:
-  workflow_run:
-    workflows: [Abbild]
-    types: [completed]
+  push:
     branches: [enterprise]
+    paths:
+      - "**.py"
+      - requirements.txt
+      - Dockerfile
+      - web_templates/**
+      - web_static/**
+      - deploy/**
+      - .github/workflows/abbild.yml
+      - .github/workflows/installation.yml
   workflow_dispatch:
 
+concurrency:
+  group: installation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      ref: ${{ steps.wait.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for the image
+        id: wait
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          REPO="${GITHUB_REPOSITORY,,}"
+          # Did this push change what goes into the image?
+          CHANGED=1
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+            git diff --name-only "$BEFORE" "$GITHUB_SHA" \
+              | grep -vE '^(deploy/|\.github/workflows/installation\.yml$|.*\.md$)' \
+              | grep -qE '(\.py$|^requirements\.txt$|^Dockerfile$|^web_templates/|^web_static/|^\.github/workflows/abbild\.yml$)' \
+              || CHANGED=0
+          fi
+          token() { curl -fsS "https://ghcr.io/token?scope=repository:$REPO:pull" | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])'; }
+          exists() { curl -fsS -o /dev/null -H "Authorization: Bearer $(token)" \
+                     -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+                     "https://ghcr.io/v2/$REPO/manifests/$1"; }
+          if [ "$CHANGED" = 1 ]; then
+            TAG="enterprise-schlank-$GITHUB_SHA"
+          else
+            TAG="enterprise-schlank"
+            # A build of an earlier commit may still be moving that tag.
+            # Queued counts too: right after a push the build may not run yet.
+            sleep 30
+            for i in $(seq 1 90); do
+              N=0
+              for STATUS in queued in_progress; do
+                C=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+                  "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/abbild.yml/runs?branch=enterprise&status=$STATUS" \
+                  | python3 -c 'import json,sys;print(json.load(sys.stdin)["total_count"])')
+                N=$((N + C))
+              done
+              [ "$N" = 0 ] && break
+              echo "image build still running or queued"; sleep 60
+            done
+          fi
+          for i in $(seq 1 90); do
+            if exists "$TAG"; then
+              echo "ref=ghcr.io/$OWNER/locanoto:$TAG" >> "$GITHUB_OUTPUT"
+              echo "image: ghcr.io/$OWNER/locanoto:$TAG"
+              exit 0
+            fi
+            echo "waiting for $TAG"; sleep 60
+          done
+          echo "image $TAG did not appear"; exit 1
+
   docker:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: image
     strategy:
       fail-fast: false
       matrix:
         variant: [minimal, full]
     runs-on: ubuntu-latest
     env:
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      IMAGE: ${{ needs.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Stand-in model server
         run: |
@@ -63,7 +135,7 @@ jobs:
         run: |
           python3 deploy/locanoto-setup.py --answers answers.json --yes \
             --state "$HOME/.locanoto" \
-            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/locanoto:enterprise-schlank-$SHA"
+            --image "$IMAGE"
 
       - name: From the outside
         run: |
@@ -94,19 +166,17 @@ jobs:
           cat /tmp/models.log || true
 
   kind:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: image
     strategy:
       fail-fast: false
       matrix:
         certmanager: [false, true]
     runs-on: ubuntu-latest
     env:
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      IMAGE: ${{ needs.image.outputs.ref }}
       HOST: locanoto.test
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Cluster config
         run: |
@@ -180,7 +250,7 @@ jobs:
         run: |
           python3 deploy/locanoto-setup.py --answers answers.json --yes \
             --state "$HOME/.locanoto" \
-            --image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/locanoto:enterprise-schlank-$SHA"
+            --image "$IMAGE"
 
       - name: From the outside
         run: |
