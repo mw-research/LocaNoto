@@ -294,7 +294,16 @@ def _module():
                 namen.add(k.module)
     return sorted(n for n in namen
                   if os.path.exists(os.path.join(BASIS, n + ".py"))
-                  and n not in ("sprache", "uebersetzen"))
+                  and n not in ("sprache", "uebersetzen")
+                  and n not in ENGLISCH_ZUERST)
+
+
+# Modules written in English from the start. Their messages are English
+# already; the page shows them in German by catching their error kinds
+# (see verschiebe_dokument in app.py), not through this table.
+ENGLISCH_ZUERST = {"doc_actions", "answering", "web_sources", "mailboxes",
+                   "accounts", "sessions", "jobs", "oidc", "metrics",
+                   "statefiles", "database", "pg_collection", "pg_keywords"}
 
 
 def _meldungen(datei):

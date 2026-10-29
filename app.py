@@ -331,52 +331,10 @@ def _sanitize_title(text):
 
 
 def make_chat_title(user_query, model):
-    """Erzeugt die Schlagwörter für den Chat-Dateinamen.
-
-    Der Aufruf lief bisher mit max_tokens=10. Bei einem Reasoning-Modell
-    verbraucht schon der Denk-Vorspann dieses Budget, sodass content leer
-    zurueckkommt -- die Datei hiess dann nur "_26-08-26.json". Ein
-    Fehlerfall war das nicht, deshalb griff der bisherige except-Zweig nie.
-
-    Jetzt: groesseres Budget, Denk-Bloecke werden entfernt, und das Ergebnis
-    wird geprueft statt vorausgesetzt. Bleibt nichts uebrig, greift derselbe
-    Rueckfall wie bei einem echten Fehler.
-    """
-    try:
-        title_prompt = (
-            "Gib dieser Frage einen kurzen Titel: hoechstens sechs Woerter, "
-            "die markantesten Begriffe zuerst, in der Sprache der Frage. "
-            "Antworte NUR mit dem Titel, ohne Anfuehrungszeichen.\n"
-            f"Frage: {user_query}"
-        )
-        resp = title_client.chat.completions.create(
-            # Der Titel ist eine Nebensache -- ein kleines Modell reicht und
-            # spart bei drei LLM-Aufrufen pro Frage spuerbar Zeit. Ohne
-            # TITLE_MODEL bleibt es beim Chat-Modell.
-            model=llm.modell("TITLE", model),
-            messages=[{"role": "user", "content": title_prompt}],
-            max_tokens=64,
-            temperature=0.3,
-            timeout=HELPER_TIMEOUT,
-        )
-        raw = (resp.choices[0].message.content or "")
-
-        # Denk-Bloecke entfernen -- auch einen unabgeschlossenen, falls das
-        # Token-Budget mitten im Denken endet.
-        raw = re.sub(r"<think>.*?</think>", " ", raw, flags=re.S | re.I)
-        raw = re.sub(r"<think>.*", " ", raw, flags=re.S | re.I)
-
-        # Reasoning-Modelle stellen die eigentliche Antwort ans Ende.
-        lines = [ln for ln in raw.splitlines() if ln.strip()]
-        keywords = _titel_bereinigen(lines[-1]) if lines else ""
-    except Exception:
-        keywords = ""
-
-    if not keywords:
-        # Rueckfall: die ersten Woerter der Frage.
-        keywords = _titel_bereinigen(" ".join(user_query.split()[:6]))
-
-    return keywords or "Chat"
+    """Title for the chat list -- answering.chat_title, shared with the server."""
+    import answering
+    return answering.chat_title(user_query, model,
+                                st.session_state.get("username", ""))
 
 
 def _titel_bereinigen(text):
@@ -683,133 +641,27 @@ reranker, rerank_info = init_reranker()
 
 # --- DOKUMENTEN-LOGIK ---
 def verschiebe_dokument(filename, von_raum, nach_raum):
-    """Verschiebt ein Dokument samt Abschnitten in einen anderen Raum.
+    """Moves a document with its passages to another room. (ok, message).
 
-    Das ist der Nachfolger der Freigabe. Fruher wurde ein Merkmal in den
-    Metadaten umgeschrieben -- ein Zeichen, und aus privat wurde
-    oeffentlich. Jetzt wandern die Abschnitte tatsaechlich in eine andere
-    Sammlung, weil die Sammlung die Grenze ist.
-
-    Die Vektoren werden mitgenommen, nicht neu berechnet: sie liegen vor,
-    und ein Neueinlesen waere Modellzeit fuer ein vorhandenes Ergebnis.
+    The work and the permission check are in doc_actions.move -- the same
+    function the server uses, so the page and the API cannot drift apart.
     """
-    quelle = raum_sammlung(von_raum, anlegen=False)
-    if quelle is None:
-        return False, "Der Ausgangsraum hat keine Daten."
-    # store.hole und nicht quelle.get: Chroma kann das Vektorsegment einer
-    # Sammlung noch nicht abgelegt haben und den Leser dann nicht aufbauen.
-    # Ohne die Wiederholung schluege das Verschieben mit einem Rueckverfolg
-    # in der Oberflaeche fehl -- und der Nutzer wuesste nur, dass es nicht
-    # ging.
-    daten = store.hole(quelle, raeume.sammlung(von_raum),
-                       where=store.datei_filter(filename),
-                       include=["documents", "metadatas", "embeddings"])
-    ids = daten.get("ids") or []
-    if not ids:
+    import doc_actions
+    try:
+        meldung = doc_actions.move(st.session_state.get("username", "?"),
+                                   filename, von_raum, nach_raum,
+                                   is_admin=is_admin())
+    except doc_actions.Denied:
+        return False, "Dafür fehlt die Schreibberechtigung."
+    except doc_actions.NotFound:
         return False, "Keine Abschnitte gefunden."
-    vektoren = daten.get("embeddings")
-    if vektoren is None or len(vektoren) != len(ids):
+    except ValueError:
         return False, ("Die Vektoren fehlen -- ohne sie waere das ein "
                        "Neueinlesen.")
-
-    metas = []
-    for m in daten.get("metadatas") or []:
-        meta = dict(m or {})
-        meta["raum"] = nach_raum
-        # access und owner bleiben als Herkunftsangabe stehen, sie steuern
-        # aber nichts mehr. Sie zu loeschen wuerde nur die Frage "wer hat
-        # das hochgeladen" unbeantwortbar machen.
-        metas.append(meta)
-
-    # Der DATEINAME wandert mit umgeschluesselt, nicht nur der Text.
-    # Er ist mit dem Raum beglaubigt, in dem er lag; unveraendert
-    # uebernommen laesst er sich im Zielraum nicht mehr oeffnen, und
-    # _metadaten_verdeckt merkt das nicht -- die Funktion sieht einen
-    # verschluesselten Wert und laesst ihn stehen. Auffallen wuerde es
-    # erst Wochen spaeter unter einer Antwort, als "(nicht lesbar)"
-    # anstelle der Quelle.
-    metas = store.metadaten_umschluesseln(von_raum, nach_raum, metas)
-
-    ziel = raum_sammlung(nach_raum)
-    # Umschluesseln: der Geheimtext ist mit dem Raum beglaubigt, in dem
-    # er lag. Unveraendert uebernommen liesse er sich im neuen Raum nie
-    # wieder oeffnen -- ein Dokument, das nach dem Verschieben stumm
-    # unlesbar ist, und niemand saehe warum.
-    _docs = store.umschluesseln(von_raum, nach_raum,
-                                daten.get("documents") or [],
-                                st.session_state.get("username", "?"))
-    store.schreibe(ziel, ids, documents=_docs,
-                   metadatas=metas, embeddings=vektoren)
-    quelle.delete(ids=ids)
-
-    keyword_index.delete_document(filename, raum=von_raum)
-    # In den Stichwortindex geht beides im Klartext -- Text UND Name.
-    # Mit verdecktem Namen faende der Dokumentfilter die Datei nicht
-    # mehr und ein spaeteres Loeschen liesse ihre Abschnitte stehen.
-    keyword_index.add_chunks(
-        zip(ids, store.klartext(von_raum, daten.get("documents") or [],
-                                st.session_state.get("username", "?")),
-            store.metadaten_klartext(nach_raum, metas)))
     refresh_document_index()
-
-    # Die Datei geht mit. Seit jeder Raum seinen eigenen Ablageordner hat,
-    # waeren die Abschnitte sonst im neuen Raum und die Datei im alten --
-    # und der alte ist fuer den neuen gesperrt. Die Quellenansicht zeigte
-    # dann keine Seite mehr, ohne zu sagen warum. Umgekehrt bliebe ein
-    # freigegebenes Dokument koerperlich im persoenlichen Ordner liegen.
-    nachsatz = _verschiebe_datei(filename, von_raum, nach_raum)
+    rest = meldung.split(".", 1)[1].strip() if "." in meldung else ""
     return True, (f"Nach '{raeume.bezeichnung(nach_raum)}' verschoben."
-                  + nachsatz)
-
-
-def _verschiebe_datei(filename, von_raum, nach_raum):
-    """Bringt die Datei in den Ordner des Zielraums. Rueckgabe: Nachsatz.
-
-    Ist am Ziel schon eine Datei dieses Namens, bleibt sie liegen und die
-    Datei wird NICHT verschoben: umbenennen ginge nicht, weil der
-    Dateiname in den Metadaten jedes Abschnitts steht und dort der
-    Schluessel ist. Lieber eine fehlende Seitenansicht als ein Bestand,
-    in dem Abschnitt und Datei auseinanderlaufen -- und gesagt wird es.
-    """
-    quelle = dokument_pfad(filename, von_raum)
-    if not quelle or not statefiles.exists(quelle):
-        return ""
-
-    def basis(raum):
-        return (DOCS_DIR if raum == raeume.ALLGEMEIN
-                else paths.raum_ordner(raum))
-
-    try:
-        rel = os.path.relpath(os.path.dirname(quelle), basis(von_raum))
-    except ValueError:
-        rel = "."
-    # Ein Dokument aus der Zeit vor den Raeumen liegt im Wurzelbereich und
-    # damit ausserhalb des Ordners seines Raums. Dann kein Unterordner.
-    if rel.startswith("..") or rel in (".", ""):
-        rel = ""
-    ziel_ordner = os.path.join(basis(nach_raum), rel) if rel \
-        else basis(nach_raum)
-    ziel = os.path.join(ziel_ordner, os.path.basename(quelle))
-    if os.path.normpath(ziel) == os.path.normpath(quelle):
-        return ""
-    if statefiles.exists(ziel):
-        return (" Die Datei blieb liegen: am Ziel gibt es bereits eine "
-                "gleichen Namens. Die Originalseite laesst sich dort "
-                "nicht anzeigen.")
-    try:
-        statefiles.makedirs(ziel_ordner, exist_ok=True)
-        statefiles.rename(quelle, ziel)
-    except OSError as e:
-        return f" Die Datei liess sich nicht mitnehmen ({e})."
-    # ownCloud zieht mit. Sonst laege die Datei dort weiter im alten
-    # Raum, und dessen naechster Abgleich holte sie als neu zurueck --
-    # ein aus einem geteilten Raum herausgenommenes Dokument stuende
-    # wieder darin.
-    ok, m = owncloud.verschiebe(von_raum, quelle, nach_raum, ziel)
-    if not ok:
-        return (f" ACHTUNG: {m} Der naechste Abgleich holt die Datei in "
-                f"'{raeume.bezeichnung(von_raum)}' zurueck.")
-    return ""
+                  + (" " + rest if rest else ""))
 
 
 # "Seite" und "page": antwortet das Modell auf Englisch, zitiert es so.
@@ -942,97 +794,15 @@ def loesche_dokument(filename, raum, kennung_statt_name=False):
 
 
 def list_foreign_private_documents(current_user, notzugang_=()):
-    """(raum, file_name) fremder Raeume -- nur wo das erlaubt ist.
-
-    Fuer den Verwaltungsbereich, damit verwaiste Ablagen ausgeschiedener
-    Mitarbeiter loeschbar bleiben. Aufgelistet werden Raum und Dateiname,
-    nie der Inhalt: ein Loeschrecht ist kein Leserecht.
-
-    Im strengen Betrieb (PRIVAT_STRENG) faellt auch der Dateiname weg. Dort
-    gilt "jeder weiss nur, was er wissen muss", und ein Dateiname ist eine
-    Auskunft: "Angebot_Kunde_Meier.pdf" verraet den Vorgang, ohne dass
-    jemand die Datei oeffnet. Was dann bleibt, steht in fremde_raeume() --
-    Raum und Anzahl.
-    """
-    seen = set()
-    for kennung, sml in _alle_raum_sammlungen():
-        # MIT BESTAETIGTEM NOTZUGANG IST DER RAUM NICHT MEHR FREMD.
-        #
-        # Ohne diese Angabe blieb er in der Verwaltungsliste stehen --
-        # mit Kennungen statt Namen --, waehrend seine Dokumente
-        # daneben in der gewoehnlichen Dokumentenverwaltung mit
-        # Klarnamen auftauchten. Zweimal dasselbe, einmal lesbar und
-        # einmal nicht, und der Unterschied war nicht zu erklaeren.
-        #
-        # Der Notzugang ist das Verfahren, mit dem jemand hineindarf.
-        # Ist er bestaetigt, gilt er auch hier.
-        if raeume.darf_lesen(current_user, kennung, notzugang_):
-            continue
-        if not raeume.darf_dateien_sehen(current_user, kennung,
-                                         ist_verwalter=is_admin()):
-            continue
-        try:
-            data = sml.get(include=["metadatas"])
-        except Exception:
-            continue
-        # GRIFF OHNE EINSICHT.
-        #
-        # Der Verwalter soll eine verwaiste Ablage aufraeumen koennen,
-        # ohne zu erfahren, worum es ging. Ein Dateiname verraet den
-        # Vorgang -- "Kuendigung_Mueller_2026.pdf" muss dafuer niemand
-        # oeffnen. Wer den Inhalt wirklich braucht, geht ueber den
-        # Notzugang, und dann stehen zwei Namen im Protokoll.
-        #
-        # datei_id ist dafuer das Mittel: eine bestimmte Kennung je
-        # DATEI, aus dem Namen abgeleitet und nicht umkehrbar.
-        #
-        # Der Geheimtext des Namens taugt NICHT dafuer, obwohl er
-        # danach aussieht: er traegt einen zufaelligen Nonce, ist also
-        # je ABSCHNITT verschieden. Die Liste zeigte damit acht
-        # Eintraege fuer eine Datei -- und ein Loeschen traf genau
-        # einen Abschnitt davon, sichtbar nur daran, dass die Datei
-        # danach noch da war.
-        for m in data.get("metadatas") or []:
-            if not m:
-                continue
-            kenn = m.get("datei_id") or ""
-            if not kenn:
-                # Abschnitte aus der Zeit vor der Verschluesselung
-                # tragen keine Kennung. Ohne diesen Zweig waere die
-                # Liste bei einem alten Bestand einfach leer -- und der
-                # Verwalter suchte den Fehler bei den Rechten.
-                #
-                # Der Name liegt dort ohnehin im Klartext; ihn zu
-                # hashen gibt denselben Griff wie ueberall und
-                # verraet nichts, was nicht schon offen laege.
-                import raumschluessel
-                kenn = raumschluessel.datei_id(m.get("file_name") or "")
-            if kenn:
-                seen.add((kennung, kenn))
-    return sorted(seen)
+    """(room, file_id) in rooms this admin cannot read -- see doc_actions."""
+    import doc_actions
+    return doc_actions.foreign_documents(current_user, is_admin())
 
 
 def fremde_raeume(current_user, notzugang_=()):
-    """[(raum, anzahl)] der Raeume, die dieser Nutzer nicht lesen darf.
-
-    Ohne Dateinamen. Das ist die Ansicht, die im strengen Betrieb bleibt:
-    ein Verwalter sieht, DASS ein Raum Inhalt hat, und kann ihn als Ganzes
-    loeschen -- ohne zu erfahren, was darin liegt.
-    """
-    aus = []
-    for kennung, sml in _alle_raum_sammlungen():
-        # Auch hier: ein Raum mit bestaetigtem Notzugang
-        # ist nicht fremd.
-        if raeume.darf_lesen(current_user, kennung,
-                             notzugang_):
-            continue
-        try:
-            anzahl = sml.count()
-        except Exception:
-            continue
-        if anzahl:
-            aus.append((kennung, anzahl))
-    return sorted(aus)
+    """[(room, passages)] of rooms this admin cannot read -- see doc_actions."""
+    import doc_actions
+    return doc_actions.foreign_rooms(current_user, True)
 
 
 # --- LISTEN FÜR DIE UI ---

@@ -992,8 +992,12 @@ def _ohne_tx(quelle):
 
 _quelle = _ohne_tx(statefiles.open(os.path.join(os.path.dirname(
     os.path.abspath(__file__)), "app.py"), encoding="utf-8").read())
-_a = _quelle.index("def list_foreign_private_documents(")
-_rumpf = _quelle[_a:_quelle.index("\ndef ", _a + 10)]
+# The admin list lives in doc_actions.foreign_documents since the page
+# and the server share it.
+_quelle_da = statefiles.open(os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "doc_actions.py"), encoding="utf-8").read()
+_a = _quelle_da.index("def foreign_documents(")
+_rumpf = _quelle_da[_a:_quelle_da.index("\ndef ", _a + 10)]
 pruef("die Verwaltungsansicht zeigt Kennungen statt Namen",
       "datei_id" in _rumpf)
 pruef("und schliesst die Namen NICHT auf",
@@ -2406,7 +2410,7 @@ pruef("jeder andere Raum in seinem Unterordner",
 # Upload muss dieselbe Regel haben.
 _app = _datei("app.py")
 pruef("der Upload benutzt dieselbe Regel",
-      "DOCS_DIR if raum == raeume.ALLGEMEIN" in _app)
+      "DOCS_DIR if room == raeume.ALLGEMEIN" in _datei("doc_actions.py"))
 
 # Beim Spiegeln des allgemeinen Raums duerfen die Ordner der anderen
 # Raeume NICHT mitkommen. Sie liegen darunter, und sie gehoeren
@@ -3984,7 +3988,8 @@ pruef("die Schnittstelle hat DELETE /dokumente auf dem gemeinsamen Weg",
       and "benutzer_=kennung" in _api_q[_api_q.find('@app.delete("/dokumente")'):]
       and "status_code=403" in _api_q and "status_code=404" in _api_q)
 pruef("Verschieben in der Oberflaeche verschiebt in ownCloud mit",
-      "owncloud.verschiebe(" in _fn_rumpf("_verschiebe_datei"))
+      "doc_actions.move(" in _fn_rumpf("verschiebe_dokument")
+      and "owncloud.verschiebe(" in _datei("doc_actions.py"))
 
 # --- OWNCLOUD-KONTEN FOLGEN LOCANOTO, ABER NUR DIE EIGENEN ---
 #
