@@ -19,10 +19,21 @@ names, sizes and hosts are placeholders.
 Built by GitHub Actions (`.github/workflows/abbild.yml`) on every push to
 the `enterprise` branch, as `ghcr.io/mw-research/locanoto:enterprise-schlank`
 (CPU, no reranker model in the image) and, started by hand,
-`enterprise-voll`. Each build also carries a fixed tag
-`enterprise-schlank-<commit>`; pin that one in production. The build
-checks text recognition and that the server starts. Installations that
-pull `schlank` are not affected.
+`enterprise-voll`, each for **linux/amd64 and linux/arm64** (Apple
+Silicon Macs, NVIDIA DGX Spark); a machine pulls its own architecture.
+Each build also carries a fixed tag `enterprise-schlank-<commit>`; pin
+that one in production. Both architectures are built on native runners
+and checked there (text recognition, server start) before the shared
+tag moves. `enterprise-voll` for arm64 only on request (CUDA wheels for
+aarch64). Installations that pull `schlank` are not affected.
+
+On a Mac or a DGX Spark without Kubernetes:
+
+```bash
+docker run -p 8700:8700 -e LOCANOTO_SCHLUESSEL=... -e DATABASE_URL=... \
+  ghcr.io/mw-research/locanoto:enterprise-schlank \
+  uvicorn server:app --host 0.0.0.0 --port 8700
+```
 
 ## New installation
 

@@ -19,11 +19,29 @@
 # CUDA-torch und einem 2,3-GB-Modell nicht zuverlaessig auf die
 # Plattenzuteilung eines GitHub-Laeufers; wer sie braucht, startet den
 # Lauf von Hand und weiss dann auch, warum er scheitern kann.
+#
+# TWO ARCHITECTURES. Every variant is built for linux/amd64 and
+# linux/arm64 (Apple Silicon Macs, NVIDIA DGX Spark / Grace, Ampere
+# servers), each on a native runner of its own architecture -- emulating
+# arm64 would make installing torch and friends take hours. Each image is
+# tested on its own runner (text recognition, and for the enterprise
+# branch the server start); only then are the two joined under one name,
+# and a machine pulls the image of its own architecture by itself.
+#
+#   <name>-<commit>-amd64 / -arm64   one architecture, fixed
+#   <name>-<commit>                  both, fixed -- pin this in production
+#   <name>                           both, moves with every good build
+#
+# "voll" on arm64 needs CUDA wheels of the pinned torch for aarch64; it is
+# built only when asked (input arm64_voll). On a DGX Spark the models run
+# in their own servers anyway, and "schlank" with a rerank endpoint is
+# the intended image there.
+#
+# The enterprise branch builds under its own names (enterprise-schlank,
+# enterprise-voll): installations that pull "schlank" must never get the
+# enterprise image by accident.
 name: Abbild
 
-# The enterprise branch builds too, under its own names
-# (enterprise-schlank, enterprise-voll): installations that pull
-# "schlank" must never get the enterprise image by accident.
 on:
   push:
     branches: [main, enterprise]
@@ -31,6 +49,8 @@ on:
       - "**.py"
       - requirements.txt
       - Dockerfile
+      - web_templates/**
+      - web_static/**
       - .github/workflows/abbild.yml
   workflow_dispatch:
     inputs:
@@ -39,44 +59,30 @@ on:
         type: choice
         options: [schlank, voll]
         default: schlank
+      arm64_voll:
+        description: "voll auch fuer arm64 bauen (CUDA-Raeder fuer aarch64 noetig)"
+        type: boolean
+        default: false
 
 concurrency:
   group: abbild-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  bauen:
+  name:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      variante: ${{ steps.v.outputs.variante }}
+      name: ${{ steps.v.outputs.name }}
+      nur_cpu: ${{ steps.v.outputs.nur_cpu }}
+      reranker: ${{ steps.v.outputs.reranker }}
+      arm64: ${{ steps.v.outputs.arm64 }}
     steps:
-      - uses: actions/checkout@v4
-
-      # Der Laeufer bringt rund 14 GB freie Platte mit, und ein guter
-      # Teil davon liegt in vorinstallierten Werkzeugen, die hier
-      # niemand braucht. Ohne das Aufraeumen bricht schon die schlanke
-      # Variante gelegentlich mit "no space left on device" ab -- ein
-      # Fehler, der nach einem Problem im Dockerfile aussieht und keins
-      # ist.
-      - name: Platte freiraeumen
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          df -h /
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Variante bestimmen
-        id: variante
+        id: v
         run: |
           V="${{ github.event.inputs.variante || 'schlank' }}"
+          echo "variante=$V" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_name }}" = "enterprise" ]; then
             echo "name=enterprise-$V" >> "$GITHUB_OUTPUT"
           else
@@ -85,64 +91,108 @@ jobs:
           if [ "$V" = "voll" ]; then
             echo "nur_cpu=0" >> "$GITHUB_OUTPUT"
             echo "reranker=BAAI/bge-reranker-v2-m3" >> "$GITHUB_OUTPUT"
+            echo "arm64=${{ github.event.inputs.arm64_voll == 'true' && '1' || '0' }}" >> "$GITHUB_OUTPUT"
           else
             echo "nur_cpu=1" >> "$GITHUB_OUTPUT"
             echo "reranker=" >> "$GITHUB_OUTPUT"
+            echo "arm64=1" >> "$GITHUB_OUTPUT"
           fi
 
+  bauen:
+    needs: name
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      AKTIV: ${{ matrix.arch == 'amd64' || needs.name.outputs.arm64 == '1' }}
+      ABBILD: ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}-${{ github.sha }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.AKTIV == 'true'
+
+      # Der Laeufer bringt rund 14 GB freie Platte mit, und ein guter
+      # Teil davon liegt in vorinstallierten Werkzeugen, die hier
+      # niemand braucht. Ohne das Aufraeumen bricht schon die schlanke
+      # Variante gelegentlich mit "no space left on device" ab -- ein
+      # Fehler, der nach einem Problem im Dockerfile aussieht und keins
+      # ist.
+      - name: Platte freiraeumen
+        if: env.AKTIV == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo rm -rf /usr/local/share/boost "${AGENT_TOOLSDIRECTORY:-/nonexistent}"
+          df -h /
+
+      - uses: docker/setup-buildx-action@v3
+        if: env.AKTIV == 'true'
+
+      - uses: docker/login-action@v3
+        if: env.AKTIV == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Bauen und ablegen
+        if: env.AKTIV == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: ${{ matrix.platform }}
           push: true
+          # One plain image per architecture; the joined name is made
+          # below from these. Without provenance each would be an index
+          # of its own, which only makes the join harder to read.
+          provenance: false
           # Kleingeschrieben, weil die Registry keine Grossbuchstaben im
           # Namen annimmt und der Organisationsname welche enthalten
           # kann.
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
+          tags: ${{ env.ABBILD }}
           # Die Marken reisen MIT DEM ABBILD, nicht mit dem
           # Kennzeichner. Ausgerollt wird der wandernde Kennzeichner;
           # aus seinem Digest kam bisher niemand auf den Commit zurueck
           # -- im Cluster liess sich nur feststellen, dass das Abbild
-          # neuer ist, nicht, dass es genau dieser Stand ist. Und das
-          # ist die Verwechslung, die schon einmal gebissen hat: zwei
-          # Ablagen bauen unabhaengig, "neuer als vorher" galt fuer
-          # beide, und nur eine trug die Korrektur.
+          # neuer ist, nicht, dass es genau dieser Stand ist.
           #
           # Auslesen im Cluster:
           #   crane config <abbild> | jq -r '.config.Labels'
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.version=${{ steps.variante.outputs.name }}
+            org.opencontainers.image.version=${{ needs.name.outputs.name }}
           build-args: |
-            NUR_CPU=${{ steps.variante.outputs.nur_cpu }}
-            RERANKER_MODEL=${{ steps.variante.outputs.reranker }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            NUR_CPU=${{ needs.name.outputs.nur_cpu }}
+            RERANKER_MODEL=${{ needs.name.outputs.reranker }}
+          cache-from: type=gha,scope=${{ needs.name.outputs.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ needs.name.outputs.name }}-${{ matrix.arch }}
 
-      # Abgelegt ist bis hier NUR der feste Kennzeichner. Der wandernde,
-      # den der Cluster zieht, rueckt erst nach, wenn das Abbild seine
-      # Probe bestanden hat -- sonst zoege ein ungeplanter Neustart ein
-      # Abbild, dessen Texterkennung nicht liest.
-      #
       # Die Probe liest eine erzeugte gescannte Seite mit den Sprachdaten,
       # die das Dockerfile mitbringt. Fehlt ein Sprachpaket oder findet
       # pymupdf Tesseract nicht, schlaegt sie fehl, und mit ihr der Bau.
+      # On the runner of the image's own architecture.
       - name: Texterkennung im Abbild pruefen
-        env:
-          ABBILD: ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
+        if: env.AKTIV == 'true'
         run: |
           docker pull "$ABBILD"
+          docker run --rm "$ABBILD" python -c "import platform; print(platform.machine())"
           docker run --rm "$ABBILD" python ocr.py --probe
 
       # The enterprise image must also carry the server's dependencies
       # and start it: a missing package would only show as a crash loop
       # in the cluster.
       - name: Server im Abbild pruefen
-        if: github.ref_name == 'enterprise'
-        env:
-          ABBILD: ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}
+        if: env.AKTIV == 'true' && github.ref_name == 'enterprise'
         run: |
           docker run --rm "$ABBILD" python -c "import psycopg, jwt, jinja2, markdown_it, multipart"
           docker run -d --name probe -p 8700:8700 -e COOKIE_SECURE=0 \
@@ -157,12 +207,38 @@ jobs:
           docker logs probe | tail -20
           docker rm -f probe
 
-      - name: Wandernden Kennzeichner nachziehen
-        run: docker buildx imagetools create -t "ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}" "ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}-${{ github.sha }}"
+  # Abgelegt sind bis hier NUR die Kennzeichner je Architektur. Der
+  # gemeinsame und der wandernde, den der Cluster zieht, entstehen erst,
+  # wenn jedes gebaute Abbild seine Probe bestanden hat -- sonst zoege ein
+  # ungeplanter Neustart ein Abbild, dessen Texterkennung nicht liest.
+  zusammenfuehren:
+    needs: [name, bauen]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Architekturen zu einem Namen verbinden
+        run: |
+          BASIS="ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}"
+          QUELLEN="$BASIS-${{ github.sha }}-amd64"
+          if [ "${{ needs.name.outputs.arm64 }}" = "1" ]; then
+            QUELLEN="$QUELLEN $BASIS-${{ github.sha }}-arm64"
+          fi
+          docker buildx imagetools create -t "$BASIS-${{ github.sha }}" -t "$BASIS" $QUELLEN
+          docker buildx imagetools inspect "$BASIS"
 
       - name: Was danach zu tun ist
         run: |
-          echo "Abgelegt als ghcr.io/${{ github.repository_owner }}/locanoto:${{ steps.variante.outputs.name }}"
+          echo "Abgelegt als ghcr.io/${{ github.repository_owner }}/locanoto:${{ needs.name.outputs.name }}"
+          echo "Architekturen: amd64$([ "${{ needs.name.outputs.arm64 }}" = "1" ] && echo ", arm64")"
           echo
           echo "Das Paket ist beim ERSTEN Mal privat. Ohne eine Aenderung"
           echo "scheitert das Ziehen im Cluster mit ImagePullBackOff, und"
