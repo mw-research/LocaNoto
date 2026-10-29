@@ -5037,6 +5037,18 @@ pruef("jede Datei kommt in der Landkarte des README vor",
 _stumm = sorted(n for n, i in _karte.items() if not i["kopf"].strip())
 pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
 
+# --- SOURCES UNDER AN ANSWER START CLOSED ---
+#
+# The first source under every answer used to open by itself. With long
+# passages the page grew after each answer and jumped to its end,
+# wherever the reader had scrolled to.
+_app_src = _datei("app.py")
+_q_anf = _app_src.index("# --- QUELLEN DAUERHAFT ANZEIGEN ---")
+_q_rumpf = _app_src[_q_anf:_app_src.index("for t in source", _q_anf)]
+pruef("Quellen unter einer Antwort stehen anfangs zu",
+      "expanded=False" in _q_rumpf and "_k == 0" not in _q_rumpf,
+      _q_rumpf[-200:])
+
 # --- WAS DER CODE LIEST, STEHT IN DER VORLAGE ---
 #
 # Das SQL-Modul lag monatelang vollstaendig in der oeffentlichen Fassung
