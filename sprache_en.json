@@ -1,5 +1,7 @@
 {
  "texte": {
+  "Rolle notzugang – wird auf dem Server vergeben und entzogen (manage_users.py).": "Role notzugang -- assigned and removed on the server (manage_users.py).",
+  "Die bestätigende Person muss ihr Passwort zuerst selbst setzen – das jetzige hat der Antragsteller vergeben.": "The confirming person must first set their own password -- the current one was set by the requester.",
   " *(Standard)*": " *(default)*",
   " -- der nächste Abgleich holt es zurück.": " -- the next sync restores it.",
   " -- gesperrt, solange eine Antwort läuft.": " -- locked while an answer is running.",

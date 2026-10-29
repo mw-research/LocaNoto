@@ -194,6 +194,9 @@ def speichern(name, werte):
 
 def loesche(name):
     """Entfernt eine Voreinstellung samt ihrer Vorlagen."""
+    # Only a real preset name: "..", "../x" would leave the preset folder.
+    if name not in namen():
+        return False
     ziel = os.path.join(ORDNER, name)
     if not statefiles.isdir(ziel):
         return False

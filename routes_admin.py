@@ -163,9 +163,16 @@ class NewToken(BaseModel):
 
 @router.post("/tokens", tags=["admin"])
 def create_token(body: NewToken, p: Principal = Depends(admin)):
-    """Returns the token once; only its hash is stored."""
-    if not benutzer.eintrag(body.user):
-        raise HTTPException(404, "No such user.")
+    """A token for the admin's own account. Returns it once.
+
+    Not for other users: a token for someone else would let an admin act
+    as that person -- read a personal workspace without the two-person
+    emergency access. Tokens for other accounts (service accounts) are
+    made with create_token.py on the server, where it is logged who did.
+    """
+    if body.user != p.name:
+        raise HTTPException(403, "Tokens only for your own account; for "
+                                 "others use create_token.py on the server.")
     token = auth.erzeuge(body.user, body.label, body.days)
     benutzer.protokolliere("token", body.user, p.name, body.label)
     return {"token": token, "user": body.user}
@@ -175,10 +182,14 @@ def create_token(body: NewToken, p: Principal = Depends(admin)):
 def revoke_token(token_id: str, p: Principal = Depends(admin)):
     if len(token_id) < 8:
         raise HTTPException(400, "Give at least 8 characters of the id.")
-    n = auth.widerrufe(token_id)
-    if not n:
-        raise HTTPException(404, "No such token.")
-    return {"revoked": n}
+    matches = [k for k, _e in auth.liste() if k.startswith(token_id)]
+    if len(matches) != 1:
+        raise HTTPException(404 if not matches else 409,
+                            "No such token." if not matches
+                            else "Ambiguous id; give more characters.")
+    auth.widerrufe(matches[0])
+    benutzer.protokolliere("token_widerrufen", token_id, p.name)
+    return {"revoked": 1}
 
 
 # --- WORKSPACES ---
@@ -503,9 +514,15 @@ def list_prompts(p: Principal = Depends(admin)):
             for n in prompts.verfuegbar()]
 
 
+def _check_preset(preset):
+    if preset is not None and preset not in presets.namen():
+        raise HTTPException(404, "No such preset.")
+
+
 @router.get("/prompts/{name}", tags=["content"])
 def get_prompt(name: str, preset: str | None = None,
                p: Principal = Depends(admin)):
+    _check_preset(preset)
     if name not in prompts.verfuegbar():
         raise HTTPException(404, "No such prompt.")
     text, origin = prompts.lese(name, preset)
@@ -519,6 +536,7 @@ class PromptText(BaseModel):
 @router.put("/prompts/{name}", tags=["content"])
 def put_prompt(name: str, body: PromptText, preset: str | None = None,
                p: Principal = Depends(admin)):
+    _check_preset(preset)
     if name not in prompts.verfuegbar():
         raise HTTPException(404, "No such prompt.")
     message = _ok(prompts.speichern(name, body.text, preset))
@@ -529,7 +547,9 @@ def put_prompt(name: str, body: PromptText, preset: str | None = None,
 @router.delete("/prompts/{name}", tags=["content"])
 def reset_prompt(name: str, preset: str | None = None,
                  p: Principal = Depends(admin)):
-    if not prompts.zuruecksetzen(name, preset):
+    _check_preset(preset)
+    if name not in prompts.verfuegbar() or \
+            not prompts.zuruecksetzen(name, preset):
         raise HTTPException(404, "Nothing to reset.")
     return {"message": "Reset to the shipped template."}
 
@@ -569,7 +589,7 @@ def put_shared_preset(name: str, body: SharedPreset,
 
 @router.delete("/presets/{name}", tags=["content"])
 def delete_shared_preset(name: str, p: Principal = Depends(admin)):
-    if not presets.loesche(name):
+    if name not in presets.namen() or not presets.loesche(name):
         raise HTTPException(404, "No such preset.")
     return {"deleted": name}
 

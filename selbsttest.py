@@ -541,6 +541,11 @@ pruef("der Antragsteller kann sich nicht selbst bestaetigen",
       not notzugang.bestaetige(_pa, "markus", "markus")[0])
 pruef("ein gewoehnlicher Nutzer auch nicht",
       not notzugang.bestaetige(_pa, "markus", "anna")[0])
+# The admin created "chef" and so knows the first password. Until chef
+# sets an own one, the account is not a second person.
+pruef("solange der Antragsteller das Passwort vergeben hat, nicht",
+      not notzugang.bestaetige(_pa, "markus", "chef")[0])
+benutzer.passwort_setzen("chef", "chefs-eigenes-passwort", von="chef")
 pruef("die Rolle 'notzugang' bestaetigt",
       notzugang.bestaetige(_pa, "markus", "chef")[0])
 _nz = notzugang.raeume_fuer("markus")
@@ -4434,6 +4439,42 @@ try:
     except _ws.Fehler as e:
         _ws_ab = str(e)
     pruef("und werden nicht abgerufen", "oeffentliche" in _ws_ab, _ws_ab)
+
+    # DNS rebinding: the name answers public first, internal afterwards.
+    # The fetch must go to the address that was checked.
+    import socket as _so
+    _ws_antw = [("93.184.216.34",), ("93.184.216.34",)]
+    _ws_echt = _so.getaddrinfo
+    _so.getaddrinfo = lambda *a, **k: [(2, 1, 6, "", (
+        (_ws_antw.pop(0) if _ws_antw else ("127.0.0.1",))[0], 0))]
+    _ws_url = {}
+
+    class _WsClient:
+        def stream(self, methode, url, headers=None, extensions=None):
+            _ws_url.update(url=url, host=(headers or {}).get("Host"),
+                           sni=(extensions or {}).get("sni_hostname"))
+
+            class _A:
+                status_code = 200
+                headers = {"content-type": "text/plain"}
+
+                def iter_bytes(self):
+                    yield b"ok"
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    return False
+            return _A()
+    try:
+        _ws.abrufen("https://beispiel.example/x", client=_WsClient())
+    finally:
+        _so.getaddrinfo = _ws_echt
+    pruef("Websuche: geholt wird von der gepruefter Adresse (kein DNS-Rebinding)",
+          _ws_url.get("url") == "https://93.184.216.34/x"
+          and _ws_url.get("host") == "beispiel.example"
+          and _ws_url.get("sni") == "beispiel.example", _ws_url)
 
     _ws_init = _ws.beantworte({"jsonrpc": "2.0", "id": 1,
                                "method": "initialize", "params": {}})

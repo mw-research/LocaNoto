@@ -111,8 +111,11 @@ def image_estimate(file: UploadFile = File(...),
     """Scanned pages and figures a PDF has -- each one a vision call."""
     import bildtext
     import pymupdf
+    data = file.file.read(UPLOAD_MAX_MB * 1024 * 1024 + 1)
+    if len(data) > UPLOAD_MAX_MB * 1024 * 1024:
+        raise HTTPException(413, f"Larger than {UPLOAD_MAX_MB} MB.")
     try:
-        doc = pymupdf.open(stream=file.file.read(), filetype="pdf")
+        doc = pymupdf.open(stream=data, filetype="pdf")
     except Exception:
         raise HTTPException(400, "Not a readable PDF.")
     try:

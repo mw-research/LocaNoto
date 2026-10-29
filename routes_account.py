@@ -20,7 +20,7 @@
     GET    /me/sql-accounts            database accounts this user may use
     PUT    /me/sql-account             the account of the own room
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 import accounts
@@ -65,14 +65,17 @@ def login(body: Login, request: Request, response: Response):
     """
     name = body.username.strip().lower()
     address = _client_address(request)
-    if sessions.login_blocked(name, address):
+    if not sessions.login_attempt(name, address):
         raise HTTPException(429, "Too many failed sign-ins. Try later.",
                             headers={"Retry-After": str(
                                 sessions.LOGIN_WINDOW_MINUTES * 60)})
+    # The password check always runs (bcrypt time), also for directory
+    # accounts -- a faster answer would tell which names those are.
+    password_ok = benutzer.pruefe(name, body.password)
     entry = benutzer.lade()[0].get(name) or {}
-    if entry.get("anmeldung") == "oidc" or not benutzer.pruefe(name, body.password):
-        sessions.login_failed(name, address)
+    if entry.get("anmeldung") == "oidc" or not password_ok:
         raise HTTPException(401, "Name or password wrong.")
+    sessions.login_succeeded(name, address)
     token = sessions.issue(name)
     set_session_cookies(response, token)
     benutzer.protokolliere("anmeldung", name, name, "api")
@@ -138,7 +141,13 @@ def oidc_callback(request: Request, code: str = "", state: str = "",
 
 
 @router.post("/auth/logout", tags=["account"])
-def logout(response: Response):
+def logout(request: Request, response: Response,
+           x_locanoto_csrf: str = Header(default="")):
+    import secrets as _secrets
+    expected = request.cookies.get("locanoto_csrf", "")
+    if request.cookies.get("locanoto_session") and not (
+            expected and _secrets.compare_digest(expected, x_locanoto_csrf)):
+        raise HTTPException(403, "CSRF check failed.")
     clear_session_cookies(response)
     return {"status": "signed out"}
 
@@ -358,14 +367,16 @@ def sql_accounts(p: Principal = Depends(principal)):
 class SqlAccount(BaseModel):
     benutzer: str = ""
     passwort: str = ""
-    server: str | None = None
-    port: int | None = None
-    datenbank: str | None = None
 
 
 @router.put("/me/sql-account", tags=["account"])
 def set_own_sql_account(body: SqlAccount, p: Principal = Depends(principal)):
-    """The database account of the own room. Empty removes it."""
+    """The database account of the own room. Empty removes it.
+
+    Only name and password: the server is the one the admin set up. A
+    free choice would let any user make the server connect anywhere in
+    the network.
+    """
     room = raeume.privat_kennung(p.name)
     ok, message = sqlquellen.setze(
         room, {k: v for k, v in body.model_dump().items() if v is not None},

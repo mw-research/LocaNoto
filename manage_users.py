@@ -78,7 +78,7 @@ def main():
 
         if wahl == "1":
             name = input("Kennung: ").strip().lower()
-            rolle = (input("Rolle [nutzer/admin] (nutzer): ").strip().lower()
+            rolle = (input("Rolle [nutzer/admin/notzugang] (nutzer): ").strip().lower()
                      or "nutzer")
             p = frage_passwort()
             if p is None:
@@ -94,7 +94,7 @@ def main():
 
         elif wahl == "3":
             name = input("Kennung: ").strip().lower()
-            rolle = input("Neue Rolle [nutzer/admin]: ").strip().lower()
+            rolle = input("Neue Rolle [nutzer/admin/notzugang]: ").strip().lower()
             ok, meldung = benutzer.rolle_setzen(name, rolle, von=von)
 
         elif wahl == "4":

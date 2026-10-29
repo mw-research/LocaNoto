@@ -180,15 +180,27 @@ def finish(code, state, sealed_flow):
 
 
 def safe_next(path):
-    """Only paths on this site -- no open redirect."""
+    """Only paths on this site -- no open redirect.
+
+    Browsers drop tabs and line breaks in URLs, so "/\t/evil.example"
+    would become "//evil.example": no control characters, no whitespace,
+    no backslash, and nothing that parses with a scheme or host.
+    """
+    from urllib.parse import urlsplit
     path = str(path or "/")
-    if not path.startswith("/") or path.startswith("//") or "\\" in path:
+    if (not path.startswith("/") or path.startswith("//")
+            or any(c <= " " or c == "\\" or c == "\x7f" for c in path)):
+        return "/"
+    parts = urlsplit(path)
+    if parts.scheme or parts.netloc:
         return "/"
     return path
 
 
 def local_name(claims):
-    raw = str(claims.get(USERNAME_CLAIM) or claims.get("email") or "")
+    raw = str(claims.get(USERNAME_CLAIM) or "")
+    if not raw and claims.get("email") and claims.get("email_verified") is True:
+        raw = str(claims["email"])
     raw = raw.split("@", 1)[0].strip().lower()
     name = re.sub(r"[^a-z0-9._-]", "", raw)
     if not name:
@@ -204,6 +216,17 @@ def role_for(groups):
     return "nutzer"
 
 
+def _left_over_workspace(name):
+    """Does the personal workspace of this name still hold passages?"""
+    import store
+    sml = store.sammlung(raeume.sammlung(raeume.privat_kennung(name)),
+                         anlegen=False)
+    try:
+        return bool(sml is not None and sml.count())
+    except Exception:
+        return True
+
+
 def provision(claims):
     """Create or update the account behind these claims. Returns its name."""
     identity = f"{claims['iss']}|{claims['sub']}"
@@ -214,6 +237,9 @@ def provision(claims):
     entry = benutzer.lade()[0].get(name)
     role = role_for(groups)
     if entry is None:
+        if _left_over_workspace(name):
+            raise Refused("A former account of this name left a personal "
+                          "workspace. An admin must clear it first.")
         ok, message = benutzer.anlege(name, secrets.token_urlsafe(32),
                                       rolle=role, von="oidc")
         if not ok:
@@ -229,6 +255,11 @@ def provision(claims):
             if entry.get("anmeldung") != "oidc" and not LINK_EXISTING:
                 raise Refused("A local account of this name exists. An "
                               "admin can link it (OIDC_LINK_EXISTING=1).")
+            if entry.get("rolle") in ("admin", "notzugang"):
+                # Never handed over by a name match: these accounts are
+                # linked by signing in once locally and deliberately.
+                raise Refused("This account has a privileged role and is "
+                              "not linked automatically.")
             benutzer.anmeldung_setzen(name, "oidc", von="oidc",
                                       extern=identity)
         if entry.get("rolle") != role:

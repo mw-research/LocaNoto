@@ -40,7 +40,7 @@ import threading
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 def _zahl(name, vorgabe, art=int):
     """Eine Zahl aus der Umgebung, sonst die Vorgabe.
@@ -103,6 +103,36 @@ def oeffentlich(host):
     return bool(infos)
 
 
+def aufgeloest(host):
+    """One checked public address of host, or None.
+
+    The fetch connects to exactly this address. Checking the name and
+    letting the HTTP client resolve it again would leave a gap: a name
+    that answers with a public address first and an internal one second
+    (DNS rebinding) would get internal pages read.
+    """
+    if not oeffentlich(host):
+        return None
+    try:
+        return socket.getaddrinfo(host, None)[0][4][0].split("%")[0]
+    except (OSError, IndexError):
+        return None
+
+
+def _gepinnt(adresse):
+    """(url to the checked address, Host header, TLS name) -- or Fehler."""
+    t = urlsplit(adresse)
+    ip = aufgeloest(t.hostname)
+    if not ip:
+        raise Fehler(f"keine oeffentliche Adresse: {adresse}")
+    ziel = f"[{ip}]" if ":" in ip else ip
+    if t.port:
+        ziel += f":{t.port}"
+    host = t.hostname + (f":{t.port}" if t.port else "")
+    return (urlunsplit((t.scheme, ziel, t.path or "/", t.query, "")),
+            host, t.hostname)
+
+
 def _brauchbar(adresse):
     t = urlsplit(adresse or "")
     return t.scheme in ("http", "https") and bool(t.hostname)
@@ -155,10 +185,11 @@ def abrufen(adresse, max_zeichen=MAX_ZEICHEN, client=None):
         for _ in range(WEITERLEITUNGEN + 1):
             if not _brauchbar(adresse):
                 raise Fehler(f"keine Webadresse: {adresse}")
-            if not oeffentlich(urlsplit(adresse).hostname):
-                raise Fehler(f"keine oeffentliche Adresse: {adresse}")
-            with client.stream("GET", adresse, headers={
-                    "Accept": "text/html,text/plain,application/pdf"}) as a:
+            direkt, host, tls_name = _gepinnt(adresse)
+            with client.stream("GET", direkt, headers={
+                    "Accept": "text/html,text/plain,application/pdf",
+                    "Host": host},
+                    extensions={"sni_hostname": tls_name}) as a:
                 if a.status_code in (301, 302, 303, 307, 308):
                     ziel = a.headers.get("location", "")
                     adresse = urljoin(adresse, ziel)

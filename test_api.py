@@ -250,9 +250,12 @@ check("language", anna.put(f"{API}/me/language", json={"language": "en"})
       .json()["language"] == "en")
 
 # --- token ---
-r = markus.post(f"{API}/admin/tokens", json={"user": "anna", "label": "script"})
-token = r.json().get("token", "")
-check("admin creates a token", token.startswith("lnt_"), r.text)
+check("no admin token for someone else (would bypass emergency access)",
+      markus.post(f"{API}/admin/tokens", json={"user": "anna"}).status_code == 403)
+token = auth.erzeuge("anna", "script")      # as create_token.py does
+r = markus.post(f"{API}/admin/tokens", json={"user": "markus", "label": "own"})
+check("admin creates an own token", r.json().get("token", "").startswith("lnt_"),
+      r.text)
 tok = TestClient(server.app)
 tok.headers["Authorization"] = f"Bearer {token}"
 check("bearer token signs in", tok.get(f"{API}/me").json().get("via") == "token")
@@ -380,6 +383,21 @@ check("form without CSRF header is refused",
                                         "question": "x"}).status_code == 403)
 check("documents fragment", "Kessel.txt" in anna.get("/ui/documents").text)
 check("static files", anon.get("/static/hx.js").status_code == 200)
+for path in ("/admin/backups", "/admin/emergency", "/admin/content",
+             "/admin/feedback", "/admin/storage", "/admin/mailboxes"):
+    r = markus.get(path)
+    check(f"admin page {path}", r.status_code == 200 and "subnav" in r.text,
+          r.status_code)
+    check(f"admin page {path} not for users",
+          anna.get(path, follow_redirects=False).status_code == 303)
+check("admin form refused to a user", anna.post(
+    "/ui/admin/glossary", data={"text": "x"}).status_code == 403)
+check("glossary form", "Saved" in markus.post(
+    "/ui/admin/glossary", data={"text": "PSA = Schutzausruestung"}).text
+    or "Gespeichert" in markus.post(
+        "/ui/admin/glossary", data={"text": "PSA = Schutzausruestung"}).text)
+check("restore needs the typed name", "error" in markus.post(
+    "/ui/admin/backups/restore", data={"name": "x", "confirm": "y"}).text)
 
 check("feedback", anna.post(f"{API}/feedback", json={
     "kind": "daumen_runter", "question": "Wie lange?"}).status_code == 200)
@@ -442,20 +460,41 @@ check("create user", markus.post(f"{API}/admin/users", json={
     "name": "carl", "password": "Passwort-123456"}).status_code == 200)
 check("role", markus.put(f"{API}/admin/users/carl/role", json={"role": "admin"})
       .status_code == 200)
+check("the emergency role is not handed out in the app", markus.put(
+    f"{API}/admin/users/carl/role", json={"role": "notzugang"}).status_code == 400
+    and markus.post(f"{API}/admin/users", json={
+        "name": "puppe", "password": "Passwort-123456",
+        "role": "notzugang"}).status_code == 400)
 check("password", markus.put(f"{API}/admin/users/carl/password", json={
     "password": "Neues-Passwort-1"}).status_code == 200)
+carl_token = auth.erzeuge("carl", "script")
 check("delete user", markus.delete(f"{API}/admin/users/carl").status_code == 200)
+gone = TestClient(server.app)
+gone.headers["X-LocaNoto-Token"] = carl_token
+check("a deleted user's token no longer works", gone.get(f"{API}/me")
+      .status_code == 401)
+check("and was revoked", not any(e.get("benutzer") == "carl"
+                                 for _k, e in auth.liste()))
 check("sign user file", markus.post(f"{API}/admin/users/sign").status_code in (200, 400))
 audit = markus.get(f"{API}/admin/audit").json()
 check("audit log", len(audit["entries"]) > 0, audit)
-check("tokens", len(markus.get(f"{API}/admin/tokens").json()) == 1)
+check("tokens", len(markus.get(f"{API}/admin/tokens").json()) == 2)
 check("revoke own token", anna.delete(f"{API}/me/tokens/{mine[0]['id']}")
       .status_code == 200)
 check("revoked token no longer works", tok.get(f"{API}/me").status_code == 401)
-r = markus.post(f"{API}/admin/tokens", json={"user": "anna"})
+check("ambiguous token id is refused", markus.delete(
+    f"{API}/admin/tokens/zzzzzzzz").status_code == 404)
 check("revoke by admin", markus.delete(
     f"{API}/admin/tokens/{markus.get(f'{API}/admin/tokens').json()[0]['id']}")
     .status_code == 200)
+check("preset names cannot leave the folder", markus.delete(
+    f"{API}/admin/presets/..").status_code in (404, 405)
+    and markus.get(f"{API}/admin/prompts/system_prompt.txt",
+                   params={"preset": "../.."}).status_code == 404)
+import oidc as _oidc  # noqa: E402
+check("no open redirect with control characters",
+      _oidc.safe_next("/\t/evil.example") == "/"
+      and _oidc.safe_next("/\\evil") == "/" and _oidc.safe_next("/c/x") == "/c/x")
 
 # --- admin: workspaces ---
 check("create workspace", markus.post(f"{API}/admin/workspaces", json={
@@ -608,6 +647,8 @@ check("delete own preset", anna.delete(f"{API}/me/presets/{own_preset}")
 check("delete chat", anna.delete(f"{API}/chats/{chat_id}").status_code == 200)
 check("delete document", markus.delete(f"{API}/documents", params={
     "room": "einkauf", "file": "Kessel.txt"}).status_code == 200)
+check("logout from another site is refused (CSRF)",
+      nocsrf.post(f"{API}/auth/logout").status_code == 403)
 check("logout", anna.post(f"{API}/auth/logout").status_code == 200)
 
 # --- sign-in through the directory (OIDC), with a stand-in provider ---

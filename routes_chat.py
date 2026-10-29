@@ -259,7 +259,14 @@ def source_page(room: str, file: str, page: int = Query(ge=1),
                 dpi: int = Query(default=150, ge=50, le=300),
                 p: Principal = Depends(principal)):
     """One page of a source PDF as image -- only from a readable room."""
-    if not raeume.darf_lesen(p.name, room, notzugang.raeume_fuer(p.name)):
+    emergency = notzugang.raeume_fuer(p.name)
+    if not raeume.darf_lesen(p.name, room, emergency):
+        raise HTTPException(404, "No such source.")
+    # The file must be a document of THIS room. The path lookup alone
+    # would also find files of removed workspaces lying on the disk.
+    import pipeline
+    if file not in pipeline.dokumente(p.name, nur=[room],
+                                      notzugang=emergency).get(room, []):
         raise HTTPException(404, "No such source.")
     path = aufnehmen.dokument_pfad(file, room)
     if not file.lower().endswith(".pdf") or not path \

@@ -56,6 +56,11 @@ def move(user, file_name, from_room, to_room, is_admin=False):
             raise Denied(f"No write access to '{room}'.")
     if from_room == to_room:
         return "Already there."
+    if from_room in emergency and raeume.ist_privat(to_room):
+        # Emergency access is for 24 hours; moving the documents into a
+        # personal workspace would keep them beyond that.
+        raise Denied("During emergency access documents can only be moved "
+                     "into shared workspaces.")
     source = _collection(from_room, create=False)
     if source is None:
         raise NotFound("The source room has no data.")
@@ -115,7 +120,7 @@ def _move_file(file_name, from_room, to_room):
         statefiles.makedirs(folder, exist_ok=True)
         statefiles.rename(source, target)
     except OSError as e:
-        return f" The file could not be moved ({e})."
+        return f" The file could not be moved ({type(e).__name__})."
     ok, m = owncloud.verschiebe(from_room, source, to_room, target)
     if not ok:
         return (f" WARNING: {m} The next sync brings the file back into "

@@ -58,10 +58,12 @@ spec:
             - server:app
             - --host=0.0.0.0
             - --port=8700
-            # The client address for rate limits comes from the ingress;
-            # only trust it from there (adjust to your ingress pods).
+            # The client address for rate limits comes from the ingress.
+            # Trust X-Forwarded-For ONLY from the ingress pods' range --
+            # with "*" anyone reaching the pod could choose an address and
+            # pass the sign-in limits. Replace with your ingress network.
             - --proxy-headers
-            - --forwarded-allow-ips=*
+            - --forwarded-allow-ips=10.0.0.0/8
             # Streamed answers hold a connection for a minute or more.
             - --timeout-keep-alive=75
           envFrom:

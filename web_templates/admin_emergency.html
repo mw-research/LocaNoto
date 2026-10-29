@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Emergency access') }}</h1>
+{% if not possible %}<p class="warn">{{ t('Nobody holds the role notzugang -- no request can be confirmed.') }}</p>{% endif %}
+
+<section class="card">
+  <h2>{{ t('Open grants') }}</h2>
+  <table class="files">
+  {% for g in open %}
+    <tr><td><code>{{ g.raum }}</code></td><td>{{ g.von }} ← {{ g.durch }}</td><td class="muted">{{ g.grund }}</td>
+      <td><form hx-post="/ui/admin/emergency/close" hx-target="#em-notice" class="inline">
+        <input type="hidden" name="room" value="{{ g.raum }}"><input type="hidden" name="requester" value="{{ g.von }}">
+        <button type="submit">{{ t('Close') }}</button></form></td></tr>
+  {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
+  </table>
+</section>
+
+<section class="card">
+  <h2>{{ t('Requests') }}</h2>
+  <table class="files">
+  {% for a in requests %}
+    <tr><td><code>{{ a.raum }}</code></td><td>{{ a.von }}</td><td class="muted">{{ a.grund }}</td>
+      <td>{% if can_confirm and a.von != me %}
+        <form hx-post="/ui/admin/emergency/confirm" hx-target="#em-notice" class="inline">
+          <input type="hidden" name="room" value="{{ a.raum }}"><input type="hidden" name="requester" value="{{ a.von }}">
+          <button type="submit" class="primary">{{ t('Confirm') }}</button></form>
+        <form hx-post="/ui/admin/emergency/reject" hx-target="#em-notice" class="inline">
+          <input type="hidden" name="room" value="{{ a.raum }}"><input type="hidden" name="requester" value="{{ a.von }}">
+          <button type="submit">{{ t('Reject') }}</button></form>
+      {% endif %}</td></tr>
+  {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
+  </table>
+</section>
+
+{% if can_request %}
+<section class="card">
+  <h2>{{ t('Request access to a personal workspace') }}</h2>
+  <form hx-post="/ui/admin/emergency/request" hx-target="#em-notice">
+    <select name="room">{% for r in rooms %}<option>{{ r }}</option>{% endfor %}</select>
+    <textarea name="reason" rows="2" minlength="10" required placeholder="{{ t('Reason (the second person decides on it)') }}"></textarea>
+    <button type="submit" class="primary">{{ t('Request') }}</button>
+  </form>
+</section>
+{% endif %}
+<div id="em-notice"></div>
+{% endblock %}

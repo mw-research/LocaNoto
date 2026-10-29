@@ -94,8 +94,18 @@ def send_draft(user, chat_id, draft_id, headers):
     draft = _find_draft(messages, draft_id)
     if draft is None:
         raise NotFound("Unknown draft.")
-    if draft.get("state") in ("sent", "discarded"):
+    if draft.get("state") in ("sent", "discarded", "sending"):
         raise ValueError(f"Draft already {draft['state']}.")
+    # Claim it before sending, under the chat lock: a second click finds
+    # "sending" and stops.
+    import dateisperre
+    with dateisperre.gesperrt(chats._index_pfad(user)):
+        messages = chats.lade(user, chat_id)
+        draft = _find_draft(messages, draft_id)
+        if draft is None or draft.get("state"):
+            raise ValueError("Draft already handled.")
+        draft["state"] = "sending"
+        chats.speichere(user, chat_id, messages)
     server = draft["server"]
     connections = mcp.verbinde({server: (headers or {}).get(server)},
                                ohne=set(mcp.lies_konfiguration()) - {server})
@@ -104,15 +114,30 @@ def send_draft(user, chat_id, draft_id, headers):
             raise NotFound(f"No mailbox '{server}'.")
         result = connections[server].rufe(draft["werkzeug"],
                                           draft.get("argumente") or {})
+    except Exception:
+        _set_state(user, chat_id, draft_id, None)   # free it for a retry
+        raise
     finally:
         for c in connections.values():
             try:
                 c.schliesse()
             except Exception:
                 pass
-    draft["state"] = "sent"
-    chats.speichere(user, chat_id, messages)
+    _set_state(user, chat_id, draft_id, "sent")
     return str(result)
+
+
+def _set_state(user, chat_id, draft_id, state):
+    import dateisperre
+    with dateisperre.gesperrt(chats._index_pfad(user)):
+        messages = chats.lade(user, chat_id)
+        draft = _find_draft(messages, draft_id)
+        if draft is not None:
+            if state is None:
+                draft.pop("state", None)
+            else:
+                draft["state"] = state
+            chats.speichere(user, chat_id, messages)
 
 
 def discard_draft(user, chat_id, draft_id):

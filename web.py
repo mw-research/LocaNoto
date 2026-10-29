@@ -110,6 +110,38 @@ TEXTS = {
         "Antwort nur aus der Stichwortsuche – die Vektorsuche hat nicht geantwortet für",
     "Your account signs in through the company directory.":
         "Dein Konto meldet sich über das Firmenverzeichnis an.",
+    "Backups": "Sicherungen", "Emergency access": "Notzugang",
+    "Prompts and glossary": "Prompts und Glossar", "Feedback": "Rückmeldungen",
+    "Storage": "Ablage", "Back up now": "Jetzt sichern",
+    "type the name to confirm": "Namen zur Bestätigung eintippen",
+    "also users, chats, settings": "auch Nutzer, Chats, Einstellungen",
+    "Restore": "Zurückholen", "incomplete": "unvollständig",
+    "with state": "mit Zustand",
+    "Type the name of the backup to confirm.":
+        "Zum Bestätigen den Namen des Abzugs eintippen.",
+    "Nobody holds the role notzugang -- no request can be confirmed.":
+        "Niemand hat die Rolle notzugang – kein Antrag kann bestätigt werden.",
+    "Open grants": "Offene Zugänge", "Close": "Schließen",
+    "Requests": "Anträge", "Confirm": "Bestätigen", "Reject": "Ablehnen",
+    "Request access to a personal workspace":
+        "Zugang zu einem persönlichen Arbeitsbereich beantragen",
+    "Reason (the second person decides on it)":
+        "Grund (die zweite Person entscheidet danach)",
+    "Request": "Beantragen", "Open": "Öffnen",
+    "Reset to the shipped template": "Auf die mitgelieferte Vorlage zurücksetzen",
+    "Glossary": "Glossar", "Archive the log?": "Protokoll archivieren?",
+    "Archive": "Archivieren", "Download": "Herunterladen",
+    "Questions without an answer": "Fragen ohne Antwort",
+    "No storage (OpenCloud) is configured.": "Keine Ablage (OpenCloud) eingerichtet.",
+    "Set up workspace folders and shares":
+        "Ordner und Freigaben der Arbeitsbereiche einrichten",
+    "Sync groups": "Gruppen abgleichen", "Sync documents": "Dokumente abgleichen",
+    "personal": "persönlich", "Kind": "Art",
+    "Address, command or Exchange server": "Adresse, Befehl oder Exchange-Server",
+    "Address of a shared mailbox (only for shared ones)":
+        "Adresse eines Funktionspostfachs (nur dafür)",
+    "personal (everyone signs in with their own account)":
+        "persönlich (jeder meldet sich mit seinem Konto an)",
     "Delete this chat?": "Diesen Chat löschen?",
     "Delete this document?": "Dieses Dokument löschen?",
 }
@@ -497,7 +529,9 @@ def _admin_context(p):
         "users": [(n, (benutzer.eintrag(n) or {}).get("rolle", "nutzer"),
                    (benutzer.eintrag(n) or {}).get("anmeldung", "lokal"))
                   for n in benutzer.namen()],
-        "roles": benutzer.ROLLEN,
+        # notzugang is assigned on the server or by the directory only
+        # (see accounts.APP_ROLES).
+        "roles": accounts.APP_ROLES,
         "workspaces": [(r, raeume.bezeichnung(r),
                         ", ".join(d.get("mitglieder") or []), d.get("gruppe") or "")
                        for r, d in sorted(raeume.liste().items())

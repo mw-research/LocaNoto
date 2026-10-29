@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block main %}
+{% include "admin_nav.html" %}
 <h1>{{ t('Admin') }}</h1>
-<p><a href="/api/v1/docs">{{ t('Full admin area in the API') }} →</a></p>
 {% if security %}<pre class="status">{{ security }}</pre>{% endif %}
 
 <section class="card">
@@ -11,10 +11,12 @@
     <tr>
       <td>{{ name }}</td><td class="muted">{{ kind }}</td>
       <td>
+        {% if role in roles %}
         <form hx-post="/ui/admin/users/{{ name }}/role" hx-target="#user-notice" class="inline">
           <select name="role">{% for r in roles %}<option {{ 'selected' if r == role }}>{{ r }}</option>{% endfor %}</select>
           <button type="submit">{{ t('Save') }}</button>
         </form>
+        {% else %}<span class="muted">{{ role }}</span>{% endif %}
       </td>
       <td>
         <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">

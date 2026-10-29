@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Feedback') }}</h1>
+<section class="card">
+  <p>{% for k, v in counts.items() %}<span class="pill">{{ k }}: {{ v }}</span> {% endfor %}</p>
+  <form hx-post="/ui/admin/feedback/archive" hx-confirm="{{ t('Archive the log?') }}" class="inline">
+    <button type="submit">{{ t('Archive') }}</button>
+  </form>
+  <a href="/api/v1/admin/feedback/download">{{ t('Download') }}</a>
+</section>
+{% for title, rows in ((t('Questions without an answer'), empty), (t('Not helpful'), down)) %}
+<section class="card">
+  <h2>{{ title }}</h2>
+  <table class="files">
+  {% for e in rows %}
+    <tr><td class="muted">{{ e.zeit }}</td><td>{{ e.benutzer }}</td><td>{{ e.frage }}</td></tr>
+  {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
+  </table>
+</section>
+{% endfor %}
+{% endblock %}

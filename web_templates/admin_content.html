@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Prompts and glossary') }}</h1>
+<section class="card">
+  <form method="get" action="/admin/content" class="inline">
+    <select name="prompt">{% for name, title in prompts %}<option value="{{ name }}" {{ 'selected' if name == chosen }}>{{ title }} ({{ name }})</option>{% endfor %}</select>
+    <button type="submit">{{ t('Open') }}</button>
+  </form>
+  {% if chosen %}
+  <p class="muted">{{ origin }}</p>
+  <form hx-post="/ui/admin/prompts/{{ chosen }}" hx-target="#prompt-notice">
+    <textarea name="text" rows="18" class="mono">{{ text }}</textarea>
+    <button type="submit" name="action" value="save" class="primary">{{ t('Save') }}</button>
+    <button type="submit" name="action" value="reset">{{ t('Reset to the shipped template') }}</button>
+  </form>
+  <div id="prompt-notice"></div>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>{{ t('Glossary') }}</h2>
+  <form hx-post="/ui/admin/glossary" hx-target="#glossary-notice">
+    <textarea name="text" rows="12" class="mono">{{ glossary }}</textarea>
+    <button type="submit" class="primary">{{ t('Save') }}</button>
+  </form>
+  <div id="glossary-notice"></div>
+</section>
+{% endblock %}

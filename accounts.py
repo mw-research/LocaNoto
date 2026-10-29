@@ -32,7 +32,17 @@ def _storage_password(name, password, by):
     return notes
 
 
+# The emergency role confirms an admin's access to a personal workspace.
+# If an admin could hand it out, the second person could be the admin's
+# own puppet account. So it is assigned outside the app only: the company
+# directory (OIDC_EMERGENCY_GROUPS) or manage_users.py on the server.
+APP_ROLES = ("admin", "nutzer")
+
+
 def create(name, password, role="nutzer", by="?"):
+    if role not in APP_ROLES:
+        return False, ("The role notzugang is assigned through the directory "
+                       "or manage_users.py on the server."), []
     ok, message = benutzer.anlege(name, password, rolle=role, von=by)
     if not ok:
         return ok, message, []
@@ -61,6 +71,9 @@ def change_own_password(name, old, new):
 
 
 def set_role(name, role, by="?"):
+    if role not in APP_ROLES or benutzer.hat_rolle(name, "notzugang"):
+        return False, ("The role notzugang is assigned and removed through "
+                       "the directory or manage_users.py on the server."), []
     ok, message = benutzer.rolle_setzen(name, role, von=by)
     return ok, message, []
 
@@ -73,6 +86,13 @@ def delete(name, by="?"):
     if not ok:
         return ok, message, []
     notes = []
+    # Tokens go with the account. Left behind, they would still sign in
+    # -- and a later account of the same name would inherit them.
+    import auth
+    for token_id, entry in auth.liste():
+        if entry.get("benutzer") == name:
+            auth.widerrufe(token_id)
+            notes.append("token revoked")
     try:
         prompts.anweisung_loeschen(name)
     except Exception as e:

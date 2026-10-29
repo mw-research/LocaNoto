@@ -207,3 +207,31 @@ def login_failed(name, address):
     window = LOGIN_WINDOW_MINUTES * 60
     for k, limit in _login_limits(name, address):
         hit(k, limit, window)
+
+
+def login_attempt(name, address):
+    """Count an attempt BEFORE the password is checked. False: over limit.
+
+    Counting afterwards let parallel requests pass the check together.
+    A successful sign-in gives its count back (login_succeeded).
+    """
+    window = LOGIN_WINDOW_MINUTES * 60
+    ok = True
+    for k, limit in _login_limits(name, address):
+        ok = hit(k, limit, window) and ok
+    return ok
+
+
+def login_succeeded(name, address):
+    window = LOGIN_WINDOW_MINUTES * 60
+    for k, _limit in _login_limits(name, address):
+        bucket = _bucket(k, window)
+        if database.active():
+            database.connect().execute(
+                "UPDATE rate_limit SET hits = greatest(hits - 1, 0) "
+                "WHERE bucket = %s", (bucket,))
+        else:
+            with _memory_lock:
+                n, exp = _memory.get(bucket, (0, 0))
+                if n:
+                    _memory[bucket] = (n - 1, exp)

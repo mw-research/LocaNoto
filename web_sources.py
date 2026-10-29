@@ -38,7 +38,7 @@ def _call(tool, arguments):
             try:
                 return c.rufe(tool, arguments)
             except Exception as e:
-                error = f"{type(e).__name__}: {e}"
+                error = f"Web search failed ({type(e).__name__})."
     finally:
         for c in connections.values():
             try:

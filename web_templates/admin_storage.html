@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Storage') }}</h1>
+{% if not configured %}
+<p class="muted">{{ t('No storage (OpenCloud) is configured.') }}</p>
+{% else %}
+<section class="card">
+  <p class="{{ 'ok' if reachable else 'error' }}">{{ description }} — {{ message }}</p>
+  <form hx-post="/ui/admin/storage/setup-rooms" hx-target="#st-notice" class="inline"><button type="submit">{{ t('Set up workspace folders and shares') }}</button></form>
+  <form hx-post="/ui/admin/storage/group-sync" hx-target="#st-notice" class="inline"><button type="submit">{{ t('Sync groups') }}</button></form>
+  <form hx-post="/ui/admin/storage/sync" hx-target="#st-notice" class="inline"><button type="submit" class="primary">{{ t('Sync documents') }}</button></form>
+  <span class="muted">{{ job.state }}</span>
+  <div id="st-notice"></div>
+</section>
+<section class="card">
+  <table class="files">
+  {% for room, path in mapping.items() %}<tr><td><code>{{ room }}</code></td><td class="muted">{{ path }}</td></tr>{% endfor %}
+  </table>
+</section>
+{% endif %}
+{% endblock %}

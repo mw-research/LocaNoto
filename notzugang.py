@@ -148,6 +148,21 @@ def beantrage(raum, von, grund):
                   "bestaetigen: " + ", ".join(benutzer.traeger("notzugang")))
 
 
+def _passwort_zuletzt_von(name):
+    """Who set this account's password last, per the audit log ("" unknown).
+
+    Directory accounts have no password anyone knows: "".
+    """
+    if (benutzer.eintrag(name) or {}).get("anmeldung") == "oidc":
+        return ""
+    wer = ""
+    for e in benutzer.protokoll(letzte=10 ** 7):
+        if e.get("ziel") == name and e.get("aktion") in ("angelegt",
+                                                         "passwort"):
+            wer = e.get("von", "")
+    return wer
+
+
 def antraege():
     """Offene Antraege, aelteste zuerst."""
     return sorted(_lade()["antraege"], key=lambda a: a.get("gestellt", 0))
@@ -162,6 +177,13 @@ def bestaetige(raum, von, durch):
         return False, "Nur die Rolle 'notzugang' kann bestätigen."
     if durch == von:
         return False, ("Beantragen und Bestätigen müssen zwei Personen sein.")
+    # Nor an account whose password the requester set last (when creating
+    # it or by a reset): he knows it, so it would be the same person with
+    # a second name. The confirming person sets their own password first.
+    if _passwort_zuletzt_von(durch) == von:
+        return False, ("Die bestätigende Person muss ihr Passwort zuerst "
+                       "selbst setzen – das jetzige hat der Antragsteller "
+                       "vergeben.")
     daten = _lade()
     passend = [a for a in daten["antraege"]
                if a["raum"] == raum and a["von"] == von]

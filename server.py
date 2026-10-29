@@ -99,6 +99,8 @@ def principal(request: Request,
     token = x_locanoto_token or _bearer(authorization)
     if token:
         name = auth.pruefe(token)
+        if name and not benutzer.eintrag(name):
+            name = None             # the account is gone; so is its token
         if not name:
             raise HTTPException(401, "No valid token.",
                                 headers={"WWW-Authenticate": "Bearer"})
@@ -256,6 +258,8 @@ def _include():
         name="static")
     app.add_exception_handler(web._ToLogin, web.to_login_handler)
     app.include_router(web.router)
+    import web_admin
+    app.include_router(web_admin.router)
 
 
 _register_errors()

@@ -147,6 +147,11 @@ td.actions { text-align: right; }
 pre.pagetext { white-space: pre-wrap; max-height: 420px; overflow-y: auto; background: var(--bg); padding: .75rem; border-radius: 6px; }
 pre.status { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border); padding: .75rem; border-radius: 6px; }
 
+/* admin */
+.subnav { display: flex; gap: .25rem 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: .9rem; }
+.pill { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; }
+textarea.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85rem; }
+
 /* toast */
 #toast {
   position: fixed; right: 1rem; bottom: 1rem; max-width: 420px; padding: .6rem 1rem;

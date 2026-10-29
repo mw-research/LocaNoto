@@ -251,9 +251,14 @@ def zeichne(*, is_admin,
                         f"benutzer_neu_{_feldschluessel('benutzer_neu', 'runde')}"):
                     _name = st.text_input(
                         tx("Kennung"), key=_feldschluessel("benutzer_neu", "name"))
+                    # Not "notzugang": that role confirms an admin's
+                    # emergency access, so an admin must not be able to
+                    # hand it out (a puppet account would be the second
+                    # person). It is set on the server (manage_users.py)
+                    # or by the company directory.
                     _rolle = st.selectbox(
-                        tx("Rolle"), list(benutzer.ROLLEN),
-                        index=list(benutzer.ROLLEN).index("nutzer"),
+                        tx("Rolle"), ["admin", "nutzer"],
+                        index=1,
                         key=_feldschluessel("benutzer_neu", "rolle"),
                         help=tx("admin verwaltet alles; notzugang bestätigt nur den Notzugang eines Admins und gehört an jemanden, der kein Admin ist."), format_func=sprache.uebersetzt())
                     _pw1 = st.text_input(
@@ -297,13 +302,16 @@ def zeichne(*, is_admin,
                 # Der Rueckfall geht ueber den NAMEN und nicht ueber eine
                 # Zahl: als "notzugang" dazukam, waere aus dem frueheren
                 # Index 1 ("nutzer") still die neue Rolle geworden.
-                _neue_rolle = st.selectbox(
-                    tx("Rolle"), list(benutzer.ROLLEN),
-                    index=(list(benutzer.ROLLEN).index(_e.get("rolle"))
-                           if _e.get("rolle") in benutzer.ROLLEN
-                           else list(benutzer.ROLLEN).index("nutzer")),
-                    key=f"benutzer_rolle_{_wahl}",
-                    help=tx("admin verwaltet alles; notzugang bestätigt nur den Notzugang eines Admins und gehört an jemanden, der kein Admin ist."), format_func=sprache.uebersetzt())
+                # notzugang is neither given nor taken here (see above).
+                if _e.get("rolle") == "notzugang":
+                    st.caption(tx("Rolle notzugang – wird auf dem Server vergeben und entzogen (manage_users.py)."))
+                    _neue_rolle = "notzugang"
+                else:
+                    _neue_rolle = st.selectbox(
+                        tx("Rolle"), ["admin", "nutzer"],
+                        index=0 if _e.get("rolle") == "admin" else 1,
+                        key=f"benutzer_rolle_{_wahl}",
+                        help=tx("admin verwaltet alles; notzugang bestätigt nur den Notzugang eines Admins und gehört an jemanden, der kein Admin ist."), format_func=sprache.uebersetzt())
                 if _neue_rolle != _e.get("rolle"):
                     if st.button(tx("Rolle übernehmen"), use_container_width=True,
                                  key=f"benutzer_rs_{_wahl}"):
@@ -459,8 +467,11 @@ def zeichne(*, is_admin,
                 # Tippen saehe sonst ein leeres Feld.
                 _tk = "token_neu"
                 with st.form(f"token_{_feldschluessel(_tk, 'runde')}"):
+                    # Only for the own account: a token for someone else
+                    # would let an admin act as that person, past the
+                    # emergency access. Others: create_token.py on the server.
                     _t_wer = st.selectbox(
-                        tx("Für wen"), _namen,
+                        tx("Für wen"), [st.session_state["username"]],
                         key=_feldschluessel(_tk, "wer"), format_func=sprache.uebersetzt())
                     _t_bez = st.text_input(
                         tx("Bezeichnung"), key=_feldschluessel(_tk, "bez"),

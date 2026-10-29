@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Backups') }}</h1>
+<section class="card">
+  <p class="muted">{{ folder }} · {{ job.state }}</p>
+  <form hx-post="/ui/admin/backups/start" hx-target="#backup-notice" class="inline">
+    <button type="submit" class="primary">{{ t('Back up now') }}</button>
+  </form>
+  <div id="backup-notice"></div>
+</section>
+<section class="card">
+  <table class="files">
+  {% for b in backups %}
+    <tr>
+      <td><code>{{ b[0] }}</code></td>
+      <td class="muted">{{ (b[2] / 1048576)|round(1) }} MB{% if b[3].get('vollstaendig') is false %} · <span class="error">{{ t('incomplete') }}</span>{% endif %}{% if b[3].get('zustand') %} · {{ t('with state') }}{% endif %}</td>
+      <td>
+        <form hx-post="/ui/admin/backups/restore" hx-target="#restore-notice" class="inline">
+          <input type="hidden" name="name" value="{{ b[0] }}">
+          <input name="confirm" placeholder="{{ t('type the name to confirm') }}" required>
+          <label class="check"><input type="checkbox" name="state" value="1"> {{ t('also users, chats, settings') }}</label>
+          <button type="submit" class="danger">{{ t('Restore') }}</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td class="muted">{{ t('none') }}</td></tr>
+  {% endfor %}
+  </table>
+  <div id="restore-notice"></div>
+</section>
+{% endblock %}
