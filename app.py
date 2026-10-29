@@ -2637,11 +2637,11 @@ if _bestand > 0:
                 st.markdown("---")
                 st.markdown(tx("📚 **Quellen:**"))
                 
-                # Kein Abfrageparameter mehr (siehe _quellen_klickbar).
-                # Der erste Aufklapper steht offen: nach dem Sprung
-                # sieht man damit sofort Text und nicht nur eine
-                # geschlossene Leiste.
-                _gewuenscht = ""
+                # All sources start closed. The first one used to open
+                # under every answer: with long passages the page grew
+                # after each answer and jumped to its end, wherever one
+                # had scrolled to. A citation in the text still jumps to
+                # its anchor (see _quellen_klickbar); one click opens it.
                 for _k, source in enumerate(msg["sources"]):
                     file_n = source["file"]
                     page_n = source["page"]
@@ -2659,8 +2659,7 @@ if _bestand > 0:
                              "sehmodell": " · vom Sehmodell gelesen"}.get(
                         source.get("herkunft"), "")
                     with st.expander(tx(f'{file_n} (Seite {page_n}){_herk}'),
-                                     expanded=(_gewuenscht == _ziel
-                                               or _k == 0)):
+                                     expanded=False):
                         for t in source["texts"]:
                             st.info(tx(t))
                         
