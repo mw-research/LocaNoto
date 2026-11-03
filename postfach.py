@@ -26,6 +26,7 @@ Postfach laedt exchangelib nie.
 import base64
 import datetime
 import uuid
+from urllib.parse import urlsplit
 
 import paths
 
@@ -179,18 +180,25 @@ SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
 def ews_adresse(ziel):
     """Aus dem, was der Verwalter eintraegt, eine EWS-Adresse machen.
 
-    Eingetragen wird 'owa.firma.de' oder die vollstaendige Adresse.
-    Beides soll gehen -- wer den Pfad kennt, tippt ihn, und wer nicht,
+    Eingetragen wird 'owa.firma.de', die vollstaendige Adresse oder das,
+    was im Browser steht (https://owa.firma.de/owa/auth/logon.aspx).
+    Alles soll gehen -- wer den Pfad kennt, tippt ihn, und wer nicht,
     muss ihn nicht kennen.
     """
-    ziel = str(ziel or "").strip().rstrip("/")
+    ziel = str(ziel or "").strip()
     if not ziel:
         return ""
-    if not ziel.startswith(("http://", "https://")):
+    if "://" not in ziel:
         ziel = "https://" + ziel
-    if "/ews/" not in ziel.lower():
-        ziel += "/EWS/Exchange.asmx"
-    return ziel
+    teile = urlsplit(ziel)
+    # EWS lives at the root of every Exchange server. Whatever path came
+    # with the address -- the OWA sign-in page, or "/EWS/..." appended to
+    # it by an earlier version of this function -- only the part from
+    # "/EWS/" on is kept, and without it the standard path.
+    pfad = teile.path
+    stelle = pfad.lower().find("/ews/")
+    pfad = pfad[stelle:] if stelle >= 0 else "/EWS/Exchange.asmx"
+    return f"{teile.scheme}://{teile.netloc}{pfad}"
 
 
 class Postfach:

@@ -3261,6 +3261,22 @@ pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
 os.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
+# --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
+import postfach as _pfa
+for _ein, _aus in (
+        ("owa.test", "https://owa.test/EWS/Exchange.asmx"),
+        ("https://owa.test/owa/auth/logon.aspx", "https://owa.test/EWS/Exchange.asmx"),
+        ("https://owa.test/owa/auth/logon.aspx?url=https%3a%2f%2fowa.test%2fowa%2f&reason=0",
+         "https://owa.test/EWS/Exchange.asmx"),
+        ("owa.test/owa/", "https://owa.test/EWS/Exchange.asmx"),
+        ("https://owa.test:8443/ews/exchange.asmx", "https://owa.test:8443/ews/exchange.asmx"),
+        # stored by the old version: repaired when connecting
+        ("https://owa.test/owa/auth/logon.aspx/EWS/Exchange.asmx",
+         "https://owa.test/EWS/Exchange.asmx"),
+        ("", "")):
+    pruef(f"EWS-Adresse aus '{_ein}'", _pfa.ews_adresse(_ein) == _aus,
+          _pfa.ews_adresse(_ein))
+
 # --- EXCHANGE SPRICHT KEIN MCP, UND DAS DARF NIRGENDS AUFFALLEN ---
 #
 # Ein Exchange-Postfach laeuft nicht ueber JSON-RPC, sondern ueber
