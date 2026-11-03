@@ -8,6 +8,7 @@
     GET    /chats/{id}/messages/{i}/images/{j}    an attached image
     POST   /chats/{id}/drafts/{draft}/send        send a prepared mail
     POST   /chats/{id}/drafts/{draft}/discard
+    POST   /chats/{id}/summary                    summarize a chat, optionally store it
     POST   /feedback                  thumbs up / down on an answer
     GET    /sources/page              a PDF page of a source as PNG
 
@@ -31,6 +32,7 @@ import notzugang
 import raeume
 import statefiles
 import vision
+import workspace_notes
 from routes_account import mailbox_headers
 from server import Principal, principal
 
@@ -231,6 +233,41 @@ def discard_draft(chat_id: str, draft_id: str,
                   p: Principal = Depends(principal)):
     mailboxes.discard_draft(p.name, chat_id, draft_id)
     return {"discarded": draft_id}
+
+
+# --- SUMMARY OF A CHAT ---
+
+class ChatSummary(BaseModel):
+    room: str | None = Field(None, description=(
+        "store the summary in this room right away; without it only the "
+        "text comes back (store it with POST /workspace-notes)"))
+    title: str | None = Field(None, max_length=200,
+                              description="instead of the model's title")
+    model: str | None = None
+
+
+@router.post("/chats/{chat_id}/summary", tags=["chats"])
+def summarize_chat(chat_id: str, body: ChatSummary,
+                   p: Principal = Depends(principal)):
+    import budget
+    try:
+        summary = workspace_notes.summarize_chat(p.name, chat_id, body.model)
+    except workspace_notes.NotFound:
+        raise HTTPException(404, "Unknown chat.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except budget.Ueberzogen as e:
+        raise HTTPException(429, str(e))
+    if body.title:
+        summary["title"] = body.title
+    stored = None
+    if body.room is not None:
+        try:
+            stored = workspace_notes.store(p.name, body.room, summary["title"],
+                                           summary["text"], summary["source"])
+        except workspace_notes.NotWritable as e:
+            raise HTTPException(403, str(e))
+    return dict(summary, stored=stored)
 
 
 # --- FEEDBACK ---

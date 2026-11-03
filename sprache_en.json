@@ -493,6 +493,7 @@
   "'{}' fehlt im Container. Verzeichnis eingehängt? Siehe README, Kapitel Listen.": "'{}' is missing in the container. Directory mounted? See README, chapter Lists.",
   "'{}' gelöscht. Chatverlauf und persönlichen Arbeitsbereich getrennt entfernen.": "'{}' deleted. Remove chat history and personal workspace separately.",
   "'{}' gibt es bereits.": "'{}' already exists.",
+  "'{}' ist reserviert.": "'{}' is reserved.",
   "'{}' gibt es nicht.": "'{}' does not exist.",
   "'{}' gibt es schon.": "'{}' already exists.",
   "'{}' hat kein '=' -- erwartet: 'arbeitsbereich = pfad'.": "'{}' has no '=' -- expected: 'workspace = path'.",

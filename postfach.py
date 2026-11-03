@@ -25,6 +25,7 @@ Postfach laedt exchangelib nie.
 """
 import base64
 import datetime
+import re
 import uuid
 from urllib.parse import urlsplit
 
@@ -172,9 +173,70 @@ WERKZEUGE = (
             "required": ["kennung", "body"],
         },
     },
+    # Reading only, like mails_lesen: nothing here changes the calendar,
+    # so nothing needs a confirmation.
+    {
+        "name": "mail_thread",
+        "beschreibung": (
+            "Den ganzen Verlauf (alle Nachrichten zum selben Betreff, "
+            "Posteingang und Gesendet, aelteste zuerst) zu einer Nachricht "
+            "aus {label} holen -- fuer 'fasse die Konversation zusammen'. "
+            "Zitierte Vorgaenger sind aus jeder Nachricht entfernt. Die "
+            "Kennung stammt aus mails_lesen."),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "kennung": {"type": "string"},
+            },
+            "required": ["kennung"],
+        },
+    },
+    {
+        "name": "calendar_events",
+        "beschreibung": (
+            "Termine aus dem Kalender von {label} heraussuchen, auch "
+            "Serientermine. Heute ist {today}. Ohne Angaben: die naechsten "
+            "7 Tage ab heute. Fuer 'naechste Woche' oder 'am 12.' das Feld "
+            "'from' auf den ersten Tag setzen und 'days' auf die Anzahl "
+            "Tage. Gibt je Termin Zeit, Betreff, Ort und Organisator "
+            "zurueck, dazu eine Kennung fuer calendar_event."),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "from": {"type": "string", "description":
+                         "Erster Tag, JJJJ-MM-TT. Vorgabe heute."},
+                "days": {"type": "integer", "description":
+                         "Wie viele Tage ab 'from'. Vorgabe 7, hoechstens 92."},
+                "text": {"type": "string", "description":
+                         "Kommt in Betreff, Ort oder Organisator vor."},
+                "count": {"type": "integer", "description":
+                          "Hoechstens so viele. Vorgabe 50."},
+            },
+        },
+    },
+    {
+        "name": "calendar_event",
+        "beschreibung": (
+            "Einen Termin aus {label} im Einzelnen: Teilnehmer mit Zu- oder "
+            "Absage, Ort, Beschreibung. Die Kennung stammt aus "
+            "calendar_events."),
+        "schema": {
+            "type": "object",
+            "properties": {
+                "kennung": {"type": "string"},
+            },
+            "required": ["kennung"],
+        },
+    },
 )
 
 SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
+
+# How long one message of a thread may be, and the whole thread. The tool
+# loop cuts every result at 8000 characters (pipeline.werkzeuglauf), so
+# the newest messages would otherwise be the ones that fall off.
+THREAD_MESSAGE = paths.env_int("POSTFACH_VERLAUF_NACHRICHT", 2500)
+THREAD_TOTAL = paths.env_int("POSTFACH_VERLAUF_GESAMT", 7500)
 
 
 def ews_adresse(ziel):
@@ -318,8 +380,12 @@ class Postfach:
         # gemeinsamen Eintrag hiesse er fuer jeden Nutzer "postfach", und
         # das Modell wuesste nicht, wessen Post es liest.
         label = self.adresse()
+        # The model needs today's date to turn "next Tuesday" into a day.
+        heute = _heute(_zeitzone(konto))
+        today = f"{_WOCHENTAGE[heute.weekday()]}, {heute:%Y-%m-%d}"
         return [{"server": self.name, "name": w["name"],
-                 "beschreibung": w["beschreibung"].format(label=label),
+                 "beschreibung": w["beschreibung"].format(label=label,
+                                                          today=today),
                  "schema": w["schema"]}
                 for w in WERKZEUGE]
 
@@ -329,6 +395,12 @@ class Postfach:
             return self._lesen(a)
         if name == "mail_volltext":
             return self._volltext(a)
+        if name == "mail_thread":
+            return self._thread(a)
+        if name == "calendar_events":
+            return self._events(a)
+        if name == "calendar_event":
+            return self._event(a)
         if name == "mail_senden":
             return self._senden(a)
         if name == "antwort_senden":
@@ -429,6 +501,139 @@ class Postfach:
                      or "(kein Text)")
         return "\n".join(teile)
 
+    def _nachricht(self, kennung):
+        """A message of this mailbox by its short id, inbox or sent."""
+        konto = self._verbindung()
+        lang = _lange_kennung(self._bereich(), kennung)
+        try:
+            return konto.inbox.get(id=lang)
+        except Exception:
+            try:
+                return konto.sent.get(id=lang)
+            except Exception as e:
+                raise Fehler(f"{self.name}: Nachricht nicht gefunden "
+                             f"({_kurz(e)}).")
+
+    def _thread(self, a):
+        """Every message with the same subject, oldest first.
+
+        By subject and not by EWS conversation: a conversation breaks when
+        someone answers from another client or forwards, the subject
+        mostly survives. Quoted predecessors are cut from each message --
+        otherwise the third answer carries the whole thread again.
+        """
+        konto = self._verbindung()
+        erste = self._nachricht(a.get("kennung"))
+        grund = _grundbetreff(getattr(erste, "subject", "") or "")
+        posten = [erste]
+        if grund:
+            felder = ("datetime_received", "subject", "sender", "text_body")
+            for ordner in (konto.inbox, konto.sent):
+                try:
+                    posten += list(ordner.filter(subject__contains=grund)
+                                   .only(*felder)
+                                   .order_by("-datetime_received")[:30])
+                except Exception as e:
+                    raise Fehler(f"{self.name}: {_kurz(e)}")
+        gesehen, liste = set(), []
+        for m in posten:
+            schluessel = getattr(m, "id", None) or id(m)
+            if schluessel in gesehen:
+                continue
+            gesehen.add(schluessel)
+            if _grundbetreff(getattr(m, "subject", "") or "") != grund:
+                continue      # "contains" also finds longer subjects
+            liste.append(m)
+        liste.sort(key=lambda m: _zeitwert(getattr(m, "datetime_received", None)))
+
+        teile, rest = [], THREAD_TOTAL
+        # Newest first into the budget, so a long thread loses its
+        # beginning and not its current state.
+        for m in reversed(liste):
+            text = _ohne_zitat(getattr(m, "text_body", "") or "")
+            text = text[:THREAD_MESSAGE] + ("..." if len(text) > THREAD_MESSAGE else "")
+            block = (f"--- {_datum(getattr(m, 'datetime_received', None))} | "
+                     f"von: {_absender(m)}\n{text or '(kein Text)'}")
+            if len(block) > rest and teile:
+                teile.append(f"--- (aeltere Nachrichten weggelassen: "
+                             f"{len(liste) - len(teile)})")
+                break
+            teile.append(block[:rest])
+            rest -= len(block)
+        teile.reverse()
+        return (f"Verlauf '{grund or '(ohne Betreff)'}': {len(liste)} "
+                f"Nachricht(en), aelteste zuerst.\n" + "\n".join(teile))
+
+    # --- KALENDER ---
+
+    def _events(self, a):
+        from exchangelib import EWSDateTime
+
+        konto = self._verbindung()
+        tz = _zeitzone(konto)
+        tag = _tag(a.get("from")) or _heute(tz)
+        tage = max(1, min(int(a.get("days") or 7), 92))
+        anzahl = max(1, min(int(a.get("count") or 50), 200))
+        such = str(a.get("text") or "").strip().lower()
+        beginn = EWSDateTime(tag.year, tag.month, tag.day, tzinfo=tz)
+        ende = beginn + datetime.timedelta(days=tage)
+        try:
+            posten = list(
+                konto.calendar.view(start=beginn, end=ende, max_items=HOLGRENZE)
+                .only("subject", "start", "end", "location", "organizer",
+                      "is_all_day", "is_cancelled"))
+        except Exception as e:
+            raise Fehler(f"{self.name}: {_kurz(e)}")
+        posten.sort(key=lambda t: _zeitwert(getattr(t, "start", None)))
+
+        zeilen = []
+        for t in posten:
+            betreff = (getattr(t, "subject", "") or "").strip()
+            ort = (getattr(t, "location", "") or "").strip()
+            org = _person(getattr(t, "organizer", None))
+            if such and such not in f"{betreff}\n{ort}\n{org}".lower():
+                continue
+            kurz = _merke_kennung(self._bereich(), t.id)
+            zeilen.append(
+                f"[{kurz}] {_zeitspanne(t, tz)} | {betreff or '(ohne Betreff)'}"
+                + (f" | Ort: {ort}" if ort else "")
+                + (f" | Organisator: {org}" if org else "")
+                + (" | ABGESAGT" if getattr(t, "is_cancelled", False) else ""))
+            if len(zeilen) >= anzahl:
+                break
+        letzter = tag + datetime.timedelta(days=tage - 1)
+        spanne = f"{tag:%d.%m.%Y} bis {letzter:%d.%m.%Y}"
+        if not zeilen:
+            return f"Keine Termine vom {spanne}."
+        return (f"{len(zeilen)} Termin(e) vom {spanne}, Zeiten in {tz}:\n"
+                + "\n".join(zeilen))
+
+    def _event(self, a):
+        konto = self._verbindung()
+        lang = _lange_kennung(self._bereich(), a.get("kennung"))
+        try:
+            t = konto.calendar.get(id=lang)
+        except Exception as e:
+            raise Fehler(f"{self.name}: Termin nicht gefunden ({_kurz(e)}).")
+        tz = _zeitzone(konto)
+        teile = [f"Betreff:    {getattr(t, 'subject', '') or '(ohne Betreff)'}",
+                 f"Zeit:       {_zeitspanne(t, tz)}"]
+        for titel, wert in (("Ort", getattr(t, "location", "")),
+                            ("Organisator", _person(getattr(t, "organizer", None)))):
+            if wert:
+                teile.append(f"{titel + ':':<11} {wert}")
+        if getattr(t, "is_cancelled", False):
+            teile.append("ABGESAGT")
+        for titel, feld in (("Teilnehmer", "required_attendees"),
+                            ("Optional", "optional_attendees")):
+            leute = [_teilnehmer(x) for x in (getattr(t, feld, None) or [])]
+            if leute:
+                teile.append(f"{titel + ':':<11} " + "; ".join(leute))
+        text = (getattr(t, "text_body", "") or "").strip()
+        if text:
+            teile += ["", text[:4000]]
+        return "\n".join(teile)
+
     # --- SENDEN ---
     #
     # Ob ueberhaupt gesendet werden darf, steht NICHT hier. Das
@@ -523,6 +728,149 @@ def _datum(wert):
         return wert.strftime("%d.%m.%Y %H:%M")
     except Exception:
         return str(wert)[:16]
+
+
+_WOCHENTAGE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
+def _zeitzone(konto):
+    """The mailbox's own time zone; the server's if Exchange does not say."""
+    try:
+        tz = konto.default_timezone
+        if tz is not None:
+            return tz
+    except Exception:
+        pass
+    from exchangelib import EWSTimeZone
+    return EWSTimeZone.localzone()
+
+
+def _heute(tz):
+    from exchangelib import EWSDateTime
+    jetzt = EWSDateTime.now(tz=tz)
+    return datetime.date(jetzt.year, jetzt.month, jetzt.day)
+
+
+def _tag(wert):
+    """'2026-11-04' or '04.11.2026' as a date; empty gives None."""
+    wert = str(wert or "").strip()
+    if not wert:
+        return None
+    for form in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.datetime.strptime(wert, form).date()
+        except ValueError:
+            pass
+    raise Fehler(f"'{wert}' ist kein Datum. Erwartet: JJJJ-MM-TT.")
+
+
+def _zeitwert(wert):
+    """Sort key for dates and times with and without zone; None last."""
+    if wert is None:
+        return (1, 0.0)
+    if hasattr(wert, "timestamp") and hasattr(wert, "hour"):
+        try:
+            return (0, wert.timestamp())
+        except Exception:
+            pass
+    try:
+        return (0, datetime.datetime(wert.year, wert.month, wert.day,
+                                     tzinfo=datetime.timezone.utc).timestamp())
+    except Exception:
+        return (1, 0.0)
+
+
+def _zeitspanne(termin, tz):
+    """'Di 04.11.2026 09:00-10:30', 'Mi 05.11.2026 ganztaegig', ..."""
+    beginn = getattr(termin, "start", None)
+    ende = getattr(termin, "end", None)
+    if beginn is None:
+        return "-"
+    ganztags = bool(getattr(termin, "is_all_day", False)) or not hasattr(beginn, "hour")
+    if hasattr(beginn, "hour"):
+        try:
+            beginn = beginn.astimezone(tz)
+            ende = ende.astimezone(tz) if ende is not None else None
+        except Exception:
+            pass
+    if ganztags:
+        erster = datetime.date(beginn.year, beginn.month, beginn.day)
+        # Exchange gives the end of an all-day entry as the next midnight.
+        letzter = erster
+        if ende is not None:
+            letzter = (datetime.date(ende.year, ende.month, ende.day)
+                       - datetime.timedelta(days=1))
+        text = f"{_WOCHENTAGE[erster.weekday()]} {erster:%d.%m.%Y} ganztaegig"
+        if letzter > erster:
+            text += f" bis {_WOCHENTAGE[letzter.weekday()]} {letzter:%d.%m.%Y}"
+        return text
+    text = f"{_WOCHENTAGE[beginn.weekday()]} {beginn:%d.%m.%Y %H:%M}"
+    if ende is None:
+        return text
+    if (ende.year, ende.month, ende.day) == (beginn.year, beginn.month, beginn.day):
+        return f"{text}-{ende:%H:%M}"
+    return f"{text} bis {_WOCHENTAGE[ende.weekday()]} {ende:%d.%m.%Y %H:%M}"
+
+
+def _person(mailbox):
+    if mailbox is None:
+        return ""
+    name = getattr(mailbox, "name", "") or ""
+    adresse = getattr(mailbox, "email_address", "") or ""
+    if name and adresse and name != adresse:
+        return f"{name} <{adresse}>"
+    return name or adresse
+
+
+# Exchange's answers to an invitation, as they show up in a list.
+_ANTWORTEN = {"Accept": "zugesagt", "Decline": "abgesagt",
+              "Tentative": "vorlaeufig", "NoResponseReceived": "keine Antwort",
+              "Organizer": "Organisator", "Unknown": ""}
+
+
+def _teilnehmer(attendee):
+    wer = _person(getattr(attendee, "mailbox", None)) or "(unbekannt)"
+    antwort = _ANTWORTEN.get(str(getattr(attendee, "response_type", "") or ""), "")
+    return f"{wer} ({antwort})" if antwort else wer
+
+
+_PRAEFIX = re.compile(r"^\s*((re|aw|wg|fw|fwd|antw|tr|sv|vs)\s*(\[\d+\])?\s*:\s*)+",
+                      re.I)
+
+
+def _grundbetreff(betreff):
+    """The subject without Re:/AW:/WG:/Fwd: in front, as many as there are."""
+    return _PRAEFIX.sub("", str(betreff or "")).strip()
+
+
+_ZITAT_BEGINN = re.compile(
+    r"^\s*(-{2,}\s*(original message|urspr(ü|ue)ngliche nachricht|"
+    r"original-nachricht)|_{8,}\s*$)", re.I)
+_ZITAT_KOPF = re.compile(r"^\s*\**(von|from)\s*:\**\s*\S", re.I)
+_ZITAT_FOLGE = re.compile(r"^\s*\**(gesendet|sent|datum|date|an|to|betreff|subject)"
+                          r"\s*:", re.I)
+_ZITAT_SCHRIEB = re.compile(r"^\s*(am|on)\s.+\s(schrieb|wrote)\b.*:\s*$", re.I)
+
+
+def _ohne_zitat(text):
+    """A mail without the messages it quotes.
+
+    Cut at the first line that starts a quote the way mail programs
+    write it: "-----Original Message-----", a block of "Von:" followed by
+    "Gesendet:"/"An:", or "Am ... schrieb ...:". Lines starting with ">"
+    go as well.
+    """
+    zeilen = str(text or "").replace("\r\n", "\n").split("\n")
+    aus = []
+    for i, z in enumerate(zeilen):
+        if (_ZITAT_BEGINN.match(z) or _ZITAT_SCHRIEB.match(z)
+                or (_ZITAT_KOPF.match(z)
+                    and any(_ZITAT_FOLGE.match(x) for x in zeilen[i + 1:i + 4]))):
+            break
+        if z.lstrip().startswith(">"):
+            continue
+        aus.append(z)
+    return "\n".join(aus).strip()
 
 
 def _zusammen(text, grenze):

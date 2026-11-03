@@ -3345,6 +3345,211 @@ for _ein, _aus in (
     pruef(f"EWS-Adresse aus '{_ein}'", _pfa.ews_adresse(_ein) == _aus,
           _pfa.ews_adresse(_ein))
 
+# --- CALENDAR AND THREADS OF AN EXCHANGE MAILBOX ---
+#
+# Against stand-ins for exchangelib and the account: the shape of the
+# answers, time zones, all-day entries, the search, quotes cut from a
+# thread. Whether a real Exchange answers the calls the same way needs a
+# real mailbox.
+import base64 as _b64c
+import datetime
+import mcp as _mcp_w
+import types as _tyc
+import zoneinfo as _zic
+import postfach as _pfc
+
+_tz_c = _zic.ZoneInfo("Europe/Berlin")
+
+
+class _EwsDt(datetime.datetime):
+    pass
+
+
+_echtes_ews = sys.modules.get("exchangelib")
+sys.modules["exchangelib"] = _tyc.SimpleNamespace(
+    EWSDateTime=_EwsDt, UTC=datetime.timezone.utc,
+    EWSTimeZone=_tyc.SimpleNamespace(localzone=lambda: _tz_c))
+
+
+def _ns(**k):
+    return _tyc.SimpleNamespace(**k)
+
+
+class _Abfrage(list):
+    def only(self, *_f):
+        return self
+
+    def order_by(self, *_f):
+        return self
+
+
+class _Ordner:
+    def __init__(self, posten):
+        self.posten = posten
+
+    def get(self, id):
+        for x in self.posten:
+            if x.id == id:
+                return x
+        raise KeyError(id)
+
+    def filter(self, subject__contains=""):
+        return _Abfrage(x for x in self.posten if subject__contains in x.subject)
+
+    def view(self, start, end, max_items=None):
+        return _Abfrage(t for t in self.posten if start <= _pfc_beginn(t) < end)
+
+
+def _pfc_beginn(t):
+    b = t.start
+    if not hasattr(b, "hour"):
+        return datetime.datetime(b.year, b.month, b.day, tzinfo=_tz_c)
+    return b
+
+
+_heute_c = datetime.datetime.now(_tz_c).date()
+_morgen_c = _heute_c + datetime.timedelta(days=1)
+_utc = datetime.timezone.utc
+_m9 = datetime.datetime(_morgen_c.year, _morgen_c.month, _morgen_c.day, 9, 0,
+                        tzinfo=_tz_c).astimezone(_utc)
+_termine = [
+    _ns(id="T1", subject="Baubesprechung Halle 3", start=_m9,
+        end=_m9 + datetime.timedelta(minutes=90), location="Raum 2.14",
+        organizer=_ns(name="Huber", email_address="huber@test.de"),
+        is_all_day=False, is_cancelled=False, text_body="Tagesordnung: Statik",
+        required_attendees=[_ns(mailbox=_ns(name="Anna", email_address="anna@test.de"),
+                                response_type="Accept")],
+        optional_attendees=[]),
+    _ns(id="T2", subject="Messe", start=_morgen_c + datetime.timedelta(days=1),
+        end=_morgen_c + datetime.timedelta(days=3), location="", organizer=None,
+        is_all_day=True, is_cancelled=False),
+    _ns(id="T3", subject="Jour fixe", start=_m9 + datetime.timedelta(hours=5),
+        end=_m9 + datetime.timedelta(hours=6), location="", organizer=None,
+        is_all_day=False, is_cancelled=True),
+    _ns(id="T4", subject="Zu weit weg", start=_m9 + datetime.timedelta(days=40),
+        end=_m9 + datetime.timedelta(days=40, hours=1), location="",
+        organizer=None, is_all_day=False, is_cancelled=False),
+]
+_t0 = datetime.datetime(2026, 10, 12, 8, 0, tzinfo=_utc)
+_mails = [
+    _ns(id="M1", subject="Angebot Meier", datetime_received=_t0,
+        sender=_ns(name="Meier", email_address="meier@test.de"),
+        text_body="Anbei das Angebot ueber 12.400 EUR."),
+    _ns(id="M3", subject="AW: Angebot Meier", datetime_received=_t0
+        + datetime.timedelta(days=2),
+        sender=_ns(name="Meier", email_address="meier@test.de"),
+        text_body="Einverstanden, Lieferung KW 47.\n\nVon: Anna\nGesendet: Mo\n"
+                  "An: Meier\nBetreff: Angebot Meier\n\nGEHEIMER ALTTEXT"),
+    _ns(id="M9", subject="Angebot Meier Nachtrag", datetime_received=_t0,
+        sender=_ns(name="X", email_address="x@test.de"), text_body="anders"),
+]
+_gesendet = [
+    _ns(id="M2", subject="RE: Angebot Meier", datetime_received=_t0
+        + datetime.timedelta(days=1),
+        sender=_ns(name="Anna", email_address="anna@test.de"),
+        text_body="Bitte 3 % Skonto.\n> Anbei das Angebot\n"),
+]
+_pfk = _pfc.Postfach("box", {"postfach": "anna@test.de"}, {
+    "Authorization": "Basic " + _b64c.b64encode(b"anna@test.de:pw").decode()})
+_pfk._konto = _ns(default_timezone=_tz_c, calendar=_Ordner(_termine),
+                  inbox=_Ordner(_mails), sent=_Ordner(_gesendet),
+                  protocol=_ns(close=lambda: None))
+_pfk._konto.inbox.total_count = 3
+
+_wz_c = {w["name"]: w for w in _pfk.werkzeuge()}
+pruef("Kalender und Verlauf stehen in der Werkzeugliste, lesend",
+      {"calendar_events", "calendar_event", "mail_thread"} <= set(_wz_c)
+      and not set(_wz_c) & {"calendar_events", "calendar_event", "mail_thread"}
+      & set(_pfc.SENDEWERKZEUGE))
+pruef("das Modell erfaehrt das heutige Datum",
+      f"{_heute_c:%Y-%m-%d}" in _wz_c["calendar_events"]["beschreibung"])
+_ev = _pfk.rufe("calendar_events", {})
+pruef("Termine der naechsten 7 Tage in Ortszeit",
+      "09:00-10:30 | Baubesprechung Halle 3 | Ort: Raum 2.14" in _ev
+      and "Zu weit weg" not in _ev, _ev)
+pruef("ganztaegige Termine ueber mehrere Tage",
+      "ganztaegig bis" in _ev and "Messe" in _ev, _ev)
+pruef("abgesagte Termine sind markiert", "Jour fixe | ABGESAGT" in _ev, _ev)
+pruef("Suche im Kalender",
+      _pfk.rufe("calendar_events", {"text": "huber"}).count("\n[") == 1)
+_ev40 = _pfk.rufe("calendar_events", {"from": str(_heute_c), "days": 45})
+pruef("Zeitraum frei waehlbar", "Zu weit weg" in _ev40, _ev40)
+_kz = _ev.split("]", 1)[0].split("[", 1)[1]
+_det = _pfk.rufe("calendar_event", {"kennung": _kz})
+pruef("Termin im Einzelnen mit Zusage",
+      "Anna <anna@test.de> (zugesagt)" in _det and "Statik" in _det, _det)
+try:
+    _pfk.rufe("calendar_events", {"from": "naechsten Dienstag"})
+    pruef("ein Nicht-Datum wird abgewiesen", False)
+except _pfc.Fehler as _e:
+    pruef("ein Nicht-Datum wird abgewiesen", "JJJJ-MM-TT" in str(_e))
+
+_km = _pfc._merke_kennung(_pfk._bereich(), "M1")
+_vl = _pfk.rufe("mail_thread", {"kennung": _km})
+pruef("Verlauf: Posteingang und Gesendet, aelteste zuerst",
+      _vl.index("12.400") < _vl.index("Skonto") < _vl.index("KW 47"), _vl)
+pruef("Verlauf ohne zitierte Vorgaenger und ohne fremde Betreffe",
+      "GEHEIMER ALTTEXT" not in _vl and "> Anbei" not in _vl
+      and "anders" not in _vl and "3 Nachricht(en)" in _vl, _vl)
+pruef("Betreff ohne Re/AW/WG",
+      _pfc._grundbetreff("AW: WG: RE[2]: Angebot Meier") == "Angebot Meier")
+pruef("Zitat nach 'Am ... schrieb ...:' faellt weg",
+      _pfc._ohne_zitat("Danke!\nAm 3.11. schrieb Meier:\nalt") == "Danke!")
+if _echtes_ews is None:
+    del sys.modules["exchangelib"]
+else:
+    sys.modules["exchangelib"] = _echtes_ews
+
+# --- SUMMARIES INTO A WORKSPACE (workspace_notes.py) ---
+import workspace_notes as _wsn
+
+pruef("Ablegen wird ohne Postfach nur angeboten, wenn danach gefragt wird",
+      _wsn.offered("Lege eine Zusammenfassung ab", {})
+      and not _wsn.offered("Wie hoch ist die Last?", {})
+      and _wsn.offered("Wie hoch ist die Last?", {"box": object()}))
+
+
+class _WzClient:
+    """Calls save_summary once, then answers."""
+
+    def __init__(self):
+        self.runde = 0
+        self.chat = _tyc.SimpleNamespace(completions=_tyc.SimpleNamespace(
+            create=self.create))
+
+    def create(self, **kw):
+        self.runde += 1
+        rufe = None
+        if self.runde == 1:
+            rufe = [_ns(id="c1", function=_ns(
+                name="workspace__save_summary",
+                arguments='{"title": "T", "text": "x"}'))]
+        return _ns(choices=[_ns(message=_ns(content="", tool_calls=rufe))])
+
+
+class _WzServer:
+    name = "workspace"
+    confirm = ("save_summary",)
+    gerufen = []
+
+    def werkzeuge(self):
+        return [{"server": "workspace", "name": "save_summary",
+                 "beschreibung": "", "schema": {"type": "object"}}]
+
+    def rufe(self, name, argumente=None):
+        self.gerufen.append(name)
+        return "abgelegt"
+
+
+_wz_zusatz, _wz_entw = pipeline.werkzeuglauf(
+    _WzClient(), "m", "system", [{"role": "user", "content": "lege ab"}],
+    {"workspace": _WzServer()})
+pruef("Ablegen laeuft nicht im Werkzeugkreis, es wird ein Entwurf",
+      not _WzServer.gerufen and len(_wz_entw) == 1
+      and _wz_entw[0]["werkzeug"] == "save_summary", (_WzServer.gerufen, _wz_entw))
+pruef("der Name 'workspace' ist fuer Postfaecher reserviert",
+      _mcp_w.lege_an("workspace", "exchange", "owa.test")[0] is False)
+
 # --- EXCHANGE SPRICHT KEIN MCP, UND DAS DARF NIRGENDS AUFFALLEN ---
 #
 # Ein Exchange-Postfach laeuft nicht ueber JSON-RPC, sondern ueber

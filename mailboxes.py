@@ -17,7 +17,8 @@ only one that holds when every request may reach another pod.
 Drafts: a tool that sends something is not run during an answer, it is
 stored as a draft in the (encrypted) chat message. send_draft runs
 exactly the stored call -- the client names it, it cannot change it --
-and marks it sent, so it is sent once.
+and marks it sent, so it is sent once. A summary for a workspace
+(workspace_notes, server "workspace") is a draft of the same kind.
 
 ADMIN SIDE
 
@@ -28,6 +29,7 @@ ADMIN SIDE
 """
 import chats
 import mcp
+import workspace_notes
 
 
 class NotFound(Exception):
@@ -107,8 +109,13 @@ def send_draft(user, chat_id, draft_id, headers):
         draft["state"] = "sending"
         chats.speichere(user, chat_id, messages)
     server = draft["server"]
-    connections = mcp.verbinde({server: (headers or {}).get(server)},
-                               ohne=set(mcp.lies_konfiguration()) - {server})
+    if server == workspace_notes.SERVER:
+        # Built in, no login: it stores as the user who confirms, with
+        # the permissions they have at the moment of the click.
+        connections = {server: workspace_notes.Tools(user)}
+    else:
+        connections = mcp.verbinde({server: (headers or {}).get(server)},
+                                   ohne=set(mcp.lies_konfiguration()) - {server})
     try:
         if server not in connections:
             raise NotFound(f"No mailbox '{server}'.")

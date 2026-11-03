@@ -69,8 +69,18 @@ class _FakeChat:
             completions=types.SimpleNamespace(create=self.create))
 
     text_override = None
+    # (tool name, arguments): the next call that is offered tools calls
+    # this one, once -- the way a model would.
+    tool_call = None
 
     def create(self, model=None, messages=None, stream=False, **kw):
+        if kw.get("tools") and _FakeChat.tool_call:
+            name, arguments = _FakeChat.tool_call
+            _FakeChat.tool_call = None
+            call = types.SimpleNamespace(id="call1", function=types.SimpleNamespace(
+                name=name, arguments=json.dumps(arguments)))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(
+                message=types.SimpleNamespace(content="", tool_calls=[call]))])
         text = (_FakeChat.text_override
                 or "Die Pruefrist betraegt vier Jahre [Kessel.txt, Seite 1].")
         if stream:
@@ -352,6 +362,64 @@ check("unknown draft is 404", anna.post(
     f"{API}/chats/{chat_id}/drafts/d9_9/send", json={}).status_code == 404)
 check("discard unknown draft is 404", anna.post(
     f"{API}/chats/{chat_id}/drafts/d9_9/discard").status_code == 404)
+# --- summaries into a workspace (workspace_notes.py) ---
+_summary = {"title": "Kessel Pruefung Zusammenfassung",
+            "text": "Die Pruefrist fuer Kessel betraegt vier Jahre. "
+                    "Naechste Pruefung im Maerz durch den Sachverstaendigen Huber.",
+            "source": "dieser Chat"}
+_FakeChat.tool_call = ("workspace__save_summary", dict(_summary, room=own))
+r = anna.post(f"{API}/ask", json={"question": "Lege bitte eine Zusammenfassung "
+                                              "davon in meinem Bereich ab",
+                                  "chat_id": chat_id})
+_msg = r.json().get("message") or {}
+_draft = (_msg.get("entwuerfe") or [{}])[0]
+_files = anna.get(f"{API}/documents").json().get(own, {}).get("files", [])
+check("a summary becomes a draft and nothing is stored yet",
+      _draft.get("server") == "workspace" and _draft.get("ziel")
+      and not any("Kessel Pruefung" in f for f in _files), _msg)
+check("a question about something else offers no tool round",
+      __import__("workspace_notes").offered("Wie lange ist die Pruefrist?", {})
+      is False)
+r = anna.post(f"{API}/chats/{chat_id}/drafts/{_draft.get('id')}/send", json={})
+_files = anna.get(f"{API}/documents").json().get(own, {}).get("files", [])
+check("confirming stores it as a document of the room",
+      r.status_code == 200 and any(f.startswith("Kessel Pruefung") and f.endswith(".md")
+                                   for f in _files), (r.text, _files))
+check("a confirmed draft does not run twice", anna.post(
+    f"{API}/chats/{chat_id}/drafts/{_draft.get('id')}/send", json={}).status_code == 409)
+_FakeChat.text_override = "Sachverstaendiger Huber pruefte im Maerz."
+r = anna.post(f"{API}/ask", json={"question": "Wer prueft den Kessel im Maerz?",
+                                  "save": False})
+_FakeChat.text_override = None
+check("the stored summary is found by the search",
+      any(s_["file"].startswith("Kessel Pruefung")
+          for s_ in r.json()["message"]["sources"]), r.json()["message"]["sources"])
+_FakeChat.tool_call = ("workspace__save_summary", dict(_summary, room="allgemein"))
+r = anna.post(f"{API}/ask", json={"question": "Speichere das im allgemeinen Bereich",
+                                  "chat_id": chat_id})
+_d2 = (r.json()["message"].get("entwuerfe") or [{}])[0]
+check("confirming into a room without write permission is refused",
+      anna.post(f"{API}/chats/{chat_id}/drafts/{_d2.get('id')}/send", json={})
+      .status_code == 409)
+r = anna.post(f"{API}/workspace-notes", json={"title": "Notiz Kessel",
+                                              "text": "Ventil tauschen."})
+check("a note through the API lands in the own room",
+      r.status_code == 200 and r.json()["room"] == own and r.json()["passages"] > 0,
+      r.text)
+check("a note into a foreign room is 403", anna.post(
+    f"{API}/workspace-notes", json={"room": "allgemein", "title": "x",
+                                    "text": "y"}).status_code == 403)
+_FakeChat.text_override = None
+r = anna.post(f"{API}/chats/{chat_id}/summary", json={})
+check("summary of a chat comes back without storing",
+      r.status_code == 200 and r.json()["title"] and r.json()["stored"] is None, r.text)
+r = anna.post(f"{API}/chats/{chat_id}/summary", json={"room": own,
+                                                      "title": "Chat Kessel"})
+check("and is stored when a room is given",
+      r.status_code == 200 and (r.json()["stored"] or {}).get("passages", 0) > 0, r.text)
+check("summary of someone else's chat is 404", markus.post(
+    f"{API}/chats/{chat_id}/summary", json={}).status_code == 404)
+
 # --- web pages (web.py) ---
 _FakeChat.text_override = "Antwort <script>alert(1)</script> **fett**"
 r = anna.post(f"{API}/ask", json={"question": "HTML?", "chat_id": chat_id})

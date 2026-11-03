@@ -47,6 +47,7 @@ import raeume
 import sessions
 import sprache
 import web_sources
+import workspace_notes
 from server import (SEALED_COOKIE, COOKIE_SECURE, Principal, principal,
                     set_session_cookies)
 
@@ -80,6 +81,9 @@ TEXTS = {
     "Draft waiting for you": "Entwurf wartet auf dich",
     "Send draft": "Entwurf senden", "Discard": "Verwerfen",
     "Sent.": "Gesendet.", "Discarded.": "Verworfen.",
+    "Summary for": "Zusammenfassung für", "Save to workspace":
+        "Im Arbeitsbereich ablegen", "Stored.": "Abgelegt.",
+    "waits for your confirmation": "wartet auf deine Bestätigung",
     "From the web": "Aus dem Netz", "Take over": "Übernehmen",
     "Delete": "Löschen", "Rename": "Umbenennen",
     "Upload": "Hochladen", "into": "nach", "Project (optional)":
@@ -322,10 +326,16 @@ def draft_action(chat_id: str, draft_id: str, action: str, request: Request,
     page_language(p.name)
     if action == "send":
         headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
+        server = next((d.get("server") for _i, d in mailboxes.drafts(p.name, chat_id)
+                       if d.get("id") == draft_id), None)
         try:
-            mailboxes.send_draft(p.name, chat_id, draft_id, headers)
+            result = mailboxes.send_draft(p.name, chat_id, draft_id, headers)
         except ValueError as e:
             raise HTTPException(409, str(e))
+        if server == workspace_notes.SERVER:
+            return HTMLResponse(f'<span class="ok">{t("Stored.")}</span> '
+                                f'<span class="muted">'
+                                f'{jinja2.utils.markupsafe.escape(result)}</span>')
         return HTMLResponse(f'<span class="ok">{t("Sent.")}</span>')
     mailboxes.discard_draft(p.name, chat_id, draft_id)
     return HTMLResponse(f'<span class="muted">{t("Discarded.")}</span>')

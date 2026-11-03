@@ -53,6 +53,7 @@ import sqldb
 import sqlpruefung
 import sqlquellen
 import tabellen
+import workspace_notes
 
 HELPER_TIMEOUT = paths.env_float("HELPER_TIMEOUT", 60)
 STANDARD_TOP_K = paths.env_int("TOP_K", 5)
@@ -401,11 +402,15 @@ def _ask(user, req):
         pipeline.kontext(hits, image_texts, bloecke=blocks), req.preset,
         benutzer=user)
     extra, drafts = [], []
+    connections = {}
     if mcp.eingerichtet():
-        progress = []
         connections = mcp.verbinde(
             {k: v for k, v in (req.mailboxes or {}).items()},
             ohne=(() if req.web else settings["web_servers"]))
+    if req.save and workspace_notes.offered(question, connections):
+        connections[workspace_notes.SERVER] = workspace_notes.Tools(user)
+    if connections:
+        progress = []
         try:
             extra, drafts = pipeline.werkzeuglauf(
                 client("CHAT", user), model, system, messages, connections,
@@ -439,6 +444,12 @@ def _ask(user, req):
 
     for i, d in enumerate(drafts):
         d["id"] = f"d{len(messages)}_{i}"
+        if d.get("server") == workspace_notes.SERVER:
+            # The room's name for the person who confirms; the id alone
+            # says little about where the summary will be readable.
+            room = (d.get("argumente") or {}).get("room") \
+                or raeume.privat_kennung(user)
+            d["ziel"] = raeume.bezeichnung(room)
     message = {"role": "assistant", "content": "".join(parts),
                "sources": pipeline.quellen(hits), "sonden": probes,
                "zahlen": numbers, "entwuerfe": drafts,

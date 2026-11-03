@@ -10,6 +10,7 @@
     POST   /websources/search             search the web (only the term leaves)
     POST   /websources/read               a page as plain text
     POST   /websources/take-over          pages into the OWN room
+    POST   /workspace-notes               a summary or note as a document
     GET    /lists                         sheets this user may query
     PUT    /me/list-folder                the own list folder
 
@@ -30,6 +31,7 @@ import pipeline
 import raeume
 import tabellen
 import web_sources
+import workspace_notes
 from server import Principal, principal
 
 router = APIRouter()
@@ -197,6 +199,29 @@ def web_take_over(body: TakeOver, p: Principal = Depends(principal)):
     (POST /documents/move).
     """
     return web_sources.take_over(p.name, [pg.model_dump() for pg in body.pages])
+
+
+# --- SUMMARIES AND NOTES ---
+
+class Note(BaseModel):
+    room: str = Field("", description="empty: the own room")
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=workspace_notes.MAX_TEXT)
+    source: str = Field("", max_length=300,
+                        description="what it is based on, shown in the document")
+
+
+@router.post("/workspace-notes", tags=["documents"])
+def create_note(body: Note, p: Principal = Depends(principal)):
+    """Store a summary or note as a Markdown document in a room the user
+    may write (folder Zusammenfassungen); it is searchable right away."""
+    try:
+        return workspace_notes.store(p.name, body.room, body.title, body.text,
+                                     body.source)
+    except workspace_notes.NotWritable as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # --- LISTS ---

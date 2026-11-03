@@ -44,7 +44,7 @@ SCHICHT = {
         "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
         "postfach", "ocr", "answering", "doc_actions", "web_sources",
         "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
-        "auth", "sicherheit", "datentraeger",
+        "auth", "sicherheit", "datentraeger", "workspace_notes",
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",

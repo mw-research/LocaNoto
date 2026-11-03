@@ -214,6 +214,16 @@ jobs:
           docker logs probe | tail -20
           docker rm -f probe
 
+      # Every endpoint against a throw-away installation inside the image
+      # (test_api.py, models replaced by stand-ins): the image has every
+      # package the API needs, a developer's machine not always. Once per
+      # build, on amd64.
+      - name: API im Abbild pruefen
+        if: env.AKTIV == 'true' && github.ref_name == 'enterprise' && matrix.arch == 'amd64'
+        run: |
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
+          tail -1 /tmp/api.log | grep -q "all passed"
+
   # Abgelegt sind bis hier NUR die Kennzeichner je Architektur. Der
   # gemeinsame und der wandernde, den der Cluster zieht, entstehen erst,
   # wenn jedes gebaute Abbild seine Probe bestanden hat -- sonst zoege ein

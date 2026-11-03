@@ -26,9 +26,13 @@
   {% for d in m.entwuerfe or [] %}
   <div class="draft" id="draft-{{ d.id }}">
     {% if d.state %}<span class="muted">{{ d.state }}</span>{% else %}
+    {% if d.server == 'workspace' %}
+    <strong>{{ t('Summary for') }} {{ d.ziel or (d.argumente or {}).room }} – {{ t('waits for your confirmation') }}</strong>
+    {% else %}
     <strong>{{ t('Draft waiting for you') }}: {{ d.werkzeug }} ({{ d.server }})</strong>
+    {% endif %}
     {% for k, v in (d.argumente or {}).items() %}<div class="arg"><span>{{ k }}</span><pre>{{ v }}</pre></div>{% endfor %}
-    <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" class="inline"><button class="primary">{{ t('Send draft') }}</button></form>
+    <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" class="inline"><button class="primary">{{ t('Save to workspace') if d.server == 'workspace' else t('Send draft') }}</button></form>
     <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/discard" hx-target="#draft-{{ d.id }}" class="inline"><button>{{ t('Discard') }}</button></form>
     {% endif %}
   </div>

@@ -158,6 +158,9 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     daten = lies_konfiguration()
     if name in daten:
         return False, f"'{name}' gibt es bereits."
+    # The built-in tool server (workspace_notes) uses this name.
+    if name == "workspace":
+        return False, f"'{name}' ist reserviert."
     angaben = dict(VORLAGEN[vorlage]["angaben"])
     if angaben["transport"] == "stdio":
         angaben["befehl"] = [t for t in str(ziel).split() if t]

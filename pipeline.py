@@ -534,7 +534,10 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
 
             if server not in verbindungen:
                 ergebnis = f"Kein Server namens '{server}'."
-            elif mcp.braucht_bestaetigung(server, name, argumente):
+            elif (mcp.braucht_bestaetigung(server, name, argumente)
+                  # A built-in server names its own tools that need a
+                  # person (workspace_notes.Tools.confirm).
+                  or name in getattr(verbindungen[server], "confirm", ())):
                 # NICHT ausfuehren. Der Entwurf geht an die Oberflaeche,
                 # und das Modell erfaehrt ausdruecklich, dass nichts
                 # verschickt wurde -- sonst schreibt es dem Nutzer, die
@@ -543,8 +546,9 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                                   "argumente": argumente})
                 ergebnis = ("NICHT ausgefuehrt. Der Entwurf liegt dem "
                             "Nutzer zur Bestaetigung vor; erst sein Klick "
-                            "verschickt ihn. Sage ihm, dass ein Entwurf "
-                            "bereitliegt -- nicht, dass gesendet wurde.")
+                            "fuehrt ihn aus. Sage ihm, dass ein Entwurf "
+                            "bereitliegt -- nicht, dass es schon geschehen "
+                            "ist.")
             else:
                 if mcp.sendet(server, name):
                     argumente = mcp.mit_hinweis(server, argumente)
