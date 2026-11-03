@@ -230,7 +230,55 @@ WERKZEUGE = (
     },
 )
 
+_TERMIN_FELDER = {
+    "subject": {"type": "string", "description": "Betreff."},
+    "start": {"type": "string", "description":
+              "Beginn in Ortszeit, 'JJJJ-MM-TT HH:MM'. Nur 'JJJJ-MM-TT' "
+              "heisst ganztaegig."},
+    "end": {"type": "string", "description":
+            "Ende, 'JJJJ-MM-TT HH:MM' oder nur 'HH:MM' am selben Tag; bei "
+            "ganztaegig der letzte Tag. Ohne Ende: 'duration'."},
+    "duration": {"type": "integer", "description":
+                 "Dauer in Minuten, wenn kein Ende angegeben ist. Vorgabe 60."},
+    "all_day": {"type": "boolean", "description": "Ganztaegig."},
+    "location": {"type": "string", "description": "Ort oder Raum."},
+    "body": {"type": "string", "description": "Beschreibung, Tagesordnung."},
+}
+
+WERKZEUGE = WERKZEUGE + (
+    {
+        "name": "calendar_add",
+        "beschreibung": (
+            "Einen Termin NUR in den Kalender von {label} eintragen, ohne "
+            "jemanden einzuladen ('trag mir ... ein', 'blocke mir ...'). "
+            "Heute ist {today}. Der Nutzer bestaetigt vor dem Eintragen."),
+        "schema": {"type": "object", "properties": dict(_TERMIN_FELDER),
+                   "required": ["subject", "start"]},
+    },
+    {
+        "name": "meeting_request",
+        "beschreibung": (
+            "Eine Besprechungsanfrage aus {label} an andere verschicken: "
+            "Einladung mit Zeit, Ort und Text, der Termin steht danach auch "
+            "im eigenen Kalender. Heute ist {today}. Teilnehmer als "
+            "Mailadressen -- nicht raten; unbekannte Adressen erst "
+            "erfragen. Der Nutzer bestaetigt vor dem Versand."),
+        "schema": {"type": "object", "properties": dict(
+            _TERMIN_FELDER,
+            attendees={"type": "string", "description":
+                       "Teilnehmer, Mailadressen durch Komma."},
+            optional_attendees={"type": "string", "description":
+                                "Optionale Teilnehmer, Mailadressen."}),
+            "required": ["subject", "start", "attendees"]},
+    },
+)
+
 SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
+
+# Writing to a calendar always waits for a person, also in a mailbox that
+# may send on its own: an invitation goes out to people, and an entry in
+# the own calendar at the wrong day is found only when it is too late.
+KALENDERWERKZEUGE = ("calendar_add", "meeting_request")
 
 # How long one message of a thread may be, and the whole thread. The tool
 # loop cuts every result at 8000 characters (pipeline.werkzeuglauf), so
@@ -401,11 +449,28 @@ class Postfach:
             return self._events(a)
         if name == "calendar_event":
             return self._event(a)
+        if name == "calendar_add":
+            return self._anlegen(a, einladen=False)
+        if name == "meeting_request":
+            return self._anlegen(a, einladen=True)
         if name == "mail_senden":
             return self._senden(a)
         if name == "antwort_senden":
             return self._antworten(a)
         raise Fehler(f"{self.name}: kein Werkzeug namens '{name}'.")
+
+    def pruefe_entwurf(self, name, argumente=None):
+        """Before a call becomes a draft: is it complete? Raises Fehler.
+
+        Returns a line for the person who confirms ("Di 11.11.2026
+        14:00-15:00 ..."), or None for tools without a check. Checked
+        here and not only when it runs: the model can still correct a
+        wrong date, the person on the button can no longer.
+        """
+        if name not in KALENDERWERKZEUGE:
+            return None
+        return _termin_vorschau(_termin_angaben(argumente or {},
+                                                name == "meeting_request"))
 
     def schliesse(self):
         if self._konto is not None:
@@ -634,6 +699,36 @@ class Postfach:
             teile += ["", text[:4000]]
         return "\n".join(teile)
 
+    def _anlegen(self, a, einladen):
+        """An entry in the own calendar; with einladen, invitations go out."""
+        from exchangelib import CalendarItem, EWSDate, EWSDateTime
+        from exchangelib.items import SEND_TO_ALL_AND_SAVE_COPY, SEND_TO_NONE
+
+        t = _termin_angaben(a, einladen)
+        konto = self._verbindung()
+        tz = _zeitzone(konto)
+        if t["ganztags"]:
+            beginn = EWSDate(t["beginn"].year, t["beginn"].month, t["beginn"].day)
+            ende = EWSDate(t["ende"].year, t["ende"].month, t["ende"].day)
+        else:
+            beginn, ende = (EWSDateTime(x.year, x.month, x.day, x.hour, x.minute,
+                                        tzinfo=tz) for x in (t["beginn"], t["ende"]))
+        try:
+            termin = CalendarItem(
+                account=konto, folder=konto.calendar, subject=t["betreff"],
+                start=beginn, end=ende, is_all_day=t["ganztags"],
+                location=t["ort"] or None, body=t["text"] or None,
+                required_attendees=t["teilnehmer"] or None,
+                optional_attendees=t["optional"] or None)
+            termin.save(send_meeting_invitations=(
+                SEND_TO_ALL_AND_SAVE_COPY if einladen else SEND_TO_NONE))
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht angelegt ({_kurz(e)}).")
+        vorschau = _termin_vorschau(t)
+        if einladen:
+            return f"Einladung verschickt: {vorschau}"
+        return f"Im Kalender eingetragen: {vorschau}"
+
     # --- SENDEN ---
     #
     # Ob ueberhaupt gesendet werden darf, steht NICHT hier. Das
@@ -762,6 +857,111 @@ def _tag(wert):
         except ValueError:
             pass
     raise Fehler(f"'{wert}' ist kein Datum. Erwartet: JJJJ-MM-TT.")
+
+
+def _zeitpunkt(wert, feld):
+    """'2026-11-11 14:00' (also with T, or 11.11.2026 14:00) -> naive
+    datetime; a date alone -> date. In the mailbox's local time."""
+    wert = " ".join(str(wert or "").replace("T", " ").split())
+    for form in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M"):
+        try:
+            return datetime.datetime.strptime(wert, form)
+        except ValueError:
+            pass
+    tag = _tag(wert) if wert else None
+    if tag is None:
+        raise Fehler(f"'{feld}' fehlt. Erwartet: JJJJ-MM-TT HH:MM.")
+    return tag
+
+
+def _termin_angaben(a, einladen):
+    """The checked fields of calendar_add / meeting_request. Raises Fehler.
+
+    ende is exclusive: for an all-day entry the day after the last one,
+    the way Exchange stores it.
+    """
+    betreff = " ".join(str(a.get("subject") or "").split())
+    if not betreff:
+        raise Fehler("Kein Betreff angegeben.")
+    beginn = _zeitpunkt(a.get("start"), "start")
+    ganztags = bool(a.get("all_day")) or not isinstance(beginn, datetime.datetime)
+    if ganztags:
+        beginn = datetime.date(beginn.year, beginn.month, beginn.day)
+        letzter = beginn
+        if str(a.get("end") or "").strip():
+            e = _zeitpunkt(a.get("end"), "end")
+            letzter = datetime.date(e.year, e.month, e.day)
+        if letzter < beginn:
+            raise Fehler("Der letzte Tag liegt vor dem ersten.")
+        ende = letzter + datetime.timedelta(days=1)
+    else:
+        roh = str(a.get("end") or "").strip()
+        if re.fullmatch(r"\d{1,2}:\d{2}", roh):
+            h, m = (int(x) for x in roh.split(":"))
+            try:
+                ende = beginn.replace(hour=h, minute=m)
+            except ValueError:
+                raise Fehler(f"'{roh}' ist keine Uhrzeit.")
+        elif roh:
+            ende = _zeitpunkt(roh, "end")
+            if not isinstance(ende, datetime.datetime):
+                raise Fehler("'end' braucht eine Uhrzeit, JJJJ-MM-TT HH:MM.")
+        else:
+            try:
+                minuten = int(a.get("duration") or 60)
+            except (TypeError, ValueError):
+                raise Fehler("'duration' ist keine Zahl von Minuten.")
+            if not 5 <= minuten <= 14 * 24 * 60:
+                raise Fehler("'duration' zwischen 5 Minuten und 14 Tagen.")
+            ende = beginn + datetime.timedelta(minutes=minuten)
+        if ende <= beginn:
+            raise Fehler("Das Ende liegt nicht nach dem Beginn.")
+    heute = datetime.date.today()
+    tag = beginn.date() if isinstance(beginn, datetime.datetime) else beginn
+    if not (heute - datetime.timedelta(days=366) <= tag
+            <= heute + datetime.timedelta(days=5 * 366)):
+        raise Fehler(f"'{beginn}' liegt nicht in einem sinnvollen Zeitraum.")
+
+    teilnehmer = _liste(a.get("attendees"))
+    optional = _liste(a.get("optional_attendees"))
+    falsch = [x for x in teilnehmer + optional
+              if not re.fullmatch(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+", x)]
+    if falsch:
+        raise Fehler("Keine Mailadresse: " + ", ".join(falsch)
+                     + ". Adressen nicht raten -- beim Nutzer nachfragen.")
+    if einladen and not teilnehmer:
+        raise Fehler("Eine Besprechungsanfrage braucht Teilnehmer (attendees).")
+    if not einladen and (teilnehmer or optional):
+        raise Fehler("calendar_add laedt niemanden ein. Fuer Teilnehmer "
+                     "meeting_request verwenden.")
+    return {"betreff": betreff, "beginn": beginn, "ende": ende,
+            "ganztags": ganztags,
+            "ort": " ".join(str(a.get("location") or "").split()),
+            "text": str(a.get("body") or "").strip(),
+            "teilnehmer": teilnehmer, "optional": optional}
+
+
+def _termin_vorschau(t):
+    """'Baubesprechung | Di 11.11.2026 14:00-15:30 | Ort: ... | an: ...'"""
+    b, e = t["beginn"], t["ende"]
+    if t["ganztags"]:
+        letzter = e - datetime.timedelta(days=1)
+        zeit = f"{_WOCHENTAGE[b.weekday()]} {b:%d.%m.%Y} ganztaegig"
+        if letzter > b:
+            zeit += f" bis {_WOCHENTAGE[letzter.weekday()]} {letzter:%d.%m.%Y}"
+    elif e.date() == b.date():
+        zeit = f"{_WOCHENTAGE[b.weekday()]} {b:%d.%m.%Y %H:%M}-{e:%H:%M}"
+    else:
+        zeit = (f"{_WOCHENTAGE[b.weekday()]} {b:%d.%m.%Y %H:%M} bis "
+                f"{_WOCHENTAGE[e.weekday()]} {e:%d.%m.%Y %H:%M}")
+    teile = [t["betreff"], zeit]
+    if t["ort"]:
+        teile.append(f"Ort: {t['ort']}")
+    if t["teilnehmer"]:
+        teile.append("an: " + ", ".join(t["teilnehmer"]))
+    if t["optional"]:
+        teile.append("optional: " + ", ".join(t["optional"]))
+    return " | ".join(teile)
 
 
 def _zeitwert(wert):

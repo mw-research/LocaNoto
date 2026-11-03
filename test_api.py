@@ -420,6 +420,26 @@ check("and is stored when a room is given",
 check("summary of someone else's chat is 404", markus.post(
     f"{API}/chats/{chat_id}/summary", json={}).status_code == 404)
 
+# Calendar drafts as the tool loop stores them (the Exchange side is
+# tested in selbsttest.py): the page shows the line with the day and
+# its own button.
+import chats as _chats_mod  # noqa: E402
+_msgs = _chats_mod.lade("anna", chat_id)
+_msgs[-1].setdefault("entwuerfe", []).extend([
+    {"id": "dk1", "server": "box", "werkzeug": "meeting_request",
+     "vorschau": "Statik Halle 3 | Mi 12.11.2026 14:00-15:00 | an: huber@test.de",
+     "argumente": {"subject": "Statik Halle 3"}},
+    {"id": "dk2", "server": "box", "werkzeug": "calendar_add",
+     "vorschau": "Fokuszeit | Do 13.11.2026 08:00-09:30",
+     "argumente": {"subject": "Fokuszeit"}}])
+_chats_mod.speichere("anna", chat_id, _msgs)
+_page = anna.get(f"/c/{chat_id}").text
+check("calendar drafts show the day and their own buttons",
+      "Statik Halle 3 | Mi 12.11.2026 14:00-15:00" in _page
+      and ("Einladung senden" in _page or "Send invitation" in _page)
+      and ("In den Kalender eintragen" in _page or "Add to calendar" in _page),
+      _page[-1500:])
+
 # --- web pages (web.py) ---
 _FakeChat.text_override = "Antwort <script>alert(1)</script> **fett**"
 r = anna.post(f"{API}/ask", json={"question": "HTML?", "chat_id": chat_id})

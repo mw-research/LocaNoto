@@ -542,13 +542,29 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                 # und das Modell erfaehrt ausdruecklich, dass nichts
                 # verschickt wurde -- sonst schreibt es dem Nutzer, die
                 # Nachricht sei unterwegs.
-                entwuerfe.append({"server": server, "werkzeug": name,
-                                  "argumente": argumente})
-                ergebnis = ("NICHT ausgefuehrt. Der Entwurf liegt dem "
-                            "Nutzer zur Bestaetigung vor; erst sein Klick "
-                            "fuehrt ihn aus. Sage ihm, dass ein Entwurf "
-                            "bereitliegt -- nicht, dass es schon geschehen "
-                            "ist.")
+                #
+                # A server may check the call first (pruefe_entwurf):
+                # an incomplete one goes back to the model to correct,
+                # instead of failing on the person's click.
+                pruefe = getattr(verbindungen[server], "pruefe_entwurf", None)
+                try:
+                    vorschau = pruefe(name, argumente) if pruefe else None
+                except Exception as e:
+                    ergebnis = (f"NICHT als Entwurf angenommen: {e} "
+                                f"Angaben korrigieren oder beim Nutzer "
+                                f"nachfragen.")
+                else:
+                    entwurf = {"server": server, "werkzeug": name,
+                               "argumente": argumente}
+                    if vorschau:
+                        entwurf["vorschau"] = vorschau
+                    entwuerfe.append(entwurf)
+                    ergebnis = ("NICHT ausgefuehrt. Der Entwurf liegt dem "
+                                "Nutzer zur Bestaetigung vor; erst sein Klick "
+                                "fuehrt ihn aus. Sage ihm, dass ein Entwurf "
+                                "bereitliegt -- nicht, dass es schon geschehen "
+                                "ist." + (f" Entwurf: {vorschau}" if vorschau
+                                          else ""))
             else:
                 if mcp.sendet(server, name):
                     argumente = mcp.mit_hinweis(server, argumente)

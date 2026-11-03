@@ -2600,6 +2600,9 @@ if _bestand > 0:
                 with st.expander(
                         tx(f"Entwurf: {_entw['werkzeug']} ({_entw['server']}) — wartet auf dich"),
                         expanded=True):
+                    # Calendar drafts: day of the week and time in one line.
+                    if _entw.get("vorschau"):
+                        st.info(tx(_entw["vorschau"]))
                     for _k, _w in (_entw.get("argumente") or {}).items():
                         st.markdown(f"**{_k}**")
                         st.code(str(_w), language="text")

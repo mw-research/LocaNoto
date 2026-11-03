@@ -84,6 +84,11 @@ TEXTS = {
     "Summary for": "Zusammenfassung für", "Save to workspace":
         "Im Arbeitsbereich ablegen", "Stored.": "Abgelegt.",
     "waits for your confirmation": "wartet auf deine Bestätigung",
+    "Meeting request": "Besprechungsanfrage",
+    "Appointment in your calendar": "Termin in deinem Kalender",
+    "Add to calendar": "In den Kalender eintragen",
+    "Send invitation": "Einladung senden",
+    "Added to the calendar.": "Im Kalender eingetragen.",
     "From the web": "Aus dem Netz", "Take over": "Übernehmen",
     "Delete": "Löschen", "Rename": "Umbenennen",
     "Upload": "Hochladen", "into": "nach", "Project (optional)":
@@ -326,8 +331,9 @@ def draft_action(chat_id: str, draft_id: str, action: str, request: Request,
     page_language(p.name)
     if action == "send":
         headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
-        server = next((d.get("server") for _i, d in mailboxes.drafts(p.name, chat_id)
-                       if d.get("id") == draft_id), None)
+        draft = next((d for _i, d in mailboxes.drafts(p.name, chat_id)
+                      if d.get("id") == draft_id), {})
+        server = draft.get("server")
         try:
             result = mailboxes.send_draft(p.name, chat_id, draft_id, headers)
         except ValueError as e:
@@ -336,6 +342,8 @@ def draft_action(chat_id: str, draft_id: str, action: str, request: Request,
             return HTMLResponse(f'<span class="ok">{t("Stored.")}</span> '
                                 f'<span class="muted">'
                                 f'{jinja2.utils.markupsafe.escape(result)}</span>')
+        if draft.get("werkzeug") == "calendar_add":
+            return HTMLResponse(f'<span class="ok">{t("Added to the calendar.")}</span>')
         return HTMLResponse(f'<span class="ok">{t("Sent.")}</span>')
     mailboxes.discard_draft(p.name, chat_id, draft_id)
     return HTMLResponse(f'<span class="muted">{t("Discarded.")}</span>')

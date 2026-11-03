@@ -129,6 +129,7 @@ details.sources summary { cursor: pointer; color: var(--muted); }
 .source img { max-width: 100%; border: 1px solid var(--border); }
 .draft { border: 1px solid var(--accent); border-radius: var(--radius); padding: .75rem; margin-top: .5rem; }
 .draft .arg pre { white-space: pre-wrap; background: var(--bg); padding: .4rem; border-radius: 6px; }
+.draft .preview { font-weight: 600; margin: .4rem 0; }
 .feedback button { border: 0; background: none; padding: .1rem .3rem; }
 .composer { border-top: 1px solid var(--border); padding: .75rem 1rem; background: var(--surface); }
 .composer-row { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; flex-wrap: wrap; }

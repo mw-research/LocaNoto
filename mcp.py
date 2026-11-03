@@ -531,6 +531,12 @@ def sendet(server, werkzeug):
     """
     a = _angaben(server)
     liste = a.get("sendet")
+    if a.get("transport") == "exchange":
+        # The list was copied into the entry when it was created. Tools
+        # that came later (the calendar) count as sending all the same --
+        # otherwise an older entry would run them without a question.
+        return werkzeug in (set(liste or []) | set(postfach.SENDEWERKZEUGE)
+                            | set(postfach.KALENDERWERKZEUGE))
     if isinstance(liste, list):
         return werkzeug in liste
     n = str(werkzeug or "").lower()
@@ -590,6 +596,11 @@ def braucht_bestaetigung(server, werkzeug, argumente=None):
     """
     if not sendet(server, werkzeug):
         return False
+    # Calendar entries and invitations wait for a person even where the
+    # mailbox may answer on its own (postfach.KALENDERWERKZEUGE).
+    if (_angaben(server).get("transport") == "exchange"
+            and werkzeug in postfach.KALENDERWERKZEUGE):
+        return True
     ja, _grund = darf_automatisch(server, werkzeug, argumente or {})
     return not ja
 

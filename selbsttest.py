@@ -3365,10 +3365,29 @@ class _EwsDt(datetime.datetime):
     pass
 
 
+class _EwsDate(datetime.date):
+    pass
+
+
+_angelegt = []
+
+
+class _Kalendereintrag:
+    def __init__(self, **felder):
+        self.felder = felder
+
+    def save(self, send_meeting_invitations=None):
+        _angelegt.append((self.felder, send_meeting_invitations))
+
+
 _echtes_ews = sys.modules.get("exchangelib")
+_echtes_ews_items = sys.modules.get("exchangelib.items")
 sys.modules["exchangelib"] = _tyc.SimpleNamespace(
-    EWSDateTime=_EwsDt, UTC=datetime.timezone.utc,
+    EWSDateTime=_EwsDt, EWSDate=_EwsDate, UTC=datetime.timezone.utc,
+    CalendarItem=_Kalendereintrag,
     EWSTimeZone=_tyc.SimpleNamespace(localzone=lambda: _tz_c))
+sys.modules["exchangelib.items"] = _tyc.SimpleNamespace(
+    SEND_TO_ALL_AND_SAVE_COPY="SendToAllAndSaveCopy", SEND_TO_NONE="SendToNone")
 
 
 def _ns(**k):
@@ -3495,10 +3514,135 @@ pruef("Betreff ohne Re/AW/WG",
       _pfc._grundbetreff("AW: WG: RE[2]: Angebot Meier") == "Angebot Meier")
 pruef("Zitat nach 'Am ... schrieb ...:' faellt weg",
       _pfc._ohne_zitat("Danke!\nAm 3.11. schrieb Meier:\nalt") == "Danke!")
+# --- creating entries and invitations ---
+_tag_c = (_heute_c + datetime.timedelta(days=8))
+_tag_s = f"{_tag_c:%Y-%m-%d}"
+_vs = _pfk.pruefe_entwurf("meeting_request", {
+    "subject": "Statik Halle 3", "start": f"{_tag_s} 14:00", "end": "15:30",
+    "location": "Raum 2.14", "attendees": "huber@test.de, meier@test.de"})
+pruef("eine Besprechungsanfrage zeigt Wochentag, Zeit, Ort und Teilnehmer",
+      f"{_pfc._WOCHENTAGE[_tag_c.weekday()]} {_tag_c:%d.%m.%Y} 14:00-15:30" in _vs
+      and "Raum 2.14" in _vs and "huber@test.de, meier@test.de" in _vs, _vs)
+for _arg_f, _grund_f in (
+        ({"subject": "x", "start": "naechsten Dienstag 14 Uhr",
+          "attendees": "a@test.de"}, "ein Datum in Worten"),
+        ({"subject": "x", "start": f"{_tag_s} 14:00", "end": "13:00",
+          "attendees": "a@test.de"}, "ein Ende vor dem Beginn"),
+        ({"subject": "x", "start": f"{_tag_s} 14:00",
+          "attendees": "Herr Huber"}, "ein Name statt einer Adresse"),
+        ({"subject": "x", "start": f"{_tag_s} 14:00"}, "eine Anfrage ohne Teilnehmer"),
+        ({"subject": "x", "start": "2041-01-01 10:00",
+          "attendees": "a@test.de"}, "ein Datum in fernster Zukunft")):
+    try:
+        _pfk.pruefe_entwurf("meeting_request", _arg_f)
+        pruef(f"abgewiesen: {_grund_f}", False)
+    except _pfc.Fehler:
+        pruef(f"abgewiesen: {_grund_f}", True)
+try:
+    _pfk.pruefe_entwurf("calendar_add", {"subject": "x", "start": f"{_tag_s} 9:00",
+                                         "attendees": "a@test.de"})
+    pruef("ein eigener Termin laedt niemanden ein", False)
+except _pfc.Fehler as _e:
+    pruef("ein eigener Termin laedt niemanden ein", "meeting_request" in str(_e))
+pruef("Lesewerkzeuge brauchen keine Vorpruefung",
+      _pfk.pruefe_entwurf("mails_lesen", {}) is None)
+
+_erg_k = _pfk.rufe("calendar_add", {"subject": "Fokuszeit", "start": f"{_tag_s} 08:00",
+                                    "duration": 90})
+_f_k, _send_k = _angelegt[-1]
+pruef("ein eigener Termin wird eingetragen, ohne Einladung",
+      _send_k == "SendToNone" and not _f_k["required_attendees"]
+      and _f_k["start"].tzinfo is _tz_c
+      and (_f_k["end"] - _f_k["start"]) == datetime.timedelta(minutes=90)
+      and "eingetragen" in _erg_k, (_f_k, _send_k))
+_pfk.rufe("meeting_request", {"subject": "Statik", "start": f"{_tag_s} 14:00",
+                              "end": "15:00", "attendees": "huber@test.de",
+                              "optional_attendees": "meier@test.de",
+                              "body": "Tagesordnung"})
+_f_m, _send_m = _angelegt[-1]
+pruef("eine Besprechungsanfrage verschickt Einladungen an alle",
+      _send_m == "SendToAllAndSaveCopy"
+      and _f_m["required_attendees"] == ["huber@test.de"]
+      and _f_m["optional_attendees"] == ["meier@test.de"]
+      and _f_m["body"] == "Tagesordnung", (_f_m, _send_m))
+_pfk.rufe("calendar_add", {"subject": "Messe", "start": _tag_s,
+                           "end": f"{_tag_c + datetime.timedelta(days=2):%Y-%m-%d}"})
+_f_g, _ = _angelegt[-1]
+pruef("ganztaegig ueber drei Tage: Ende ist der Tag danach",
+      _f_g["is_all_day"] and isinstance(_f_g["start"], _EwsDate)
+      and (_f_g["end"] - _f_g["start"]).days == 3, _f_g)
+
 if _echtes_ews is None:
     del sys.modules["exchangelib"]
 else:
     sys.modules["exchangelib"] = _echtes_ews
+if _echtes_ews_items is None:
+    del sys.modules["exchangelib.items"]
+else:
+    sys.modules["exchangelib.items"] = _echtes_ews_items
+
+# --- calendar entries always wait for a person ---
+_konfig_alt = _mcp_w.KONFIG
+_mcp_w.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_kalender.json")
+# An entry as created before the calendar existed: its own list of
+# sending tools does not know the calendar, and it may answer on its own.
+io.open(_mcp_w.KONFIG, "w", encoding="utf-8").write(json.dumps({
+    "info": {"transport": "exchange", "anmeldung": "basic",
+             "postfach": "info@test.de", "persoenlich": False,
+             "automatisch": True, "hinweis_anhaengen": False,
+             "textfeld": "body", "sendet": ["mail_senden", "antwort_senden"]}}))
+pruef("Kalendereintraege gelten auch in alten Eintraegen als sendend",
+      _mcp_w.sendet("info", "meeting_request") and _mcp_w.sendet("info", "calendar_add"))
+pruef("und warten auch im automatischen Postfach auf einen Menschen",
+      _mcp_w.braucht_bestaetigung("info", "meeting_request", {})
+      and _mcp_w.braucht_bestaetigung("info", "calendar_add", {}))
+pruef("Lesen im Kalender bleibt ohne Rueckfrage",
+      not _mcp_w.braucht_bestaetigung("info", "calendar_events", {}))
+os.remove(_mcp_w.KONFIG)
+_mcp_w.KONFIG = _konfig_alt
+
+
+class _PruefServer:
+    name = "box"
+    confirm = ("meeting_request",)
+
+    def werkzeuge(self):
+        return [{"server": "box", "name": "meeting_request", "beschreibung": "",
+                 "schema": {"type": "object"}}]
+
+    def pruefe_entwurf(self, name, argumente):
+        if not argumente.get("attendees"):
+            raise ValueError("Teilnehmer fehlen.")
+        return "Statik | Mi 12.11.2026 14:00-15:00"
+
+    def rufe(self, name, argumente=None):
+        raise AssertionError("must not run")
+
+
+class _ZweiRunden:
+    def __init__(self):
+        self.runde = 0
+        self.chat = _tyc.SimpleNamespace(completions=_tyc.SimpleNamespace(
+            create=self.create))
+
+    def create(self, **kw):
+        self.runde += 1
+        argumente = ('{"subject": "Statik"}' if self.runde == 1
+                     else '{"subject": "Statik", "attendees": "a@test.de"}')
+        rufe = None
+        if self.runde <= 2:
+            rufe = [_ns(id=f"c{self.runde}", function=_ns(
+                name="box__meeting_request", arguments=argumente))]
+        return _ns(choices=[_ns(message=_ns(content="", tool_calls=rufe))])
+
+
+_zz, _ze = pipeline.werkzeuglauf(_ZweiRunden(), "m", "system",
+                                 [{"role": "user", "content": "lade ein"}],
+                                 {"box": _PruefServer()})
+_antw_z = [m["content"] for m in _zz if m.get("role") == "tool"]
+pruef("ein unvollstaendiger Entwurf geht zum Korrigieren ans Modell zurueck",
+      "Teilnehmer fehlen" in _antw_z[0] and len(_ze) == 1
+      and _ze[0]["vorschau"].startswith("Statik | Mi"), (_antw_z, _ze))
 
 # --- SUMMARIES INTO A WORKSPACE (workspace_notes.py) ---
 import workspace_notes as _wsn
@@ -3588,8 +3732,9 @@ pruef("beide Bauarten haben dieselben drei Methoden",
 # und eine verschickte Nachricht kommt nicht zurueck.
 _erkannt = {_w["name"] for _w in _pf0.WERKZEUGE
             if _mcp0.sendet("markus", _w["name"])}
-pruef("genau die Sendewerkzeuge gelten als sendend",
-      _erkannt == set(_pf0.SENDEWERKZEUGE), sorted(_erkannt))
+pruef("genau die Sende- und Kalenderwerkzeuge gelten als sendend",
+      _erkannt == set(_pf0.SENDEWERKZEUGE) | set(_pf0.KALENDERWERKZEUGE),
+      sorted(_erkannt))
 
 _namen = {_w["name"] for _w in _pf0.WERKZEUGE}
 pruef("die Vorlage nennt nur Werkzeuge, die es wirklich gibt",
