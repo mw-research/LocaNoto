@@ -151,6 +151,21 @@ check("proxy only for the way out, internal names excluded",
       and "modelle.intern" in svc["server"]["environment"]["NO_PROXY"])
 check("a $ in a secret is escaped for compose",
       svc["litellm"]["environment"]["MODEL_API_KEY"] == "sk-with-$$dollar")
+_gw = {"target": "docker", "dir": os.path.join(TMP, "install-gw"), "host": "10.0.0.9",
+       "tls": "internal", "model_url": "http://modelle:8000/v1", "chat_model": "c",
+       "embedding_model": "e", "vision_model": "", "dimensions": 64,
+       "features": {"websearch": False, "opencloud": False, "gateway": True,
+                    "oidc": False, "pages": False},
+       "env": {"RERANKER_BASE_URL": "http://modelle:8000", "EMBEDDING_NEXT_MODEL": "e2"}}
+_rg = run_setup(_gw, os.path.join(TMP, "state-gw"), {"LOCANOTO_MODEL_API_KEY": "sk-model"})
+_cg = yaml.safe_load(open(os.path.join(TMP, "install-gw", "compose.yaml"), encoding="utf-8"))
+_eg = _cg["services"]["server"]["environment"]
+_eg = _eg if isinstance(_eg, dict) else dict(x.split("=", 1) for x in _eg)
+_lg = open(os.path.join(TMP, "install-gw", "litellm", "config.yaml"), encoding="utf-8").read() \
+    if os.path.exists(os.path.join(TMP, "install-gw", "litellm", "config.yaml")) else ""
+check("behind the gateway a reranker on the model server gets the model server's key",
+      _rg.returncode == 0 and _eg.get("RERANKER_API_KEY") == "sk-model", _rg.stderr[-300:])
+check("and the gateway also serves the next embedding model", "e2" in _lg, _lg[:300])
 check("server goes through the gateway",
       svc["server"]["environment"]["OPENAI_BASE_URL"] == "http://litellm:4000/v1")
 check("services talk plain HTTP inside",

@@ -492,6 +492,14 @@ def app_env(a, sec, database_url, opencloud_url):
                     "OIDC_ADMIN_GROUPS": a.get("oidc_admin_groups", "")})
     for k, v in (a.get("env") or {}).items():
         env.setdefault(k, str(v))
+    # Behind the gateway OPENAI_API_KEY is the gateway's own key. A reranker
+    # or a next embedding model on the model server itself gets the model
+    # server's key instead -- otherwise it would be sent the gateway's.
+    if gateway:
+        for url, key in (("RERANKER_BASE_URL", "RERANKER_API_KEY"),
+                         ("EMBEDDING_NEXT_BASE_URL", "EMBEDDING_NEXT_API_KEY")):
+            if env.get(url):
+                env[key] = sec.get("MODEL_API_KEY") or "none"
     return env
 
 
@@ -560,7 +568,12 @@ server:
 
 def litellm_config(a):
     models = []
-    for name in {a["chat_model"], a["embedding_model"], a.get("vision_model") or ""} - {""}:
+    extra = a.get("env") or {}
+    # A next embedding model (reembed.py) on the same model server goes
+    # through the gateway like the others.
+    upcoming = "" if extra.get("EMBEDDING_NEXT_BASE_URL") else extra.get("EMBEDDING_NEXT_MODEL", "")
+    for name in sorted({a["chat_model"], a["embedding_model"], a.get("vision_model") or "",
+                        upcoming} - {""}):
         models.append({"model_name": name, "litellm_params": {
             "model": f"openai/{name}", "api_base": a["model_url"],
             "api_key": "os.environ/MODEL_API_KEY"}})
@@ -965,7 +978,8 @@ def k8s_objects(a, sec, cert_manager):
     env = app_env(a, sec, db_url, "http://opencloud:9200")
     secret_keys = [k for k in env if k in (
         "DATABASE_URL", "LOCANOTO_SCHLUESSEL", "OPENAI_API_KEY", "METRICS_TOKEN",
-        "OWNCLOUD_PASSWORT", "OWNCLOUD_ADMIN_PASSWORT", "OIDC_CLIENT_SECRET")]
+        "OWNCLOUD_PASSWORT", "OWNCLOUD_ADMIN_PASSWORT", "OIDC_CLIENT_SECRET",
+        "RERANKER_API_KEY", "EMBEDDING_NEXT_API_KEY")]
     plain = {k: v for k, v in env.items() if k not in secret_keys}
     objs = [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": ns}},
             {"apiVersion": "v1", "kind": "Secret", "metadata": meta("locanoto", a, "config"),
