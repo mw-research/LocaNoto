@@ -224,6 +224,24 @@ jobs:
           docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
           tail -1 /tmp/api.log | grep -q "all passed"
 
+      # Changing the embedding model against a real pgvector: vectors of a
+      # second model from the stored text, switch, refusal of a model
+      # without vectors (test_reembed.py).
+      - name: Modellwechsel auf Postgres pruefen
+        if: env.AKTIV == 'true' && github.ref_name == 'enterprise' && matrix.arch == 'amd64'
+        run: |
+          docker network create reembed
+          docker run -d --name pg --network reembed -e POSTGRES_PASSWORD=pw pgvector/pgvector:pg16
+          for i in $(seq 1 30); do
+            docker exec pg psql -U postgres -c "select 1" >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker run --rm --network reembed -e PYTHONIOENCODING=utf-8 \
+            -e SELFTEST_DATABASE=postgresql://postgres:pw@pg:5432/postgres \
+            "$ABBILD" python test_reembed.py 2>&1 | tee /tmp/reembed.log
+          tail -1 /tmp/reembed.log | grep -q "all passed"
+          docker rm -f pg
+
   # Abgelegt sind bis hier NUR die Kennzeichner je Architektur. Der
   # gemeinsame und der wandernde, den der Cluster zieht, entstehen erst,
   # wenn jedes gebaute Abbild seine Probe bestanden hat -- sonst zoege ein

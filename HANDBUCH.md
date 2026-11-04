@@ -718,6 +718,33 @@ Papierkorb). Benutzer löschen und Passwörter ändern wirkt dort nur bei
 verwalteten Konten. Fehlt ein Konto, entsteht es beim nächsten
 Passwortsetzen. Einrichtung: `README.md`, „Dokumente aus ownCloud".
 
+### Wie wechsle ich als Admin das Embedding-Modell in LocaNoto?
+
+Nur mit Postgres (`DATABASE_URL`). Die Dokumente werden dafür nicht neu
+eingelesen: LocaNoto berechnet die Vektoren aus dem gespeicherten Text neu.
+
+1. In der `.env` `EMBEDDING_NEXT_MODEL` auf das neue Modell setzen, dazu
+   `EMBEDDING_NEXT_BASE_URL` und `EMBEDDING_NEXT_API_KEY`, falls es auf
+   einem anderen Server läuft. Optional `REEMBED_HOURS=20-6` → arbeitet
+   nur nachts. Worker neu starten.
+2. **Admin** → **Hintergrundläufe** → **Vektoren neu berechnen** → **Starten**.
+   Die Suche läuft währenddessen mit dem alten Modell weiter. Abbrechen
+   und später neu starten ist jederzeit möglich, er macht dort weiter.
+3. Meldet der Auftrag „Every passage has a vector of …": `EMBEDDING_MODEL`
+   auf das neue Modell setzen, `EMBEDDING_NEXT_*` entfernen, ausrollen,
+   **Vektoren neu berechnen** noch einmal starten (holt nach, was während
+   des Ausrollens hochgeladen wurde).
+
+Die alten Vektoren bleiben, bis ein späterer Wechsel den Platz braucht.
+Bis dahin heißt Zurückwechseln nur `EMBEDDING_MODEL` zurückstellen.
+`python reembed.py --status` zeigt den Stand, `--drop-unused` entfernt
+die alten Vektoren sofort.
+
+`EMBEDDING_MODEL` ohne diesen Weg zu ändern, lehnt LocaNoto ab (Suche
+meldet einen Fehler, `doctor.py` sagt warum) – die gespeicherten Vektoren
+passen nur zum alten Modell. Ändert sich bloß der Name desselben Modells
+(z. B. ein neuer Tag auf dem Modellserver): `python reembed.py --adopt`.
+
 ### Wie sichere ich LocaNoto als Admin?
 
 Drei Dinge gehören in die Sicherung:

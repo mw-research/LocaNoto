@@ -13,10 +13,15 @@ everywhere.
 
 Filters (where=) support what LocaNoto uses: equality, $in, $or, $and.
 Anything else raises ValueError instead of silently matching too much.
+
+Vectors are read and written in the column of this process's embedding
+model (vector_columns.py); a new vector for a passage empties the other
+column, so the vector of another model is computed again for the new text.
 """
 import json
 
 import database
+import vector_columns
 
 _INCLUDE_DEFAULT = ("documents", "metadatas")
 
@@ -41,6 +46,11 @@ class PgCollection:
         if not ids:
             return
         con = database.connect()
+        col, _vtype, dims = vector_columns.active()
+        # A new vector means a new text: the other model's vector is stale.
+        stale = "".join(
+            f", {o} = CASE WHEN EXCLUDED.{col} IS NULL THEN passage.{o} END"
+            for o in vector_columns.others(col))
         rows = []
         for i, pid in enumerate(ids):
             doc = documents[i] if documents is not None else None
@@ -50,7 +60,7 @@ class PgCollection:
         with con.transaction():
             with con.cursor() as cur:
                 for pid, doc, meta, emb in rows:
-                    vec = (database.as_literal(database.shorten(emb))
+                    vec = (database.as_literal(database.shorten(emb, dims))
                            if emb is not None else None)
                     meta_json = json.dumps(meta or {}) if meta is not None else None
                     if not replace:
@@ -58,7 +68,7 @@ class PgCollection:
                         # warning); so does this.
                         cur.execute(
                             "INSERT INTO passage (collection, id, document, "
-                            "metadata, embedding) VALUES (%s, %s, %s, "
+                            f"metadata, {col}) VALUES (%s, %s, %s, "
                             "COALESCE(%s::jsonb, '{}'::jsonb), %s) "
                             "ON CONFLICT (collection, id) DO NOTHING",
                             (self.name, pid, doc, meta_json, vec))
@@ -66,13 +76,13 @@ class PgCollection:
                     # upsert: what is not given stays as it was, like Chroma
                     cur.execute(
                         "INSERT INTO passage (collection, id, document, "
-                        "metadata, embedding) VALUES (%s, %s, %s, "
+                        f"metadata, {col}) VALUES (%s, %s, %s, "
                         "COALESCE(%s::jsonb, '{}'::jsonb), %s) "
                         "ON CONFLICT (collection, id) DO UPDATE SET "
                         "document = COALESCE(EXCLUDED.document, passage.document), "
                         "metadata = CASE WHEN %s::jsonb IS NULL "
                         "THEN passage.metadata ELSE EXCLUDED.metadata END, "
-                        "embedding = COALESCE(EXCLUDED.embedding, passage.embedding)",
+                        f"{col} = COALESCE(EXCLUDED.{col}, passage.{col})" + stale,
                         (self.name, pid, doc, meta_json, vec, meta_json))
 
     # --- reading ---
@@ -87,7 +97,8 @@ class PgCollection:
         if where_document:
             raise ValueError("where_document is not supported")
         cond, args = self._conditions(ids, where)
-        sql = (f"SELECT id, document, metadata, embedding FROM passage "
+        col = vector_columns.active()[0] if "embeddings" in (include or ()) else "NULL"
+        sql = (f"SELECT id, document, metadata, {col} FROM passage "
                f"WHERE {cond} ORDER BY id")
         if limit is not None:
             sql += " LIMIT %s"
@@ -104,15 +115,15 @@ class PgCollection:
         if where_document:
             raise ValueError("where_document is not supported")
         con = database.connect()
-        vtype = database.vector_settings()["type"]
+        col, vtype, dims = vector_columns.active()
         results = []
         for q in query_embeddings:
             cond, args = self._conditions(None, where)
-            vec = database.as_literal(database.shorten(q))
-            sql = (f"SELECT id, document, metadata, embedding, "
-                   f"(embedding <-> %s::{vtype}) ^ 2 AS distance "
-                   f"FROM passage WHERE {cond} AND embedding IS NOT NULL "
-                   f"ORDER BY embedding <-> %s::{vtype}, id LIMIT %s")
+            vec = database.as_literal(database.shorten(q, dims))
+            sql = (f"SELECT id, document, metadata, {col}, "
+                   f"({col} <-> %s::{vtype}) ^ 2 AS distance "
+                   f"FROM passage WHERE {cond} AND {col} IS NOT NULL "
+                   f"ORDER BY {col} <-> %s::{vtype}, id LIMIT %s")
             rows = con.execute(sql, [vec] + args + [vec, int(n_results)]).fetchall()
             results.append(rows)
         return _result(results, include, nested=True)

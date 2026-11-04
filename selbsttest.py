@@ -3689,6 +3689,25 @@ finally:
     for _t in _wr.tasks("markus"):
         _wr.remove("markus", _t["id"])
 
+# --- A NEW EMBEDDING MODEL (vector_columns.py, reembed.py) ---
+import reembed as _reembed
+import datetime as _dt_re
+_at = lambda h: _dt_re.datetime(2026, 11, 4, h, 30)
+pruef("the re-embedding job works in a window over midnight, and only there",
+      _reembed.window("20-6", _at(23)) and _reembed.window("20-6", _at(3))
+      and not _reembed.window("20-6", _at(12)) and _reembed.window("", _at(12))
+      and _reembed.window("9-17", _at(10)) and not _reembed.window("9-17", _at(18)))
+pruef("without Postgres it says that a new model means reading again",
+      _reembed.main([]) == 1)
+import hintergrund as _hg_re
+pruef("it is a job the admin page can start",
+      _hg_re.LAEUFE.get("vektoren", ("",))[0] == "reembed.py")
+_pgc_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pg_collection.py"),
+                encoding="utf-8").read()
+pruef("the Postgres collection never names a vector column itself",
+      "embedding <->" not in _pgc_src and "metadata, embedding)" not in _pgc_src
+      and _pgc_src.count("vector_columns.active()") == 3)
+
 # --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
 import postfach as _pfa
 for _ein, _aus in (

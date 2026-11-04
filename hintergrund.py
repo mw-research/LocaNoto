@@ -37,6 +37,10 @@ LAEUFE = {
     # ein Neuladen der Oberflaeche ihn nicht abschneidet.
     "sicherung": ("sicherung.py", "sicherung.log",
                   "Vektordatenbank sichern"),
+    # Vectors of a new embedding model from the stored text (Postgres only;
+    # vector_columns.py says how the switch works).
+    "vektoren": ("reembed.py", "reembed.log",
+                 "Vektoren neu berechnen"),
 }
 
 

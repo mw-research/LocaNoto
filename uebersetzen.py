@@ -303,7 +303,7 @@ def _module():
 # (see verschiebe_dokument in app.py), not through this table.
 ENGLISCH_ZUERST = {"doc_actions", "answering", "web_sources", "mailboxes",
                    "workspace_notes", "attachments", "created_files",
-                   "web_research",
+                   "web_research", "vector_columns", "reembed",
                    "accounts", "sessions", "jobs", "oidc", "metrics",
                    "statefiles", "database", "pg_collection", "pg_keywords"}
 

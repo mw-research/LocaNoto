@@ -693,6 +693,33 @@ trash). Deleting users and changing passwords only affect managed accounts
 there. A missing account is created the next time a password is set.
 Setup: `README.md`, "Dokumente aus ownCloud".
 
+### How do I change the embedding model in LocaNoto as an admin?
+
+Only with Postgres (`DATABASE_URL`). The documents are not read again:
+LocaNoto computes the vectors anew from the stored text.
+
+1. In `.env`, set `EMBEDDING_NEXT_MODEL` to the new model, plus
+   `EMBEDDING_NEXT_BASE_URL` and `EMBEDDING_NEXT_API_KEY` if it runs on
+   another server. Optionally `REEMBED_HOURS=20-6` → works only at night.
+   Restart the worker.
+2. **Admin** → **Jobs** → **Vektoren neu berechnen** → **Start**. Search
+   keeps using the old model meanwhile. Cancelling and starting again
+   later is fine; it continues where it stopped.
+3. When the job reports "Every passage has a vector of …": set
+   `EMBEDDING_MODEL` to the new model, remove `EMBEDDING_NEXT_*`, roll
+   out, and start **Vektoren neu berechnen** once more (it catches up on
+   what was uploaded during the rollout).
+
+The old vectors stay until a later change needs their place. Until then,
+going back is only setting `EMBEDDING_MODEL` back. `python reembed.py
+--status` shows the progress, `--drop-unused` removes the old vectors at
+once.
+
+Changing `EMBEDDING_MODEL` without these steps is refused (search reports
+an error, `doctor.py` says why) – the stored vectors fit only the old
+model. If only the name of the same model changed (e.g. a new tag on the
+model server): `python reembed.py --adopt`.
+
 ### How do I back up LocaNoto as an admin?
 
 Three things belong in the backup:

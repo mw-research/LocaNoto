@@ -98,6 +98,24 @@ def run():
                   "Check address or name of the embedding model "
                   "(EMBEDDING_BASE_URL, EMBEDDING_MODEL)."))
 
+    if database.active():
+        import vector_columns
+        try:
+            rows = vector_columns.progress()
+            mine = [r for r in rows if r["role"] == "active"]
+            check(say("Vektoren", "vectors"), bool(mine),
+                  "; ".join(f"{r['model']} {r['filled']}/{r['total']}"
+                            + (f" ({r['role']})" if r["role"] != "active" else "")
+                            for r in rows),
+                  say("EMBEDDING_MODEL passt zu keinen gespeicherten Vektoren. "
+                      "Zurückstellen oder erst EMBEDDING_NEXT_MODEL setzen und "
+                      "den Auftrag „Vektoren neu berechnen“ laufen lassen.",
+                      "EMBEDDING_MODEL matches no stored vectors. Set it back, "
+                      "or set EMBEDDING_NEXT_MODEL and run the job "
+                      "'Vektoren neu berechnen' first."))
+        except Exception as ex:
+            check(say("Vektoren", "vectors"), False, type(ex).__name__)
+
     import mcp
     servers = mcp.websuche_server()
     if servers:

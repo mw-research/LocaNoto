@@ -35,6 +35,7 @@ SCHICHT = {
         "test_migration", "server", "routes_account", "routes_chat",
         "routes_documents", "routes_admin", "worker", "test_api", "web",
         "test_multipod", "web_admin", "doctor", "make_ca", "trustbundle",
+        "reembed", "test_reembed",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
@@ -49,7 +50,7 @@ SCHICHT = {
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",
-        "budget", "pg_collection", "pg_keywords",
+        "budget", "pg_collection", "pg_keywords", "vector_columns",
     ),
     "Grundlage": ("paths", "geheim", "llm", "embedding",
                   "dateisperre", "sprache", "database", "statefiles"),
