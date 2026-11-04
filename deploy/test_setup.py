@@ -228,6 +228,12 @@ check("the list share is mounted read-only in server and worker, and allowed as 
           in s["volumes"] and {"name": "lists", "mountPath": "/mnt/listen", "readOnly": True}
           in s["containers"][0]["volumeMounts"] for s in (_srv_spec, _wrk_spec))
       and cm.get("LISTEN_WURZELN") == "/mnt/listen", cm.get("LISTEN_WURZELN"))
+_min = {"target": "kubernetes", "host": "locanoto.example.test", "tls": "internal",
+        "model_url": "http://modelle:8000/v1", "chat_model": "c", "embedding_model": "e",
+        "features": {"websearch": True}}
+_rm = run_setup(_min, os.path.join(TMP, "state-k8s-min"), {})
+check("the short answers file of the README is enough for Kubernetes",
+      _rm.returncode == 0, _rm.stderr[-500:])
 check("further settings from the answers file reach the ConfigMap",
       cm.get("RERANKER_BASE_URL") == "http://modelle:8000" and cm.get("REEMBED_HOURS") == "20-6")
 for _bad_env, _why in (({"RERANKER_API_KEY": "x"}, "a key"),

@@ -18,13 +18,42 @@ in your own network; the documents do not leave it.
 
 ## Installation
 
+Requirements: Python 3.8 or newer, Docker or `kubectl`, an OpenAI-compatible
+model server. The installer creates keys and certificates, starts every
+service, creates the first admin account and checks every part at the end.
+
+**Docker (one machine)** – answer the questions, Enter takes the suggestion:
+
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/main/deploy/locanoto-setup.py
 python3 locanoto-setup.py --en
 ```
 
-Requirements: Python 3.8 or newer, Docker or `kubectl`, an OpenAI-compatible
-model server. Details: [deploy/README.md](deploy/README.md).
+**Kubernetes (no questions)**:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/main/deploy/locanoto-setup.py
+cat > answers.json <<'EOF'
+{"target": "kubernetes", "host": "locanoto.example.com",
+ "tls": "letsencrypt", "acme_email": "it@example.com",
+ "model_url": "https://models.example.com/v1",
+ "chat_model": "qwen3.8:27b", "embedding_model": "qwen3-embedding:8b",
+ "features": {"websearch": true, "opencloud": false}}
+EOF
+export LOCANOTO_ADMIN_PASSWORD='...' LOCANOTO_MODEL_API_KEY='...'
+python3 locanoto-setup.py --answers answers.json --yes --en
+```
+
+Then open `https://<host>`.
+
+```bash
+python3 locanoto-setup.py --check      # everything fine?
+python3 locanoto-setup.py --upgrade    # new version, same answers
+```
+
+`~/.locanoto/secrets.json` holds the installation key – keep an offline
+copy. Further answers (own certificate, OpenCloud, network drive for lists,
+reranker, …): [deploy/README.md](deploy/README.md).
 
 ## Documentation
 

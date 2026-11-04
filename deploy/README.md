@@ -87,6 +87,24 @@ Ein Beispiel für `antworten.json` steht in `.github/workflows/installation.yml`
 – dort wird bei jedem Stand auf Docker und Kubernetes genau so installiert
 und von außen geprüft.
 
+| Schlüssel | Bedeutung |
+|---|---|
+| `target` | `docker` oder `kubernetes` |
+| `dir` | nur Docker: Ordner der Installation |
+| `namespace`, `ingress_class`, `storage_class`, `replicas` | nur Kubernetes; Vorgaben `locanoto`, erkannte Klasse, Standard, `1` |
+| `host` | Adresse von LocaNoto |
+| `tls` | `letsencrypt` (+ `acme_email`), `internal`, `own` (+ `own_cert`, `own_key`), `none` |
+| `install_cert_manager` | `false`: cert-manager nicht selbst installieren |
+| `company_ca`, `proxy`, `no_proxy` | Firmen-CA (Liste von Pfaden), Proxy für den Weg nach außen |
+| `model_url`, `chat_model`, `embedding_model`, `vision_model` | Modellserver (`/v1`) und Modelle |
+| `dimensions` | Vektorlänge in der Datenbank, Vorgabe `2048` |
+| `features` | `websearch`, `opencloud`, `gateway`, `oidc`, `pages` (je `true`/`false`) |
+| `cloud_host`, `cloud_internal_ip` | Adresse der Dateiablage; IP, unter der Pods den Ingress erreichen |
+| `oidc_issuer`, `oidc_client_id`, `oidc_admin_groups` | Anmeldung über das Firmenverzeichnis |
+| `lists_pvc`, `lists_dir` | Netzlaufwerk für Listen (siehe unten) |
+| `admin_name` | erstes Admin-Konto, Vorgabe `admin` |
+| `env` | weitere Einstellungen aus `.env.example` (siehe unten) |
+
 Listen (Excel, CSV) von einem Netzlaufwerk: `"lists_pvc"` nennt einen
 PersistentVolumeClaim im Namensraum (NFS, SMB über dessen CSI-Treiber, …),
 `"lists_dir"` einen Ordner auf dem Docker-Rechner. Er wird nur lesend unter

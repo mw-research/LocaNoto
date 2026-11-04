@@ -1372,6 +1372,12 @@ def main():
             a["features"].setdefault(k, d)
         a.setdefault("dimensions", 2048)
         a.setdefault("company_ca", [])
+        a.setdefault("vision_model", "")
+        a.setdefault("proxy", "")
+        a.setdefault("replicas", 1)
+        if a.get("target") == "kubernetes":
+            a.setdefault("namespace", "locanoto")
+            a.setdefault("ingress_class", _guess_ingress_class() or "nginx")
         if "env" not in a and old.get("env"):
             a["env"] = old["env"]
     elif args.upgrade and old:
