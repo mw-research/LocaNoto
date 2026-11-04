@@ -17,7 +17,7 @@ names, sizes and hosts are placeholders.
 ## Image
 
 Built by GitHub Actions (`.github/workflows/abbild.yml`) on every push to
-the `enterprise` branch, as `ghcr.io/mw-research/locanoto:enterprise-schlank`
+branch `main`, as `ghcr.io/mw-research/locanoto:enterprise-schlank`
 (CPU, no reranker model in the image) and, started by hand,
 `enterprise-voll`, each for **linux/amd64 and linux/arm64** (Apple
 Silicon Macs, NVIDIA DGX Spark); a machine pulls its own architecture.

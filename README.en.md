@@ -10,6 +10,9 @@ writes the answer from what was found and cites the source passage.
 At runtime the application talks only to the model servers you configure.
 **Your documents never leave your network.**
 
+The former edition (images `schlank` and `voll`) is on branch
+[`legacy`](https://github.com/mw-research/LocaNoto/tree/legacy) and is no longer developed.
+
 *Deutsch: [README.md](README.md) is the complete reference. The user
 interface is available in English and German; the handbook in
 [English](HANDBUCH.en.md) and [German](HANDBUCH.md).*

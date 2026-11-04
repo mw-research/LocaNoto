@@ -20,6 +20,9 @@ Zur Laufzeit spricht die Anwendung nur mit den Modellservern, die in der
 | **Anbindung** | OpenCloud (oder oCIS, ownCloud, Nextcloud) für Dokumente und Gruppen, HTTP-Schnittstelle mit Token |
 | **Betrieb** | Docker Compose oder Kubernetes; der Container hält keinen Zustand |
 
+Die frühere Ausgabe (Abbilder `schlank` und `voll`) liegt im Branch
+[`legacy`](https://github.com/mw-research/LocaNoto/tree/legacy) und wird nicht weiterentwickelt.
+
 **Bedienen:** [HANDBUCH.md](HANDBUCH.md) — für Nutzer und Verwalter; in LocaNoto eingelesen, beantwortet die Anwendung damit Fragen zu ihrer eigenen Bedienung
 **Einrichten:** [mit Docker](#-einrichten-mit-docker) ·
 [auf Kubernetes](#-einrichten-auf-kubernetes)

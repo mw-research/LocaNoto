@@ -21,7 +21,7 @@ Ollama mit `/v1`), und eine Adresse, unter der LocaNoto erreichbar sein soll
 ## In drei Schritten
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/enterprise/deploy/locanoto-setup.py
+curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/main/deploy/locanoto-setup.py
 python3 locanoto-setup.py
 ```
 
@@ -101,7 +101,7 @@ with access to a cluster that has an ingress controller; the address of an
 OpenAI-compatible model server; the address LocaNoto should answer at.
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/enterprise/deploy/locanoto-setup.py
+curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/main/deploy/locanoto-setup.py
 python3 locanoto-setup.py --en
 ```
 

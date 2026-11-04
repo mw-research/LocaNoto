@@ -24,8 +24,8 @@
 # linux/arm64 (Apple Silicon Macs, NVIDIA DGX Spark / Grace, Ampere
 # servers), each on a native runner of its own architecture -- emulating
 # arm64 would make installing torch and friends take hours. Each image is
-# tested on its own runner (text recognition, and for the enterprise
-# branch the server start); only then are the two joined under one name,
+# tested on its own runner (text recognition, and on main the server
+# start); only then are the two joined under one name,
 # and a machine pulls the image of its own architecture by itself.
 #
 #   <name>-<commit>-amd64 / -arm64   one architecture, fixed
@@ -37,14 +37,15 @@
 # wheel, so it runs on a DGX Spark with its GPU. The input arm64_voll
 # switches arm64 off for "voll" if a build should fail there.
 #
-# The enterprise branch builds under its own names (enterprise-schlank,
-# enterprise-voll): installations that pull "schlank" must never get the
-# enterprise image by accident.
+# main builds under the names enterprise-schlank and enterprise-voll --
+# the names installations pull. The former edition (branch legacy) builds
+# "schlank" and "voll"; an installation of it must never get this image
+# by accident.
 name: Abbild
 
 on:
   push:
-    branches: [main, enterprise]
+    branches: [main]
     paths:
       - "**.py"
       - requirements.txt
@@ -90,7 +91,7 @@ jobs:
           echo "abbild=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           V="${{ github.event.inputs.variante || 'schlank' }}"
           echo "variante=$V" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref_name }}" = "enterprise" ]; then
+          if [ "${{ github.ref_name }}" = "main" ]; then
             echo "name=enterprise-$V" >> "$GITHUB_OUTPUT"
           else
             echo "name=$V" >> "$GITHUB_OUTPUT"
@@ -199,7 +200,7 @@ jobs:
       # and start it: a missing package would only show as a crash loop
       # in the cluster.
       - name: Server im Abbild pruefen
-        if: env.AKTIV == 'true' && github.ref_name == 'enterprise'
+        if: env.AKTIV == 'true' && github.ref_name == 'main'
         run: |
           docker run --rm "$ABBILD" python -c "import psycopg, jwt, jinja2, markdown_it, multipart, pymssql"
           docker run -d --name probe -p 8700:8700 -e COOKIE_SECURE=0 \
@@ -219,7 +220,7 @@ jobs:
       # package the API needs, a developer's machine not always. Once per
       # build, on amd64.
       - name: API im Abbild pruefen
-        if: env.AKTIV == 'true' && github.ref_name == 'enterprise' && matrix.arch == 'amd64'
+        if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
           docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
           tail -1 /tmp/api.log | grep -q "all passed"
@@ -228,7 +229,7 @@ jobs:
       # second model from the stored text, switch, refusal of a model
       # without vectors (test_reembed.py).
       - name: Modellwechsel auf Postgres pruefen
-        if: env.AKTIV == 'true' && github.ref_name == 'enterprise' && matrix.arch == 'amd64'
+        if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
           docker network create reembed
           docker run -d --name pg --network reembed -e POSTGRES_PASSWORD=pw pgvector/pgvector:pg16

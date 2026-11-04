@@ -3,7 +3,7 @@
 # HTTPS with the internal root certificate, sign-in, a question answered
 # end to end (by a stand-in model server), and doctor.py inside.
 #
-# Runs on every push to the enterprise branch that touches the code or
+# Runs on every push to main that touches the code or
 # the installer, and by hand. A first job waits for the image: the one of
 # this very commit when the commit changed what goes into the image, else
 # the newest one, once a running image build has finished. (A
@@ -20,7 +20,7 @@ name: Installation
 
 on:
   push:
-    branches: [enterprise]
+    branches: [main]
     paths:
       - "**.py"
       - requirements.txt
@@ -78,7 +78,7 @@ jobs:
               N=0
               for STATUS in queued in_progress; do
                 C=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
-                  "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/abbild.yml/runs?branch=enterprise&status=$STATUS" \
+                  "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/abbild.yml/runs?branch=main&status=$STATUS" \
                   | python3 -c 'import json,sys;print(json.load(sys.stdin)["total_count"])')
                 N=$((N + C))
               done
