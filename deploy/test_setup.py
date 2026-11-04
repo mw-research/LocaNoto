@@ -208,7 +208,8 @@ answers = {"target": "kubernetes", "namespace": "lnt", "host": "locanoto.example
            "cloud_host": "cloud.example.test", "cloud_internal_ip": "10.96.0.50",
            "oidc_issuer": "https://idp.example.test",
            "oidc_client_id": "locanoto", "oidc_admin_groups": "it-admins",
-           "env": {"RERANKER_BASE_URL": "http://modelle:8000", "REEMBED_HOURS": "20-6"}}
+           "env": {"RERANKER_BASE_URL": "http://modelle:8000", "REEMBED_HOURS": "20-6"},
+           "lists_pvc": "listen-share"}
 r = run_setup(answers, state, {"LOCANOTO_OIDC_SECRET": "oidc-secret-value"})
 check("kubernetes render runs", r.returncode == 0, r.stderr[-800:])
 objs = list(yaml.safe_load_all(open(os.path.join(state, "kubernetes.yaml"), encoding="utf-8")))
@@ -220,6 +221,13 @@ check("expected objects", {("Deployment", "server"), ("Deployment", "worker"),
 by = {(o["kind"], o["metadata"]["name"]): o for o in objs}
 cm = by[("ConfigMap", "locanoto")]["data"]
 secret = by[("Secret", "locanoto")]["stringData"]
+_srv_spec = by[("Deployment", "server")]["spec"]["template"]["spec"]
+_wrk_spec = by[("Deployment", "worker")]["spec"]["template"]["spec"]
+check("the list share is mounted read-only in server and worker, and allowed as root",
+      all({"name": "lists", "persistentVolumeClaim": {"claimName": "listen-share", "readOnly": True}}
+          in s["volumes"] and {"name": "lists", "mountPath": "/mnt/listen", "readOnly": True}
+          in s["containers"][0]["volumeMounts"] for s in (_srv_spec, _wrk_spec))
+      and cm.get("LISTEN_WURZELN") == "/mnt/listen", cm.get("LISTEN_WURZELN"))
 check("further settings from the answers file reach the ConfigMap",
       cm.get("RERANKER_BASE_URL") == "http://modelle:8000" and cm.get("REEMBED_HOURS") == "20-6")
 for _bad_env, _why in (({"RERANKER_API_KEY": "x"}, "a key"),

@@ -21,8 +21,11 @@ Security: a strict Content-Security-Policy (scripts and styles only from
 this server, nothing inline), model output rendered as Markdown with HTML
 switched off, the same session cookie and CSRF header as the API.
 """
+import html
 import os
+import re
 import time
+from urllib.parse import quote, urlencode
 
 import jinja2
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -79,6 +82,19 @@ TEXTS = {
     "Web search": "Websuche", "Model": "Modell", "Preset": "Voreinstellung",
     "none": "keine", "Sources": "Quellen", "page": "Seite",
     "Further passages found": "Weitere gefundene Stellen (nicht zitiert)",
+    "Open in a new tab": "In neuem Tab öffnen", "Workspace": "Arbeitsbereich",
+    "No such passage, or no access.": "Keine solche Fundstelle oder kein Zugriff.",
+    "No passage of this page in the store.": "Kein Abschnitt zu dieser Seite im Bestand.",
+    "Lists": "Listen", "List query": "Listenabfrage",
+    "List folders per workspace": "Listenordner je Arbeitsbereich",
+    "Folder in the container, or owncloud:/path in the file store. Empty removes it.":
+        "Ordner im Container oder owncloud:/Pfad in der Dateiablage. Leer entfernt ihn.",
+    "Personal folders (pattern with {benutzer})": "Persönliche Ordner (Muster mit {benutzer})",
+    "Allowed roots": "Erlaubte Wurzeln", "none set (LISTEN_WURZELN)": "keine gesetzt (LISTEN_WURZELN)",
+    "Read lists again": "Listen neu einlesen", "Sheets in the catalog": "Blätter im Katalog",
+    "Not readable": "Nicht lesbar", "Sheet": "Blatt", "large": "groß",
+    "Lists live where the departments keep them (network drive, file store); questions read them fresh. A folder belongs to a workspace: who may read the workspace sees its lists.":
+        "Listen liegen dort, wo die Abteilungen sie pflegen (Netzlaufwerk, Dateiablage); jede Frage liest sie frisch. Ein Ordner gehört zu einem Arbeitsbereich: Wer den Bereich lesen darf, sieht seine Listen.",
     "Show page": "Seite zeigen", "Helpful": "Hilfreich",
     "Not helpful": "Nicht hilfreich", "Thanks.": "Danke.",
     "Draft waiting for you": "Entwurf wartet auf dich",
@@ -242,6 +258,61 @@ def markdown(text):
 
 _env.filters["markdown"] = markdown
 
+_BRACKET = re.compile(r"\[([^\[\]<>]{1,400})\]")
+_CITE = re.compile(r"^(\s*)(.+?),\s*(Seiten?|S\.|[Pp]ages?|[Pp]\.)\s*(\d+)"
+                   r"((?:\s*[-\u2013]\s*\d+)?\s*)$")
+_CODE = re.compile(r"(<pre[\s\S]*?</pre>|<code>[\s\S]*?</code>)")
+
+
+def source_link(room, file, page):
+    """Address of the page that shows one passage on its own (/source)."""
+    return "/source?" + urlencode({"room": room or "", "file": file, "page": page})
+
+
+def answer_html(m):
+    """The answer as HTML, every [file, page X] that names one of its
+    sources a link that opens the passage in a tab of its own.
+
+    Only citations of a real source become links: a page the model
+    inferred would lead nowhere and pretend to be checkable. Code blocks
+    stay as they are. The links are made when the page is drawn, not
+    stored -- an old chat gets them too.
+    """
+    body = markdown(m.get("content"))
+    where = {}
+    for s in list(m.get("sources") or []) + list(m.get("sources_more") or []):
+        name = str(s.get("file") or "").strip()
+        if not name:
+            continue
+        target = (s.get("raum") or "", name)
+        for key in (name.casefold(), name.rsplit(".", 1)[0].casefold()):
+            where.setdefault((key, str(s.get("page"))), target)
+    if not where:
+        return body
+
+    def part(text):
+        hit = _CITE.match(text)
+        if not hit:
+            return text
+        lead, name_html, word, page, rest = hit.groups()
+        target = where.get((html.unescape(name_html).strip().casefold(), page))
+        if not target:
+            return text
+        href = html.escape(source_link(target[0], target[1], page))
+        return (f'{lead}<a class="cite" href="{href}" target="_blank" rel="noopener">'
+                f'{name_html}, {word} {page}{rest.rstrip()}</a>'
+                f'{rest[len(rest.rstrip()):]}')
+
+    def bracket(hit):
+        return "[" + ";".join(part(p) for p in hit.group(1).split(";")) + "]"
+
+    return "".join(chunk if i % 2 else _BRACKET.sub(bracket, chunk)
+                   for i, chunk in enumerate(_CODE.split(body)))
+
+
+_env.filters["answer_html"] = answer_html
+_env.globals["source_link"] = source_link
+
 
 def _optional(request):
     """The signed-in user of a page, or None (then: to the sign-in page)."""
@@ -254,7 +325,8 @@ def _optional(request):
 def _need(request):
     p = _optional(request)
     if p is None:
-        raise _ToLogin(request.url.path)
+        query = request.url.query
+        raise _ToLogin(request.url.path + (f"?{query}" if query else ""))
     page_language(p.name)
     return p
 
@@ -265,7 +337,8 @@ class _ToLogin(Exception):
 
 
 def to_login_handler(_request, error):
-    return RedirectResponse(f"/login?next={error.path}", status_code=303)
+    return RedirectResponse(f"/login?next={quote(error.path, safe='/')}",
+                            status_code=303)
 
 
 def _nav(p, active):
@@ -451,6 +524,34 @@ def document_move(request: Request, room: str = Form(...),
     page_language(p.name)
     doc_actions.move(p.name, file, room, target, p.is_admin)
     return documents_fragment(request, p)
+
+
+# --- ONE PASSAGE IN A TAB OF ITS OWN ---
+
+@router.get("/source")
+def source_page(request: Request, room: str = "", file: str = "", page: str = ""):
+    """What the search stored for this file and page, and for a PDF the
+    page itself -- opened from a citation in an answer. Same checks as
+    /api/v1/sources/page: a readable workspace, a document of it."""
+    p = _need(request)
+    emergency = notzugang.raeume_fuer(p.name)
+    found = bool(room and file and raeume.darf_lesen(p.name, room, emergency)
+                 and file in pipeline.dokumente(p.name, nur=[room],
+                                                notzugang=emergency).get(room, []))
+    texts = []
+    if found:
+        import store
+        sml = store.sammlung(raeume.sammlung(room), anlegen=False)
+        if sml is not None:
+            data = sml.get(where=store.datei_filter(file),
+                           include=["documents", "metadatas"])
+            docs = store.klartext(room, data.get("documents") or [], p.name)
+            texts = [d for d, meta in zip(docs, data.get("metadatas") or [])
+                     if str((meta or {}).get("page", "")) == str(page)]
+    return render("source.html", request, nav=_nav(p, "chat"), found=found,
+                  room=room, room_label=raeume.bezeichnung(room) if found else "",
+                  file=file, page=page, texts=texts,
+                  image=found and file.lower().endswith(".pdf") and page.isdigit())
 
 
 # --- WEB SOURCES ---

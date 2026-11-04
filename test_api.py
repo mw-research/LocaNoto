@@ -319,6 +319,25 @@ check("ask answers", r.status_code == 200 and "vier Jahre" in body.get("answer",
 chat_id = body.get("chat_id")
 check("answer has the source",
       any(s["file"] == "Kessel.txt" for s in body["message"]["sources"]), body)
+_cited = body["message"]["sources"][0]
+_page_html = anna.get(f"/c/{chat_id}").text
+check("a citation in the answer opens the passage in a tab of its own",
+      'class="cite"' in _page_html and 'target="_blank"' in _page_html
+      and "/source?room=" in _page_html, _page_html[-800:])
+_src = anna.get("/source", params={"room": _cited["raum"], "file": "Kessel.txt",
+                                   "page": _cited["page"]})
+check("the source page shows the stored passage", _src.status_code == 200
+      and "betraegt vier Jahre" in _src.text, _src.text[-500:])
+check("not to someone without access to the workspace",
+      "betraegt vier Jahre" not in markus.get("/source", params={
+          "room": _cited["raum"], "file": "Kessel.txt", "page": _cited["page"]}).text)
+_anon_src = TestClient(server.app).get("/source", params={"room": "x", "file": "a b.pdf",
+                                                          "page": "2"},
+                                       follow_redirects=False)
+check("signed out, the source link leads to the sign-in and back to the same passage",
+      _anon_src.status_code == 303 and "next=/source%3Froom%3Dx" in _anon_src.headers["location"],
+      _anon_src.headers.get("location"))
+
 r = anna.post(f"{API}/ask?stream=true", json={"question": "Und danach?",
                                               "chat_id": chat_id})
 events = [line[7:] for line in r.text.splitlines() if line.startswith("event: ")]
@@ -664,6 +683,26 @@ finally:
 check("lists", "sheets" in anna.get(f"{API}/lists").json())
 check("own list folder not allowed without area", anna.put(
     f"{API}/me/list-folder", json={"path": "/x"}).status_code == 403)
+
+# --- lists from a folder (admin page) ---
+_list_dir = os.path.join(TMP, "listen", "einkauf")
+os.makedirs(_list_dir, exist_ok=True)
+with open(os.path.join(_list_dir, "Lieferanten.csv"), "w", encoding="utf-8") as _f:
+    _f.write("Lieferant;Ort;Bewertung\nMueller;Wuerzburg;A\nSchmidt;Schweinfurt;B\n")
+check("the lists page is for admins", markus.get("/admin/lists").status_code == 200
+      and anna.get("/admin/lists", follow_redirects=False).status_code == 303)
+r = markus.post("/ui/admin/lists/folder", data={"room": "einkauf", "path": _list_dir})
+check("a list folder is set for a workspace", r.status_code == 200
+      and r.headers.get("HX-Redirect") == "/admin/lists", r.text[:300])
+_lp = markus.get("/admin/lists").text
+check("and its sheets are in the catalog", "Lieferanten.csv" in _lp and _list_dir in _lp,
+      _lp[-600:])
+check("lists of a workspace only for its members",
+      "Lieferanten.csv" in json.dumps(anna.get(f"{API}/lists").json()))
+r = markus.post("/ui/admin/lists/folder", data={"room": "einkauf", "path": "relativ/pfad"})
+check("a relative folder is refused with a reason", r.status_code == 200
+      and "HX-Redirect" not in r.headers and "absolut" in r.text.lower(), r.text[:300])
+markus.post("/ui/admin/lists/folder", data={"room": "einkauf", "path": ""})
 
 # --- mailboxes (admin) ---
 check("not admin is 403", anna.get(f"{API}/admin/users").status_code == 403)

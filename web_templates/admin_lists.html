@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Lists') }}</h1>
+<p class="muted">{{ t('Lists live where the departments keep them (network drive, file store); questions read them fresh. A folder belongs to a workspace: who may read the workspace sees its lists.') }}</p>
+<section class="card">
+  <h2>{{ t('List folders per workspace') }}</h2>
+  <p class="muted">{{ t('Folder in the container, or owncloud:/path in the file store. Empty removes it.') }}
+    {{ t('Allowed roots') }}: {% if roots %}<code>{{ roots|join(', ') }}</code>{% else %}{{ t('none set (LISTEN_WURZELN)') }}{% endif %}</p>
+  <table class="files">
+  {% for room, label, path in folders %}
+    <tr><td>{{ label }}</td>
+      <td><form hx-post="/ui/admin/lists/folder" hx-target="#ls-notice" class="inline wide">
+        <input type="hidden" name="room" value="{{ room }}">
+        <input name="path" value="{{ path }}" placeholder="/mnt/listen/{{ room }}" aria-label="{{ label }}">
+        <button type="submit">{{ t('Save') }}</button></form></td></tr>
+  {% endfor %}
+    <tr><td>{{ t('Personal folders (pattern with {benutzer})') }}</td>
+      <td><form hx-post="/ui/admin/lists/folder" hx-target="#ls-notice" class="inline wide">
+        <input type="hidden" name="room" value="{{ pattern_room }}">
+        <input name="path" value="{{ pattern }}" placeholder="/mnt/heim/{benutzer}/Listen">
+        <button type="submit">{{ t('Save') }}</button></form></td></tr>
+  </table>
+  <div id="ls-notice"></div>
+</section>
+<section class="card">
+  <h2>{{ t('Sheets in the catalog') }} ({{ sheets|length }})</h2>
+  <p class="muted">{{ description }}</p>
+  <form hx-post="/ui/admin/lists/rebuild" hx-target="#ls-notice2" class="inline"><button type="submit" class="primary">{{ t('Read lists again') }}</button></form>
+  <div id="ls-notice2"></div>
+  <table class="files">
+  {% for e in sheets %}
+    <tr><td>{{ e.datei }}{% if e.blatt %} · {{ e.blatt }}{% endif %}</td>
+      <td class="muted">{{ e.raum or 'allgemein' }}</td>
+      <td class="muted">{{ e.zeilen }} {{ t('rows') }}{% if e.gross %} · {{ t('large') }}{% endif %}</td></tr>
+  {% endfor %}
+  </table>
+  {% if errors %}
+  <h3>{{ t('Not readable') }}</h3>
+  <ul>{% for f in errors %}<li class="error">{{ f[0] }} — {{ tm(f[1]) }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}

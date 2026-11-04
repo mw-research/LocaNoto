@@ -87,6 +87,12 @@ Ein Beispiel für `antworten.json` steht in `.github/workflows/installation.yml`
 – dort wird bei jedem Stand auf Docker und Kubernetes genau so installiert
 und von außen geprüft.
 
+Listen (Excel, CSV) von einem Netzlaufwerk: `"lists_pvc"` nennt einen
+PersistentVolumeClaim im Namensraum (NFS, SMB über dessen CSI-Treiber, …),
+`"lists_dir"` einen Ordner auf dem Docker-Rechner. Er wird nur lesend unter
+`/mnt/listen` eingehängt; die Ordner je Arbeitsbereich stehen danach unter
+Admin → Listen.
+
 Weitere Einstellungen aus `.env.example` (Reranker, eigener Embedding-Server,
 `REEMBED_HOURS`, …) stehen in der Antwortdatei unter `"env"`, etwa
 `"env": {"RERANKER_BASE_URL": "http://modelle:8000", "REEMBED_HOURS": "20-6"}`.

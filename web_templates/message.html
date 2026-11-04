@@ -3,7 +3,7 @@
   <div class="bubble">{{ m.content }}</div>
   {% if m.images %}<div class="images">{% for j in range(m.images) %}<img src="/api/v1/chats/{{ chat_id }}/messages/{{ m.index }}/images/{{ j }}" alt="">{% endfor %}</div>{% endif %}
 {% else %}
-  <div class="answer">{{ m.content|markdown|safe }}</div>
+  <div class="answer">{{ m|answer_html|safe }}</div>
   {% if m.zahlen and m.zahlen.vektorausfall %}
   <p class="warn">{{ t('Answer from the keyword search only -- the vector search did not answer for') }}: {{ m.zahlen.vektorausfall|join(', ') }}</p>
   {% endif %}
@@ -26,13 +26,26 @@
     <summary>{{ t('Sources') }} ({{ m.sources|length }})</summary>
     {% for s in m.sources %}
     <div class="source">
-      <div class="source-head">{{ s.file }} · {{ t('page') }} {{ s.page }}{% if s.herkunft %} · {{ s.herkunft }}{% endif %}</div>
+      <div class="source-head">{{ s.file }} · {{ t('page') }} {{ s.page }}{% if s.herkunft %} · {{ s.herkunft }}{% endif %}
+        <a href="{{ source_link(s.raum, s.file, s.page) }}" target="_blank" rel="noopener" title="{{ t('Open in a new tab') }}">↗</a></div>
       {% for x in s.texts %}<blockquote>{{ x }}</blockquote>{% endfor %}
       {% if s.file.lower().endswith('.pdf') and s.page is number %}
       <details class="page"><summary>{{ t('Show page') }}</summary>
         <img loading="lazy" alt="" src="/api/v1/sources/page?room={{ s.raum|urlencode }}&amp;file={{ s.file|urlencode }}&amp;page={{ s.page }}">
       </details>
       {% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+  {% if m.lists and m.lists.sheets %}
+  <details class="sources sql">
+    <summary>{{ t('Lists') }} ({{ m.lists.sheets|length }})</summary>
+    {% for s in m.lists.sheets %}
+    <div class="source">
+      <div class="source-head">{{ s.sheet }}{% if s.rows is not none %} · {{ s.rows }} {{ t('rows') }}{% endif %}</div>
+      {% if s.query %}<pre>{{ s.query }}</pre>{% endif %}
+      {% if s.reason %}<p class="muted">{{ s.reason }}</p>{% endif %}
     </div>
     {% endfor %}
   </details>

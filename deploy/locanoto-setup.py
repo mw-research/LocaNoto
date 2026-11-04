@@ -35,6 +35,12 @@ Without questions (automation, CI):
     (admin password from LOCANOTO_ADMIN_PASSWORD, model key from
      LOCANOTO_MODEL_API_KEY, OIDC secret from LOCANOTO_OIDC_SECRET)
 
+Lists (Excel, CSV) on a network drive: "lists_pvc" names a
+PersistentVolumeClaim (NFS, SMB through its CSI driver, ...) in the
+namespace, "lists_dir" a folder on the Docker host. It is mounted read-only
+at /mnt/listen in the server and the worker; the folders per workspace are
+then set under Admin -> Lists.
+
 Further settings of .env.example (a reranker, a separate embedding
 server, REEMBED_HOURS, ...) go into the answers file as "env": {NAME:
 value}. They are kept for --upgrade. Keys and passwords do not belong
@@ -277,6 +283,14 @@ def interview(old):
                                   "ReadWriteMany-Speicher)",
                                   "Number of server pods (more than 1 needs "
                                   "ReadWriteMany storage)"), str(a.get("replicas", 1))))
+        a["lists_pvc"] = ask(T("PersistentVolumeClaim mit Listen vom Netzlaufwerk (leer = keiner)",
+                               "PersistentVolumeClaim with lists from a network drive (empty = none)"),
+                             a.get("lists_pvc", ""))
+    else:
+        a["lists_dir"] = ask(T("Ordner auf diesem Rechner mit Listen, z. B. ein "
+                               "eingehängtes Netzlaufwerk (leer = keiner)",
+                               "Folder on this machine with lists, e.g. a mounted "
+                               "network drive (empty = none)"), a.get("lists_dir", ""))
     return a
 
 
@@ -450,6 +464,9 @@ def _local_crypto():
 
 # --- SETTINGS SHARED BY BOTH TARGETS ------------------------------------
 
+LISTS_MOUNT = "/mnt/listen"
+
+
 def app_env(a, sec, database_url, opencloud_url):
     """Environment of the server, worker and pages containers."""
     f = a["features"]
@@ -490,6 +507,8 @@ def app_env(a, sec, database_url, opencloud_url):
                     "OIDC_CLIENT_SECRET": sec.get("OIDC_SECRET", ""),
                     "OIDC_REDIRECT_URI": f"https://{a['host']}/api/v1/auth/oidc/callback",
                     "OIDC_ADMIN_GROUPS": a.get("oidc_admin_groups", "")})
+    if a.get("lists_pvc") or a.get("lists_dir"):
+        env["LISTEN_WURZELN"] = LISTS_MOUNT
     for k, v in (a.get("env") or {}).items():
         env.setdefault(k, str(v))
     # Behind the gateway OPENAI_API_KEY is the gateway's own key. A reranker
@@ -601,8 +620,9 @@ def docker_files(a, sec):
     db_url = (f"postgresql://locanoto:{sec['POSTGRES_PASSWORD']}@postgres:5432/locanoto")
     env = app_env(a, sec, db_url, "http://opencloud:9200")
     trust_mount = ["trust:/trust:ro"]
+    lists_mount = [f"{a['lists_dir']}:{LISTS_MOUNT}:ro"] if a.get("lists_dir") else []
     base = {"image": image, "restart": "unless-stopped",
-            "volumes": ["documents:/app/data", "config:/app/config"] + trust_mount,
+            "volumes": ["documents:/app/data", "config:/app/config"] + trust_mount + lists_mount,
             "depends_on": {"postgres": {"condition": "service_healthy"},
                            "trust": {"condition": "service_completed_successfully"}}}
     services = {
@@ -999,6 +1019,12 @@ def k8s_objects(a, sec, cert_manager):
                   {"name": "config", "mountPath": "/app/config"}]
     app_vols = [{"name": "documents", "persistentVolumeClaim": {"claimName": "locanoto-documents"}},
                 {"name": "tmp", "emptyDir": {}}, {"name": "config", "emptyDir": {}}]
+    if a.get("lists_pvc"):
+        # The network drive with the lists: created by the cluster admin
+        # (NFS, SMB CSI, ...), only read here.
+        app_mounts.append({"name": "lists", "mountPath": LISTS_MOUNT, "readOnly": True})
+        app_vols.append({"name": "lists", "persistentVolumeClaim": {
+            "claimName": a["lists_pvc"], "readOnly": True}})
     rwx = a.get("replicas", 1) > 1
     objs.append(pvc(a, "locanoto-documents", "50Gi", "ReadWriteMany" if rwx else "ReadWriteOnce"))
 

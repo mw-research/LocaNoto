@@ -171,6 +171,8 @@ textarea.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; 
 #toast.show { opacity: 1; transform: none; }
 #toast.bad { background: var(--bad); color: #fff; }
 #toast.notice { pointer-events: auto; }
+a.cite { text-decoration: underline dotted; }
+img.pageimage { max-width: 100%; height: auto; border: 1px solid var(--border); }
 #toast a { color: inherit; font-weight: 600; text-decoration: underline; }
 .tabs .badge { display: inline-block; min-width: 1.2em; margin-left: .3rem; padding: 0 .35rem; border-radius: 999px;
   background: var(--accent); color: #fff; font-size: .75rem; line-height: 1.3; text-align: center; }

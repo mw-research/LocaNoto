@@ -415,6 +415,7 @@ def _ask(user, req):
     list_blocks, info = _list_blocks(user, req, question, model,
                                      history_text, settings["areas"])
     blocks += list_blocks
+    list_info = info
     if info:
         yield "lists", info
 
@@ -491,6 +492,10 @@ def _ask(user, req):
     if settings["web_excluded"]:
         message["web_excluded"] = [raeume.bezeichnung(r)
                                    for r in settings["web_excluded"]]
+    if list_info and list_info.get("sheets"):
+        # Like the database query: which sheet, which query, how many rows.
+        message["lists"] = {"sheets": [{k: s.get(k) for k in ("sheet", "query", "rows", "reason")}
+                                       for s in list_info["sheets"]]}
     if sql_info:
         # The query stays with the answer: it is what the numbers rest on,
         # as a source page is for a quote.

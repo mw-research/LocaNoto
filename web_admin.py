@@ -6,6 +6,7 @@
     /admin/feedback     empty answers and thumbs down; archive
     /admin/storage      OpenCloud: status, set up workspaces, group sync
     /admin/mailboxes    mailboxes and web search services
+    /admin/lists        list folders per workspace, catalog, read again
 
 The same functions as /api/v1/admin/..., with the same checks. The
 emergency page is open to admins and to the role notzugang (the second
@@ -18,6 +19,7 @@ import benutzer
 import dateisperre
 import feedback
 import jobs
+import listenquellen
 import mailboxes
 import notzugang
 import owncloud
@@ -26,6 +28,7 @@ import prompts
 import raeume
 import sicherung
 import statefiles
+import tabellen
 from server import Principal, principal
 from web import _need, _nav, _notice, page_language, render, tm
 
@@ -224,6 +227,51 @@ def storage_action(action: str, request: Request,
         result = jobs.start("abgleich", by=p.name)
         return _notice(tm(result.get("message", "")), result.get("started"))
     raise HTTPException(404, "Unknown action.")
+
+
+# --- LISTS ---
+
+@router.get("/admin/lists")
+def lists_page(request: Request):
+    p, away = _page(request)
+    if away:
+        return away
+    catalog = tabellen.lies_katalog()
+    sheets = sorted(tabellen.sichtbar(catalog.get("eintraege", []), p.name),
+                    key=lambda e: (e.get("raum") or "", e.get("datei") or "",
+                                   e.get("blatt") or ""))
+    folders = [(r, raeume.bezeichnung(r), listenquellen.pfad_von(r))
+               for r in sorted(raeume.liste()) if not raeume.ist_privat(r)]
+    return render("admin_lists.html", request, nav=_nav(p, "admin"),
+                  folders=folders, sheets=sheets,
+                  errors=catalog.get("fehler") or [],
+                  pattern=listenquellen.pfad_von(listenquellen.MUSTER_RAUM),
+                  pattern_room=listenquellen.MUSTER_RAUM,
+                  roots=listenquellen.WURZELN,
+                  description=tm(listenquellen.beschreibung()))
+
+
+@router.post("/ui/admin/lists/folder")
+def lists_folder(request: Request, room: str = Form(...), path: str = Form(""),
+                 p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    if room != listenquellen.MUSTER_RAUM and room not in raeume.liste():
+        raise HTTPException(404, "Unknown workspace.")
+    ok, message = listenquellen.setze_raum(room, path, benutzer=p.name,
+                                           ist_verwalter=True)
+    if not ok:
+        return _notice(tm(message), False)
+    tabellen.baue_katalog()
+    return _reload("/admin/lists")
+
+
+@router.post("/ui/admin/lists/rebuild")
+def lists_rebuild(request: Request, p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    tabellen.baue_katalog()
+    return _reload("/admin/lists")
 
 
 # --- MAILBOXES ---
