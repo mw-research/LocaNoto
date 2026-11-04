@@ -373,14 +373,14 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              SQLCMD=$(ls /opt/mssql-tools*/bin/sqlcmd | tail -n 1)
+              TOOL=$(ls /opt/mssql-tools*/bin/sqlcmd | tail -n 1)
               TRUST=""
-              case "$SQLCMD" in *tools18*) TRUST="-C" ;; esac
+              case "$TOOL" in *tools18*) TRUST="-C" ;; esac
               for i in $(seq 1 60); do
-                "$SQLCMD" -S demo-erp -U sa -P "$SA_PASSWORD" $TRUST -Q "SELECT 1" >/dev/null 2>&1 && break
+                "$TOOL" -S demo-erp -U sa -P "$SA_PASSWORD" $TRUST -Q "SELECT 1" >/dev/null 2>&1 && break
                 echo "waiting for SQL Server ..."; sleep 5
               done
-              "$SQLCMD" -S demo-erp -U sa -P "$SA_PASSWORD" $TRUST -b \
+              "$TOOL" -S demo-erp -U sa -P "$SA_PASSWORD" $TRUST -b \
                 -v READ_PASSWORD="$READ_PASSWORD" -i /seed/seed.sql
           env:
             - name: SA_PASSWORD

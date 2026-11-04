@@ -14,6 +14,7 @@ fällig?“.
 | `sql-hint.txt` | Kurzhinweis für das Modell (Statuscodes, Beziehungen) |
 | `make_demo_erp.py` | erzeugt die vier Dateien oben aus einer Tabellendefinition |
 | `check_demo_erp.py` | prüft die Datenbank mit dem Datenbankcode von LocaNoto |
+| `documents/` | zwei Beispieldokumente passend zu den Daten |
 
 Voraussetzungen: ein Knoten mit amd64 (SQL Server gibt es nicht für ARM),
 2 GB Arbeitsspeicher frei, 5 GB Speicher. Die Developer-Edition ist für
@@ -51,9 +52,11 @@ Datenbank zurück): `kubectl -n $NS delete job demo-erp-seed` und
    Server `demo-erp`, Port `1433`, Datenbank `DemoERP`, Benutzer
    `locanoto_lesen`, das Passwort aus Schritt 1, Hinweis: Inhalt von
    `sql-hint.txt`.
-3. **Datenmodell hochladen:** `data-model.md` in denselben Arbeitsbereich.
-   Dann beantwortet LocaNoto auch Fragen zur Struktur („Welche Tabellen gibt
-   es?“, „Was bedeutet Status F?“).
+3. **Dokumente hochladen** in denselben Arbeitsbereich: `data-model.md` –
+   dann beantwortet LocaNoto auch Fragen zur Struktur („Welche Tabellen gibt
+   es?“, „Was bedeutet Status F?“) – sowie die zwei Beispieldokumente aus
+   `documents/` (Prüfvorschrift, Reklamationsprozess). Sie passen zu den Daten:
+   Prüfarten und Fristen, Status der Reklamationen.
 4. Im Chat unter den Optionen **Datenbank** anhaken und fragen.
 
 Dasselbe über die API:
