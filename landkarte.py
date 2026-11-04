@@ -1,7 +1,7 @@
 """Was macht welche Datei, und woher kommt ihr Wert?
 
     python landkarte.py              die Uebersicht
-    python landkarte.py --tabelle    die Tabelle fuer das README
+    python landkarte.py --tabelle    die Tabelle fuer REFERENZ.md
 
 Eine Uebersicht, die jemand von Hand pflegt, ist nach dem naechsten Modul
 falsch -- und niemand merkt es, weil eine Beschreibung nicht abstuerzt.
@@ -96,7 +96,7 @@ def lies(basis=BASIS):
 
 
 def tabelle(karte):
-    """Die Tabelle fuer das README -- erzeugt, nicht gepflegt."""
+    """Die Tabelle fuer REFERENZ.md -- erzeugt, nicht gepflegt."""
     zeilen = ["| Datei | Aufgabe | liest aus der `.env` | liefert an |",
               "|---|---|---|---|"]
     for schicht in ("Grundlage", "Bestand", "Fachlogik", "Einstiege"):

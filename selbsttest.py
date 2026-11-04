@@ -4570,7 +4570,9 @@ _hb_ab = list(_lesen_h.abschnitte(os.path.join(_HIER_S, "HANDBUCH.md")))
 _hb_lang = [t for _n, t, x in _hb_ab if len(x) > 1500]
 pruef("jeder Abschnitt des Handbuchs bleibt beim Einlesen ein Stueck",
       _hb_ab and not _hb_lang, _hb_lang)
-pruef("die README verweist auf das Handbuch", "HANDBUCH.md" in _datei("README.md"))
+pruef("die README verweist auf Handbuch und Referenz",
+      "HANDBUCH.md" in _datei("README.md") and "REFERENZ.md" in _datei("README.md")
+      and "HANDBUCH.en.md" in _datei("README.en.md"))
 
 # --- WAS IN LOCANOTO GELOESCHT WIRD, BLEIBT GELOESCHT ---
 #
@@ -5891,12 +5893,12 @@ _hoch = sorted(f"{n} -> {m}" for n, i in _karte.items() for m in i["nutzt"]
                if _RANG[_karte[m]["schicht"]] > _RANG[i["schicht"]])
 pruef("keine Kante der Landkarte zeigt nach oben", not _hoch, _hoch)
 
-# 3. Jede Datei steht im README. Die Tabelle wird erzeugt; diese
+# 3. Jede Datei steht in der REFERENZ.md. Die Tabelle wird erzeugt; diese
 #    Pruefung stellt sicher, dass sie nach einer neuen Datei auch
 #    erneuert wurde.
-_liesmich = _datei("README.md")
+_liesmich = _datei("REFERENZ.md")
 _fehlt_doku = sorted(n for n in _karte if f"`{n}.py`" not in _liesmich)
-pruef("jede Datei kommt in der Landkarte des README vor",
+pruef("jede Datei kommt in der Landkarte der REFERENZ.md vor",
       not _fehlt_doku, _fehlt_doku)
 
 # 4. Jede Datei sagt in einem Satz, was sie tut. Ohne Dateikopf bleibt

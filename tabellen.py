@@ -90,7 +90,7 @@ def pruefe_pfad(p):
     if not os.path.isabs(p):
         return False, ("Bitte vollständigen Pfad im Container angeben, etwa /listen.")
     if not statefiles.exists(p):
-        return False, (f"'{p}' fehlt im Container. Verzeichnis eingehängt? Siehe README, Kapitel Listen.")
+        return False, (f"'{p}' fehlt im Container. Verzeichnis eingehängt? Siehe REFERENZ.md, Kapitel Listen.")
     if not statefiles.isdir(p):
         return False, f"'{p}' ist eine Datei, kein Ordner."
     if not os.access(p, os.R_OK):

@@ -450,7 +450,7 @@ services:
       - opencloud_config:/etc/opencloud
       # Dateien und Konten. LocaNoto verschluesselt sie nicht und kann es
       # nicht: OpenCloud muss sie ausliefern. Der Datentraeger gehoert
-      # also verschluesselt, siehe README. Ein Pfad statt des Volumes
+      # also verschluesselt, siehe REFERENZ.md. Ein Pfad statt des Volumes
       # muss dem Nutzer 1000 gehoeren (chown -R 1000:1000).
       - ${OWNCLOUD_PFAD:-opencloud_daten}:/var/lib/opencloud
 

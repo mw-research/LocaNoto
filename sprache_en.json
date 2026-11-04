@@ -490,7 +490,7 @@
   "'{}' darf in '{}' nicht löschen.": "'{}' may not delete in '{}'.",
   "'{}' darf nicht in den Arbeitsbereich '{}' schreiben.": "'{}' may not write to workspace '{}'.",
   "'{}' entfernt.": "'{}' removed.",
-  "'{}' fehlt im Container. Verzeichnis eingehängt? Siehe README, Kapitel Listen.": "'{}' is missing in the container. Directory mounted? See README, chapter Lists.",
+  "'{}' fehlt im Container. Verzeichnis eingehängt? Siehe REFERENZ.md, Kapitel Listen.": "'{}' is missing in the container. Directory mounted? See REFERENZ.md, chapter Lists.",
   "'{}' gelöscht. Chatverlauf und persönlichen Arbeitsbereich getrennt entfernen.": "'{}' deleted. Remove chat history and personal workspace separately.",
   "'{}' gibt es bereits.": "'{}' already exists.",
   "'{}' ist reserviert.": "'{}' is reserved.",

@@ -7,7 +7,7 @@ servers.
 
 Part 1 is **for users**, Part 2 **for admins**. Each section answers one
 question and can be understood on its own. The technical reference is in
-the `README.md`.
+`REFERENZ.md` (German; overview in `REFERENCE.en.md`).
 
 ## Part 1: Using LocaNoto (for users)
 
@@ -548,7 +548,7 @@ Searches only cover the token owner's workspaces; deleting and submitting
 only where they could also do so in the interface (otherwise `403`). File
 too large → `413`. The API is only reachable from the server itself; from
 outside, a reverse proxy with TLS belongs in front of it. Examples:
-`README.md`, "HTTP-Schnittstelle".
+`REFERENZ.md`, "HTTP-Schnittstelle".
 
 ### How do I set up a mailbox in LocaNoto as an admin?
 
@@ -575,7 +575,7 @@ process (stdio)".
 
 ### How do I set up web search in LocaNoto as an admin?
 
-1. Run the search service separately from LocaNoto (`README.md`,
+1. Run the search service separately from LocaNoto (`REFERENZ.md`,
    "Websuche").
 2. **Admin area** → **Mailboxes (tool servers)** → **New mailbox** →
    **Server type** web search, **Address or command**
@@ -691,7 +691,7 @@ groups. **Admin area** → **ownCloud**:
 Deleting and moving in LocaNoto also applies in ownCloud (deleted items →
 trash). Deleting users and changing passwords only affect managed accounts
 there. A missing account is created the next time a password is set.
-Setup: `README.md`, "Dokumente aus ownCloud".
+Setup: `REFERENZ.md`, "Dokumente aus ownCloud".
 
 ### How do I change the embedding model in LocaNoto as an admin?
 

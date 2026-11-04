@@ -10,7 +10,7 @@
 #   kubectl logs -f job/locanoto-migrate
 #
 # Before deciding DATABASE_DIMENSIONS for good, compare the search on a
-# list of real questions (compare_search.py, see the README).
+# list of real questions (compare_search.py, see REFERENZ.md).
 ---
 apiVersion: batch/v1
 kind: Job

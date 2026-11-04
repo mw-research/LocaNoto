@@ -7,7 +7,7 @@ Servern.
 
 Teil 1 ist **für Nutzer**, Teil 2 **für Admins**. Jeder Abschnitt
 beantwortet eine Frage und ist für sich verständlich. Die technische
-Referenz steht in der `README.md`.
+Referenz steht in der `REFERENZ.md`.
 
 ## Teil 1: LocaNoto benutzen (für Nutzer)
 
@@ -568,7 +568,7 @@ Gesucht wird nur in den Arbeitsbereichen des Token-Besitzers; löschen und
 einliefern nur, wo er es auch in der Oberfläche dürfte (sonst `403`).
 Datei zu groß → `413`. Die Schnittstelle ist nur vom Server selbst
 erreichbar; von außen gehört ein Reverse Proxy mit TLS davor. Beispiele:
-`README.md`, „HTTP-Schnittstelle".
+`REFERENZ.md`, „HTTP-Schnittstelle".
 
 ### Wie richte ich als Admin ein Postfach in LocaNoto ein?
 
@@ -596,7 +596,7 @@ Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP" oder
 
 ### Wie richte ich als Admin die Websuche in LocaNoto ein?
 
-1. Suchdienst getrennt von LocaNoto betreiben (`README.md`, „Websuche").
+1. Suchdienst getrennt von LocaNoto betreiben (`REFERENZ.md`, „Websuche").
 2. **Admin-Bereich** → **Postfächer (Werkzeugserver)** → **Neues
    Postfach** → **Servertyp** Websuche, **Adresse oder Befehl**
    `http://websuche:8000/mcp` → **Anlegen**.
@@ -716,7 +716,7 @@ eingerichtet → LocaNoto legt hochgeladene Dokumente auch dort ab und
 Löschen und Verschieben in LocaNoto wirkt auch in ownCloud (Gelöschtes →
 Papierkorb). Benutzer löschen und Passwörter ändern wirkt dort nur bei
 verwalteten Konten. Fehlt ein Konto, entsteht es beim nächsten
-Passwortsetzen. Einrichtung: `README.md`, „Dokumente aus ownCloud".
+Passwortsetzen. Einrichtung: `REFERENZ.md`, „Dokumente aus ownCloud".
 
 ### Wie wechsle ich als Admin das Embedding-Modell in LocaNoto?
 
