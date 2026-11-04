@@ -7,10 +7,12 @@ computes the vectors of model B in the background column (reembed.py),
 switches EMBEDDING_MODEL to B and checks that search finds the same with
 B -- and that a model without vectors is refused instead of answering
 from vectors of another one. The two "models" are compare_search's
-HashEmbedder, once on the text and once on the text reversed word by
-word, so their vectors differ and each finds only with its own queries.
+HashEmbedder, once on the text and once on the text with every letter
+shifted by seven, so the two hash into different positions and their
+vectors are about as alike as two random ones.
 """
 import os
+import string
 import sys
 import tempfile
 import uuid
@@ -86,8 +88,12 @@ def run():
     def model_a(text):
         return h.vector(text)
 
+    shift = str.maketrans(string.ascii_lowercase + string.ascii_uppercase,
+                          string.ascii_lowercase[7:] + string.ascii_lowercase[:7]
+                          + string.ascii_uppercase[7:] + string.ascii_uppercase[:7])
+
     def model_b(text):
-        return h.vector(" ".join(reversed(text.split())) + " b")
+        return h.vector(text.translate(shift))
 
     sml = store.sammlung(raeume.sammlung("allgemein"))
     ids = [f"{f}_c{i}" for i, (f, _t) in enumerate(PASSAGES)]
@@ -141,6 +147,8 @@ def run():
     vector_columns._cache["at"] = 0.0
     check("after the switch model B finds every passage", all(first_hits(model_b).values()),
           first_hits(model_b))
+    check("the two models' vectors really differ",
+          sum(x * y for x, y in zip(model_a(PASSAGES[0][1]), model_b(PASSAGES[0][1]))) < 0.5)
     check("and writes go to its column", vector_columns.active()[0] == "embedding_b")
 
     os.environ["EMBEDDING_MODEL"] = "hash-c"
