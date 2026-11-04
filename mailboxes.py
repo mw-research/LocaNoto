@@ -27,6 +27,7 @@ ADMIN SIDE
     remove(name)
     tools(server, header=None)       what a server offers, which tools send
 """
+import attachments
 import chats
 import mcp
 import workspace_notes
@@ -121,6 +122,9 @@ def send_draft(user, chat_id, draft_id, headers):
     else:
         connections = mcp.verbinde({server: (headers or {}).get(server)},
                                    ohne=set(mcp.lies_konfiguration()) - {server})
+        for c in connections.values():
+            if hasattr(c, "attachment_source"):
+                c.attachment_source = attachments.source(user, chat_id)
     try:
         if server not in connections:
             raise NotFound(f"No mailbox '{server}'.")

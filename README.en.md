@@ -105,7 +105,10 @@ talking to. The bundled templates use **OpenCloud** (Apache-2.0).
 
 ### Mailboxes and tool servers (MCP)
 
-Exchange mailboxes are connected directly (EWS). Any tool server speaking
+Exchange mailboxes are connected directly (EWS), other mail accounts over
+IMAP/SMTP (Gmail with an app password, GMX, web.de, own servers; not
+Microsoft 365, which no longer accepts passwords there). Mails can carry
+attachments from the user's own workspace and the chat's images only. Any tool server speaking
 the Model Context Protocol can be added. Tools that send something are never
 executed by the model on its own: the user sees a draft and clicks *send*.
 Credentials of personal mailboxes live only in the session memory.

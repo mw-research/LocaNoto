@@ -109,6 +109,14 @@ VORLAGEN = {
                     "textfeld": "body",
                     "sendet": list(_EXCHANGE_SENDET)},
     },
+    # Gmail, GMX, web.de, own servers (imap_mailbox.py). Same tools and
+    # rules as Exchange, without calendar.
+    "imap": {
+        "beschreibung": "IMAP/SMTP — Gmail, GMX, web.de, eigener Mailserver",
+        "angaben": {"transport": "imap", "anmeldung": "basic",
+                    "textfeld": "body",
+                    "sendet": list(_EXCHANGE_SENDET)},
+    },
     "http": {
         "beschreibung": "MCP-Server über HTTP",
         "angaben": {"transport": "http", "anmeldung": "keine"},
@@ -164,6 +172,13 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     angaben = dict(VORLAGEN[vorlage]["angaben"])
     if angaben["transport"] == "stdio":
         angaben["befehl"] = [t for t in str(ziel).split() if t]
+    elif angaben["transport"] == "imap":
+        import imap_mailbox
+        try:
+            (angaben["imap_host"], angaben["imap_port"], angaben["smtp_host"],
+             angaben["smtp_port"]) = imap_mailbox.parse_target(ziel)
+        except ValueError as e:
+            return False, str(e)
     elif angaben["transport"] == "exchange":
         # Leer heisst: exchangelib sucht den Server selbst. Das ist der
         # bequeme Weg und deshalb erlaubt -- bei den uebrigen
@@ -440,8 +455,12 @@ def verbinde(koepfe=None, ohne=()):
         # wird, entscheidet sich HIER und nur hier -- nach aussen haben
         # beide dieselben drei Methoden, und alles darueber merkt vom
         # Unterschied nichts.
-        bauart = (postfach.Postfach if (angaben.get("transport") or "http") == "exchange"
-                  else Verbindung)
+        transport = angaben.get("transport") or "http"
+        if transport == "imap":
+            import imap_mailbox
+            bauart = imap_mailbox.ImapMailbox
+        else:
+            bauart = postfach.Postfach if transport == "exchange" else Verbindung
         aus[name] = bauart(name, angaben, koepfe.get(name))
     return aus
 

@@ -38,6 +38,7 @@ import re
 import threading
 import time
 
+import attachments
 import budget
 import chats
 import feedback
@@ -426,6 +427,10 @@ def _ask(user, req):
         connections = mcp.verbinde(
             {k: v for k, v in (req.mailboxes or {}).items()},
             ohne=(() if req.web else settings["web_servers"]))
+    for c in connections.values():
+        # attachments only from the own workspace and this chat
+        if hasattr(c, "attachment_source"):
+            c.attachment_source = attachments.source(user, chat_id if req.save else None)
     if req.save and workspace_notes.offered(question, connections):
         connections[workspace_notes.SERVER] = workspace_notes.Tools(user)
     if connections:

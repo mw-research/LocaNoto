@@ -3358,6 +3358,190 @@ pruef("der Hinweis des Arbeitsbereichs steht im Prompt",
       and "dbo.Auftraege(AuftragsNr int" in _SqlClient.gesehen[-1],
       _SqlClient.gesehen[-1][-300:])
 
+# --- IMAP/SMTP MAILBOX (imap_mailbox.py) against stand-in servers ---
+import base64 as _b64i
+import email as _emi
+import email.policy as _empi
+import imap_mailbox as _imb
+import postfach as _pfi
+from email.message import EmailMessage as _EMi
+
+
+def _mail_i(uid, frm, subject, body, date, msgid, refs=""):
+    m = _EMi()
+    m["From"], m["To"], m["Subject"] = frm, "anna@example.com", subject
+    m["Date"], m["Message-ID"] = date, msgid
+    if refs:
+        m["References"] = refs
+    m.set_content(body)
+    return uid, m.as_bytes()
+
+
+_MAILS_I = {
+    "INBOX": [
+        _mail_i(b"1", "Meier <meier@example.com>", "Angebot Ölpumpe",
+                "Anbei das Angebot über 12.400 EUR.", "Mon, 12 Oct 2026 08:00:00 +0200", "<a1@x>"),
+        _mail_i(b"3", "Meier <meier@example.com>", "AW: Angebot Ölpumpe",
+                "Einverstanden.\n\nAm 13.10. schrieb Anna:\n> alt", "Wed, 14 Oct 2026 08:00:00 +0200",
+                "<a3@x>", "<a1@x> <a2@x>"),
+        _mail_i(b"4", "Shop <news@shop.example>", "Newsletter", "Angebote",
+                "Thu, 15 Oct 2026 08:00:00 +0200", "<n4@x>"),
+    ],
+    "Sent": [
+        _mail_i(b"2", "anna@example.com", "RE: Angebot Ölpumpe", "Bitte 3 % Skonto.",
+                "Tue, 13 Oct 2026 08:00:00 +0200", "<a2@x>", "<a1@x>"),
+    ],
+}
+
+
+class _FakeImap:
+    log = []
+
+    def __init__(self, host, port, ssl_context=None, timeout=None):
+        _FakeImap.log.append(("connect", host, port))
+        self.folder = None
+
+    def login(self, user, password):
+        if password != "app-pass":
+            raise _imb.imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+        _FakeImap.log.append(("login", user))
+
+    def list(self):
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Sent) "/" "Sent"']
+
+    def select(self, folder, readonly=False):
+        self.folder = folder.strip('"')
+        return "OK", [b"1"]
+
+    def uid(self, command, *args):
+        mails = _MAILS_I.get(self.folder, [])
+        if command == "SEARCH":
+            words = list(args)
+            hits = []
+            for uid, raw in mails:
+                m = _emi.message_from_bytes(raw, policy=_empi.default)
+                ok = True
+                for key in ("FROM", "SUBJECT", "TEXT"):
+                    if key in words:
+                        value = words[words.index(key) + 1].strip('"').lower()
+                        field = {"FROM": m["From"], "SUBJECT": m["Subject"]}.get(key, raw.decode())
+                        ok = ok and value in str(field).lower()
+                if ok:
+                    hits.append(uid)
+            return "OK", [b" ".join(hits)]
+        if command == "FETCH":
+            for uid, raw in mails:
+                if uid == args[0] or uid.decode() == args[0]:
+                    return "OK", [(b"1 (BODY[] {n}", raw), b")"]
+            return "OK", []
+        raise AssertionError(command)
+
+    def append(self, folder, flags, when, data):
+        _FakeImap.log.append(("append", folder))
+        return "OK", []
+
+    def logout(self):
+        pass
+
+
+class _FakeSmtp:
+    sent = []
+
+    def __init__(self, host, port, timeout=None, context=None):
+        self.host = host
+
+    def starttls(self, context=None):
+        pass
+
+    def login(self, user, password):
+        pass
+
+    def send_message(self, msg):
+        _FakeSmtp.sent.append(msg)
+
+    def quit(self):
+        pass
+
+
+_real_imap, _real_smtp = _imb.imaplib.IMAP4_SSL, _imb.smtplib.SMTP
+_imb.imaplib.IMAP4_SSL, _imb.smtplib.SMTP = _FakeImap, _FakeSmtp
+try:
+    pruef("IMAP target: SMTP host derived, ports by default",
+          _imb.parse_target("imap.gmail.com") == ("imap.gmail.com", 993, "smtp.gmail.com", 587)
+          and _imb.parse_target("imap.gmx.net, mail.gmx.net:465")
+          == ("imap.gmx.net", 993, "mail.gmx.net", 465))
+    _head = {"Authorization": "Basic " + _b64i.b64encode(b"anna@example.com:app-pass").decode()}
+    _box = _imb.ImapMailbox("mail", {"transport": "imap", "imap_host": "imap.example.com",
+                                     "imap_port": 993, "smtp_host": "smtp.example.com",
+                                     "smtp_port": 587}, _head)
+    _tools_i = {w["name"] for w in _box.werkzeuge()}
+    pruef("IMAP mailbox: logs in and offers the mail tools, no calendar",
+          _tools_i == set(_imb.TOOLS), _tools_i)
+    _lst = _box.rufe("mails_lesen", {"von": "meier"})
+    pruef("IMAP: messages by sender, newest first",
+          _lst.index("AW: Angebot") < _lst.index("Anbei das Angebot") and "Newsletter" not in _lst,
+          _lst)
+    pruef("IMAP: a search word with umlauts is matched in the app",
+          "Ölpumpe" in _box.rufe("mails_lesen", {"suchtext": "Ölpumpe"})
+          and "Newsletter" not in _box.rufe("mails_lesen", {"suchtext": "Ölpumpe"}))
+    _k_i = _lst.split("]", 1)[0].split("[", 1)[1]
+    _thr = _box.rufe("mail_thread", {"kennung": _k_i})
+    pruef("IMAP: the thread over inbox and sent, oldest first, without quotes",
+          _thr.index("12.400") < _thr.index("Skonto") < _thr.index("Einverstanden")
+          and "> alt" not in _thr and "3 Nachricht(en)" in _thr, _thr)
+    _box.attachment_source = lambda names: [("Angebot.pdf", b"%PDF-1.4 test", "application/pdf")]
+    _out_i = _box.rufe("mail_senden", {"an": "meier@example.com", "betreff": "Unterlagen",
+                                       "body": "Anbei.", "anhaenge": ["Angebot.pdf"]})
+    _sent_i = _FakeSmtp.sent[-1]
+    pruef("IMAP: a new mail goes out with its attachment and a copy in Sent",
+          "Anhänge: Angebot.pdf" in _out_i
+          and [a.get_filename() for a in _sent_i.iter_attachments()] == ["Angebot.pdf"]
+          and ("append", '"Sent"') in _FakeImap.log, (_out_i, _FakeImap.log[-3:]))
+    _box.rufe("antwort_senden", {"kennung": _k_i, "body": "Danke."})
+    _rep_i = _FakeSmtp.sent[-1]
+    pruef("IMAP: a reply carries In-Reply-To, References and Re:",
+          _rep_i["In-Reply-To"] == "<a3@x>" and "<a1@x>" in _rep_i["References"]
+          and _rep_i["Subject"].startswith("AW:") and _rep_i["To"] == "meier@example.com",
+          (_rep_i["Subject"], _rep_i["To"]))
+    _box.schliesse()
+    _bad = _imb.ImapMailbox("mail", {"imap_host": "x", "smtp_host": "y"}, {
+        "Authorization": "Basic " + _b64i.b64encode(b"anna@example.com:wrong").decode()})
+    try:
+        _bad.werkzeuge()
+        pruef("IMAP: a wrong password is refused", False)
+    except _pfi.Fehler as _e:
+        pruef("IMAP: a wrong password is refused", "abgelehnt" in str(_e))
+finally:
+    _imb.imaplib.IMAP4_SSL, _imb.smtplib.SMTP = _real_imap, _real_smtp
+
+# --- attachments only from the own workspace and the chat ---
+import attachments as _att
+_own_a = raeume.sichere_anlage_privat("markus")
+_dir_a = paths.raum_ordner(_own_a)
+statefiles.makedirs(_dir_a, exist_ok=True)
+with statefiles.open(os.path.join(_dir_a, "Angebot-markus.txt"), "wb") as _f:
+    _f.write(b"own file")
+_real_docs = pipeline.dokumente
+pipeline.dokumente = lambda user, nur=None, notzugang=(): (
+    {_own_a: ["Angebot-markus.txt"]} if user == "markus" else {})
+try:
+    _files_a = _att.resolve("markus", None, ["Angebot-markus.txt"])
+    pruef("a document of the own workspace can be attached",
+          _files_a == [("Angebot-markus.txt", b"own file", "text/plain")], _files_a)
+    try:
+        _att.resolve("markus", None, ["Vertrag-aus-Einkauf.pdf"])
+        pruef("a file outside the own workspace cannot be attached", False)
+    except ValueError as _e:
+        pruef("a file outside the own workspace cannot be attached",
+              "Not attachable" in str(_e) and "Angebot-markus.txt" in str(_e))
+    try:
+        _att.resolve("anna", None, ["Angebot-markus.txt"])
+        pruef("nor one of someone else's workspace", False)
+    except ValueError:
+        pruef("nor one of someone else's workspace", True)
+finally:
+    pipeline.dokumente = _real_docs
+
 # --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
 import postfach as _pfa
 for _ein, _aus in (

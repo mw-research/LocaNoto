@@ -157,6 +157,8 @@ TEXTS = {
     "Sync groups": "Gruppen abgleichen", "Sync documents": "Dokumente abgleichen",
     "personal": "persönlich", "Kind": "Art",
     "Address, command or Exchange server": "Adresse, Befehl oder Exchange-Server",
+    "Address, command, Exchange server or IMAP server (imap.gmail.com)":
+        "Adresse, Befehl, Exchange- oder IMAP-Server (imap.gmail.com)",
     "Address of a shared mailbox (only for shared ones)":
         "Adresse eines Funktionspostfachs (nur dafür)",
     "personal (everyone signs in with their own account)":

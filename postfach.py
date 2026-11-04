@@ -151,6 +151,11 @@ WERKZEUGE = (
                 "betreff": {"type": "string"},
                 "body": {"type": "string", "description":
                          "Der Text der Nachricht."},
+                "anhaenge": {"type": "array", "items": {"type": "string"},
+                             "description":
+                             "Attachments, by file name: documents of the user's "
+                             "own workspace, or images of this chat as "
+                             "chat-image-1, chat-image-2, ... Nothing else."},
             },
             "required": ["an", "betreff", "body"],
         },
@@ -324,6 +329,10 @@ class Postfach:
         self.angaben = dict(angaben or {})
         self.zusatz_kopf = dict(zusatz_kopf or {})
         self._konto = None
+        # Set by whoever knows user and chat (answering, mailboxes.send_draft):
+        # callable(names) -> [(name, bytes, mime)], see attachments.py.
+        # Without it no attachment goes out.
+        self.attachment_source = None
 
     # --- ANMELDUNG ---
 
@@ -431,11 +440,22 @@ class Postfach:
         # The model needs today's date to turn "next Tuesday" into a day.
         heute = _heute(_zeitzone(konto))
         today = f"{_WOCHENTAGE[heute.weekday()]}, {heute:%Y-%m-%d}"
-        return [{"server": self.name, "name": w["name"],
-                 "beschreibung": w["beschreibung"].format(label=label,
-                                                          today=today),
-                 "schema": w["schema"]}
-                for w in WERKZEUGE]
+        attachable = []
+        if self.attachment_source is not None and hasattr(self.attachment_source, "available"):
+            try:
+                attachable = self.attachment_source.available()
+            except Exception:
+                attachable = []
+        out = []
+        for w in WERKZEUGE:
+            text = w["beschreibung"].format(label=label, today=today)
+            if w["name"] == "mail_senden":
+                text += (" Attachable now: " + ", ".join(attachable[:30])
+                         + (" ..." if len(attachable) > 30 else "") + "."
+                         if attachable else " No files can be attached now.")
+            out.append({"server": self.name, "name": w["name"],
+                        "beschreibung": text, "schema": w["schema"]})
+        return out
 
     def rufe(self, name, argumente=None):
         a = dict(argumente or {})
@@ -467,6 +487,12 @@ class Postfach:
         here and not only when it runs: the model can still correct a
         wrong date, the person on the button can no longer.
         """
+        if name == "mail_senden" and (argumente or {}).get("anhaenge"):
+            files = self._anhaenge(argumente["anhaenge"])
+            return ("Anhänge: " + ", ".join(f"{n} ({len(d) // 1024 + 1} KB)"
+                                            for n, d, _m in files))
+        if name == "antwort_senden" and (argumente or {}).get("anhaenge"):
+            raise Fehler("Anhänge gehen nur mit einer neuen Nachricht (mail_senden).")
         if name not in KALENDERWERKZEUGE:
             return None
         return _termin_vorschau(_termin_angaben(argumente or {},
@@ -735,13 +761,27 @@ class Postfach:
     # entscheidet mcp.braucht_bestaetigung an einer Stelle fuer alle
     # Postfaecher. Hier wird nur ausgefuehrt, was schon entschieden ist.
 
+    def _anhaenge(self, names):
+        """The attachment files, read through attachment_source. Raises Fehler."""
+        if not names:
+            return []
+        if self.attachment_source is None:
+            raise Fehler("Anhänge sind hier nicht möglich.")
+        try:
+            return self.attachment_source(names if isinstance(names, list) else [names])
+        except ValueError as e:
+            raise Fehler(str(e))
+
     def _senden(self, a):
-        from exchangelib import Message, Mailbox
+        from exchangelib import FileAttachment, Mailbox, Message
 
         konto = self._verbindung()
         an = _liste(a.get("an"))
         if not an:
             raise Fehler("Kein Empfaenger angegeben.")
+        # Read before anything is sent: a missing file stops the mail,
+        # not the other way round.
+        files = self._anhaenge(a.get("anhaenge"))
         try:
             m = Message(
                 account=konto,
@@ -750,10 +790,13 @@ class Postfach:
                 to_recipients=[Mailbox(email_address=x) for x in an],
                 cc_recipients=[Mailbox(email_address=x)
                                for x in _liste(a.get("kopie"))] or None)
+            for name, data, _mime in files:
+                m.attach(FileAttachment(name=name, content=data))
             m.send_and_save()
         except Exception as e:
             raise Fehler(f"{self.name}: nicht gesendet ({_kurz(e)}).")
-        return f"Gesendet an {', '.join(an)}."
+        return (f"Gesendet an {', '.join(an)}."
+                + (f" Anhänge: {', '.join(n for n, _d, _m in files)}." if files else ""))
 
     def _antworten(self, a):
         konto = self._verbindung()

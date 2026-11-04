@@ -16,7 +16,7 @@
   <form hx-post="/ui/admin/mailboxes" hx-target="#mb-notice">
     <label>{{ t('Name') }}<input name="name" required></label>
     <label>{{ t('Kind') }}<select name="template">{% for k, label in templates.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
-    <label>{{ t('Address, command or Exchange server') }}<input name="target"></label>
+    <label>{{ t('Address, command, Exchange server or IMAP server (imap.gmail.com)') }}<input name="target"></label>
     <label>{{ t('Address of a shared mailbox (only for shared ones)') }}<input name="mailbox"></label>
     <label class="check"><input type="checkbox" name="personal" value="1" checked> {{ t('personal (everyone signs in with their own account)') }}</label>
     <fieldset>
