@@ -5,7 +5,8 @@
 <section class="card">
   <table class="files">
   {% for m in boxes %}
-    <tr><td><strong>{{ m.name }}</strong></td><td class="muted">{{ m.kind }} · {{ m.transport }} · {{ m.login }}{% if m.personal %} · {{ t('personal') }}{% endif %}</td>
+    <tr><td><strong>{{ m.name }}</strong></td><td class="muted">{{ m.kind }} · {{ m.transport }} · {{ m.login }}{% if m.personal %} · {{ t('personal') }}{% endif %}{% if m.mailbox %} · {{ m.mailbox }}{% endif %}
+      · {% if m.auto_reply %}{{ t('answers on its own') }} · {{ t('with notice') if m.notice else t('WITHOUT notice') }}{% else %}{{ t('prepares drafts') }}{% endif %}</td>
       <td><form hx-post="/ui/admin/mailboxes/{{ m.name }}/delete" hx-confirm="{{ t('Delete') }} {{ m.name }}?" class="inline"><button type="submit" class="danger">{{ t('Delete') }}</button></form></td></tr>
   {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
   </table>
@@ -18,6 +19,12 @@
     <label>{{ t('Address, command or Exchange server') }}<input name="target"></label>
     <label>{{ t('Address of a shared mailbox (only for shared ones)') }}<input name="mailbox"></label>
     <label class="check"><input type="checkbox" name="personal" value="1" checked> {{ t('personal (everyone signs in with their own account)') }}</label>
+    <fieldset>
+      <legend>{{ t('Only for shared mailboxes') }}</legend>
+      <label class="check"><input type="checkbox" name="auto" value="1"> {{ t('may answer on its own (no confirmation)') }}</label>
+      <label class="check"><input type="checkbox" name="notice" value="1" checked> {{ t('add a notice under automatic answers') }}</label>
+      <label>{{ t('Notice') }}<input name="notice_text" placeholder="{{ notice_default }}"></label>
+    </fieldset>
     <button type="submit" class="primary">{{ t('Create') }}</button>
   </form>
   <div id="mb-notice"></div>

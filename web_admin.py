@@ -234,17 +234,25 @@ def mailboxes_page(request: Request):
     if away:
         return away
     return render("admin_mailboxes.html", request, nav=_nav(p, "admin"),
-                  boxes=mailboxes.overview(), templates=mailboxes.templates())
+                  boxes=mailboxes.overview(), templates=mailboxes.templates(),
+                  notice_default=mailboxes.NOTICE_DEFAULT)
 
 
 @router.post("/ui/admin/mailboxes")
 def mailbox_create(request: Request, name: str = Form(...),
                    template: str = Form(...), target: str = Form(""),
                    personal: str = Form(""), mailbox: str = Form(""),
+                   auto: str = Form(""), notice: str = Form(""),
+                   notice_text: str = Form(""),
                    p: Principal = Depends(principal)):
     _admin(p)
     page_language(p.name)
     options = {"postfach": mailbox} if mailbox else {}
+    # The same three settings as in the classic page: a shared mailbox may
+    # answer on its own, by default with a notice under each such mail.
+    # mcp.lege_an drops "automatisch" for personal mailboxes.
+    options.update(automatisch=bool(auto), hinweis_anhaengen=bool(notice),
+                   hinweis=notice_text.strip() or None)
     ok, message = mailboxes.create(name, template, target, bool(personal),
                                    **options)
     if ok:

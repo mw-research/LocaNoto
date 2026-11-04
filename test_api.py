@@ -466,6 +466,53 @@ check("the page shows the database query under the answer",
       "WHERE Status = &#39;O&#39;" in _page or "WHERE Status = 'O'" in _page, _page[-1200:])
 markus.post("/ui/admin/workspaces/sql", data={"room": "einkauf", "user": "", "password": ""})
 
+# --- shared mailbox that answers on its own, set up in the web page ---
+r = markus.post("/ui/admin/mailboxes", data={
+    "name": "info", "template": "exchange", "target": "owa.test",
+    "mailbox": "info@test.invalid", "auto": "1", "notice": "1",
+    "notice_text": "Automatically written."})
+_boxes = {b["name"]: b for b in markus.get(f"{API}/mailboxes").json()}
+_mbpage = markus.get("/admin/mailboxes").text
+check("a shared mailbox may answer on its own, with the notice",
+      r.status_code == 200 and _boxes.get("info", {}).get("auto_reply") is True
+      and ("answers on its own" in _mbpage or "antwortet selbständig" in _mbpage),
+      (r.text[:200], _boxes))
+import mcp as _mcp_t  # noqa: E402
+check("the notice text is stored with it",
+      _mcp_t.lies_konfiguration()["info"].get("hinweis") == "Automatically written."
+      and _mcp_t.hinweis_an("info"))
+markus.post("/ui/admin/mailboxes/info/delete")
+
+# --- user search instead of one long list ---
+_rows = markus.get("/ui/admin/users", params={"q": "ann"}).text
+check("the user list filters by name", "anna" in _rows and "markus" not in _rows, _rows[:400])
+check("user names are suggested while typing",
+      markus.get("/ui/users/suggest", params={"q": "an"}).json()[:1] == ["anna"])
+check("only admins search users", anna.get("/ui/users/suggest", params={"q": "a"})
+      .status_code == 403)
+
+# --- web search per workspace ---
+markus.post("/ui/admin/workspaces/einkauf/websearch", data={"allow": "1"})
+check("an admin allows web search for a workspace in the page",
+      raeume.websuche_erlaubt("einkauf"))
+markus.post("/ui/admin/workspaces/einkauf/websearch", data={"allow": "0"})
+check("and blocks it again", not raeume.websuche_erlaubt("einkauf"))
+_ws_real = answering.mcp.websuche_server
+answering.mcp.websuche_server = lambda: {"websuche"}
+try:
+    _set = answering.resolve("anna", answering.Request(question="x", web=True))
+    check("with web search over all workspaces, blocked ones are left out",
+          "einkauf" in _set["web_excluded"]
+          and "einkauf" not in {r_ for r_, _c in _set["pairs"]}, _set["web_excluded"])
+    try:
+        answering.resolve("anna", answering.Request(question="x", web=True,
+                                                    rooms=["einkauf"]))
+        check("a blocked workspace chosen on purpose is refused", False)
+    except answering.Refused as e:
+        check("a blocked workspace chosen on purpose is refused", e.status == 403)
+finally:
+    answering.mcp.websuche_server = _ws_real
+
 # --- web pages (web.py) ---
 _FakeChat.text_override = "Antwort <script>alert(1)</script> **fett**"
 r = anna.post(f"{API}/ask", json={"question": "HTML?", "chat_id": chat_id})

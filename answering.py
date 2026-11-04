@@ -147,6 +147,7 @@ def resolve(user, req):
         if not files:
             raise Refused(404, "Unknown project or no documents in it.")
     web_servers = mcp.websuche_server()
+    web_excluded = []
     if req.web:
         if not web_servers:
             raise Refused(400, "No web search is set up.")
@@ -156,12 +157,23 @@ def resolve(user, req):
         readable = raeume.lesbar(user, emergency)
         asked = [r for r in readable if not req.rooms or r in req.rooms]
         closed = [r for r in asked if not raeume.websuche_erlaubt(r)]
-        if closed:
+        if closed and req.rooms:
+            # chosen on purpose: say so instead of quietly dropping it
             raise Refused(403, "Web search is not allowed next to: "
                           + ", ".join(closed))
+        if closed:
+            # "all workspaces": this question leaves out the ones that do
+            # not allow web search (by default the shared "allgemein"),
+            # and the answer says so.
+            open_rooms = [r for r in asked if r not in closed]
+            if not open_rooms:
+                raise Refused(403, "Web search is not allowed next to: "
+                              + ", ".join(closed))
+            pairs = pipeline.sammlungen(user, nur=open_rooms, notzugang=emergency)
+            web_excluded = closed
     return {"model": model, "top_k": int(top_k), "areas": areas,
             "pairs": pairs, "files": files or None, "emergency": emergency,
-            "web_servers": web_servers}
+            "web_servers": web_servers, "web_excluded": web_excluded}
 
 
 # --- CHAT TITLE ---
@@ -369,6 +381,10 @@ def _ask(user, req):
                                    verlauf=history_text,
                                    bild_texte=image_texts, preset=req.preset)
     yield "probes", {"probes": probes, "note": note}
+    if settings["web_excluded"]:
+        yield "tool", {"progress": "Web search: left out of this question: "
+                                   + ", ".join(raeume.bezeichnung(r)
+                                               for r in settings["web_excluded"])}
 
     # 2. hybrid search
     try:
@@ -458,6 +474,9 @@ def _ask(user, req):
                "zahlen": numbers, "entwuerfe": drafts,
                "web": pipeline.webtreffer(extra, settings["web_servers"]),
                "modell": model}
+    if settings["web_excluded"]:
+        message["web_excluded"] = [raeume.bezeichnung(r)
+                                   for r in settings["web_excluded"]]
     if sql_info:
         # The query stays with the answer: it is what the numbers rest on,
         # as a source page is for a quote.

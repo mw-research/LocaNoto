@@ -1,0 +1,29 @@
+<p class="muted">{{ users.total }} {{ t('users') }}{% if users.query %} · „{{ users.query }}“{% endif %}{% if users.total > users.rows|length %} · {{ users.offset + 1 }}–{{ users.offset + users.rows|length }}{% endif %}</p>
+<table class="files">
+{% for name, role, kind in users.rows %}
+  <tr>
+    <td>{{ name }}</td><td class="muted">{{ kind }}</td>
+    <td>
+      {% if role in roles %}
+      <form hx-post="/ui/admin/users/{{ name }}/role" hx-target="#user-notice" class="inline">
+        <select name="role">{% for r in roles %}<option {{ 'selected' if r == role }}>{{ r }}</option>{% endfor %}</select>
+        <button type="submit">{{ t('Save') }}</button>
+      </form>
+      {% else %}<span class="muted">{{ role }}</span>{% endif %}
+    </td>
+    <td>
+      <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">
+        <button type="submit" class="danger">{{ t('Delete') }}</button>
+      </form>
+    </td>
+  </tr>
+{% else %}
+  <tr><td class="muted">{{ t('none') }}</td></tr>
+{% endfor %}
+</table>
+{% if users.previous is not none or users.next %}
+<p>
+  {% if users.previous is not none %}<button class="link" hx-get="/ui/admin/users?q={{ users.query|urlencode }}&offset={{ users.previous }}" hx-target="#user-rows">← {{ t('previous') }}</button>{% endif %}
+  {% if users.next %}<button class="link" hx-get="/ui/admin/users?q={{ users.query|urlencode }}&offset={{ users.next }}" hx-target="#user-rows">{{ t('next') }} →</button>{% endif %}
+</p>
+{% endif %}

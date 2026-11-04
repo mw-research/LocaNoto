@@ -6,26 +6,10 @@
 
 <section class="card">
   <h2>{{ t('Users') }}</h2>
-  <table class="files">
-  {% for name, role, kind in users %}
-    <tr>
-      <td>{{ name }}</td><td class="muted">{{ kind }}</td>
-      <td>
-        {% if role in roles %}
-        <form hx-post="/ui/admin/users/{{ name }}/role" hx-target="#user-notice" class="inline">
-          <select name="role">{% for r in roles %}<option {{ 'selected' if r == role }}>{{ r }}</option>{% endfor %}</select>
-          <button type="submit">{{ t('Save') }}</button>
-        </form>
-        {% else %}<span class="muted">{{ role }}</span>{% endif %}
-      </td>
-      <td>
-        <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">
-          <button type="submit" class="danger">{{ t('Delete') }}</button>
-        </form>
-      </td>
-    </tr>
-  {% endfor %}
-  </table>
+  <form hx-get="/ui/admin/users" hx-target="#user-rows" hx-trigger="input delay:300ms" class="inline wide">
+    <input name="q" type="search" placeholder="{{ t('Search users') }}" autocomplete="off">
+  </form>
+  <div id="user-rows">{% include "admin_users.html" %}</div>
   <form hx-post="/ui/admin/users" hx-target="#user-notice" class="inline wide">
     <input name="name" placeholder="{{ t('Name') }}" required>
     <input name="password" type="password" placeholder="{{ t('Password') }}" minlength="8" required autocomplete="new-password">
@@ -38,14 +22,20 @@
 <section class="card">
   <h2>{{ t('Workspaces') }}</h2>
   <table class="files">
-  {% for id, label, members, group in workspaces %}
-    <tr><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ members }}</td><td class="muted">{{ group }}</td></tr>
+  {% for id, label, members, group, web in workspaces %}
+    <tr><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ members }}</td><td class="muted">{{ group }}</td>
+      <td><form hx-post="/ui/admin/workspaces/{{ id }}/websearch" hx-target="#ws-notice" class="inline">
+        <input type="hidden" name="allow" value="{{ '0' if web else '1' }}">
+        <span class="{{ '' if web else 'muted' }}">{{ t('Web search allowed') if web else t('Web search blocked') }}</span>
+        <button type="submit">{{ t('Block') if web else t('Allow') }}</button>
+      </form></td></tr>
   {% endfor %}
   </table>
+  <p class="muted">{{ t('Web search next to a workspace means: the model writes search terms while passages of that workspace are in its context, and what ends up in a search term goes to search engines. Taken-over results always land in the own workspace, never in a shared one. The general workspace is therefore blocked by default; with web search, a question over all workspaces simply leaves it out.') }}</p>
   <form hx-post="/ui/admin/workspaces" hx-target="#ws-notice" class="inline wide">
     <input name="id" placeholder="id" required pattern="[a-z0-9_-]+">
     <input name="label" placeholder="{{ t('Label') }}" required>
-    <input name="members" placeholder="{{ t('Members (comma separated)') }}">
+    <input name="members" placeholder="{{ t('Members (comma separated)') }}" data-userpick data-multiple>
     <button type="submit" class="primary">{{ t('Create') }}</button>
   </form>
   <div id="ws-notice"></div>

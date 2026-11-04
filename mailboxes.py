@@ -36,6 +36,9 @@ class NotFound(Exception):
     pass
 
 
+NOTICE_DEFAULT = mcp.HINWEIS_VORGABE
+
+
 def overview():
     out = []
     for name, a in sorted(mcp.lies_konfiguration().items()):
@@ -45,7 +48,9 @@ def overview():
                     "transport": a.get("transport", "http"),
                     "login": mcp.anmeldeart(name),
                     "personal": bool(a.get("persoenlich")),
-                    "auto_reply": bool(a.get("automatisch"))})
+                    "mailbox": a.get("postfach") or "",
+                    "auto_reply": bool(a.get("automatisch")),
+                    "notice": bool(a.get("automatisch")) and mcp.hinweis_an(name)})
     return out
 
 

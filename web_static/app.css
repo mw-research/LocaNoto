@@ -73,6 +73,11 @@ input, select, textarea, button, .button {
   border: 1px solid var(--border); border-radius: 6px; padding: .45rem .6rem;
 }
 label input, label select { display: block; width: 100%; margin-top: .2rem; }
+/* user name suggestions under a field (hx.js, data-userpick) */
+.userpick { border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  margin-top: .2rem; max-height: 14rem; overflow-y: auto; }
+.userpick button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; }
+.userpick button:hover { background: var(--bg); }
 /* a checkbox or radio sits in front of its text, not above it */
 label.check input, input[type=checkbox], input[type=radio] {
   display: inline-block; width: auto; margin: 0; flex: none; padding: 0;

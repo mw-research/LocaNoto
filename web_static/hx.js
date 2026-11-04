@@ -2,6 +2,8 @@
 // official file can replace this one without changing a page:
 //
 //   hx-get / hx-post      request on submit (forms) or click (others)
+//   hx-trigger            another event, e.g. "input delay:300ms" (waits until
+//                         typing pauses)
 //   hx-target             CSS selector of the element to fill ("this" = self)
 //   hx-swap               innerHTML (default) | outerHTML | beforeend | afterbegin
 //   hx-confirm            ask before sending
@@ -9,7 +11,9 @@
 //
 // Every request carries the CSRF header the server expects with the
 // session cookie. Errors show as a short message, never as page content.
-// Plus three helpers for this app: sign-in, sign-out and upload forms.
+// Plus helpers for this app: sign-in, sign-out, upload forms, and
+// data-userpick -- a text field that suggests user names while typing
+// (comma separated lists too).
 (function () {
   "use strict";
 
@@ -100,9 +104,21 @@
     Array.prototype.forEach.call(els, function (el) {
       if (el._hx) return;
       el._hx = true;
-      var trigger = el.getAttribute("hx-trigger") || (el.tagName === "FORM" ? "submit" : "click");
+      var spec = (el.getAttribute("hx-trigger") || (el.tagName === "FORM" ? "submit" : "click")).split(/\s+/);
+      var trigger = spec[0];
+      var delay = 0;
+      spec.forEach(function (part) {
+        var m = part.match(/^delay:(\d+)ms$/);
+        if (m) delay = parseInt(m[1], 10);
+      });
       if (trigger === "load") { send(el); return; }
-      el.addEventListener(trigger, function (ev) { ev.preventDefault(); send(el, ev); });
+      var timer = null;
+      el.addEventListener(trigger, function (ev) {
+        if (trigger === "submit" || trigger === "click") ev.preventDefault();
+        if (!delay) { send(el, ev); return; }
+        clearTimeout(timer);
+        timer = setTimeout(function () { send(el, ev); }, delay);
+      });
     });
   }
 
@@ -143,7 +159,45 @@
     }
   }
 
+  // Suggest user names for a text field; the last comma separated part is
+  // the one being typed.
+  function userpick(input) {
+    var box = document.createElement("div");
+    box.className = "userpick";
+    box.hidden = true;
+    input.insertAdjacentElement("afterend", box);
+    var timer = null;
+    input.setAttribute("autocomplete", "off");
+    input.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(async function () {
+        var parts = input.value.split(",");
+        var q = parts[parts.length - 1].trim();
+        if (q.length < 1) { box.hidden = true; return; }
+        var r = await fetch("/ui/users/suggest?q=" + encodeURIComponent(q), { credentials: "same-origin" });
+        if (!r.ok) { box.hidden = true; return; }
+        var names = await r.json();
+        box.innerHTML = "";
+        names.forEach(function (n) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.textContent = n;
+          b.addEventListener("click", function () {
+            parts[parts.length - 1] = (parts.length > 1 ? " " : "") + n;
+            input.value = parts.join(",") + (input.hasAttribute("data-multiple") ? ", " : "");
+            box.hidden = true;
+            input.focus();
+          });
+          box.appendChild(b);
+        });
+        box.hidden = !names.length;
+      }, 200);
+    });
+    input.addEventListener("blur", function () { setTimeout(function () { box.hidden = true; }, 200); });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("input[data-userpick]").forEach(userpick);
     var accent = document.documentElement.getAttribute("data-accent");
     if (accent) document.documentElement.style.setProperty("--accent", accent);
     process(document.body);

@@ -26,7 +26,7 @@ import time
 
 import jinja2
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from markdown_it import MarkdownIt
 
 import accounts
@@ -161,6 +161,20 @@ TEXTS = {
         "Adresse eines Funktionspostfachs (nur dafür)",
     "personal (everyone signs in with their own account)":
         "persönlich (jeder meldet sich mit seinem Konto an)",
+    "Only for shared mailboxes": "Nur für Funktionspostfächer",
+    "Search users": "Benutzer suchen", "users": "Benutzer",
+    "Web search allowed": "Websuche erlaubt", "Web search blocked": "Websuche gesperrt",
+    "Block": "Sperren", "Allow": "Erlauben",
+    "Not searched with web search (not allowed there)":
+        "Bei Websuche nicht durchsucht (dort gesperrt)",
+    "Web search next to a workspace means: the model writes search terms while passages of that workspace are in its context, and what ends up in a search term goes to search engines. Taken-over results always land in the own workspace, never in a shared one. The general workspace is therefore blocked by default; with web search, a question over all workspaces simply leaves it out.":
+        "Websuche neben einem Arbeitsbereich heißt: Das Modell formuliert Suchbegriffe, während Abschnitte dieses Bereichs im Kontext stehen – was davon in einen Suchbegriff gerät, geht an Suchmaschinen. Übernommene Treffer landen immer im eigenen Bereich, nie in einem geteilten. „Allgemein“ ist deshalb ab Werk gesperrt; eine Frage mit Websuche über alle Bereiche lässt ihn einfach aus.",
+    "previous": "zurück", "next": "weiter",
+    "may answer on its own (no confirmation)": "darf selbst antworten (ohne Bestätigung)",
+    "add a notice under automatic answers": "Hinweis unter automatische Antworten setzen",
+    "Notice": "Hinweistext", "answers on its own": "antwortet selbständig",
+    "with notice": "mit Hinweis", "WITHOUT notice": "OHNE Hinweis",
+    "prepares drafts": "legt Entwürfe vor",
     "Delete this chat?": "Diesen Chat löschen?",
     "Delete this document?": "Dieses Dokument löschen?",
 }
@@ -558,14 +572,13 @@ def _admin_context(p):
     import sicherheit
     return {
         "nav": _nav(p, "admin"),
-        "users": [(n, (benutzer.eintrag(n) or {}).get("rolle", "nutzer"),
-                   (benutzer.eintrag(n) or {}).get("anmeldung", "lokal"))
-                  for n in benutzer.namen()],
+        "users": _user_page("", 0),
         # notzugang is assigned on the server or by the directory only
         # (see accounts.APP_ROLES).
         "roles": accounts.APP_ROLES,
         "workspaces": [(r, raeume.bezeichnung(r),
-                        ", ".join(d.get("mitglieder") or []), d.get("gruppe") or "")
+                        ", ".join(d.get("mitglieder") or []), d.get("gruppe") or "",
+                        raeume.websuche_erlaubt(r))
                        for r, d in sorted(raeume.liste().items())
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
@@ -574,6 +587,49 @@ def _admin_context(p):
         "sql_targets": [(r, raeume.bezeichnung(r))
                         for r in sorted(raeume.liste()) if not raeume.ist_privat(r)],
     }
+
+
+USER_PAGE = 50
+
+
+def _user_page(query, offset):
+    """One page of the user list, filtered by a part of the name.
+
+    With thousands of accounts the page shows a search field and at most
+    USER_PAGE rows instead of everyone at once.
+    """
+    q = str(query or "").strip().lower()
+    names = [n for n in benutzer.namen() if q in n.lower()] if q else benutzer.namen()
+    offset = max(0, int(offset or 0))
+    rows = []
+    for n in names[offset:offset + USER_PAGE]:
+        entry = benutzer.eintrag(n) or {}
+        rows.append((n, entry.get("rolle", "nutzer"), entry.get("anmeldung", "lokal")))
+    return {"rows": rows, "total": len(names), "offset": offset, "query": query or "",
+            "next": offset + USER_PAGE if offset + USER_PAGE < len(names) else None,
+            "previous": max(0, offset - USER_PAGE) if offset else None}
+
+
+@router.get("/ui/admin/users")
+def admin_user_rows(request: Request, q: str = "", offset: int = 0,
+                    p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    return render("admin_users.html", request, users=_user_page(q, offset),
+                  roles=accounts.APP_ROLES)
+
+
+@router.get("/ui/users/suggest")
+def suggest_users(q: str = "", p: Principal = Depends(principal)):
+    """Up to ten user names containing q, for fields that take user names
+    (admins only: the list of accounts is not for everyone)."""
+    _admin(p)
+    q = q.strip().lower()
+    if not q:
+        return JSONResponse([])
+    starts = [n for n in benutzer.namen() if n.lower().startswith(q)]
+    inside = [n for n in benutzer.namen() if q in n.lower() and n not in starts]
+    return JSONResponse((starts + inside)[:10])
 
 
 @router.get("/admin")
@@ -631,6 +687,16 @@ def admin_create_workspace(request: Request, id: str = Form(...),
     page_language(p.name)
     ok, message = raeume.anlegen(
         id, label, "", [m.strip() for m in members.split(",") if m.strip()])
+    return _back_to_admin() if ok else _notice(tm(message), False)
+
+
+@router.post("/ui/admin/workspaces/{room}/websearch")
+def admin_set_web_search(room: str, request: Request, allow: str = Form(""),
+                         p: Principal = Depends(principal)):
+    """The same as PATCH /api/v1/admin/workspaces/{room} with web_search."""
+    _admin(p)
+    page_language(p.name)
+    ok, message = raeume.websuche_setzen(room, allow == "1")
     return _back_to_admin() if ok else _notice(tm(message), False)
 
 
