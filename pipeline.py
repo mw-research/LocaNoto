@@ -674,6 +674,55 @@ def quellen(treffer):
             for (raum, datei, seite), texte in gesammelt.items()]
 
 
+_CITATION = re.compile(r"\[([^\[\]]+)\]")
+_CITED_PAGE = re.compile(
+    r"^\s*(.+?)\s*,\s*(?:Seiten?|pages?|S\.|p\.)\s*([\d\s,\-\u2013und and]+?)\s*$",
+    re.IGNORECASE)
+
+
+def _cited_pages(answer):
+    """{(file name, casefolded), page} pairs the answer cites as [file, page X]."""
+    cited = set()
+    for group in _CITATION.findall(answer or ""):
+        for part in group.split(";"):
+            m = _CITED_PAGE.match(part)
+            if not m:
+                continue
+            name = m.group(1).strip().casefold()
+            for a, b in re.findall(r"(\d+)(?:\s*[-\u2013]\s*(\d+))?", m.group(2)):
+                first, last = int(a), int(b or a)
+                for page in range(first, min(last, first + 50) + 1):
+                    cited.add((name, page))
+    return cited
+
+
+def cited_sources(sources, answer):
+    """(cited, others): the sources the answer cites, and the rest.
+
+    The model gets every passage the search found; below the answer only
+    those it actually cites belong first. A file name counts with or
+    without its extension. When the answer cites none of them (no
+    citations, or names the model changed), all stay cited -- an answer
+    without any source would be worse than one with too many.
+    """
+    pages = _cited_pages(answer)
+    if not pages:
+        return list(sources), []
+    cited, others = [], []
+    for s in sources:
+        name = str(s.get("file", "")).casefold()
+        stem = name.rsplit(".", 1)[0]
+        try:
+            page = int(s.get("page"))
+        except (TypeError, ValueError):
+            page = None
+        hit = page is not None and ((name, page) in pages or (stem, page) in pages)
+        (cited if hit else others).append(s)
+    if not cited:
+        return list(sources), []
+    return cited, others
+
+
 def projekte(benutzer, raum, notzugang=()):
     """{projekt: [dateien]} eines Raums, aus dem Ordner je Datei.
 

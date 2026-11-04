@@ -3708,6 +3708,24 @@ pruef("the Postgres collection never names a vector column itself",
       "embedding <->" not in _pgc_src and "metadata, embedding)" not in _pgc_src
       and _pgc_src.count("vector_columns.active()") == 3)
 
+# --- ONLY CITED SOURCES BELOW THE ANSWER (pipeline.cited_sources) ---
+_src_c = [{"file": "Pruefvorschrift.pdf", "page": 3}, {"file": "Pruefvorschrift.pdf", "page": 4},
+          {"file": "Handbuch Reklamation.md", "page": 1}, {"file": "Wartung.pdf", "page": 7},
+          {"file": "Wartung.pdf", "page": 9}]
+_c, _o = pipeline.cited_sources(_src_c, "Alle vier Jahre [Pruefvorschrift.pdf, Seite 3]. "
+                                "Vorgehen siehe [Handbuch Reklamation, Seite 1; Wartung.pdf, Seiten 8-9].")
+pruef("only the sources the answer cites come first; the rest apart",
+      [(s["file"], s["page"]) for s in _c] == [("Pruefvorschrift.pdf", 3),
+                                               ("Handbuch Reklamation.md", 1), ("Wartung.pdf", 9)]
+      and [(s["file"], s["page"]) for s in _o] == [("Pruefvorschrift.pdf", 4), ("Wartung.pdf", 7)],
+      (_c, _o))
+pruef("an English citation counts too",
+      [s["page"] for s in pipeline.cited_sources(_src_c, "Every four years [Pruefvorschrift.pdf, page 4].")[0]] == [4])
+pruef("an answer without citations keeps every source",
+      pipeline.cited_sources(_src_c, "Keine Angabe in den Dokumenten.") == (_src_c, []))
+pruef("citations of unknown files keep every source",
+      pipeline.cited_sources(_src_c, "[Andere.pdf, Seite 2]") == (_src_c, []))
+
 # --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
 import postfach as _pfa
 for _ein, _aus in (

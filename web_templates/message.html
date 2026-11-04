@@ -37,6 +37,17 @@
     {% endfor %}
   </details>
   {% endif %}
+  {% if m.sources_more %}
+  <details class="sources more">
+    <summary>{{ t('Further passages found') }} ({{ m.sources_more|length }})</summary>
+    {% for s in m.sources_more %}
+    <div class="source">
+      <div class="source-head">{{ s.file }} · {{ t('page') }} {{ s.page }}{% if s.herkunft %} · {{ s.herkunft }}{% endif %}</div>
+      {% for x in s.texts %}<blockquote>{{ x }}</blockquote>{% endfor %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
   {% for d in m.entwuerfe or [] %}
   <div class="draft" id="draft-{{ d.id }}">
     {% if d.state %}<span class="muted">{{ d.state }}</span>{% else %}

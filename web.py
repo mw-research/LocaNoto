@@ -78,6 +78,7 @@ TEXTS = {
     "Workspaces": "Arbeitsbereiche", "all": "alle",
     "Web search": "Websuche", "Model": "Modell", "Preset": "Voreinstellung",
     "none": "keine", "Sources": "Quellen", "page": "Seite",
+    "Further passages found": "Weitere gefundene Stellen (nicht zitiert)",
     "Show page": "Seite zeigen", "Helpful": "Hilfreich",
     "Not helpful": "Nicht hilfreich", "Thanks.": "Danke.",
     "Draft waiting for you": "Entwurf wartet auf dich",

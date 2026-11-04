@@ -479,8 +479,10 @@ def _ask(user, req):
             room = (d.get("argumente") or {}).get("room") \
                 or raeume.privat_kennung(user)
             d["ziel"] = raeume.bezeichnung(room)
-    message = {"role": "assistant", "content": "".join(parts),
-               "sources": pipeline.quellen(hits), "sonden": probes,
+    answer = "".join(parts)
+    cited, others = pipeline.cited_sources(pipeline.quellen(hits), answer)
+    message = {"role": "assistant", "content": answer,
+               "sources": cited, "sources_more": others, "sonden": probes,
                "zahlen": numbers, "entwuerfe": drafts,
                "web": pipeline.webtreffer(extra, settings["web_servers"]),
                "modell": model}
