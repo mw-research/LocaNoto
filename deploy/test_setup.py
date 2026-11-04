@@ -192,7 +192,8 @@ answers = {"target": "kubernetes", "namespace": "lnt", "host": "locanoto.example
                         "oidc": True, "pages": False},
            "cloud_host": "cloud.example.test", "cloud_internal_ip": "10.96.0.50",
            "oidc_issuer": "https://idp.example.test",
-           "oidc_client_id": "locanoto", "oidc_admin_groups": "it-admins"}
+           "oidc_client_id": "locanoto", "oidc_admin_groups": "it-admins",
+           "env": {"RERANKER_BASE_URL": "http://modelle:8000", "REEMBED_HOURS": "20-6"}}
 r = run_setup(answers, state, {"LOCANOTO_OIDC_SECRET": "oidc-secret-value"})
 check("kubernetes render runs", r.returncode == 0, r.stderr[-800:])
 objs = list(yaml.safe_load_all(open(os.path.join(state, "kubernetes.yaml"), encoding="utf-8")))
@@ -204,6 +205,14 @@ check("expected objects", {("Deployment", "server"), ("Deployment", "worker"),
 by = {(o["kind"], o["metadata"]["name"]): o for o in objs}
 cm = by[("ConfigMap", "locanoto")]["data"]
 secret = by[("Secret", "locanoto")]["stringData"]
+check("further settings from the answers file reach the ConfigMap",
+      cm.get("RERANKER_BASE_URL") == "http://modelle:8000" and cm.get("REEMBED_HOURS") == "20-6")
+for _bad_env, _why in (({"RERANKER_API_KEY": "x"}, "a key"),
+                       ({"CHAT_MODEL": "other"}, "a setting the installer owns"),
+                       ({"lower": "x"}, "not a variable name")):
+    _r = run_setup(dict(answers, env=_bad_env), os.path.join(TMP, "state-env-bad"), {})
+    check(f'"env" with {_why} is refused', _r.returncode != 0 and '"env"' in _r.stderr + _r.stdout,
+          (_r.returncode, _r.stderr[-300:]))
 check("secrets in the Secret, not in the ConfigMap",
       "LOCANOTO_SCHLUESSEL" in secret and "OIDC_CLIENT_SECRET" in secret
       and "LOCANOTO_SCHLUESSEL" not in cm and "oidc-secret-value" not in json.dumps(cm))

@@ -34,6 +34,11 @@ Without questions (automation, CI):
     python3 locanoto-setup.py --answers answers.json --yes
     (admin password from LOCANOTO_ADMIN_PASSWORD, model key from
      LOCANOTO_MODEL_API_KEY, OIDC secret from LOCANOTO_OIDC_SECRET)
+
+Further settings of .env.example (a reranker, a separate embedding
+server, REEMBED_HOURS, ...) go into the answers file as "env": {NAME:
+value}. They are kept for --upgrade. Keys and passwords do not belong
+there -- the answers file is not secret.
 """
 import argparse
 import getpass
@@ -485,7 +490,29 @@ def app_env(a, sec, database_url, opencloud_url):
                     "OIDC_CLIENT_SECRET": sec.get("OIDC_SECRET", ""),
                     "OIDC_REDIRECT_URI": f"https://{a['host']}/api/v1/auth/oidc/callback",
                     "OIDC_ADMIN_GROUPS": a.get("oidc_admin_groups", "")})
+    for k, v in (a.get("env") or {}).items():
+        env.setdefault(k, str(v))
     return env
+
+
+SECRET_WORDS = ("KEY", "PASSWOR", "SECRET", "TOKEN", "SCHLUESSEL")
+
+
+def extra_env_problem(extra, reserved):
+    """Why the "env" of an answers file cannot be used, or None."""
+    if not isinstance(extra, dict):
+        return '"env" must be an object {"NAME": "value"}.'
+    for k, v in extra.items():
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", str(k)):
+            return f'"env": {k} is not a variable name.'
+        if any(w in k for w in SECRET_WORDS):
+            return (f'"env": {k} looks like a key or password -- the answers file '
+                    f'is not secret. Leave it out; it falls back to the model key.')
+        if k in reserved:
+            return f'"env": {k} is set by the installer from its own answers.'
+        if isinstance(v, (dict, list)):
+            return f'"env": {k} must be a single value.'
+    return None
 
 
 def trust_env():
@@ -1305,6 +1332,8 @@ def main():
             a["features"].setdefault(k, d)
         a.setdefault("dimensions", 2048)
         a.setdefault("company_ca", [])
+        if "env" not in a and old.get("env"):
+            a["env"] = old["env"]
     elif args.upgrade and old:
         a = old
     else:
@@ -1312,6 +1341,11 @@ def main():
     a["image"] = args.image or a.get("image") or IMAGE
     a["state_dir"] = args.state
     a["version"] = VERSION
+    if a.get("env"):
+        problem = extra_env_problem(a["env"], set(app_env(
+            dict(a, env={}), new_secrets({}), "x", "x")))
+        if problem:
+            raise SystemExit(problem)
 
     sec = new_secrets(sec)
     if os.getenv("LOCANOTO_MODEL_API_KEY"):

@@ -87,6 +87,12 @@ Ein Beispiel für `antworten.json` steht in `.github/workflows/installation.yml`
 – dort wird bei jedem Stand auf Docker und Kubernetes genau so installiert
 und von außen geprüft.
 
+Weitere Einstellungen aus `.env.example` (Reranker, eigener Embedding-Server,
+`REEMBED_HOURS`, …) stehen in der Antwortdatei unter `"env"`, etwa
+`"env": {"RERANKER_BASE_URL": "http://modelle:8000", "REEMBED_HOURS": "20-6"}`.
+Sie bleiben bei `--upgrade` erhalten. Schlüssel und Passwörter gehören nicht
+hinein – die Antwortdatei ist nicht geheim; der Installer lehnt sie ab.
+
 ---
 
 # Installing LocaNoto
