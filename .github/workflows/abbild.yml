@@ -44,7 +44,7 @@ name: Abbild
 
 on:
   push:
-    branches: [main, enterprise]
+    branches: [legacy]
     paths:
       - "**.py"
       - requirements.txt

@@ -1,5 +1,9 @@
 # LocaNoto
 
+> **Legacy.** This edition is no longer developed. The current one is on
+> branch [`main`](https://github.com/mw-research/LocaNoto/tree/main)
+> (images `enterprise-schlank` and `enterprise-voll`).
+
 **Ask your own documents — and get the answer with file and page.**
 
 LocaNoto is a self-hosted retrieval-augmented question answering system for
