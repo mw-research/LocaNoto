@@ -164,6 +164,13 @@ xxhash==4.0.0
 yarl==1.24.5
 zipp==4.1.0
 zstandard==0.25.0
+# Files the model creates on request (created_files.py): PowerPoint and PDF;
+# Excel and Word use openpyxl and python-docx from above.
+python-pptx==1.0.2
+XlsxWriter==3.2.0
+reportlab==4.2.5
+chardet==5.2.0
+
 # Driver for the databases of the workspaces (Microsoft SQL Server, sqldb.py).
 # Loaded only when a database account is used.
 pymssql==2.2.11

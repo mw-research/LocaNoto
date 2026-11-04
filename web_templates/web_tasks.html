@@ -1,0 +1,15 @@
+{% if notice %}<p class="ok">{{ notice }}</p>{% endif %}
+{% if not tasks %}<p class="muted">{{ t('No searches yet.') }}</p>{% endif %}
+<ul class="tasks">
+{% for item in tasks %}
+  <li>
+    <span class="grow">{{ task_line(item) if item.state != 'running' else (t('Web search') if item.kind == 'search' else t('Take over')) ~ ': ' ~ item.query }}</span>
+    {% if item.state == 'running' %}<span class="tag">{{ t('running') }} …</span>
+    {% else %}
+      {% if not item.seen %}<span class="tag new">{{ t('new') }}</span>{% endif %}
+      <button type="button" hx-get="/ui/web/tasks/{{ item.id }}" hx-target="#webtask">{{ t('Show') }}</button>
+    {% endif %}
+    <button type="button" class="link" hx-post="/ui/web/tasks/{{ item.id }}/delete" hx-target="#webtasks" hx-confirm="{{ t('Delete') }}?">{{ t('Delete') }}</button>
+  </li>
+{% endfor %}
+</ul>

@@ -482,12 +482,12 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +65 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +67 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +14 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +18 |
-| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `attachments`, `aufnehmen`, `auth` +27 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +20 |
+| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `attachments`, `aufnehmen`, `auth` +29 |
 | `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +13 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +16 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +18 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `raeume`, `routes_account`, `selbsttest` +3 |
 | **Bestand** | | | |
@@ -503,18 +503,20 @@ Dateien importieren sie.
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +12 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +4 |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `imap_mailbox`, `mcp`, `selbsttest` |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mailboxes` +7 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mailboxes` +8 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `answering`, `api`, `app`, `attachments` +11 |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `attachments`, `doc_actions` +7 |
 | `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K` | `app`, `routes_account`, `routes_chat`, `server` +4 |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +2 |
 | `imap_mailbox.py` | Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers. | `POSTFACH_HOLGRENZE`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
+| `created_files.py` | Files the model creates on request: Excel, Word, PDF, PowerPoint. | `CREATED_FILES_KEEP`, `CREATED_FILES_MAX_ROWS`, `FILES_TOOL` | `answering`, `attachments`, `routes_documents`, `selbsttest` |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `app`, `routes_admin` +5 |
 | `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `answering`, `api`, `app`, `doc_actions` +8 |
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `attachments`, `mailboxes` +7 |
 | `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +6 | `routes_account`, `test_api`, `web` |
 | `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_WINDOW_MINUTES` +3 | `oidc`, `routes_account`, `server`, `web` |
+| `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `selbsttest`, `web` |
 | `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +7 | `answering`, `app`, `selbsttest` |
 | `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MINDEST_TEXT`, `OCR_DPI`, `OCR_SPRACHEN` | `aufnehmen`, `ingest`, `selbsttest` |
 | `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `app`, `pipeline` +6 |
@@ -535,7 +537,7 @@ Dateien importieren sie.
 | `attachments.py` | Files a user may attach to a mail: the own workspace and this chat's images. | `ATTACHMENT_MAX_MB` | `answering`, `mailboxes`, `selbsttest` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `routes_admin`, `selbsttest` +2 |
 | `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `web` |
-| `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `server`, `web` |
+| `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `selbsttest`, `server`, `test_api` +2 |
 | `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `app`, `routes_admin`, `verwaltung` |
 | `metrics.py` | Counters in the Prometheus text format, for /metrics. | — | `server` |
 | `quellticket.py` | Ein Ticket fuer genau eine Fundstelle, fuer kurze Zeit. | `QUELLE_TICKET_MINUTEN` | `app`, `selbsttest` |
@@ -545,22 +547,22 @@ Dateien importieren sie.
 | `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
 | `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
 | `test_api.py` | Exercises every endpoint of server.py against a real installation. | `SELFTEST_DATABASE` | — |
-| `routes_admin.py` | API: the admin area -- everything verwaltung.py and the admin parts of | — | `server` |
 | `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME` | `server`, `web_admin` |
+| `routes_admin.py` | API: the admin area -- everything verwaltung.py and the admin parts of | — | `server` |
 | `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `app`, `routes_admin`, `selbsttest`, `test_api` +2 |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
-| `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | `selbsttest` |
+| `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server` |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
+| `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `uebersetzen.py` | Oberflaechentexte fuer die Uebersetzung einwickeln und einsammeln. | — | `selbsttest` |
 | `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
 | `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
 | `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +4 |
-| `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
 | `test_multipod.py` | Two server processes and a worker on one database -- as two pods would run. | `SELFTEST_DATABASE` | — |

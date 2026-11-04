@@ -10,7 +10,16 @@
     POST   /websources/search             search the web (only the term leaves)
     POST   /websources/read               a page as plain text
     POST   /websources/take-over          pages into the OWN room
+    POST   /websources/tasks              start a search in the background
+    GET    /websources/tasks              the own searches and take-overs
+    GET    /websources/tasks/{id}         one, with its hits (marks it seen)
+    DELETE /websources/tasks/{id}
+    POST   /websources/tasks/{id}/take-over   chosen hits, in the background
+    GET    /websources/notifications      finished, not yet looked at
     POST   /workspace-notes               a summary or note as a document
+    GET    /files                         files created for this user
+    GET    /files/{name}                  download one
+    DELETE /files/{name}
     GET    /lists                         sheets this user may query
     PUT    /me/list-folder                the own list folder
 
@@ -20,6 +29,7 @@ would pass the extraction budget (budget.py) in one request.
 """
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      UploadFile)
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import aufnehmen
@@ -30,7 +40,9 @@ import paths
 import pipeline
 import raeume
 import tabellen
+import web_research
 import web_sources
+import created_files
 import workspace_notes
 from server import Principal, principal
 
@@ -201,6 +213,65 @@ def web_take_over(body: TakeOver, p: Principal = Depends(principal)):
     return web_sources.take_over(p.name, [pg.model_dump() for pg in body.pages])
 
 
+class WebTask(BaseModel):
+    query: str = Field(min_length=2, max_length=200,
+                       description="goes to search engines -- keywords only")
+    count: int = Field(default=web_research.COUNT_DEFAULT, ge=1, le=30)
+
+
+def _task_call(fn, *args):
+    try:
+        return fn(*args)
+    except web_research.Refused as e:
+        raise HTTPException(404 if "Unknown" in str(e) else 429, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/websources/tasks", tags=["web"])
+def web_task_start(body: WebTask, p: Principal = Depends(principal)):
+    """Starts a web search that runs on its own; poll the task or
+    /websources/notifications. Results stay until the task is deleted."""
+    return _task_call(web_research.start_search, p.name, body.query, body.count)
+
+
+@router.get("/websources/tasks", tags=["web"])
+def web_task_list(p: Principal = Depends(principal)):
+    return web_research.tasks(p.name)
+
+
+@router.get("/websources/tasks/{task_id}", tags=["web"])
+def web_task(task_id: str, p: Principal = Depends(principal)):
+    return _task_call(web_research.task_of, p.name, task_id, True)
+
+
+@router.delete("/websources/tasks/{task_id}", tags=["web"])
+def web_task_delete(task_id: str, p: Principal = Depends(principal)):
+    _task_call(web_research.remove, p.name, task_id)
+    return {"deleted": task_id}
+
+
+class TaskPicks(BaseModel):
+    picks: list[int] = Field(min_length=1, max_length=30,
+                             description="positions in the task's hits, from 0")
+
+
+@router.post("/websources/tasks/{task_id}/take-over", tags=["web"])
+def web_task_take_over(task_id: str, body: TaskPicks,
+                       p: Principal = Depends(principal)):
+    """Chosen hits into the OWN room, read and stored in the background."""
+    return _task_call(web_research.start_take_over, p.name, task_id, body.picks)
+
+
+@router.get("/websources/notifications", tags=["web"])
+def web_notifications(p: Principal = Depends(principal)):
+    items = web_research.tasks(p.name)
+    return {"running": sum(1 for t in items if t["state"] == "running"),
+            "finished": [dict(id=t["id"], kind=t["kind"], state=t["state"],
+                              text=web_research.summary(t))
+                         for t in items if t["state"] != "running" and not t.get("seen")]}
+
+
 # --- SUMMARIES AND NOTES ---
 
 class Note(BaseModel):
@@ -222,6 +293,44 @@ def create_note(body: Note, p: Principal = Depends(principal)):
         raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# --- CREATED FILES ---
+
+_MEDIA = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "pdf": "application/pdf"}
+
+
+@router.get("/files", tags=["documents"])
+def created_file_list(p: Principal = Depends(principal)):
+    """Files LocaNoto created for this user (Excel, Word, PDF, PowerPoint)."""
+    return created_files.names(p.name)
+
+
+@router.get("/files/{name}", tags=["documents"])
+def created_file(name: str, p: Principal = Depends(principal)):
+    from urllib.parse import quote
+    try:
+        data = created_files.read(p.name, name)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "No such file.")
+    ext = name.rsplit(".", 1)[-1].lower()
+    return Response(content=data, media_type=_MEDIA.get(ext, "application/octet-stream"),
+                    headers={"Content-Disposition":
+                             f"attachment; filename*=UTF-8''{quote(name)}"})
+
+
+@router.delete("/files/{name}", tags=["documents"])
+def delete_created_file(name: str, p: Principal = Depends(principal)):
+    try:
+        found = created_files.delete(p.name, name)
+    except ValueError:
+        found = False
+    if not found:
+        raise HTTPException(404, "No such file.")
+    return {"deleted": name}
 
 
 # --- LISTS ---

@@ -5,8 +5,9 @@
     source(user, chat_id)             -> callable(names) for a mailbox connection
 
 Only what the user alone controls leaves the house this way: documents of
-the own (private) workspace -- uploads, taken-over web pages, created
-files -- and images the user put into this chat. A document of a shared
+the own (private) workspace -- uploads, taken-over web pages --, files
+LocaNoto created for the user (created_files.py) and images the user put
+into this chat. A document of a shared
 workspace is not attachable: what others put there is not the sender's
 to forward, and a mail is the one thing that cannot be taken back. To
 send one anyway, move it into the own workspace first; that step is
@@ -47,8 +48,10 @@ def _chat_images(user, chat_id):
 
 
 def available(user, chat_id=None):
+    import created_files
     _own, docs = _own_documents(user)
-    return sorted(docs) + [label for label, _p in _chat_images(user, chat_id)]
+    return (sorted(docs) + [n for n in created_files.names(user) if n not in docs]
+            + [label for label, _p in _chat_images(user, chat_id)])
 
 
 def _image_label(name):
@@ -65,7 +68,9 @@ def resolve(user, chat_id, names):
     names = [str(n).strip() for n in (names or []) if str(n).strip()]
     if not names:
         return []
+    import created_files
     own, docs = _own_documents(user)
+    created = set(created_files.names(user))
     images = {_image_label(label): (label, path) for label, path in _chat_images(user, chat_id)}
     out, total, refused = [], 0, []
     for name in names:
@@ -77,6 +82,8 @@ def resolve(user, chat_id, names):
             with statefiles.open(path, "rb") as f:
                 data = f.read()
             out.append((name, data))
+        elif name in created:
+            out.append((name, created_files.read(user, name)))
         elif _image_label(name) in images:
             label, path = images[_image_label(name)]
             data = vision.lade(path)
@@ -91,7 +98,7 @@ def resolve(user, chat_id, names):
     if refused:
         raise ValueError(
             "Not attachable: " + ", ".join(refused) + ". Only documents of the own "
-            "workspace and images of this chat can be attached"
+            "workspace, created files and images of this chat can be attached"
             + (" (available: " + ", ".join(available(user, chat_id)[:20]) + ")"
                if available(user, chat_id) else "") + ".")
     if total > MAX_TOTAL_MB * 1024 * 1024:

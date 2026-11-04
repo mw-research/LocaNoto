@@ -7,6 +7,9 @@
   {% if m.zahlen and m.zahlen.vektorausfall %}
   <p class="warn">{{ t('Answer from the keyword search only -- the vector search did not answer for') }}: {{ m.zahlen.vektorausfall|join(', ') }}</p>
   {% endif %}
+  {% if m.files %}
+  <p class="files-created">{{ t('Created') }}: {% for f in m.files %}<a href="/api/v1/files/{{ f|urlencode }}" download>{{ f }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>
+  {% endif %}
   {% if m.web_excluded %}
   <p class="muted">{{ t('Not searched with web search (not allowed there)') }}: {{ m.web_excluded|join(', ') }}</p>
   {% endif %}

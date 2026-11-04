@@ -302,7 +302,8 @@ def _module():
 # already; the page shows them in German by catching their error kinds
 # (see verschiebe_dokument in app.py), not through this table.
 ENGLISCH_ZUERST = {"doc_actions", "answering", "web_sources", "mailboxes",
-                   "workspace_notes", "attachments",
+                   "workspace_notes", "attachments", "created_files",
+                   "web_research",
                    "accounts", "sessions", "jobs", "oidc", "metrics",
                    "statefiles", "database", "pg_collection", "pg_keywords"}
 

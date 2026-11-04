@@ -64,6 +64,13 @@ SPRACHE = os.getenv("WEBSUCHE_SPRACHE", "de").strip() or "de"
 # Gegen gesperrte Suchmaschinen: ein Modell in einer Schleife soll nicht
 # hundert Anfragen in der Minute schicken.
 PRO_MINUTE = _zahl("WEBSUCHE_PRO_MINUTE", 30)
+# The source search may ask for more than the answer's 5: up to this many,
+# over several result pages of SearXNG.
+MAX_TREFFER = _zahl("WEBSUCHE_MAX_TREFFER", 30)
+# The same search within this time is answered from memory. Forty people
+# in a demo asking the same thing reach the search engines once, and the
+# per-minute brake counts only what really goes out.
+CACHE_SEKUNDEN = _zahl("WEBSUCHE_CACHE_SEKUNDEN", 900)
 
 # Ein langer Satz traegt mehr aus dem Zusammenhang hinaus als ein paar
 # Stichworte.
@@ -232,6 +239,41 @@ def _bremse():
         _takt.append(jetzt)
 
 
+_cache = {}
+_cache_sperre = threading.Lock()
+
+
+def _ergebnisse(client, anfrage, seite):
+    """The raw results of one SearXNG page, from the cache when fresh."""
+    import httpx
+    key = (anfrage.lower(), SPRACHE, seite)
+    jetzt = time.monotonic()
+    with _cache_sperre:
+        hit = _cache.get(key)
+        if hit and jetzt - hit[0] < CACHE_SEKUNDEN:
+            return hit[1]
+    _bremse()
+    try:
+        a = client.get(f"{SEARXNG}/search", params={
+            "q": anfrage, "format": "json", "language": SPRACHE,
+            "safesearch": "1", "pageno": seite},
+            headers={"Accept": "application/json"})
+        a.raise_for_status()
+        daten = a.json()
+    except httpx.HTTPError as e:
+        raise Fehler(f"Die Suchmaschine ist nicht erreichbar ({e}).")
+    except ValueError:
+        raise Fehler("Die Suchmaschine antwortet nicht in JSON -- ist "
+                     "das JSON-Format in SearXNG eingeschaltet?")
+    ergebnisse = list(daten.get("results") or [])
+    with _cache_sperre:
+        if len(_cache) > 500:
+            for k in sorted(_cache, key=lambda k_: _cache[k_][0])[:250]:
+                _cache.pop(k, None)
+        _cache[key] = (jetzt, ergebnisse)
+    return ergebnisse
+
+
 def _punkte(anfrage, t, rang):
     """Titel und Ausschnitt gegen die Suchwoerter, dazu der Rang."""
     woerter = set(re.findall(r"\w{3,}", anfrage.lower()))
@@ -248,7 +290,7 @@ def suchen(anfrage, client=None, anzahl=None, lesen=None):
     anzahl und lesen ueberschreiben die Vorgaben, in Grenzen: die
     Quellensuche will mehr Treffer und noch keine ganzen Seiten.
     """
-    anzahl = max(1, min(10, int(anzahl or TREFFER)))
+    anzahl = max(1, min(MAX_TREFFER, int(anzahl or TREFFER)))
     lesen = max(0, min(5, LESEN if lesen is None else int(lesen)))
     import httpx
     anfrage = " ".join(str(anfrage or "").split())[:MAX_ANFRAGE]
@@ -256,25 +298,18 @@ def suchen(anfrage, client=None, anzahl=None, lesen=None):
         raise Fehler("Die Anfrage ist leer.")
     if not SEARXNG:
         raise Fehler("Keine Suchmaschine eingerichtet (WEBSUCHE_SEARXNG).")
-    _bremse()
     eigener = client is None
     client = client or httpx.Client(timeout=SEKUNDEN,
                                     headers={"User-Agent": KENNUNG},
                                     follow_redirects=False)
     try:
-        try:
-            a = client.get(f"{SEARXNG}/search", params={
-                "q": anfrage, "format": "json", "language": SPRACHE,
-                "safesearch": "1"}, headers={"Accept": "application/json"})
-            a.raise_for_status()
-            daten = a.json()
-        except httpx.HTTPError as e:
-            raise Fehler(f"Die Suchmaschine ist nicht erreichbar ({e}).")
-        except ValueError:
-            raise Fehler("Die Suchmaschine antwortet nicht in JSON -- ist "
-                         "das JSON-Format in SearXNG eingeschaltet?")
+        # One page has about ten results; more are asked for page by page,
+        # up to three pages.
+        roh = []
+        for seite in range(1, min(3, (anzahl + 9) // 10) + 1):
+            roh += _ergebnisse(client, anfrage, seite)
         gefunden = []
-        for e in daten.get("results") or []:
+        for e in roh:
             adresse = str(e.get("url") or "").strip()
             if _brauchbar(adresse):
                 gefunden.append({
@@ -286,15 +321,20 @@ def suchen(anfrage, client=None, anzahl=None, lesen=None):
         sortiert = sorted(enumerate(gefunden),
                           key=lambda p: _punkte(anfrage, p[1], p[0]),
                           reverse=True)
-        auswahl, gesehen = [], set()
+        # One result per site for the answer; a longer source search may
+        # show two pages of the same site.
+        je_host = 1 if anzahl <= 10 else 2
+        auswahl, gesehen, adressen = [], {}, set()
         for _rang, t in sortiert:
             host = urlsplit(t["adresse"]).hostname
             # Ein Treffer, der ins eigene Netz zeigt, ist keiner -- auch
             # wenn er nicht abgerufen wuerde, gehoert er nicht in die
             # Liste, die das Modell und der Nutzer sehen.
-            if host in gesehen or not oeffentlich(host):
+            if (gesehen.get(host, 0) >= je_host or t["adresse"] in adressen
+                    or not oeffentlich(host)):
                 continue
-            gesehen.add(host)
+            gesehen[host] = gesehen.get(host, 0) + 1
+            adressen.add(t["adresse"])
             auswahl.append(t)
             if len(auswahl) >= anzahl:
                 break

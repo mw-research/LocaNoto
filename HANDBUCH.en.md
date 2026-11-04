@@ -295,6 +295,8 @@ goes out, no documents.
 - Shared workspace → an admin has to allow web search there first.
   Otherwise the sidebar names the workspaces that are not enabled; then
   select only enabled ones at the top.
+- **Allgemein** is blocked by default. A question with web search over all
+  workspaces leaves it out and says so below the answer.
 
 Results appear below the answer as **From the web** with [W1], [W2] …,
 separate from the documents. Tick results → **Import n** → they land in
@@ -302,18 +304,22 @@ your personal workspace.
 
 ### How do I collect sources from the internet with LocaNoto?
 
-1. Above the chat, expand **Web sources**.
-2. Enter a **Topic** as keywords → **Search** → up to ten results, without
-   an answer. The search term goes to search engines: no internal names
-   or figures.
-3. Optionally **Read** → shows the page as plain text, without images and
-   scripts; exactly this text is imported. **Original ↗** opens the page
-   in your browser.
-4. Tick results → **Import n**.
+1. Tab **Web sources** → enter a **topic** as keywords → **Search**.
+   Or type keywords into the chat box → **Search in the web**.
+   The search term goes to search engines: no internal names or figures.
+2. The search runs in the background; you may leave the page. When the
+   results are there (up to 25), a notice with **Show** appears and the
+   **Web sources** tab shows a count.
+3. **Show** → the results. Optionally **Read** → the page as plain text,
+   without images and scripts. **↗** opens the page in your browser.
+4. Tick results (or **Select all**) → **Take over selected into my
+   workspace**. This runs in the background too; a notice says how many
+   pages were stored.
 
-Imported items always land **in your personal workspace**, folder
-*Suchergebnisse*, with source and retrieval date. If something belongs in
-a shared workspace → move it there.
+Searches stay under **My searches** until you delete them. Imported items
+always land **in your personal workspace**, folder *Suchergebnisse*, with
+source and retrieval date. If something belongs in a shared workspace →
+move it there.
 
 ### How do I tell LocaNoto how it should answer me?
 

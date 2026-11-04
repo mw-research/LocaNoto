@@ -5,13 +5,17 @@
 <p class="muted">{{ t('Web search') }}: –</p>
 {% else %}
 <section class="card">
-  <form hx-post="/ui/web/search" hx-target="#webresults" class="inline wide">
-    <input name="query" required placeholder="DIN EN 1090 ...">
+  <form hx-post="/ui/web/tasks" hx-target="#webtasks" class="inline wide">
+    <input name="query" required minlength="2" maxlength="200" placeholder="DIN EN 1090 ...">
     <button type="submit" class="primary">{{ t('Search') }}</button>
   </form>
-  <p class="muted">{{ t('Keywords only -- they go to search engines.') }}</p>
+  <p class="muted">{{ t('Keywords only -- they go to search engines.') }}
+    {{ t('Searches run in the background and stay here until you delete them. Taken-over pages land in your own workspace, folder Suchergebnisse; from there they can be moved on purpose.') }}</p>
 </section>
-<div id="webresults"></div>
-<div id="taken"></div>
 {% endif %}
+<section class="card">
+  <h2>{{ t('My searches') }}</h2>
+  <div id="webtasks" hx-get="/ui/web/tasks" hx-trigger="load"></div>
+</section>
+<div id="webtask"{% if task %} hx-get="/ui/web/tasks/{{ task }}" hx-trigger="load"{% endif %}></div>
 {% endblock %}

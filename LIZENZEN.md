@@ -160,6 +160,10 @@ Sie ist keine Rechtsauskunft.
 | `pyspnego` | 0.12.2 | MIT |
 | `python-dateutil` | 2.9.0.post0 | Apache Software License; BSD License |
 | `python-docx` | 1.2.0 | MIT License |
+| `python-pptx` | 1.0.2 | MIT License |
+| `XlsxWriter` | 3.2.0 | BSD License |
+| `reportlab` | 4.2.5 | BSD License |
+| `chardet` | 5.2.0 | GNU Lesser General Public License v2.1 (LGPL) |
 | `python-dotenv` | 1.2.2 | BSD-3-Clause |
 | `python-multipart` | 0.0.32 | Apache Software License |
 | `pytz` | 2026.3.post1 | MIT License |

@@ -3542,6 +3542,153 @@ try:
 finally:
     pipeline.dokumente = _real_docs
 
+# --- CREATED FILES (created_files.py) ---
+import io as _io_c
+import zipfile as _zip_c
+import created_files as _cf
+
+_x_name, _x_data = _cf.build("xlsx", "Offene Auftraege", {"sheets": [{
+    "name": "Meier", "columns": ["AuftragsNr", "Wert"], "rows": [["24001", "1.234,50"], [24002, 99]]}]})
+import openpyxl as _opx
+_ws_c = _opx.load_workbook(_io_c.BytesIO(_x_data)).active
+pruef("an Excel file with header row and numbers as numbers",
+      _x_name == "Offene Auftraege.xlsx" and _ws_c["A1"].value == "AuftragsNr"
+      and _ws_c["A2"].value == 24001 and _ws_c["B2"].value == 1234.5,
+      (_ws_c["A2"].value, _ws_c["B2"].value))
+_d_name, _d_data = _cf.build("docx", "Bericht", {"text": "# Teil 1\n- Punkt **wichtig**\n\n| A | B |\n|---|---|\n| 1 | 2 |"})
+import docx as _dx
+_doc_c = _dx.Document(_io_c.BytesIO(_d_data))
+pruef("a Word file with heading, list and table from Markdown",
+      any(p.text == "Teil 1" for p in _doc_c.paragraphs) and len(_doc_c.tables) == 1
+      and _doc_c.tables[0].cell(1, 1).text == "2")
+try:
+    _p_name, _p_data = _cf.build("pptx", "Vortrag", {"slides": [
+        {"title": "Ergebnis", "bullets": ["eins", "zwei"], "notes": "sagen"}]})
+    pruef("a PowerPoint file with title slide and content slide",
+          _zip_c.is_zipfile(_io_c.BytesIO(_p_data)) and _p_name == "Vortrag.pptx")
+except ImportError:
+    pruef("a PowerPoint file (python-pptx missing here, tested in the image)", True)
+for _bad_c, _why in ((("csv", "x", {}), "unknown kind"), (("xlsx", "", {"sheets": [{}]}), "no title"),
+                     (("docx", "x", {}), "no text")):
+    try:
+        _cf.build(*_bad_c)
+        pruef(f"refused: {_why}", False)
+    except ValueError:
+        pruef(f"refused: {_why}", True)
+_stored_c = _cf.store("markus", _x_name, _x_data)
+_again_c = _cf.store("markus", _x_name, _x_data)
+_raw_c = statefiles.read_bytes(os.path.join(paths.CHATS_DIR, "markus", "dateien", _stored_c))
+pruef("created files are stored encrypted, a second one with the same name numbered",
+      _cf.read("markus", _stored_c) == _x_data and _again_c == "Offene Auftraege (2).xlsx"
+      and b"AuftragsNr" not in _raw_c and _x_data[:2] not in _raw_c[:2], _again_c)
+try:
+    _cf.read("anna", _stored_c)
+    pruef("someone else's created file is not readable", False)
+except FileNotFoundError:
+    pruef("someone else's created file is not readable", True)
+try:
+    _cf.read("markus", "../../anna/dateien/x.xlsx")
+    pruef("a path in a file name does not leave the own folder", False)
+except (FileNotFoundError, ValueError):
+    pruef("a path in a file name does not leave the own folder", True)
+_cf.delete("markus", _again_c)
+
+# --- WEB SEARCHES IN THE BACKGROUND (web_research.py) ---
+import threading as _th_w
+import time as _time_w
+import mcp as _mcp_r
+import web_research as _wr
+import dateisperre
+import web_sources as _wsrc
+
+_real_w = (_wsrc.search, _wsrc.take_over, _mcp_r.websuche_server)
+_gate_w = _th_w.Event()
+
+
+def _fake_search(query, count):
+    _gate_w.wait(5)
+    return [{"nr": i + 1, "titel": f"Treffer {i}", "adresse": f"https://e{i}.example/norm",
+             "text": "Ausfuehrungsklassen", "anfrage": query} for i in range(count)]
+
+
+_taken_w = []
+_wsrc.search = _fake_search
+_wsrc.take_over = lambda user, pages: _taken_w.extend(pages) or [
+    {"title": p["title"], "url": p["url"], "passages": 2, "note": "", "file": "x.md"} for p in pages]
+_mcp_r.websuche_server = lambda: {"websuche"}
+
+
+def _wait_w(user, task_id):
+    for _ in range(100):
+        t = _wr.task_of(user, task_id)
+        if t["state"] != "running":
+            return t
+        _time_w.sleep(0.05)
+    return t
+
+
+try:
+    _t1 = _wr.start_search("markus", "  DIN EN   1090 ", 12)
+    _t2 = _wr.start_search("markus", "EN 13445", 3)
+    try:
+        _wr.start_search("markus", "dritte Suche")
+        pruef("a third search at the same time is refused", False)
+    except _wr.Refused:
+        pruef("a third search at the same time is refused", True)
+    pruef("a running search is listed, its hits not yet there",
+          [t["state"] for t in _wr.tasks("markus")] == ["running", "running"]
+          and not _wr.unseen("markus"))
+    _gate_w.set()
+    _d1 = _wait_w("markus", _t1["id"])
+    _wait_w("markus", _t2["id"])
+    pruef("the search runs on its own and keeps its hits",
+          _d1["state"] == "done" and len(_d1["hits"]) == 12 and _d1["query"] == "DIN EN 1090",
+          _d1.get("error"))
+    pruef("finished searches are a notice until looked at",
+          {t["id"] for t in _wr.unseen("markus")} == {_t1["id"], _t2["id"]})
+    _wr.task_of("markus", _t1["id"], seen=True)
+    pruef("looking at one removes its notice",
+          [t["id"] for t in _wr.unseen("markus")] == [_t2["id"]])
+    _raw_w = statefiles.read_bytes(_wr._path("markus"))
+    pruef("the task list is stored encrypted", b"1090" not in _raw_w and b"Treffer" not in _raw_w)
+    try:
+        _wr.task_of("anna", _t1["id"])
+        pruef("someone else's search is not visible", False)
+    except _wr.Refused:
+        pruef("someone else's search is not visible", True)
+    _to = _wr.start_take_over("markus", _t1["id"], [0, 2, 2, 99])
+    _done_to = _wait_w("markus", _to["id"])
+    pruef("chosen hits are taken over in the background, each once",
+          _done_to["state"] == "done" and [p["url"] for p in _taken_w]
+          == ["https://e0.example/norm", "https://e2.example/norm"]
+          and _done_to["result"][0]["passages"] == 2, _done_to.get("error"))
+    pruef("and the take-over is a notice of its own with what was stored",
+          any(t["id"] == _to["id"] and t["stored"] == 2 for t in _wr.unseen("markus")))
+    try:
+        _wr.start_take_over("markus", _to["id"], [0])
+        pruef("only hits of a search can be taken over", False)
+    except _wr.Refused:
+        pruef("only hits of a search can be taken over", True)
+    with dateisperre.gesperrt(_wr._path("markus")):
+        _items_w = _wr._load("markus")
+        _items_w.insert(0, dict(_items_w[0], id="alt", state="running",
+                                started="2020-01-01T00:00:00+00:00"))
+        _wr._save("markus", _items_w)
+    pruef("a task of a server that went away counts as failed",
+          next(t for t in _wr.tasks("markus") if t["id"] == "alt")["state"] == "failed")
+    _wr.remove("markus", "alt")
+    pruef("a task can be removed", all(t["id"] != "alt" for t in _wr.tasks("markus")))
+    _mcp_r.websuche_server = lambda: set()
+    try:
+        _wr.start_search("markus", "ohne Dienst")
+        pruef("no search starts without a web search service", False)
+    except _wsrc.Unavailable:
+        pruef("no search starts without a web search service", True)
+finally:
+    _wsrc.search, _wsrc.take_over, _mcp_r.websuche_server = _real_w
+    for _t in _wr.tasks("markus"):
+        _wr.remove("markus", _t["id"])
+
 # --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
 import postfach as _pfa
 for _ein, _aus in (
@@ -5182,8 +5329,8 @@ try:
                              lesen=0)[1]
     finally:
         _ws.SEARXNG = _ws_alt_s
-    pruef("die Quellensuche liefert bis zu zehn Treffer, ohne Seiten zu laden",
-          len(_ws_l) == 10 and len(_ws_l50) == 10 and _WsC.abrufe == 0,
+    pruef("die Quellensuche liefert so viele Treffer wie verlangt (hoechstens MAX_TREFFER), ohne Seiten zu laden",
+          len(_ws_l) == 10 and len(_ws_l50) == min(12, _ws.MAX_TREFFER) and _WsC.abrufe == 0,
           (len(_ws_l), len(_ws_l50), _WsC.abrufe))
     pruef("und ihr Ergebnis liest sich als Trefferliste",
           [t["nr"] for t in pipeline.webtreffer_aus_text(

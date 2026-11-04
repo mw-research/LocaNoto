@@ -11,9 +11,12 @@
 //
 // Every request carries the CSRF header the server expects with the
 // session cookie. Errors show as a short message, never as page content.
-// Plus helpers for this app: sign-in, sign-out, upload forms, and
+// Plus helpers for this app: sign-in, sign-out, upload forms,
 // data-userpick -- a text field that suggests user names while typing
-// (comma separated lists too).
+// (comma separated lists too) -- and notices: every signed-in page asks
+// /ui/notifications every few seconds (often while a web search runs,
+// rarely otherwise), shows each finished task once with a link to it and
+// a count on the "Web sources" tab, and refreshes the task list there.
 (function () {
   "use strict";
 
@@ -207,6 +210,13 @@
     document.querySelectorAll("form[data-upload]").forEach(function (f) {
       f.addEventListener("submit", function (ev) { upload(f, ev); });
     });
+    if (document.querySelector("header.top")) pollTimer = setTimeout(poll, 1500);
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest && ev.target.closest("[data-select-all]");
+      if (!b) return;
+      var form = b.closest("section").querySelector("form[id^=takeover-]");
+      if (form) document.querySelectorAll('input[name=pick][form="' + form.id + '"]').forEach(function (c) { c.checked = true; });
+    });
     document.querySelectorAll("[data-logout]").forEach(function (b) {
       b.addEventListener("click", async function () {
         await fetch("/api/v1/auth/logout", { method: "POST", headers: csrfHeaders(), credentials: "same-origin" });
@@ -215,5 +225,72 @@
     });
   });
 
-  window.hx = { process: process, swap: swap, toast: toast, csrfHeaders: csrfHeaders, errorText: errorText };
+  // --- notices for background tasks (web_research.py) ---
+
+  function shownIds() {
+    try { return JSON.parse(sessionStorage.getItem("locanoto_shown") || "[]"); } catch (e) { return []; }
+  }
+
+  function remember(ids) {
+    try { sessionStorage.setItem("locanoto_shown", JSON.stringify(ids.slice(-100))); } catch (e) { /* private window */ }
+  }
+
+  function notice(item, view) {
+    var t = document.getElementById("toast");
+    if (!t) return;
+    t.textContent = item.text + " ";
+    var a = document.createElement("a");
+    a.href = "/web?task=" + encodeURIComponent(item.id);
+    a.textContent = view + " →";
+    t.appendChild(a);
+    t.className = "show notice" + (item.bad ? " bad" : "");
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.className = ""; }, 15000);
+  }
+
+  function badge(count) {
+    var link = document.querySelector('nav.tabs a[href="/web"]');
+    if (!link) return;
+    var b = link.querySelector(".badge");
+    if (!count) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement("span"); b.className = "badge"; link.appendChild(b); }
+    b.textContent = String(count);
+  }
+
+  var lastState = "";
+  var pollTimer = null;
+  var polling = false;
+  var pollAgain = false;
+
+  async function poll() {
+    if (polling) { pollAgain = true; return; }
+    polling = true;
+    clearTimeout(pollTimer);
+    var wait = 20000;
+    try {
+      var r = await fetch("/ui/notifications", { credentials: "same-origin" });
+      if (r.ok) {
+        var n = await r.json();
+        var shown = shownIds();
+        n.finished.forEach(function (item) {
+          if (shown.indexOf(item.id) < 0) { notice(item, n.view); shown.push(item.id); }
+        });
+        remember(shown);
+        badge(n.finished.length);
+        var state = n.running + ":" + n.finished.map(function (i) { return i.id; }).join(",");
+        var list = document.getElementById("webtasks");
+        if (list && lastState && state !== lastState) {
+          var page = await fetch("/ui/web/tasks", { credentials: "same-origin" });
+          if (page.ok) swap(list, await page.text(), "innerHTML");
+        }
+        lastState = state;
+        if (n.running) wait = 4000;
+      }
+    } catch (e) { /* offline for a moment: try again later */ }
+    polling = false;
+    if (pollAgain) { pollAgain = false; wait = 0; }
+    pollTimer = setTimeout(poll, document.hidden ? Math.max(wait, 30000) : wait);
+  }
+
+  window.hx = { process: process, swap: swap, toast: toast, csrfHeaders: csrfHeaders, errorText: errorText, poll: poll };
 })();

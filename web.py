@@ -47,6 +47,7 @@ import raeume
 import sessions
 import sprache
 import sqlquellen
+import web_research
 import web_sources
 import workspace_notes
 from server import (SEALED_COOKIE, COOKIE_SECURE, Principal, principal,
@@ -164,7 +165,7 @@ TEXTS = {
     "personal (everyone signs in with their own account)":
         "persönlich (jeder meldet sich mit seinem Konto an)",
     "Only for shared mailboxes": "Nur für Funktionspostfächer",
-    "Search users": "Benutzer suchen", "users": "Benutzer",
+    "Search users": "Benutzer suchen", "users": "Benutzer", "Created": "Erstellt",
     "Web search allowed": "Websuche erlaubt", "Web search blocked": "Websuche gesperrt",
     "Block": "Sperren", "Allow": "Erlauben",
     "Not searched with web search (not allowed there)":
@@ -178,6 +179,32 @@ TEXTS = {
     "with notice": "mit Hinweis", "WITHOUT notice": "OHNE Hinweis",
     "prepares drafts": "legt Entwürfe vor",
     "Delete this chat?": "Diesen Chat löschen?",
+    "Search started. You will be notified when the hits are there -- you can leave this page.":
+        "Suche gestartet. Du wirst benachrichtigt, sobald die Treffer da sind – die Seite darf verlassen werden.",
+    "Taking over in the background. You will be notified when the pages are stored.":
+        "Übernahme läuft im Hintergrund. Du wirst benachrichtigt, sobald die Seiten gespeichert sind.",
+    "No hits chosen.": "Keine Treffer ausgewählt.", "Show": "Ansehen",
+    "Web search failed": "Websuche fehlgeschlagen", "Web search ready": "Websuche fertig",
+    "hits": "Treffer", "Take-over failed": "Übernahme fehlgeschlagen",
+    "Taken over into your workspace": "In deinen Arbeitsbereich übernommen",
+    "My searches": "Meine Suchen", "running": "läuft",
+    "new": "neu", "No searches yet.": "Noch keine Suchen.",
+    "Search in the web": "Im Web suchen",
+    "This text goes to search engines as it is:": "Dieser Text geht so an Suchmaschinen:",
+    "Search runs. You will be notified -- the hits are under Web sources.":
+        "Suche läuft. Du wirst benachrichtigt – die Treffer stehen unter Quellen im Netz.",
+    "Searches run in the background and stay here until you delete them. Taken-over pages land in your own workspace, folder Suchergebnisse; from there they can be moved on purpose.":
+        "Suchen laufen im Hintergrund und bleiben hier, bis du sie löschst. Übernommene Seiten landen in deinem eigenen Arbeitsbereich, Ordner Suchergebnisse; von dort lassen sie sich gezielt verschieben.",
+    "Select all": "Alle auswählen",
+    "Too many web tasks at once -- wait until one is finished.":
+        "Zu viele Webaufträge gleichzeitig – bitte warten, bis einer fertig ist.",
+    "Too many web tasks this hour -- try again later.":
+        "Zu viele Webaufträge in dieser Stunde – bitte später noch einmal.",
+    "Only hits of a finished search can be taken over.":
+        "Nur Treffer einer fertigen Suche lassen sich übernehmen.",
+    "Unknown task.": "Unbekannter Auftrag.", "Empty search term.": "Leerer Suchbegriff.",
+    "Interrupted (server restarted).": "Abgebrochen (Server neu gestartet).",
+    "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
 }
 
@@ -428,18 +455,55 @@ def document_move(request: Request, room: str = Form(...),
 # --- WEB SOURCES ---
 
 @router.get("/web")
-def web_page(request: Request):
+def web_page(request: Request, task: str = ""):
     p = _need(request)
     return render("web.html", request, nav=_nav(p, "web"),
-                  available=bool(answering.mcp.websuche_server()))
+                  available=bool(answering.mcp.websuche_server()),
+                  task=task if task.isalnum() else "")
 
 
-@router.post("/ui/web/search")
-def web_search(request: Request, query: str = Form(...),
-               p: Principal = Depends(principal)):
+def _task_call(fn, *args):
+    try:
+        return fn(*args)
+    except web_research.Refused as e:
+        raise HTTPException(404 if "Unknown" in str(e) else 429, t(str(e)))
+    except ValueError as e:
+        raise HTTPException(400, t(str(e)))
+
+
+def _tasks_fragment(request, p, notice=""):
+    return render("web_tasks.html", request, tasks=web_research.tasks(p.name),
+                  notice=notice)
+
+
+@router.get("/ui/web/tasks")
+def web_tasks(request: Request, p: Principal = Depends(principal)):
     page_language(p.name)
-    hits = web_sources.search(query, 10)
-    return render("web_results.html", request, hits=hits)
+    return _tasks_fragment(request, p)
+
+
+@router.post("/ui/web/tasks")
+def web_task_start(request: Request, query: str = Form(...),
+                   p: Principal = Depends(principal)):
+    """Starts a search in the background -- from the web page or the chat."""
+    page_language(p.name)
+    _task_call(web_research.start_search, p.name, query)
+    return _tasks_fragment(request, p, t("Search started. You will be notified when the hits are there -- you can leave this page."))
+
+
+@router.get("/ui/web/tasks/{task_id}")
+def web_task(task_id: str, request: Request, p: Principal = Depends(principal)):
+    page_language(p.name)
+    item = _task_call(web_research.task_of, p.name, task_id, True)
+    return render("web_task.html", request, task=item)
+
+
+@router.post("/ui/web/tasks/{task_id}/delete")
+def web_task_delete(task_id: str, request: Request,
+                    p: Principal = Depends(principal)):
+    page_language(p.name)
+    _task_call(web_research.remove, p.name, task_id)
+    return _tasks_fragment(request, p)
 
 
 @router.post("/ui/web/read")
@@ -453,22 +517,45 @@ def web_read(request: Request, url: str = Form(...),
     return render("web_page_text.html", request, url=url, text=text)
 
 
-@router.post("/ui/web/take-over")
-async def web_take_over(request: Request, p: Principal = Depends(principal)):
+@router.post("/ui/web/tasks/{task_id}/take-over")
+async def web_take_over(task_id: str, request: Request,
+                        p: Principal = Depends(principal)):
+    """Chosen hits into the own workspace -- in the background as well."""
     page_language(p.name)
     form = await request.form()
-    pages = []
-    for key in form.keys():
-        if key.startswith("pick_"):
-            n = key[5:]
-            pages.append({"title": form.get(f"title_{n}", ""),
-                          "url": form.get(f"url_{n}", ""),
-                          "text": form.get(f"text_{n}", ""),
-                          "query": form.get(f"query_{n}", "")})
-    import starlette.concurrency
-    result = await starlette.concurrency.run_in_threadpool(
-        web_sources.take_over, p.name, pages)
-    return render("web_taken.html", request, result=result)
+    picks = [int(v) for v in form.getlist("pick") if str(v).isdigit()]
+    if not picks:
+        raise HTTPException(400, t("No hits chosen."))
+    _task_call(web_research.start_take_over, p.name, task_id, picks)
+    return _tasks_fragment(request, p, t("Taking over in the background. You will be notified when the pages are stored."))
+
+
+@router.get("/ui/notifications")
+def notifications(p: Principal = Depends(principal)):
+    """What the pages ask every few seconds: running and finished tasks."""
+    page_language(p.name)
+    items = web_research.tasks(p.name)
+    finished = [t_ for t_ in items if t_["state"] != "running" and not t_.get("seen")]
+    return JSONResponse({
+        "running": sum(1 for t_ in items if t_["state"] == "running"),
+        "finished": [{"id": t_["id"], "bad": t_["state"] == "failed",
+                      "text": _task_line(t_)} for t_ in finished],
+        "view": t("Show")})
+
+
+def _task_line(item):
+    """One line about a task, in the page language."""
+    if item["kind"] == "search":
+        if item["state"] == "failed":
+            return t("Web search failed") + f": {item['query']} – {t(item.get('error') or '')}"
+        return t("Web search ready") + f": {item['query']} – {item.get('hit_count', 0)} " + t("hits")
+    if item["state"] == "failed":
+        return t("Take-over failed") + f": {t(item.get('error') or '')}"
+    return (t("Taken over into your workspace") +
+            f": {item.get('stored', 0)}/{len(item.get('titles') or [])} – {item['query']}")
+
+
+_env.globals["task_line"] = _task_line
 
 
 # --- SETTINGS ---

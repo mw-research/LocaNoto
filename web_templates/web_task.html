@@ -1,0 +1,38 @@
+{% if task.kind == 'search' %}
+<section class="card">
+  <h2>{{ task.query }}</h2>
+  {% if task.state == 'failed' %}<p class="error">{{ t(task.error) }}</p>{% endif %}
+  {% if task.hits %}
+  <form id="takeover-{{ task.id }}" hx-post="/ui/web/tasks/{{ task.id }}/take-over" hx-target="#webtasks"></form>
+  <p><button type="button" class="link" data-select-all>{{ t('Select all') }}</button></p>
+  {% endif %}
+</section>
+{% for h in task.hits %}
+<section class="card hit">
+  <label class="check">
+    <input type="checkbox" name="pick" value="{{ loop.index0 }}" form="takeover-{{ task.id }}">
+    <strong>{{ h.titel }}</strong>
+  </label>
+  <div class="muted">{{ h.adresse }}</div>
+  <p>{{ (h.text or '')[:400] }}</p>
+  <form hx-post="/ui/web/read" hx-target="#read-{{ task.id }}-{{ loop.index }}" class="inline">
+    <input type="hidden" name="url" value="{{ h.adresse }}">
+    <button type="submit">{{ t('Read') }}</button>
+    {% if h.adresse.startswith(('http://', 'https://')) %}<a href="{{ h.adresse }}" target="_blank" rel="noopener noreferrer">↗</a>{% endif %}
+  </form>
+  <div id="read-{{ task.id }}-{{ loop.index }}"></div>
+</section>
+{% endfor %}
+{% if task.hits %}<button type="submit" form="takeover-{{ task.id }}" class="primary">{{ t('Take over selected into my workspace') }}</button>{% endif %}
+{% else %}
+<section class="card">
+  <h2>{{ t('Take over') }}: {{ task.query }}</h2>
+  {% if task.state == 'failed' %}<p class="error">{{ t(task.error) }}</p>{% endif %}
+  <ul>
+  {% for r in task.result %}
+    <li class="{{ 'ok' if r.passages else 'error' }}">{{ r.file or r.title }} — {{ tm(r.note) }}</li>
+  {% endfor %}
+  </ul>
+  <p><a href="/documents">{{ t('Documents') }} →</a></p>
+</section>
+{% endif %}

@@ -466,6 +466,34 @@ check("the page shows the database query under the answer",
       "WHERE Status = &#39;O&#39;" in _page or "WHERE Status = 'O'" in _page, _page[-1200:])
 markus.post("/ui/admin/workspaces/sql", data={"room": "einkauf", "user": "", "password": ""})
 
+# --- files created on request (created_files.py), all four kinds ---
+_made = {}
+for _kind, _args in (
+        ("xlsx", {"sheets": [{"name": "Auftraege", "columns": ["Nr", "Wert"],
+                              "rows": [["24001", "120,50"]]}]}),
+        ("docx", {"text": "# Ergebnis\n- offen: 2"}),
+        ("pdf", {"text": "# Ergebnis\n\n| Nr | Wert |\n|---|---|\n| 24001 | 120,50 |"}),
+        ("pptx", {"slides": [{"title": "Stand", "bullets": ["zwei offen"]}]})):
+    _FakeChat.tool_call = ("files__create_file", dict(_args, kind=_kind, title=f"Demo {_kind}"))
+    r = anna.post(f"{API}/ask", json={"question": f"Erstelle eine {_kind}-Datei dazu",
+                                      "chat_id": chat_id})
+    _made[_kind] = (r.json().get("message") or {}).get("files") or []
+check("Excel, Word, PDF and PowerPoint files are created from the chat",
+      all(_made[k] == [f"Demo {k}.{k}"] for k in _made), _made)
+r = anna.get(f"{API}/files/Demo%20pdf.pdf")
+check("a created file downloads with its type",
+      r.status_code == 200 and r.content.startswith(b"%PDF")
+      and r.headers["content-type"] == "application/pdf", r.status_code)
+check("created files are listed", "Demo xlsx.xlsx" in anna.get(f"{API}/files").json())
+check("someone else's created file is 404",
+      markus.get(f"{API}/files/Demo%20pdf.pdf").status_code == 404)
+check("a created file can be deleted",
+      anna.delete(f"{API}/files/Demo%20docx.docx").status_code == 200
+      and "Demo docx.docx" not in anna.get(f"{API}/files").json())
+_page = anna.get(f"/c/{chat_id}").text
+check("the answer links the created file", "/api/v1/files/Demo%20xlsx.xlsx" in _page,
+      _page[-600:])
+
 # --- shared mailbox that answers on its own, set up in the web page ---
 r = markus.post("/ui/admin/mailboxes", data={
     "name": "info", "template": "exchange", "target": "owa.test",
@@ -593,6 +621,46 @@ r = anna.post(f"{API}/websources/take-over", json={"pages": [{
     "text": "Ausfuehrungsklassen nach DIN EN 1090. " * 10, "read": True}]})
 check("take-over lands in the own room", r.status_code == 200
       and r.json()[0]["passages"] > 0, r.text)
+# background web search: start, notice, look at, take over
+import time  # noqa: E402
+check("a background search without service is 503", anna.post(
+    f"{API}/websources/tasks", json={"query": "DIN"}).status_code == 503)
+import web_sources as _wsrc
+_ws_saved = (_wsrc.search, answering.mcp.websuche_server)
+_wsrc.search = lambda q, n: [{"nr": 1, "titel": "Norm", "adresse": "https://example.org/norm",
+                              "text": "Ausfuehrungsklassen nach DIN EN 1090. " * 10, "anfrage": q}]
+answering.mcp.websuche_server = lambda: {"websuche"}
+try:
+    r = anna.post("/ui/web/tasks", data={"query": "DIN EN 1090"})
+    check("a search starts from the page (or the chat button)",
+          r.status_code == 200 and "DIN EN 1090" in r.text, r.text[:300])
+    _task_id = anna.get(f"{API}/websources/tasks").json()[0]["id"]
+    for _ in range(100):
+        if anna.get(f"{API}/websources/tasks").json()[0]["state"] != "running":
+            break
+        time.sleep(0.05)
+    n = anna.get("/ui/notifications").json()
+    check("a finished search is a notice with a link to it",
+          n["running"] == 0 and n["finished"][0]["id"] == _task_id, n)
+    check("not someone else's", markus.get(f"{API}/websources/tasks/{_task_id}").status_code == 404)
+    r = anna.get(f"/ui/web/tasks/{_task_id}")
+    check("the hits show with a choice", r.status_code == 200 and 'name="pick"' in r.text
+          and "example.org/norm" in r.text, r.text[:300])
+    check("looked at: no notice any more", not anna.get("/ui/notifications").json()["finished"])
+    r = anna.post(f"/ui/web/tasks/{_task_id}/take-over", data={"pick": "0"})
+    check("take-over starts in the background", r.status_code == 200, r.text[:300])
+    for _ in range(200):
+        _all = anna.get(f"{API}/websources/tasks").json()
+        if _all[0]["state"] != "running":
+            break
+        time.sleep(0.05)
+    check("and reports what was stored", _all[0]["kind"] == "take_over"
+          and _all[0]["state"] == "done" and _all[0]["stored"] == 1, _all[0])
+    check("the web page loads the task list", 'hx-get="/ui/web/tasks"' in anna.get("/web").text)
+    check("a task can be deleted", anna.delete(f"{API}/websources/tasks/{_task_id}").status_code == 200
+          and anna.get(f"{API}/websources/tasks/{_task_id}").status_code == 404)
+finally:
+    _wsrc.search, answering.mcp.websuche_server = _ws_saved
 check("lists", "sheets" in anna.get(f"{API}/lists").json())
 check("own list folder not allowed without area", anna.put(
     f"{API}/me/list-folder", json={"path": "/x"}).status_code == 403)

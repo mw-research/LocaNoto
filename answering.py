@@ -41,6 +41,7 @@ import time
 import attachments
 import budget
 import chats
+import created_files
 import feedback
 import llm
 import mcp
@@ -433,6 +434,10 @@ def _ask(user, req):
             c.attachment_source = attachments.source(user, chat_id if req.save else None)
     if req.save and workspace_notes.offered(question, connections):
         connections[workspace_notes.SERVER] = workspace_notes.Tools(user)
+    file_tools = None
+    if req.save and created_files.offered(question, connections):
+        file_tools = created_files.Tools(user)
+        connections[created_files.SERVER] = file_tools
     if connections:
         progress = []
         try:
@@ -479,6 +484,8 @@ def _ask(user, req):
                "zahlen": numbers, "entwuerfe": drafts,
                "web": pipeline.webtreffer(extra, settings["web_servers"]),
                "modell": model}
+    if file_tools is not None and file_tools.created:
+        message["files"] = list(file_tools.created)
     if settings["web_excluded"]:
         message["web_excluded"] = [raeume.bezeichnung(r)
                                    for r in settings["web_excluded"]]

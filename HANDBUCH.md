@@ -304,6 +304,8 @@ Suchbegriff, keine Dokumente.
 - Geteilter Arbeitsbereich → ein Admin muss die Websuche dort erst
   erlauben. Sonst nennt die Seitenleiste die nicht freigegebenen
   Arbeitsbereiche; dann oben nur freigegebene wählen.
+- **Allgemein** ist ab Werk gesperrt. Eine Frage mit Websuche über alle
+  Arbeitsbereiche lässt ihn aus und sagt das unter der Antwort.
 
 Treffer stehen unter der Antwort als **Aus dem Netz** mit [W1], [W2] …,
 getrennt von den Dokumenten. Treffer ankreuzen → **n übernehmen** → sie
@@ -311,16 +313,21 @@ landen in deinem persönlichen Arbeitsbereich.
 
 ### Wie sammle ich mit LocaNoto Quellen aus dem Internet?
 
-1. Über dem Chat **Quellen im Netz** aufklappen.
-2. **Thema** in Stichworten eingeben → **Suchen** → bis zu zehn Treffer,
-   ohne Antwort. Der Suchbegriff geht an Suchmaschinen: keine internen
-   Namen oder Zahlen.
-3. Optional **Lesen** → zeigt die Seite als reinen Text, ohne Bilder und
-   Skripte; genau dieser Text wird übernommen. **Original ↗** öffnet die
-   Seite im Browser.
-4. Treffer ankreuzen → **n übernehmen**.
+1. Reiter **Quellen im Netz** → **Thema** in Stichworten → **Suchen**.
+   Oder im Chat Stichworte ins Eingabefeld → **Im Web suchen**.
+   Der Suchbegriff geht an Suchmaschinen: keine internen Namen oder
+   Zahlen.
+2. Die Suche läuft im Hintergrund, die Seite darf verlassen werden. Sind
+   die Treffer da (bis zu 25), erscheint eine Meldung mit **Ansehen**, und
+   der Reiter **Quellen im Netz** zeigt eine Zahl.
+3. **Ansehen** → Treffer. Optional **Lesen** → die Seite als reiner Text,
+   ohne Bilder und Skripte. **↗** öffnet die Seite im Browser.
+4. Treffer ankreuzen (oder **Alle auswählen**) → **Ausgewählte in meinen
+   Arbeitsbereich übernehmen**. Auch das läuft im Hintergrund; eine
+   Meldung sagt, wie viele Seiten gespeichert wurden.
 
-Übernommenes landet **immer in deinem persönlichen Arbeitsbereich**, Ordner
+Suchen bleiben unter **Meine Suchen**, bis du sie löschst. Übernommenes
+landet **immer in deinem persönlichen Arbeitsbereich**, Ordner
 *Suchergebnisse*, mit Quelle und Abrufdatum. Gehört es in einen geteilten
 Arbeitsbereich → dorthin verschieben.
 

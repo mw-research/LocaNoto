@@ -1,7 +1,9 @@
 // The chat: send the question to /api/v1/ask?stream=true and show the
 // answer while it grows. The growing text is shown as plain text (never
 // as HTML); when it is complete, the server renders the message (Markdown
-// with HTML switched off, sources, drafts) and that replaces it.
+// with HTML switched off, sources, drafts) and that replaces it. The
+// button "Search in the web" starts a background search (web_research.py)
+// with the text of the question box.
 (function () {
   "use strict";
 
@@ -120,9 +122,27 @@
     }
   }
 
+  // Start a web search with the text of the question box; it runs in the
+  // background, the notice comes wherever the user is by then.
+  async function webSearch(form, button) {
+    var query = form.question.value.trim().replace(/\s+/g, " ").slice(0, 200);
+    if (query.length < 2) { form.question.focus(); return; }
+    if (!window.confirm(button.getAttribute("data-confirm") + "\n\n" + query)) return;
+    var response = await fetch("/ui/web/tasks", {
+      method: "POST", credentials: "same-origin",
+      headers: window.hx.csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" }),
+      body: new URLSearchParams({ query: query })
+    });
+    if (!response.ok) { window.hx.toast(await window.hx.errorText(response), true); return; }
+    window.hx.toast(button.getAttribute("data-started"));
+    window.hx.poll();
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("ask");
     if (!form) return;
+    var web = form.querySelector("[data-web-search]");
+    if (web) web.addEventListener("click", function () { webSearch(form, web); });
     form.addEventListener("submit", function (ev) { ask(form, ev); });
     form.question.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); }

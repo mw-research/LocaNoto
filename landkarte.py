@@ -45,7 +45,7 @@ SCHICHT = {
         "postfach", "ocr", "answering", "doc_actions", "web_sources",
         "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
         "auth", "sicherheit", "datentraeger", "workspace_notes",
-        "attachments", "imap_mailbox",
+        "attachments", "imap_mailbox", "created_files", "web_research",
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",
