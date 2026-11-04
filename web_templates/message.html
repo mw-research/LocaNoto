@@ -7,6 +7,14 @@
   {% if m.zahlen and m.zahlen.vektorausfall %}
   <p class="warn">{{ t('Answer from the keyword search only -- the vector search did not answer for') }}: {{ m.zahlen.vektorausfall|join(', ') }}</p>
   {% endif %}
+  {% if m.sql and m.sql.query %}
+  <details class="sources sql">
+    <summary>{{ t('Database query') }} ({% if m.sql.rows is defined %}{{ m.sql.rows }} {{ t('rows') }}{% else %}{{ m.sql.reason }}{% endif %})</summary>
+    <pre>{{ m.sql.query }}</pre>
+  </details>
+  {% elif m.sql and m.sql.reason %}
+  <p class="muted">{{ t('Database') }}: {{ m.sql.reason }}</p>
+  {% endif %}
   {% if m.sources %}
   <details class="sources">
     <summary>{{ t('Sources') }} ({{ m.sources|length }})</summary>

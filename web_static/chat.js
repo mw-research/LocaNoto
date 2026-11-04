@@ -34,8 +34,10 @@
       model: form.model ? form.model.value : null,
       preset: form.preset && form.preset.value ? form.preset.value : null,
       web: !!(form.web && form.web.checked),
+      sql: !!(form.sql && form.sql.checked),
       images: []
     };
+    if (body.sql && form.sql_room) body.sql_room = form.sql_room.value;
     if (!body.rooms.length) body.rooms = null;
     for (var i = 0; i < files.length; i++) {
       body.images.push({ name: files[i].name, data_base64: await readFile(files[i]) });
@@ -90,6 +92,8 @@
             status.textContent += "  —  " + d.hits + " / " + d.candidates;
           } else if (event === "tool") {
             status.textContent = d.progress;
+          } else if (event === "sql") {
+            status.textContent = d.query ? "SQL: " + d.query : (d.reason || "");
           } else if (event === "text") {
             text.textContent += d.text;
           } else if (event === "error") {

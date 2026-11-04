@@ -3329,6 +3329,35 @@ pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
 statefiles.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 
+# --- SQL: TEMPLATE SHIPPED, ROOM NOTE REACHES THE MODEL ---
+import sqldb as _sqd
+import types as _tys
+
+
+class _SqlClient:
+    gesehen = []
+
+    def __init__(self):
+        self.chat = _tys.SimpleNamespace(completions=_tys.SimpleNamespace(
+            create=self.create))
+
+    def create(self, **kw):
+        _SqlClient.gesehen.append(kw["messages"][0]["content"])
+        return _tys.SimpleNamespace(choices=[_tys.SimpleNamespace(
+            message=_tys.SimpleNamespace(content="SELECT 1 FROM dbo.Auftraege"))])
+
+
+pruef("die Vorlage fuer Datenbankabfragen wird mitgeliefert",
+      os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "sql_prompt.txt")))
+_sq = _sqd.formuliere(_SqlClient(), "m", "Welche Auftraege sind offen?",
+                      "dbo.Auftraege(AuftragsNr int, Status nvarchar)",
+                      hinweis_raum="Status 'O' heisst offen.")
+pruef("der Hinweis des Arbeitsbereichs steht im Prompt",
+      _sq.startswith("SELECT") and "Status 'O' heisst offen." in _SqlClient.gesehen[-1]
+      and "dbo.Auftraege(AuftragsNr int" in _SqlClient.gesehen[-1],
+      _SqlClient.gesehen[-1][-300:])
+
 # --- EWS ADDRESS FROM WHAT PEOPLE PASTE ---
 import postfach as _pfa
 for _ein, _aus in (

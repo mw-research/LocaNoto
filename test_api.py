@@ -440,6 +440,32 @@ check("calendar drafts show the day and their own buttons",
       and ("In den Kalender eintragen" in _page or "Add to calendar" in _page),
       _page[-1500:])
 
+# --- database access in the web pages ---
+r = markus.post("/ui/admin/workspaces/sql", data={
+    "room": "einkauf", "server": "db.invalid", "port": "1433",
+    "database": "DemoERP", "user": "locanoto_lesen", "password": "Lese-Passwort-1",
+    "note": "Status O = offen"})
+check("admin sets a workspace's database account in the web page",
+      r.status_code == 200 and "einkauf" in markus.get("/admin").text, r.text[:300])
+check("only admins set database accounts", anna.post("/ui/admin/workspaces/sql", data={
+    "room": "einkauf", "user": "x", "password": "y"}).status_code == 403)
+_chatpage = anna.get(f"/c/{chat_id}").text
+check("the chat offers the database for members of that workspace",
+      'name="sql"' in _chatpage, _chatpage[-800:])
+r = anna.post(f"{API}/ask", json={"question": "Welche Auftraege sind offen?",
+                                  "chat_id": chat_id, "sql": True, "sql_room": "einkauf"})
+_sqlmsg = r.json().get("message") or {}
+check("the database result is kept with the answer (here: unreachable server)",
+      r.status_code == 200 and (_sqlmsg.get("sql") or {}).get("reason"), _sqlmsg.get("sql"))
+_msgs = _chats_mod.lade("anna", chat_id)
+_msgs[-1]["sql"] = {"query": "SELECT TOP 200 AuftragsNr FROM dbo.Auftraege WHERE Status = 'O'",
+                    "rows": 2}
+_chats_mod.speichere("anna", chat_id, _msgs)
+_page = anna.get(f"/c/{chat_id}").text
+check("the page shows the database query under the answer",
+      "WHERE Status = &#39;O&#39;" in _page or "WHERE Status = 'O'" in _page, _page[-1200:])
+markus.post("/ui/admin/workspaces/sql", data={"room": "einkauf", "user": "", "password": ""})
+
 # --- web pages (web.py) ---
 _FakeChat.text_override = "Antwort <script>alert(1)</script> **fett**"
 r = anna.post(f"{API}/ask", json={"question": "HTML?", "chat_id": chat_id})

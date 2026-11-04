@@ -303,3 +303,57 @@ jobs:
           kubectl get pods -A > /tmp/pods.log 2>&1 || true
           python3 deploy/ci_annotate.py "kind ${{ matrix.certmanager }}" /tmp/install.log \
             /tmp/opencloud.log /tmp/objects.log /tmp/server.log /tmp/pods.log /tmp/describe.log
+
+  # The demo ERP (deploy/demo-erp) as its README says: secret, apply, seed
+  # job -- then LocaNoto's own database code against it, from a pod that
+  # carries LocaNoto's label, so the network policy is part of the test.
+  demo-erp:
+    needs: image
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ needs.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generated files match the generator
+        run: |
+          python3 deploy/demo-erp/make_demo_erp.py
+          git diff --exit-code deploy/demo-erp/
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: demoerp
+
+      - name: Deploy and seed
+        run: |
+          kubectl create namespace locanoto
+          SA="Sa1!$(openssl rand -hex 12)"
+          RD="Rd1!$(openssl rand -hex 12)"
+          echo "::add-mask::$SA"
+          echo "::add-mask::$RD"
+          echo "RD=$RD" >> "$GITHUB_ENV"
+          kubectl -n locanoto create secret generic demo-erp \
+            --from-literal=SA_PASSWORD="$SA" --from-literal=READ_PASSWORD="$RD"
+          kubectl -n locanoto apply -f deploy/demo-erp/demo-erp.yaml
+          kubectl -n locanoto wait --for=condition=complete job/demo-erp-seed --timeout=900s
+          kubectl -n locanoto logs job/demo-erp-seed | tail -3
+
+      - name: Query through LocaNoto
+        run: |
+          kubectl -n locanoto run check --image="$IMAGE" --restart=Never \
+            --labels=app.kubernetes.io/name=locanoto --env=DEMO_ERP_PASSWORD="$RD" \
+            --command -- sleep 900
+          kubectl -n locanoto wait --for=condition=Ready pod/check --timeout=600s
+          kubectl -n locanoto cp deploy/demo-erp/check_demo_erp.py check:/tmp/check.py
+          kubectl -n locanoto exec check -- python /tmp/check.py 2>&1 | tee /tmp/check.log
+          tail -1 /tmp/check.log | grep -q "all passed"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n locanoto get pods,jobs -o wide > /tmp/objects.log 2>&1 || true
+          kubectl -n locanoto logs job/demo-erp-seed --tail 40 > /tmp/seed.log 2>&1 || true
+          kubectl -n locanoto logs statefulset/demo-erp --tail 40 > /tmp/mssql.log 2>&1 || true
+          kubectl -n locanoto describe pods > /tmp/describe.log 2>&1 || true
+          python3 deploy/ci_annotate.py "demo-erp" /tmp/check.log /tmp/seed.log /tmp/mssql.log \
+            /tmp/objects.log /tmp/describe.log

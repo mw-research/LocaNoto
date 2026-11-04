@@ -242,7 +242,8 @@ def _sql_block(user, req, question, model, history_text):
     access = sqlquellen.zugang(room) if room else None
     try:
         query = sqldb.formuliere(client("SQL", user), llm.modell("SQL", model),
-                                 question, schema, history_text)
+                                 question, schema, history_text,
+                                 hinweis_raum=(access or {}).get("hinweis", ""))
     except Exception as e:
         return [], {"reason": f"Query not generated: {e}"}
     if not query:
@@ -387,9 +388,11 @@ def _ask(user, req):
 
     # 3. database and lists
     blocks = []
+    sql_info = None
     if req.sql:
         sql_blocks, info = _sql_block(user, req, question, model, history_text)
         blocks += sql_blocks
+        sql_info = info
         yield "sql", info
     list_blocks, info = _list_blocks(user, req, question, model,
                                      history_text, settings["areas"])
@@ -455,6 +458,11 @@ def _ask(user, req):
                "zahlen": numbers, "entwuerfe": drafts,
                "web": pipeline.webtreffer(extra, settings["web_servers"]),
                "modell": model}
+    if sql_info:
+        # The query stays with the answer: it is what the numbers rest on,
+        # as a source page is for a quote.
+        message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason")
+                          if k in sql_info}
     messages.append(message)
     if req.save:
         chats.speichere(user, chat_id, messages)

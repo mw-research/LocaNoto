@@ -2893,7 +2893,8 @@ if _bestand > 0:
                         try:
                             abfrage = sqldb.formuliere(
                                 sql_client, llm.modell("SQL", chat_model),
-                                user_query, sql_schema, verlauf)
+                                user_query, sql_schema, verlauf,
+                                hinweis_raum=(_sqz or {}).get("hinweis", ""))
                             if not abfrage:
                                 sql_grund = ("Das Modell sieht die Frage "
                                              "nicht durch die Datenbank "

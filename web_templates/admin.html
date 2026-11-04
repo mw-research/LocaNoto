@@ -52,6 +52,25 @@
 </section>
 
 <section class="card">
+  <h2>{{ t('Database access per workspace') }}</h2>
+  <p class="muted">{{ t('Microsoft SQL Server. Use an account with read rights only (db_datareader). Empty user and password remove the access.') }}</p>
+  {% if sql_rooms %}<p>{{ t('With database access') }}: {% for r in sql_rooms %}<code>{{ r }}</code> {% endfor %}</p>{% endif %}
+  <form hx-post="/ui/admin/workspaces/sql" hx-target="#sql-notice">
+    <label>{{ t('Workspace') }}
+      <select name="room">{% for id, label in sql_targets %}<option value="{{ id }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>{{ t('Server') }} <input name="server" placeholder="demo-erp"></label>
+    <label>{{ t('Port') }} <input name="port" type="number" value="1433"></label>
+    <label>{{ t('Database name') }} <input name="database" placeholder="DemoERP"></label>
+    <label>{{ t('User') }} <input name="user" autocomplete="off"></label>
+    <label>{{ t('Password') }} <input name="password" type="password" autocomplete="new-password"></label>
+    <label>{{ t('Note for the model (status codes, which table holds what)') }}
+      <textarea name="note" rows="4" class="mono"></textarea></label>
+    <button type="submit" class="primary">{{ t('Save') }}</button>
+  </form>
+  <div id="sql-notice"></div>
+</section>
+
+<section class="card">
   <h2>{{ t('Jobs') }}</h2>
   <table class="files">
   {% for j in jobs %}

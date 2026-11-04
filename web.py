@@ -46,6 +46,7 @@ import prompts
 import raeume
 import sessions
 import sprache
+import sqlquellen
 import web_sources
 import workspace_notes
 from server import (SEALED_COOKIE, COOKIE_SECURE, Principal, principal,
@@ -100,6 +101,15 @@ TEXTS = {
     "Read": "Lesen", "Take over selected into my workspace":
         "Ausgewählte in meinen Arbeitsbereich übernehmen",
     "Language": "Sprache", "Save": "Speichern",
+    "Database": "Datenbank", "Database of": "Datenbank von",
+    "Database query": "Datenbankabfrage", "rows": "Zeilen",
+    "Database access per workspace": "Datenbankzugang je Arbeitsbereich",
+    "Microsoft SQL Server. Use an account with read rights only (db_datareader). Empty user and password remove the access.":
+        "Microsoft SQL Server. Ein Konto nur mit Leserechten verwenden (db_datareader). Leerer Benutzer und leeres Passwort entfernen den Zugang.",
+    "With database access": "Mit Datenbankzugang", "Workspace": "Arbeitsbereich",
+    "Server": "Server", "Port": "Port", "Database name": "Datenbank", "User": "Benutzer",
+    "Note for the model (status codes, which table holds what)":
+        "Hinweis für das Modell (Statuscodes, welche Tabelle was enthält)",
     "Personal instruction": "Persönliche Anweisung",
     "Applies to every question you ask.": "Gilt für jede deiner Fragen.",
     "Change password": "Passwort ändern", "Current password":
@@ -239,6 +249,10 @@ def _chat_options(p):
         "presets": [(n, presets.anzeige(n))
                     for n in presets.namen() + presets.eigene(p.name)],
         "web": bool(answering.mcp.websuche_server()),
+        # workspaces whose database this user may query ("" = the one from
+        # the environment)
+        "sql": [(r, raeume.bezeichnung(r) if r else t("Database"))
+                for r, _account in answering.sql_accounts(p.name)],
     }
 
 
@@ -556,6 +570,9 @@ def _admin_context(p):
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
         "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
+        "sql_rooms": sorted(sqlquellen.raeume_mit_zugang()),
+        "sql_targets": [(r, raeume.bezeichnung(r))
+                        for r in sorted(raeume.liste()) if not raeume.ist_privat(r)],
     }
 
 
@@ -615,6 +632,25 @@ def admin_create_workspace(request: Request, id: str = Form(...),
     ok, message = raeume.anlegen(
         id, label, "", [m.strip() for m in members.split(",") if m.strip()])
     return _back_to_admin() if ok else _notice(tm(message), False)
+
+
+@router.post("/ui/admin/workspaces/sql")
+def admin_set_sql_account(request: Request, room: str = Form(...),
+                          server: str = Form(""), port: str = Form(""),
+                          database: str = Form(""), user: str = Form(""),
+                          password: str = Form(""), note: str = Form(""),
+                          p: Principal = Depends(principal)):
+    """The same as PUT /api/v1/admin/workspaces/{room}/sql-account."""
+    _admin(p)
+    page_language(p.name)
+    ok, message = sqlquellen.setze(room, {
+        "server": server, "port": int(port) if port.strip().isdigit() else None,
+        "datenbank": database, "benutzer": user, "passwort": password,
+        "hinweis": note}, benutzer=p.name, ist_verwalter=True)
+    if ok:
+        answering._schema_cache.pop(room, None)
+        return _back_to_admin()
+    return _notice(tm(message), False)
 
 
 @router.post("/ui/admin/jobs/{name}")

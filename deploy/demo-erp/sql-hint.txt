@@ -1,0 +1,5 @@
+Status in dbo.Auftraege: O = offen, F = in Fertigung, G = geliefert, S = storniert. "Offen" im Sinne von noch nicht geliefert heisst Status IN ('O','F').
+dbo.v_OffeneAuftraege enthaelt offene Auftraege mit Kunde und Auftragswert (netto, nach Rabatt).
+Pruefart in dbo.Pruefungen: A = aeussere, I = innere, F = Festigkeitspruefung. Faellig ist eine Pruefung am Datum in NaechstePruefung; je Anlage und Pruefart zaehlt die juengste Pruefung.
+Kunden werden ueber Firma gesucht (LIKE '%Meier%'), Anlagen ueber AnlagenNr (AN-0001) oder Bezeichnung.
+Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR.

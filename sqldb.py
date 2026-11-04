@@ -167,7 +167,8 @@ def lade_schema(zugang=None):
     return text
 
 
-def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None):
+def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None,
+               hinweis_raum=""):
     """Laesst das Sprachmodell eine Abfrage zu der Frage formulieren.
 
     Rueckgabe: die bereinigte Abfrage, oder "" wenn das Modell die Frage
@@ -182,8 +183,12 @@ def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None):
               "r", encoding="utf-8") as f:
         vorlage = f.read()
 
-    hinweis = ("Hinweise zum Fachgebiet:\n" + SQL_HINWEIS + "\n"
-               if SQL_HINWEIS else "")
+    # The note stored with a room's database account (sqlquellen,
+    # field "hinweis") belongs to exactly that database; the one from the
+    # environment applies to all. Both go in.
+    teile = [t for t in (SQL_HINWEIS, str(hinweis_raum or "").strip()) if t]
+    hinweis = ("Hinweise zum Fachgebiet:\n" + "\n".join(teile) + "\n"
+               if teile else "")
     prompt = (vorlage
               .replace("{SCHEMA}", schema)
               .replace("{HINWEIS}", hinweis)
