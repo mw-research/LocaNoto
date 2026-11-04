@@ -201,7 +201,7 @@ jobs:
       - name: Server im Abbild pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'enterprise'
         run: |
-          docker run --rm "$ABBILD" python -c "import psycopg, jwt, jinja2, markdown_it, multipart"
+          docker run --rm "$ABBILD" python -c "import psycopg, jwt, jinja2, markdown_it, multipart, pymssql"
           docker run -d --name probe -p 8700:8700 -e COOKIE_SECURE=0 \
             -e LOCANOTO_SCHLUESSEL="$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" \
             "$ABBILD" uvicorn server:app --host 0.0.0.0 --port 8700

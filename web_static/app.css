@@ -73,6 +73,10 @@ input, select, textarea, button, .button {
   border: 1px solid var(--border); border-radius: 6px; padding: .45rem .6rem;
 }
 label input, label select { display: block; width: 100%; margin-top: .2rem; }
+/* a checkbox or radio sits in front of its text, not above it */
+label.check input, input[type=checkbox], input[type=radio] {
+  display: inline-block; width: auto; margin: 0; flex: none; padding: 0;
+}
 textarea { width: 100%; resize: vertical; }
 button, .button { cursor: pointer; text-decoration: none; display: inline-block; }
 button:hover, .button:hover { border-color: var(--accent); }

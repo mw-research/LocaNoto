@@ -164,6 +164,10 @@ xxhash==4.0.0
 yarl==1.24.5
 zipp==4.1.0
 zstandard==0.25.0
+# Driver for the databases of the workspaces (Microsoft SQL Server, sqldb.py).
+# Loaded only when a database account is used.
+pymssql==2.2.11
+
 # exchangelib traegt die direkte Exchange-Anbindung (postfach.py).
 # Ohne sie laeuft alles ausser den Postfaechern; das Modul laedt sie
 # erst beim ersten Zugriff. sspilib kommt unter Windows von selbst
