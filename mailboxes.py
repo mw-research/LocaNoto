@@ -20,6 +20,14 @@ exactly the stored call -- the client names it, it cannot change it --
 and marks it sent, so it is sent once. A summary for a workspace
 (workspace_notes, server "workspace") is a draft of the same kind.
 
+When the server does not answer in time, a mail may still have gone out.
+Before reporting a failure send_draft looks into the sent folder (the
+calendar for an entry): found means sent. Not found means failed, and
+the draft can be sent again; could not look means "unclear" -- the user
+is told to check the sent folder before sending again. Every outcome is
+kept in the draft (state, result or error), so the next question in the
+chat knows it (pipeline.history_for_model).
+
 ADMIN SIDE
 
     templates()                      the kinds of servers (mcp.VORLAGEN)
@@ -35,6 +43,14 @@ import workspace_notes
 
 class NotFound(Exception):
     pass
+
+
+class SendFailed(Exception):
+    """A draft did not go out (state "failed") or may have ("unclear")."""
+
+    def __init__(self, message, state):
+        super().__init__(message)
+        self.state = state
 
 
 NOTICE_DEFAULT = mcp.HINWEIS_VORGABE
@@ -102,17 +118,20 @@ def send_draft(user, chat_id, draft_id, headers):
     draft = _find_draft(messages, draft_id)
     if draft is None:
         raise NotFound("Unknown draft.")
-    if draft.get("state") in ("sent", "discarded", "sending"):
+    if draft.get("state") in DONE:
         raise ValueError(f"Draft already {draft['state']}.")
+    if draft.get("kind") == "web":
+        raise ValueError("A web search is confirmed in the chat.")
     # Claim it before sending, under the chat lock: a second click finds
     # "sending" and stops.
     import dateisperre
     with dateisperre.gesperrt(chats._index_pfad(user)):
         messages = chats.lade(user, chat_id)
         draft = _find_draft(messages, draft_id)
-        if draft is None or draft.get("state"):
+        if draft is None or draft.get("state") in DONE:
             raise ValueError("Draft already handled.")
         draft["state"] = "sending"
+        draft.pop("error", None)
         chats.speichere(user, chat_id, messages)
     server = draft["server"]
     if server == workspace_notes.SERVER:
@@ -125,25 +144,67 @@ def send_draft(user, chat_id, draft_id, headers):
         for c in connections.values():
             if hasattr(c, "attachment_source"):
                 c.attachment_source = attachments.source(user, chat_id)
+    import postfach
+    known = {}
+    for m in messages:
+        known.update(m.get("ids") or {})
+    postfach.load_ids(known)
     try:
         if server not in connections:
             raise NotFound(f"No mailbox '{server}'.")
         result = connections[server].rufe(draft["werkzeug"],
                                           draft.get("argumente") or {})
-    except Exception:
-        _set_state(user, chat_id, draft_id, None)   # free it for a retry
+    except (ValueError, NotFound) as e:
+        # Refused before anything went out (a permission, a missing
+        # field): the caller says why; the draft may be confirmed again.
+        _set_state(user, chat_id, draft_id, "failed", error=str(e)[:300])
         raise
+    except Exception as e:
+        state, text = _after_error(connections.get(server), draft, e)
+        _set_state(user, chat_id, draft_id, state,
+                   **({"result": text} if state == "sent" else {"error": text}))
+        if state == "sent":
+            return text
+        raise SendFailed(text, state)
     finally:
         for c in connections.values():
             try:
                 c.schliesse()
             except Exception:
                 pass
-    _set_state(user, chat_id, draft_id, "sent")
+    _set_state(user, chat_id, draft_id, "sent", result=str(result)[:500])
     return str(result)
 
 
-def _set_state(user, chat_id, draft_id, state):
+DONE = ("sent", "discarded", "sending")
+
+# Errors that come before anything is handed to the server: nothing can
+# have gone out, there is nothing to look for.
+BEFORE_SENDING = ("nicht angemeldet", "Anmeldedaten", "Unbekannte Kennung",
+                  "gehoert nicht zu", "Kein Empfaenger", "Anhänge",
+                  "kein Werkzeug", "exchangelib fehlt", "keine Postfachadresse",
+                  "Anmeldung abgelehnt", "Keine Mailadresse", "Kein Betreff",
+                  "ist kein Datum", "fehlt. Erwartet")
+
+
+def _after_error(connection, draft, error):
+    """(state, text) after a failed call: sent after all, failed, unclear."""
+    text = str(error)[:300] or type(error).__name__
+    check = getattr(connection, "check_sent", None)
+    if check is None or isinstance(error, NotFound) or any(
+            w in text for w in BEFORE_SENDING):
+        return "failed", text
+    try:
+        found = check(draft["werkzeug"], draft.get("argumente") or {})
+    except Exception:
+        return "unclear", text
+    if found:
+        return "sent", ("Sent. (The server answered too late; the message "
+                        "is in the sent folder.)")
+    return "failed", text
+
+
+def _set_state(user, chat_id, draft_id, state, **fields):
     import dateisperre
     with dateisperre.gesperrt(chats._index_pfad(user)):
         messages = chats.lade(user, chat_id)
@@ -153,6 +214,8 @@ def _set_state(user, chat_id, draft_id, state):
                 draft.pop("state", None)
             else:
                 draft["state"] = state
+            for k, v in fields.items():
+                draft[k] = v
             chats.speichere(user, chat_id, messages)
 
 
@@ -163,8 +226,18 @@ def discard_draft(user, chat_id, draft_id):
     draft = _find_draft(messages, draft_id)
     if draft is None:
         raise NotFound("Unknown draft.")
+    if draft.get("state") in DONE:
+        raise ValueError(f"Draft already {draft['state']}.")
     draft["state"] = "discarded"
     chats.speichere(user, chat_id, messages)
+
+
+def draft_of(user, chat_id, draft_id):
+    """(message_index, draft) or (None, None)."""
+    for i, d in drafts(user, chat_id):
+        if d.get("id") == draft_id:
+            return i, d
+    return None, None
 
 
 # --- ADMIN ---

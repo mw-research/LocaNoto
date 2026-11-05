@@ -25,10 +25,12 @@ Postfach laedt exchangelib nie.
 """
 import base64
 import datetime
+import hashlib
+import json
 import re
-import uuid
 from urllib.parse import urlsplit
 
+import local_time
 import paths
 
 # Wie viele Nachrichten hoechstens vom Server geholt werden, bevor
@@ -42,7 +44,11 @@ HOLGRENZE = paths.env_int("POSTFACH_HOLGRENZE", 200)
 # darf nicht zwanzig vollstaendige Mails in den Prompt legen.
 TEXTAUSZUG = paths.env_int("POSTFACH_TEXTAUSZUG", 400)
 
-ZEITLIMIT = paths.env_float("POSTFACH_TIMEOUT", 30)
+ZEITLIMIT = paths.env_float("POSTFACH_TIMEOUT", 60)
+
+# After an error while sending: how far back the sent folder is searched
+# for the message (check_sent).
+SENT_LOOKBACK_MINUTES = 15
 
 
 class Fehler(Exception):
@@ -58,17 +64,47 @@ class Fehler(Exception):
 # Das ist ein Zwischenspeicher und kein Bestand: nach einem Neustart
 # ist er leer. Eine unbekannte Kennung endet darum nicht im falschen
 # Empfaenger, sondern in einer Fehlermeldung -- siehe _lange_kennung().
+#
+# The short id is derived from the long one, so the same message gets
+# the same short id in every pod and every question. And the ids a
+# connection hands out are kept with the chat answer (new_ids,
+# answering.py) and loaded again for the next question and for a draft
+# (load_ids): with two server pods, "answer that mail" or the click on a
+# draft may reach a pod that never listed the mail.
 _KENNUNGEN = {}
-_KENNUNG_GRENZE = 500
+_KENNUNG_GRENZE = 5000
 
 
 def _merke_kennung(server, lang):
-    kurz = "m" + uuid.uuid4().hex[:8]
-    if len(_KENNUNGEN) >= _KENNUNG_GRENZE:
+    roh = json.dumps([server, lang], ensure_ascii=False, default=str)
+    kurz = "m" + hashlib.sha256(roh.encode("utf-8")).hexdigest()[:8]
+    if len(_KENNUNGEN) >= _KENNUNG_GRENZE and kurz not in _KENNUNGEN:
         for alt in list(_KENNUNGEN)[:_KENNUNG_GRENZE // 2]:
             _KENNUNGEN.pop(alt, None)
     _KENNUNGEN[kurz] = (server, lang)
     return kurz
+
+
+def remember(conn, lang):
+    """A short id for a message of conn, also recorded in conn.new_ids."""
+    bereich = conn._bereich()
+    kurz = _merke_kennung(bereich, lang)
+    sink = getattr(conn, "new_ids", None)
+    if isinstance(sink, dict):
+        sink[kurz] = [bereich, list(lang) if isinstance(lang, tuple) else lang]
+    return kurz
+
+
+def load_ids(known):
+    """Short ids kept with a chat ({short: [scope, long]}) back into the cache."""
+    for kurz, entry in (known or {}).items():
+        try:
+            bereich, lang = entry
+        except (TypeError, ValueError):
+            continue
+        if isinstance(lang, list):
+            lang = tuple(lang)
+        _KENNUNGEN[str(kurz)] = (bereich, lang)
 
 
 def _lange_kennung(server, kurz):
@@ -329,6 +365,9 @@ class Postfach:
         self.angaben = dict(angaben or {})
         self.zusatz_kopf = dict(zusatz_kopf or {})
         self._konto = None
+        # Short ids handed out by this connection (remember()); answering
+        # keeps them with the answer.
+        self.new_ids = {}
         # Set by whoever knows user and chat (answering, mailboxes.send_draft):
         # callable(names) -> [(name, bytes, mime)], see attachments.py.
         # Without it no attachment goes out.
@@ -401,20 +440,25 @@ class Postfach:
         adresse = self.adresse()
         zugang = Credentials(username=benutzer, password=passwort)
         url = ews_adresse(self.angaben.get("url"))
+        # The installation's time zone, not the container's: in a
+        # container that is UTC, and every appointment was an hour off.
+        tz = _zeitzone()
         try:
             if url:
                 konfig = Configuration(service_endpoint=url,
                                        credentials=zugang)
                 self._konto = Account(primary_smtp_address=adresse,
                                       config=konfig, autodiscover=False,
-                                      access_type=DELEGATE)
+                                      access_type=DELEGATE,
+                                      default_timezone=tz)
             else:
                 # Ohne Adresse sucht exchangelib den Server selbst. Das
                 # ist der bequeme Weg und der langsame; er steht hier
                 # als Rueckfall, nicht als Vorgabe.
                 self._konto = Account(primary_smtp_address=adresse,
                                       credentials=zugang, autodiscover=True,
-                                      access_type=DELEGATE)
+                                      access_type=DELEGATE,
+                                      default_timezone=tz)
         except Exception as e:
             raise Fehler(f"{self.name}: {_kurz(e)}")
         return self._konto
@@ -554,9 +598,9 @@ class Postfach:
                 continue
             if such and such not in f"{betreff}\n{text}".lower():
                 continue
-            kurz = _merke_kennung(self._bereich(), m.id)
+            kurz = remember(self, m.id)
             zeilen.append(
-                f"[{kurz}] {_datum(getattr(m, 'datetime_received', None))} | "
+                f"[{kurz}] {_datum(_lokal(getattr(m, 'datetime_received', None)))} | "
                 f"von: {absender} | {betreff or '(ohne Betreff)'}"
                 + (f"\n    {_zusammen(text, TEXTAUSZUG)}" if text else ""))
             if len(zeilen) >= anzahl:
@@ -581,7 +625,7 @@ class Postfach:
                              f"({_kurz(e)}).")
         an = ", ".join(_adressen(getattr(m, "to_recipients", None)))
         kopie = ", ".join(_adressen(getattr(m, "cc_recipients", None)))
-        teile = [f"Datum:   {_datum(getattr(m, 'datetime_received', None))}",
+        teile = [f"Datum:   {_datum(_lokal(getattr(m, 'datetime_received', None)))}",
                  f"Von:     {_absender(m)}",
                  f"An:      {an or '-'}"]
         if kopie:
@@ -643,7 +687,7 @@ class Postfach:
         for m in reversed(liste):
             text = _ohne_zitat(getattr(m, "text_body", "") or "")
             text = text[:THREAD_MESSAGE] + ("..." if len(text) > THREAD_MESSAGE else "")
-            block = (f"--- {_datum(getattr(m, 'datetime_received', None))} | "
+            block = (f"--- {_datum(_lokal(getattr(m, 'datetime_received', None)))} | "
                      f"von: {_absender(m)}\n{text or '(kein Text)'}")
             if len(block) > rest and teile:
                 teile.append(f"--- (aeltere Nachrichten weggelassen: "
@@ -684,7 +728,7 @@ class Postfach:
             org = _person(getattr(t, "organizer", None))
             if such and such not in f"{betreff}\n{ort}\n{org}".lower():
                 continue
-            kurz = _merke_kennung(self._bereich(), t.id)
+            kurz = remember(self, t.id)
             zeilen.append(
                 f"[{kurz}] {_zeitspanne(t, tz)} | {betreff or '(ohne Betreff)'}"
                 + (f" | Ort: {ort}" if ort else "")
@@ -819,6 +863,146 @@ class Postfach:
             raise Fehler(f"{self.name}: nicht gesendet ({_kurz(e)}).")
         return f"Antwort an {_absender(m)} gesendet."
 
+    # --- DID IT GO OUT? ---
+
+    def check_sent(self, name, argumente=None):
+        """After an error: is the mail in the sent folder, the entry in the
+        calendar? True only when it is found; a timeout after the server
+        took a mail is no failure, and a second click would send it twice.
+        """
+        from exchangelib import EWSDateTime, UTC
+
+        a = dict(argumente or {})
+        konto = self._verbindung()
+        if name in KALENDERWERKZEUGE:
+            t = _termin_angaben(a, name == "meeting_request")
+            tz = _zeitzone(konto)
+            b = t["beginn"]
+            beginn = EWSDateTime(b.year, b.month, b.day,
+                                 getattr(b, "hour", 0), getattr(b, "minute", 0),
+                                 tzinfo=tz)
+            posten = konto.calendar.view(
+                start=beginn - datetime.timedelta(minutes=1),
+                end=beginn + datetime.timedelta(minutes=1)).only("subject")
+            return any(" ".join(str(getattr(x, "subject", "") or "").split())
+                       == t["betreff"] for x in posten)
+        if name not in SENDEWERKZEUGE:
+            return False
+        if name == "mail_senden":
+            betreff = _grundbetreff(str(a.get("betreff") or ""))
+            an = {x.lower() for x in _liste(a.get("an"))}
+        else:
+            original = self._nachricht(a.get("kennung"))
+            betreff = _grundbetreff(getattr(original, "subject", "") or "")
+            an = set()
+        seit = (EWSDateTime.now(tz=UTC)
+                - datetime.timedelta(minutes=SENT_LOOKBACK_MINUTES))
+        posten = (konto.sent.filter(datetime_created__gte=seit)
+                  .only("subject", "to_recipients")[:50])
+        for x in posten:
+            if _grundbetreff(getattr(x, "subject", "") or "") != betreff:
+                continue
+            ziele = {y.lower() for y in _adressen(getattr(x, "to_recipients", None))}
+            if not an or an & ziele:
+                return True
+        return False
+
+    # --- NEW MAIL (mail_watch.py) ---
+
+    def new_messages(self, since, limit=20):
+        """[(received, sender, subject)] newer than since (aware), newest first."""
+        from exchangelib import EWSDateTime
+
+        konto = self._verbindung()
+        try:
+            posten = list(
+                konto.inbox.filter(datetime_received__gt=EWSDateTime.from_datetime(since))
+                .only("datetime_received", "subject", "sender")
+                .order_by("-datetime_received")[:limit])
+        except Exception as e:
+            raise Fehler(f"{self.name}: {_kurz(e)}")
+        return [(getattr(m, "datetime_received", None), _absender(m),
+                 (getattr(m, "subject", "") or "").strip())
+                for m in posten]
+
+    # --- TICKETS (tickets.py) ---
+
+    def ticket_messages(self, since, limit=50):
+        """Inbox messages received after since (aware), oldest first, as
+        dicts: key, ref, when, name, address, subject, text, auto."""
+        from exchangelib import EWSDateTime
+
+        konto = self._verbindung()
+        try:
+            posten = list(
+                konto.inbox.filter(datetime_received__gt=EWSDateTime.from_datetime(since))
+                .only("datetime_received", "subject", "sender", "text_body",
+                      "message_id", "headers")
+                .order_by("datetime_received")[:limit])
+        except Exception as e:
+            raise Fehler(f"{self.name}: {_kurz(e)}")
+        out = []
+        for m in posten:
+            s = getattr(m, "sender", None)
+            headers = {str(getattr(h, "name", "")).lower(): str(getattr(h, "value", ""))
+                       for h in (getattr(m, "headers", None) or [])}
+            address = (getattr(s, "email_address", "") or "") if s else ""
+            out.append({
+                "key": getattr(m, "message_id", None) or m.id,
+                "ref": m.id,
+                "when": getattr(m, "datetime_received", None),
+                "name": (getattr(s, "name", "") or "") if s else "",
+                "address": address,
+                "subject": (getattr(m, "subject", "") or "").strip(),
+                "text": (getattr(m, "text_body", "") or "").strip(),
+                "auto": is_automatic(headers, address, self.adresse()),
+            })
+        return out
+
+    def ticket_reply(self, ref, subject, body):
+        """Answer the sender of an inbox message."""
+        konto = self._verbindung()
+        try:
+            konto.inbox.get(id=ref).reply(subject=subject, body=body)
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht gesendet ({_kurz(e)}).")
+
+    def ticket_forward(self, ref, to, subject, body):
+        """Forward an inbox message to addresses."""
+        from exchangelib import Mailbox
+
+        konto = self._verbindung()
+        try:
+            konto.inbox.get(id=ref).forward(
+                subject=subject, body=body,
+                to_recipients=[Mailbox(email_address=x) for x in to])
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht weitergeleitet ({_kurz(e)}).")
+
+
+# Mail that must not get an automatic answer (RFC 3834 and what large
+# senders use): answering it starts a loop between two machines.
+_NO_REPLY = re.compile(r"^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|"
+                       r"bounce[s]?|notifications?)\b", re.I)
+
+
+def is_automatic(headers, address, own=""):
+    """Is a message machine-made (auto reply, list, bounce) or our own?"""
+    h = {str(k).lower(): str(v).lower().strip() for k, v in (headers or {}).items()}
+    address = str(address or "").lower()
+    if own and address == str(own).lower():
+        return True
+    if h.get("auto-submitted", "no") not in ("", "no"):
+        return True
+    if h.get("x-auto-response-suppress", "") and any(
+            w in h["x-auto-response-suppress"] for w in ("all", "autoreply", "oof")):
+        return True
+    if h.get("precedence", "") in ("bulk", "junk", "list", "auto_reply"):
+        return True
+    if "list-id" in h or "list-unsubscribe" in h:
+        return True
+    return bool(_NO_REPLY.match(address.split("@")[0])) if address else True
+
 
 # --- KLEINKRAM ---
 
@@ -871,16 +1055,33 @@ def _datum(wert):
 _WOCHENTAGE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
 
 
-def _zeitzone(konto):
-    """The mailbox's own time zone; the server's if Exchange does not say."""
+def _zeitzone(konto=None):
+    """The installation's time zone (TIMEZONE, local_time.py).
+
+    Not the container's: that is UTC, and appointments were an hour off.
+    """
+    from exchangelib import EWSTimeZone
     try:
-        tz = konto.default_timezone
+        return EWSTimeZone(local_time.zone_name())
+    except Exception:
+        pass
+    try:
+        tz = konto.default_timezone if konto is not None else None
         if tz is not None:
             return tz
     except Exception:
         pass
-    from exchangelib import EWSTimeZone
     return EWSTimeZone.localzone()
+
+
+def _lokal(wert):
+    """A received time in the installation's zone, for the model."""
+    if wert is None or not hasattr(wert, "astimezone"):
+        return wert
+    try:
+        return wert.astimezone(local_time.zone())
+    except Exception:
+        return wert
 
 
 def _heute(tz):
@@ -959,7 +1160,7 @@ def _termin_angaben(a, einladen):
             ende = beginn + datetime.timedelta(minutes=minuten)
         if ende <= beginn:
             raise Fehler("Das Ende liegt nicht nach dem Beginn.")
-    heute = datetime.date.today()
+    heute = local_time.today()
     tag = beginn.date() if isinstance(beginn, datetime.datetime) else beginn
     if not (heute - datetime.timedelta(days=366) <= tag
             <= heute + datetime.timedelta(days=5 * 366)):

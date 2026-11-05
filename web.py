@@ -8,6 +8,7 @@ a page and an API call can never answer differently.
     /                 chat; /c/<id> a given chat
     /documents        workspaces and documents: upload, move, delete
     /web              sources from the web: search, read, take over
+    /tickets          tickets of shared mailboxes (web_tickets.py)
     /settings         language, instruction, presets, password, mailboxes, tokens
     /admin            users, workspaces, jobs, status (the rest: /api/v1/docs)
 
@@ -41,7 +42,9 @@ import doc_actions
 import feedback
 import jobs
 import llm
+import mail_watch
 import mailboxes
+import notices
 import notzugang
 import pipeline
 import presets
@@ -50,9 +53,9 @@ import raeume
 import sessions
 import sprache
 import sqlquellen
+import tickets
 import web_research
 import web_sources
-import workspace_notes
 from server import (SEALED_COOKIE, COOKIE_SECURE, Principal, principal,
                     set_session_cookies)
 
@@ -223,6 +226,49 @@ TEXTS = {
     "Interrupted (server restarted).": "Abgebrochen (Server neu gestartet).",
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
+    "Searched.": "Gesucht.", "Sending ...": "Wird gesendet …",
+    "Not sent": "Nicht gesendet",
+    "The server did not answer. Look into your sent folder (or calendar) before you send it again.":
+        "Der Server hat nicht geantwortet. Vor einem erneuten Senden im Ordner Gesendet (bzw. im Kalender) nachsehen.",
+    "Web search proposed": "Websuche vorgeschlagen",
+    "Notify me about new mail": "Bei neuer Mail benachrichtigen",
+    "Checked every few minutes while LocaNoto is open in a browser tab.":
+        "Geprüft alle paar Minuten, solange LocaNoto in einem Browsertab offen ist.",
+    "Tickets": "Tickets", "Ticket system": "Ticketsystem",
+    "Tickets of shared mailboxes": "Tickets der Funktionspostfächer",
+    "No tickets.": "Keine Tickets.", "open": "offen", "in_progress": "in Arbeit",
+    "closed": "erledigt", "Assigned to": "Zuständig", "nobody": "niemand",
+    "Take it": "Übernehmen", "Note": "Notiz", "Add note": "Notiz hinzufügen",
+    "From": "Von", "Received": "Eingegangen", "Subject": "Betreff",
+    "History": "Verlauf", "Answer in the chat": "Im Chat beantworten",
+    "all statuses": "alle Status", "Release": "Freigeben",
+    "received": "eingegangen", "answered": "Standardantwort gesendet",
+    "answer_failed": "Standardantwort fehlgeschlagen", "forwarded": "weitergeleitet",
+    "forward_failed": "Weiterleitung fehlgeschlagen", "mail": "Mail",
+    "assigned": "zugewiesen", "status": "Status", "note": "Notiz",
+    "Ticket system on": "Ticketsystem an",
+    "Login for the mailbox (stored encrypted; empty keeps the stored one)":
+        "Anmeldung für das Postfach (verschlüsselt gespeichert; leer lässt die gespeicherte)",
+    "Standard answer ({ticket}, {subject}, {name} are filled in)":
+        "Standardantwort ({ticket}, {subject}, {name} werden eingesetzt)",
+    "Members (get every ticket)": "Mitglieder (bekommen jedes Ticket)",
+    "Forward every new mail to (addresses, comma separated)":
+        "Jede neue Mail weiterleiten an (Adressen, durch Komma)",
+    "Ticket prefix": "Ticketkürzel", "Check now": "Jetzt prüfen",
+    "login stored": "Anmeldung gespeichert", "no login stored": "keine Anmeldung gespeichert",
+    "New mail becomes a ticket: the sender gets the standard answer at once, the members a notice, the forward addresses the mail. Replies with the ticket number in the subject go to the same ticket. Checked by the worker every minute.":
+        "Neue Mail wird zum Ticket: Der Absender bekommt sofort die Standardantwort, die Mitglieder eine Benachrichtigung, die Weiterleitungsadressen die Mail. Antworten mit der Ticketnummer im Betreff landen beim selben Ticket. Der Worker prüft jede Minute.",
+    "First check: from now on new mail becomes a ticket.":
+        "Erste Prüfung: Ab jetzt wird neue Mail zum Ticket.",
+    "new mail(s)": "neue Mail(s)",
+    "Unknown mailbox.": "Unbekanntes Postfach.",
+    "Tickets only for shared mailboxes.": "Tickets nur für Funktionspostfächer.",
+    "User AND password for the mailbox.": "Benutzer UND Passwort für das Postfach.",
+    "Without the installation key no password is stored.":
+        "Ohne Installationsschlüssel wird kein Passwort gespeichert.",
+    "A login for the mailbox is needed.": "Eine Anmeldung für das Postfach ist nötig.",
+    "No login stored for this mailbox.": "Für dieses Postfach ist keine Anmeldung gespeichert.",
+    "Unknown ticket.": "Unbekanntes Ticket.", "Unknown status.": "Unbekannter Status.",
 }
 
 
@@ -342,7 +388,8 @@ def to_login_handler(_request, error):
 
 
 def _nav(p, active):
-    return {"user": p.name, "admin": p.is_admin, "active": active}
+    return {"user": p.name, "admin": p.is_admin, "active": active,
+            "tickets": bool(tickets.boxes_for(p.name, p.is_admin))}
 
 
 # --- SIGN-IN ---
@@ -387,12 +434,34 @@ def _messages(p, chat_id):
     return out
 
 
+def _prefill(p, mail="", ticket=""):
+    """A question for the chat box: from a mail notice or a ticket.
+
+    Built here from the name in the link -- the link itself carries no
+    mail text, so nothing of it lands in an access log.
+    """
+    if mail and mail in mail_watch.mailboxes():
+        return mail_watch.question_for(p.name, mail)
+    box, _, tid = ticket.partition(":")
+    if box and tid and box in tickets.boxes_for(p.name, p.is_admin):
+        item = tickets.ticket(box, tid)
+        if item:
+            sender = (f"{item['from_name']} <{item['from_address']}>"
+                      if item.get("from_name") else item.get("from_address"))
+            head = (f"Draft an answer to ticket {item['id']} ({sender})"
+                    if sprache.gewaehlt(p.name) == "en" else
+                    f"Entwirf eine Antwort auf Ticket {item['id']} ({sender})")
+            return (f"{head}:\n\n{item.get('subject') or ''}\n\n"
+                    f"{(item.get('text') or '')[:3000]}")
+    return ""
+
+
 @router.get("/")
-def home(request: Request):
+def home(request: Request, mail: str = "", ticket: str = ""):
     p = _need(request)
     return render("chat.html", request, nav=_nav(p, "chat"),
                   chats=chats.liste(p.name), chat_id="", messages=[],
-                  options=_chat_options(p))
+                  options=_chat_options(p), prefill=_prefill(p, mail, ticket))
 
 
 @router.get("/c/{chat_id}")
@@ -459,25 +528,35 @@ def give_feedback(request: Request, kind: str = Form(...),
 @router.post("/ui/chats/{chat_id}/drafts/{draft_id}/{action}")
 def draft_action(chat_id: str, draft_id: str, action: str, request: Request,
                  p: Principal = Depends(principal)):
+    """Send or discard a draft; answers with the draft as it is now.
+
+    Every failure is shown in the draft, with its reason -- never as an
+    error page: a failed mail can be sent again, an unclear one says so.
+    """
     page_language(p.name)
-    if action == "send":
-        headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
-        draft = next((d for _i, d in mailboxes.drafts(p.name, chat_id)
-                      if d.get("id") == draft_id), {})
-        server = draft.get("server")
-        try:
-            result = mailboxes.send_draft(p.name, chat_id, draft_id, headers)
-        except ValueError as e:
-            raise HTTPException(409, str(e))
-        if server == workspace_notes.SERVER:
-            return HTMLResponse(f'<span class="ok">{t("Stored.")}</span> '
-                                f'<span class="muted">'
-                                f'{jinja2.utils.markupsafe.escape(result)}</span>')
-        if draft.get("werkzeug") == "calendar_add":
-            return HTMLResponse(f'<span class="ok">{t("Added to the calendar.")}</span>')
-        return HTMLResponse(f'<span class="ok">{t("Sent.")}</span>')
-    mailboxes.discard_draft(p.name, chat_id, draft_id)
-    return HTMLResponse(f'<span class="muted">{t("Discarded.")}</span>')
+    problem = ""
+    try:
+        if action == "send":
+            headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
+            mailboxes.send_draft(p.name, chat_id, draft_id, headers)
+        elif action == "discard":
+            mailboxes.discard_draft(p.name, chat_id, draft_id)
+        else:
+            raise HTTPException(404, "Unknown action.")
+    except mailboxes.SendFailed:
+        pass    # the draft carries state and error now
+    except (ValueError, mailboxes.NotFound) as e:
+        problem = str(e)
+    except HTTPException:
+        raise
+    except Exception as e:
+        problem = f"{type(e).__name__}: {e}"[:300]
+    _i, draft = mailboxes.draft_of(p.name, chat_id, draft_id)
+    if draft is None:
+        return _notice(problem or "Unknown draft.", False)
+    if problem and not draft.get("state"):
+        draft = dict(draft, state="failed", error=problem)
+    return render("draft.html", request, d=draft, chat_id=chat_id)
 
 
 # --- DOCUMENTS ---
@@ -633,16 +712,45 @@ async def web_take_over(task_id: str, request: Request,
 
 
 @router.get("/ui/notifications")
-def notifications(p: Principal = Depends(principal)):
-    """What the pages ask every few seconds: running and finished tasks."""
+def notifications(request: Request, p: Principal = Depends(principal)):
+    """What the pages ask every few seconds: running and finished tasks,
+    and notices (new mail, tickets). Also starts the mail check that is
+    due -- with the logins of this browser, which the server never keeps."""
     page_language(p.name)
     items = web_research.tasks(p.name)
     finished = [t_ for t_ in items if t_["state"] != "running" and not t_.get("seen")]
+    if p.via == "session":
+        try:
+            mail_watch.maybe_check(
+                p.name, sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE)))
+        except Exception:
+            pass
     return JSONResponse({
         "running": sum(1 for t_ in items if t_["state"] == "running"),
         "finished": [{"id": t_["id"], "bad": t_["state"] == "failed",
                       "text": _task_line(t_)} for t_ in finished],
+        "notices": notices.pending(p.name),
+        "tickets": _open_tickets(p),
         "view": t("Show")})
+
+
+def _open_tickets(p):
+    """Open tickets nobody took yet, for the count on the Tickets tab."""
+    n = 0
+    for box in tickets.boxes_for(p.name, p.is_admin):
+        try:
+            n += sum(1 for x in tickets.tickets_of(box)
+                     if x["status"] == "open" and not x.get("assignee"))
+        except Exception:
+            pass
+    return n
+
+
+@router.post("/ui/notices/shown")
+async def notices_shown(request: Request, p: Principal = Depends(principal)):
+    form = await request.form()
+    notices.mark_shown(p.name, form.getlist("id"))
+    return JSONResponse({"ok": True})
 
 
 def _task_line(item):
@@ -671,7 +779,8 @@ def _settings_context(p, request):
         "sso": entry.get("anmeldung") == "oidc",
         "presets": [(n, presets.anzeige(n), presets.ist_eigene(n))
                     for n in presets.namen() + presets.eigene(p.name)],
-        "mailboxes": [dict(m, connected=m["name"] in connected)
+        "mailboxes": [dict(m, connected=m["name"] in connected,
+                           watch=mail_watch.watching(p.name, m["name"]))
                       for m in mailboxes.overview()
                       if m["kind"] == "mailbox"],
         "tokens": [(k[:12], e.get("bezeichnung", ""), e.get("erstellt", ""))
@@ -735,7 +844,8 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
         except mailboxes.NotFound:
             raise
         except Exception as e:
-            return _notice(f"{type(e).__name__}", ok=False)
+            # The reason, not just its class: "Fehler" told nobody why.
+            return _notice(str(e)[:300] or type(e).__name__, ok=False)
         sealed[server] = header
         response = HTMLResponse("")
     response.set_cookie(SEALED_COOKIE, sessions.seal(p.name, sealed),
@@ -743,6 +853,15 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
                         samesite="strict", path="/")
     response.headers["HX-Redirect"] = "/settings"
     return response
+
+
+@router.post("/ui/settings/mailbox/{server}/watch")
+def watch_mailbox(server: str, request: Request, on: str = Form(""),
+                  p: Principal = Depends(principal)):
+    if server not in mail_watch.mailboxes():
+        raise HTTPException(404, "Unknown mailbox.")
+    mail_watch.set_watch(p.name, server, on == "1")
+    return HTMLResponse("")
 
 
 @router.post("/ui/settings/token/{token_id}/revoke")

@@ -282,8 +282,54 @@ below it with recipient, subject and text.
 - **Send** → sends the draft exactly as it appears there.
 - **Discard** → sends nothing.
 
+If sending goes wrong, the draft says why:
+
+- **Not sent: …** → nothing went out; **Send** tries again.
+- **The server did not answer** → look into the *Sent* folder (or the
+  calendar) before trying again.
+
+If the server answers too late but the mail is in *Sent*, it counts as
+sent. LocaNoto knows what happened to a draft at the next question in the
+same chat, and which mails and appointments it read before.
+
 Only for a shared mailbox can an admin enable autonomous replies; such
 emails usually carry a note that they were created automatically.
+
+### How do I add appointments with LocaNoto?
+
+With an Exchange mailbox connected, for example: "What is in my calendar
+tomorrow?", "Block Tuesday 2 pm for an hour of focus time", "Invite
+huber@firma.de to the site meeting on Friday at 10".
+
+Entries and invitations are drafts like mails: the draft names weekday,
+date and time → check → **Add to calendar** or **Send invitation**.
+LocaNoto knows today's date and the weekdays of the surrounding weeks;
+times are in the installation's time zone (default Europe/Berlin).
+
+### How does LocaNoto notify me of new mail?
+
+With a mailbox connected and LocaNoto open in a browser tab, LocaNoto
+checks for new mail every few minutes. New mail → a notice with sender and
+subject → **Show** opens a chat asking about the new messages.
+
+**Settings** → **Mailboxes** → **Notify me about new mail** switches this
+per mailbox. With no LocaNoto tab open nothing is checked: the login
+lives only in the browser session.
+
+### How do I work with tickets in LocaNoto?
+
+If an admin switched on the ticket system for a shared mailbox and made
+you a member, there is a **Tickets** tab.
+
+- Every new mail to the mailbox becomes a ticket (e.g. T-2026-0001). The
+  sender gets the standard answer with the number at once; you get a
+  notice. The number on the tab counts open tickets nobody took.
+- Open a ticket → **Take it** (you are responsible, status *in progress*),
+  set the **Status**, **Add note**.
+- **Answer in the chat** → a chat with the ticket as the question; the
+  answer goes out as a draft through your connected mailbox.
+- If the customer replies with the number in the subject, the mail goes
+  to the same ticket and reopens it; the person responsible is notified.
 
 ### How do I search the internet with LocaNoto?
 
@@ -297,6 +343,12 @@ goes out, no documents.
   select only enabled ones at the top.
 - **Allgemein** is blocked by default. A question with web search over all
   workspaces leaves it out and says so below the answer.
+
+Without web search switched on, LocaNoto can **propose** a web search,
+e.g. when the documents give nothing or the question asks for something
+current. Below the answer: **Web search proposed** with the exact search
+text → **Search in the web** → the answer continues in the same chat with
+the hits. **Discard** → nothing goes out.
 
 Results appear below the answer as **From the web** with [W1], [W2] …,
 separate from the documents. Tick results → **Import n** → they land in
@@ -602,6 +654,29 @@ draft, without exception.
 
 **Fetch tools** marks tools that send something with **[SENDET]**; all
 others only read.
+
+### How do I set up a ticket system for a shared mailbox in LocaNoto as an admin?
+
+**Admin** → **Mailboxes** → for each shared mailbox a section **Ticket
+system**:
+
+1. Tick **Ticket system on**.
+2. **Login for the mailbox**: an account that may read this mailbox and
+   send from it. It is stored encrypted with the installation key, because
+   the worker runs without a signed-in user. Empty keeps the stored login.
+3. **Standard answer**: goes to every sender at once. `{ticket}`,
+   `{subject}` and `{name}` are filled in.
+4. **Members**: LocaNoto users who see every ticket and get a notice.
+   Admins see all tickets.
+5. Optional **Forward every new mail to**: addresses that get every new
+   mail with the ticket number in the subject.
+6. **Save** → **Check now**. The first check only notes the time; from
+   then on every new mail becomes a ticket.
+
+The worker checks every minute (`TICKET_POLL_SECONDS`). Machine mail
+(out-of-office replies, newsletters, bounces, mail of the mailbox itself)
+neither becomes a ticket nor gets an answer. A mail is marked handled
+before anything is sent: it is never answered twice.
 
 ### How does emergency access work in LocaNoto?
 

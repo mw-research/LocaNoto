@@ -113,6 +113,25 @@ the Model Context Protocol can be added. Tools that send something are never
 executed by the model on its own: the user sees a draft and clicks *send*.
 Credentials of personal mailboxes live only in the session memory.
 
+A draft that fails is checked against the *Sent* folder (the calendar for
+appointments): found counts as sent, not found may be sent again, and
+"unclear" asks the user to look first. Tool calls and results stay with
+the answer in the chat, so the next question still knows the mails it
+read and what became of a draft. Every system prompt carries today's
+date and a table of weekdays; times are in `TIMEZONE` (default
+Europe/Berlin), not in the container's UTC.
+
+While LocaNoto is open in a browser tab, connected mailboxes are checked
+for new mail every `MAIL_CHECK_MINUTES` and new mail becomes a notice.
+
+**Ticket system.** For a shared mailbox an admin can switch on tickets:
+every new mail becomes a ticket (`T-2026-0001`), the sender gets a
+standard answer with the number at once, members get a notice and see the
+**Tickets** tab, optional addresses get the mail forwarded. Replies with
+the number go to the same ticket. Machine mail (auto replies, lists,
+bounces) is ignored. The worker checks every `TICKET_POLL_SECONDS` with a
+login for the mailbox that is stored encrypted with the installation key.
+
 ### Web search
 
 When documents are not enough, the model may look things up on the web —
@@ -122,6 +141,10 @@ leaves the house, via a self-hosted SearXNG and without user identity. The
 search service (`websuche.py`) runs in its own pod without any LocaNoto
 secret or volume, checks every address and every redirect against private
 networks, and streams pages with a size cap.
+
+Without the switch, the model can **propose** a web search (`WEB_TOOL`):
+it becomes a draft showing the exact search text, and only the user's
+click sends it; the answer then continues in the same chat.
 
 Results appear under the answer, separate from document sources. A
 NotebookLM-style **source search** lets users collect sources without

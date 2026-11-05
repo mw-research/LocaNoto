@@ -21,6 +21,7 @@ import os
 import re
 import time
 
+import local_time
 import paths
 import statefiles
 import keyword_index
@@ -458,7 +459,85 @@ def systemprompt(kontexttext, preset=None, benutzer=None):
             .replace("{EXPERT_ROLE}", rolle)
             .replace("{GLOSSAR}", _glossarblock(preset))
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
+    # Today and the weekdays around it: the model has no clock, and a
+    # weekday it computes itself is wrong often enough to matter.
+    text += "\n" + local_time.calendar_block(_language(benutzer))
     return prompts.mit_anweisung(text, benutzer) if benutzer else text
+
+
+def _language(user):
+    if not user:
+        return "de"
+    try:
+        import sprache
+        return "en" if sprache.gewaehlt(user) == "en" else "de"
+    except Exception:
+        return "de"
+
+
+# --- THE HISTORY THE MODEL SEES ---
+#
+# An answer that used tools (a mailbox, the calendar, web search) keeps
+# the calls and their results (answering.py, "tool_log"). Without them
+# the next question only shows the model its own summary: it no longer
+# knows the mails it listed, and asked about them it may even say it made
+# them up. The log goes back in as what it was -- tool calls and tool
+# results before the answer -- for the last TOOL_LOG_TURNS answers.
+TOOL_LOG_TURNS = paths.env_int("TOOL_LOG_TURNS", 3)
+TOOL_LOG_CHARS = paths.env_int("TOOL_LOG_CHARS", 4000)
+
+_DRAFT_STATE = {
+    "sent": "Der Nutzer hat den Entwurf bestaetigt; er wurde ausgefuehrt.",
+    "discarded": "Der Nutzer hat den Entwurf verworfen; nichts wurde ausgefuehrt.",
+    "sending": "Der Entwurf wird gerade ausgefuehrt.",
+    "failed": "Der Nutzer hat den Entwurf bestaetigt, die Ausfuehrung ist fehlgeschlagen.",
+    "unclear": ("Der Nutzer hat den Entwurf bestaetigt; ob er ausgefuehrt "
+                "wurde, ist unklar (keine Antwort vom Server)."),
+}
+
+
+def tool_log(zusatz, entwuerfe=()):
+    """The tool messages of one answer, cut for storing with it."""
+    out = []
+    for m in zusatz or []:
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            out.append({"role": "assistant", "content": m.get("content") or "",
+                        "tool_calls": m["tool_calls"]})
+        elif m.get("role") == "tool":
+            text = str(m.get("content") or "")
+            if len(text) > TOOL_LOG_CHARS:
+                text = text[:TOOL_LOG_CHARS] + " ... (gekuerzt)"
+            out.append({"role": "tool", "tool_call_id": m.get("tool_call_id"),
+                        "content": text})
+    return out
+
+
+def _draft_result(draft):
+    state = draft.get("state")
+    text = _DRAFT_STATE.get(state, "NICHT ausgefuehrt. Der Entwurf wartet "
+                                   "noch auf die Bestaetigung des Nutzers.")
+    detail = draft.get("result") or draft.get("error")
+    return text + (f" Rueckmeldung: {detail}" if detail else "")
+
+
+def history_for_model(nachrichten, anzahl=20):
+    """The last messages for the model, with the tool calls of recent answers."""
+    recent = list(nachrichten or [])[-anzahl:]
+    logged = [i for i, m in enumerate(recent)
+              if m.get("role") == "assistant" and m.get("tool_log")]
+    keep = set(logged[-max(0, TOOL_LOG_TURNS):])
+    out = []
+    for i, m in enumerate(recent):
+        if i in keep:
+            drafts = {d.get("call_id"): d for d in m.get("entwuerfe") or []
+                      if d.get("call_id")}
+            for t in m["tool_log"]:
+                t = dict(t)
+                if t.get("role") == "tool" and t.get("tool_call_id") in drafts:
+                    t["content"] = _draft_result(drafts[t["tool_call_id"]])
+                out.append(t)
+        out.append({"role": m["role"], "content": m.get("content") or ""})
+    return out
 
 
 # Wie oft das Modell hoechstens nachschlagen darf, bevor es antworten
@@ -466,9 +545,17 @@ def systemprompt(kontexttext, preset=None, benutzer=None):
 # kostet einen Modellaufruf und die Wartezeit des Menschen davor.
 WERKZEUG_RUNDEN = paths.env_int("MCP_RUNDEN", 4)
 
+# How long one round of the tool loop may take. It sends the whole
+# history and every tool description; on a local model that took longer
+# than the 60 s of HELPER_TIMEOUT, the loop gave up quietly, and the
+# model then answered that it could not send mail -- one message after
+# it had done so.
+TOOL_TIMEOUT = paths.env_float("TOOL_TIMEOUT", 180)
+
 
 def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
-                 verlauf_anzahl=20, fortschritt=None):
+                 verlauf_anzahl=20, fortschritt=None, vorab=None,
+                 hinweise=None):
     """Laesst das Modell Werkzeuge rufen, bis es antworten kann.
 
     Rueckgabe: (zusatz, entwuerfe)
@@ -478,36 +565,46 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
       entwuerfe  Aufrufe, die NICHT ausgefuehrt wurden, weil sie etwas
                  verschicken wuerden. Sie warten auf einen Menschen.
 
+    vorab: tool messages already there (a confirmed web search), the
+    loop continues after them. hinweise: a list that collects what the
+    answer has to tell (a mailbox not signed in, tools not reachable),
+    so the model says so instead of guessing.
+
     OHNE SERVER PASSIERT NICHTS: kein Modellaufruf, keine Werkzeugliste,
     ([], []) zurueck. Eine Installation ohne Postfach merkt von diesem
     Code nichts.
     """
     import mcp
 
+    hinweise = hinweise if hinweise is not None else []
     if not verbindungen:
-        return [], []
-    werkzeuge = mcp.als_werkzeugliste(verbindungen, sagen=fortschritt)
+        return list(vorab or []), []
+
+    def sagen(text):
+        if fortschritt:
+            fortschritt(text)
+        hinweise.append(str(text))
+
+    werkzeuge = mcp.als_werkzeugliste(verbindungen, sagen=sagen)
     if not werkzeuge:
-        return [], []
+        return list(vorab or []), []
 
     an_modell = [{"role": "system", "content": system}]
-    for m in nachrichten[-verlauf_anzahl:]:
-        an_modell.append({"role": m["role"], "content": m["content"]})
+    an_modell += history_for_model(nachrichten, verlauf_anzahl)
 
-    zusatz, entwuerfe = [], []
+    zusatz, entwuerfe = list(vorab or []), []
     for _runde in range(max(1, WERKZEUG_RUNDEN)):
         try:
             a = client.chat.completions.create(
                 model=modell, messages=an_modell + zusatz,
                 tools=werkzeuge, tool_choice="auto",
-                timeout=HELPER_TIMEOUT)
+                timeout=TOOL_TIMEOUT)
         except Exception as e:
             # Ein Modell, das mit Werkzeugen nicht umgehen kann, darf die
             # Antwort nicht verhindern. Dann eben ohne Nachschlagen --
-            # das ist genau der Zustand von vor dieser Erweiterung.
-            if fortschritt:
-                fortschritt(f"Werkzeuge nicht nutzbar: {type(e).__name__}")
-            return [], []
+            # aber das Modell erfaehrt es und sagt es, statt zu raten.
+            sagen(f"Werkzeuge nicht nutzbar: {type(e).__name__}")
+            return zusatz, entwuerfe
 
         nachricht = a.choices[0].message if a.choices else None
         rufe = list(getattr(nachricht, "tool_calls", None) or [])
@@ -555,7 +652,7 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                                 f"nachfragen.")
                 else:
                     entwurf = {"server": server, "werkzeug": name,
-                               "argumente": argumente}
+                               "argumente": argumente, "call_id": r.id}
                     if vorschau:
                         entwurf["vorschau"] = vorschau
                     entwuerfe.append(entwurf)
@@ -563,15 +660,29 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                                 "Nutzer zur Bestaetigung vor; erst sein Klick "
                                 "fuehrt ihn aus. Sage ihm, dass ein Entwurf "
                                 "bereitliegt -- nicht, dass es schon geschehen "
-                                "ist." + (f" Entwurf: {vorschau}" if vorschau
-                                          else ""))
+                                "ist." + (f" Entwurf: {vorschau}. Datum und "
+                                          f"Wochentag genau so nennen."
+                                          if vorschau else ""))
             else:
-                if mcp.sendet(server, name):
+                sends = mcp.sendet(server, name)
+                if sends:
                     argumente = mcp.mit_hinweis(server, argumente)
                 try:
                     ergebnis = verbindungen[server].rufe(name, argumente)
                 except Exception as e:
                     ergebnis = f"Fehler: {e}"
+                    # A timeout after the server took the mail looks like
+                    # a failure and is none. Look in the sent folder
+                    # before telling anyone it did not go out.
+                    check = getattr(verbindungen[server], "check_sent", None)
+                    if sends and check:
+                        try:
+                            if check(name, argumente):
+                                ergebnis = ("Gesendet. (Die Antwort des Servers "
+                                            "kam nicht rechtzeitig; die Nachricht "
+                                            "liegt im Ordner Gesendet.)")
+                        except Exception:
+                            pass
 
             zusatz.append({"role": "tool", "tool_call_id": r.id,
                            "content": (ergebnis or "")[:8000]})
@@ -626,8 +737,7 @@ def antwort(client, modell, system, nachrichten, verlauf_anzahl=20,
     Lebenszeichen.
     """
     an_modell = [{"role": "system", "content": system}]
-    for m in nachrichten[-verlauf_anzahl:]:
-        an_modell.append({"role": m["role"], "content": m["content"]})
+    an_modell += history_for_model(nachrichten, verlauf_anzahl)
     # Was der Werkzeugkreis nachgeschlagen hat, gehoert dazu -- sonst
     # antwortet das Modell, ohne zu wissen, was es gerade erfragt hat.
     an_modell.extend(zusatz or [])

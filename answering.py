@@ -19,6 +19,16 @@ Events, in this order (each optional except the last):
     lists     {"sheets": [...]} or {"reason"}
     tool      {"progress"}
     text      {"text"}                         -- many, the answer in pieces
+
+WEB SEARCH ON CONFIRMATION. Without the web switch the model may still
+propose a web search (if a workspace asked allows it): the call becomes
+a draft like a mail, showing the exact search text. Confirming it asks
+again with web_draft set: the search runs with that text, and the answer
+continues the chat without a new question.
+
+TOOL RESULTS STAY WITH THE ANSWER ("tool_log", "ids"), so the next
+question still knows the mails it listed (pipeline.history_for_model)
+and their short ids still resolve, in any pod.
     done      {"message", "chat_id"}           -- the saved assistant message
     error     {"status", "detail"}             -- instead of done
 
@@ -34,6 +44,8 @@ web search against the rooms asked, the SQL account through
 sqlquellen.fuer_benutzer.
 """
 import dataclasses
+import json
+import os
 import re
 import threading
 import time
@@ -48,6 +60,7 @@ import mcp
 import notzugang
 import paths
 import pipeline
+import postfach
 import presets
 import raeume
 import ranking
@@ -109,6 +122,7 @@ class Request:
     mailboxes: dict = dataclasses.field(default_factory=dict)  # {server: header}
     history: list | None = None         # for stateless calls (save=False)
     save: bool = True
+    web_draft: str | None = None        # confirmed web search draft of this chat
 
 
 class Refused(Exception):
@@ -310,6 +324,80 @@ def _list_blocks(user, req, question, model, history_text, areas):
     return blocks, {"sheets": sheets}
 
 
+# --- WEB SEARCH ON CONFIRMATION ---
+
+class _Every:
+    """Every tool of a server waits for a person (werkzeuglauf: confirm)."""
+
+    def __contains__(self, _name):
+        return True
+
+
+WEB_HINT = ("Websuche: nur vorschlagen, wenn die Dokumente die Frage nicht "
+            "beantworten oder nach aktuellen oder externen Informationen "
+            "gefragt ist. Der Nutzer sieht den Suchtext und bestaetigt ihn; "
+            "der Suchtext darf keine vertraulichen Angaben aus den Dokumenten "
+            "enthalten.")
+
+
+# When the web search is offered without the switch (WEB_TOOL): "auto"
+# when the question sounds like it, when the documents gave nothing, or
+# when a mailbox is connected (then the tool round runs anyway). Offering
+# it costs a model call before the answer; "always" pays it every time.
+_ASKS_FOR_WEB = re.compile(
+    r"\b(web|internet|online|netz|google|recherch\w*|aktuell\w*|neueste\w*|"
+    r"news|nachrichten|homepage|website|webseite|search|latest|current)\b", re.I)
+
+
+def _web_on_confirmation(user, req, settings, question="", hits=(),
+                         mailbox=False):
+    """May the model propose a web search here? Not with the switch on
+    (then it searches directly), not without a chat to keep the draft,
+    not if no workspace asked allows web search."""
+    if req.web or not req.save or not settings["web_servers"]:
+        return False
+    mode = (os.getenv("WEB_TOOL") or "auto").strip().lower()
+    if mode == "off":
+        return False
+    if mode != "always" and not (mailbox or not hits
+                                 or _ASKS_FOR_WEB.search(question or "")):
+        return False
+    emergency = settings["emergency"]
+    asked = [r for r in raeume.lesbar(user, emergency)
+             if not req.rooms or r in req.rooms]
+    return any(raeume.websuche_erlaubt(r) for r in asked)
+
+
+def _claim_web_draft(user, chat_id, draft_id):
+    """Marks a web search draft as confirmed, once. Returns it."""
+    import dateisperre
+    import mailboxes
+    with dateisperre.gesperrt(chats._index_pfad(user)):
+        messages = chats.lade(user, chat_id)
+        draft = mailboxes._find_draft(messages, draft_id)
+        if draft is None or draft.get("kind") != "web":
+            raise Refused(404, "Unknown web search draft.")
+        if draft.get("state") in ("sent", "discarded", "sending"):
+            raise Refused(409, f"Draft already {draft['state']}.")
+        draft["state"] = "sent"
+        chats.speichere(user, chat_id, messages)
+    return draft
+
+
+def _chat_ids(messages):
+    known = {}
+    for m in messages:
+        known.update(m.get("ids") or {})
+    return known
+
+
+def _unconnected(req):
+    """Mailboxes that need a login this request does not carry."""
+    return [n for n, a in mcp.lies_konfiguration().items()
+            if a.get("art") != "websuche" and mcp.braucht_anmeldung(n)
+            and n not in (req.mailboxes or {})]
+
+
 # --- THE FLOW ---
 
 def ask(user, req):
@@ -325,10 +413,11 @@ def ask(user, req):
 
 
 def _ask(user, req):
-    import vision
+    if req.web_draft:
+        # A confirmed web search: like a question with the switch on.
+        req = dataclasses.replace(req, web=True)
     settings = resolve(user, req)
     model = settings["model"]
-    question = (req.question or "").strip()
 
     # The chat: an own one or a new one. Never someone else's -- chat
     # files live under the user's name, so a foreign id is just unknown.
@@ -346,6 +435,28 @@ def _ask(user, req):
                     for m in (req.history or [])
                     if m.get("role") in ("user", "assistant")]
 
+    web_draft = None
+    if req.web_draft:
+        if not (req.save and chat_id):
+            raise Refused(400, "A web search draft belongs to a chat.")
+        web_draft = _claim_web_draft(user, chat_id, req.web_draft)
+        messages = chats.lade(user, chat_id)
+        question = next((m.get("content") or "" for m in reversed(messages)
+                         if m.get("role") == "user"), "")
+        yield "chat", {"chat_id": chat_id, "new": False,
+                       "title": chats.titel(user, chat_id)}
+        image_texts = []
+    else:
+        question, image_texts = yield from _new_question(
+            user, req, chat_id, new_chat, messages, model)
+    yield from _answer(user, req, settings, chat_id, messages, question,
+                       image_texts, web_draft)
+
+
+def _new_question(user, req, chat_id, new_chat, messages, model):
+    """Images, the question into the chat, the chat event."""
+    import vision
+    question = (req.question or "").strip()
     # Images: stored with the chat, described by the vision model. The
     # description is a probe and context; the chat model gets text only.
     image_paths, image_texts, failed = [], [], []
@@ -376,6 +487,13 @@ def _ask(user, req):
         chats.speichere(user, chat_id, messages, title)
         yield "chat", {"chat_id": chat_id, "new": new_chat,
                        "title": title or chats.titel(user, chat_id)}
+    return question, image_texts
+
+
+def _answer(user, req, settings, chat_id, messages, question, image_texts,
+            web_draft):
+    """Search, tools and the answer to the last question of messages."""
+    model = settings["model"]
 
     # 1. probes
     history_text = pipeline.verlaufstext(messages)
@@ -425,14 +543,65 @@ def _ask(user, req):
         benutzer=user)
     extra, drafts = [], []
     connections = {}
+    notes = []
+    web_confirm = False
     if mcp.eingerichtet():
+        unconnected = _unconnected(req)
+        web_confirm = _web_on_confirmation(
+            user, req, settings, question, hits,
+            mailbox=any(n in (req.mailboxes or {}) for n in mcp.lies_konfiguration()
+                        if n not in settings["web_servers"]))
+        if unconnected:
+            # Not offered at all -- a tool that can only fail would be
+            # called and fail on every question.
+            system += ("\nPostfaecher ohne Anmeldung in dieser Sitzung: "
+                       + ", ".join(unconnected) + ". Nur wenn nach Mail oder "
+                       "Kalender gefragt ist: der Nutzer verbindet sie unter "
+                       "Einstellungen > Postfaecher.\n")
+        skip = set(unconnected)
+        if not (req.web or web_confirm):
+            skip |= set(settings["web_servers"])
         connections = mcp.verbinde(
-            {k: v for k, v in (req.mailboxes or {}).items()},
-            ohne=(() if req.web else settings["web_servers"]))
+            {k: v for k, v in (req.mailboxes or {}).items()}, ohne=skip)
+        if web_confirm:
+            for name in settings["web_servers"]:
+                if name in connections:
+                    connections[name].confirm = _Every()
+            system += "\n" + WEB_HINT + "\n"
+    if req.save and chat_id:
+        postfach.load_ids(_chat_ids(messages))
     for c in connections.values():
         # attachments only from the own workspace and this chat
         if hasattr(c, "attachment_source"):
             c.attachment_source = attachments.source(user, chat_id if req.save else None)
+    first = []
+    if web_draft is not None:
+        # The confirmed search runs with exactly the text the person saw.
+        server, tool = web_draft.get("server"), web_draft.get("werkzeug")
+        args = web_draft.get("argumente") or {}
+        call_id = "web_" + str(web_draft.get("id"))
+        yield "tool", {"progress": f"{server}: {tool}"}
+        try:
+            if server not in connections:
+                raise RuntimeError("web search not available")
+            result = str(connections[server].rufe(tool, args) or "")
+        except Exception as e:
+            result = f"Fehler: {e}"
+        first = [{"role": "assistant", "content": "",
+                  "tool_calls": [{"id": call_id, "type": "function",
+                                  "function": {"name": f"{server}__{tool}",
+                                               "arguments": json.dumps(args, ensure_ascii=False)}}]},
+                 {"role": "tool", "tool_call_id": call_id, "content": result[:8000]}]
+        extra = list(first)
+        # Only the confirmed text goes out: no further searches in this
+        # round (the mailboxes stay).
+        for name in settings["web_servers"]:
+            c = connections.pop(name, None)
+            if c is not None:
+                try:
+                    c.schliesse()
+                except Exception:
+                    pass
     if req.save and workspace_notes.offered(question, connections):
         connections[workspace_notes.SERVER] = workspace_notes.Tools(user)
     file_tools = None
@@ -444,9 +613,11 @@ def _ask(user, req):
         try:
             extra, drafts = pipeline.werkzeuglauf(
                 client("CHAT", user), model, system, messages, connections,
-                fortschritt=lambda t: progress.append(str(t)))
+                fortschritt=lambda t: progress.append(str(t)), vorab=first,
+                hinweise=notes)
         except Exception as e:
             progress.append(f"Tools not available: {type(e).__name__}: {e}")
+            notes.append(f"Werkzeuge nicht verfuegbar: {type(e).__name__}")
         finally:
             for c in connections.values():
                 try:
@@ -455,6 +626,10 @@ def _ask(user, req):
                     pass
         for p in progress:
             yield "tool", {"progress": p}
+    if notes:
+        system += ("\n<werkzeughinweise>\n" + "\n".join(notes[:10])
+                   + "\nBetrifft die Frage diese Werkzeuge: dem Nutzer sagen, "
+                     "was nicht ging. Nichts erfinden.\n</werkzeughinweise>\n")
 
     # 5. the answer, saved every few seconds while it grows
     parts, last = [], time.time()
@@ -474,6 +649,8 @@ def _ask(user, req):
 
     for i, d in enumerate(drafts):
         d["id"] = f"d{len(messages)}_{i}"
+        if d.get("server") in settings["web_servers"]:
+            d["kind"] = "web"
         if d.get("server") == workspace_notes.SERVER:
             # The room's name for the person who confirms; the id alone
             # says little about where the summary will be readable.
@@ -489,6 +666,16 @@ def _ask(user, req):
                "modell": model}
     if file_tools is not None and file_tools.created:
         message["files"] = list(file_tools.created)
+    if extra:
+        # What the tools returned, for the next question (see module doc).
+        message["tool_log"] = pipeline.tool_log(extra)
+    ids = {}
+    for c in connections.values():
+        ids.update(getattr(c, "new_ids", None) or {})
+    if ids:
+        message["ids"] = ids
+    if web_draft is not None:
+        message["web_search"] = (web_draft.get("argumente") or {})
     if settings["web_excluded"]:
         message["web_excluded"] = [raeume.bezeichnung(r)
                                    for r in settings["web_excluded"]]

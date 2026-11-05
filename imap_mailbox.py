@@ -31,6 +31,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+import local_time
 import paths
 import postfach
 
@@ -106,6 +107,7 @@ class ImapMailbox:
         self.angaben = dict(angaben or {})
         self.zusatz_kopf = dict(zusatz_kopf or {})
         self.attachment_source = None
+        self.new_ids = {}
         self._imap = None
         self._folders = None
 
@@ -162,7 +164,9 @@ class ImapMailbox:
         for w in postfach.WERKZEUGE:
             if w["name"] not in TOOLS:
                 continue
-            text = w["beschreibung"].format(label=label, today=datetime.date.today())
+            day = local_time.today()
+            text = w["beschreibung"].format(
+                label=label, today=f"{local_time.weekday(day)}, {day:%Y-%m-%d}")
             if w["name"] == "mail_senden":
                 text += (" Attachable now: " + ", ".join(attachable[:30]) + "."
                          if attachable else " No files can be attached now.")
@@ -269,12 +273,12 @@ class ImapMailbox:
         sent = str(a.get("ordner") or "").lower().startswith("ges")
         folder = (self._sent_folder() if sent else "INBOX") or "INBOX"
         hours = a.get("stunden")
-        since = (datetime.date.today() - datetime.timedelta(hours=max(1, int(hours)))
+        since = ((datetime.datetime.now() - datetime.timedelta(hours=max(1, int(hours)))).date()
                  if hours else None)
         lines = []
         for uid, msg in self._find(folder, since=since, sender=sender, text=text):
             when = _date(msg)
-            short = postfach._merke_kennung(self._bereich(), (folder, uid.decode()))
+            short = postfach.remember(self, (folder, uid.decode()))
             body = _text(msg)
             lines.append(f"[{short}] {postfach._datum(when)} | von: {_sender(msg)} | "
                          f"{_decode(msg.get('Subject')) or '(ohne Betreff)'}"
@@ -346,7 +350,13 @@ class ImapMailbox:
                 server.login(user, password)
                 server.send_message(msg)
             finally:
-                server.quit()
+                # The message is delivered once send_message returns; a
+                # connection that breaks on QUIT must not turn that into
+                # "not sent" -- the user would send it again.
+                try:
+                    server.quit()
+                except Exception:
+                    pass
         except smtplib.SMTPAuthenticationError as e:
             raise postfach.Fehler(f"{self.name}: Anmeldung beim Versand abgelehnt ({_short(e)}).")
         except Exception as e:
@@ -409,6 +419,82 @@ class ImapMailbox:
                                  + original["Message-ID"]).strip()
         self._deliver(msg)
         return f"Antwort an {reply_to} gesendet."
+
+    # --- did it go out? ---
+
+    def check_sent(self, name, argumente=None):
+        """After an error: is the message in the sent folder? (Gmail and
+        servers that file sent mail by themselves; else False.)"""
+        a = dict(argumente or {})
+        folder = self._sent_folder()
+        if not folder or name not in postfach.SENDEWERKZEUGE:
+            return False
+        if name == "mail_senden":
+            base = postfach._grundbetreff(str(a.get("betreff") or ""))
+        else:
+            _f, _u, original = self._message(a.get("kennung"))
+            base = postfach._grundbetreff(_decode(original.get("Subject")))
+        limit = (datetime.datetime.now(datetime.timezone.utc)
+                 - datetime.timedelta(minutes=postfach.SENT_LOOKBACK_MINUTES))
+        for _uid, msg in self._find(folder, since=limit.date())[:30]:
+            when = _date(msg)
+            if when is not None and when.tzinfo is not None and when < limit:
+                continue
+            if postfach._grundbetreff(_decode(msg.get("Subject"))) == base:
+                return True
+        return False
+
+    # --- new mail (mail_watch.py) ---
+
+    def new_messages(self, since, limit=20):
+        """[(received, sender, subject)] newer than since (aware), newest first."""
+        out = []
+        for _uid, msg in self._find("INBOX", since=since.date())[:max(limit * 3, 30)]:
+            when = _date(msg)
+            if when is None or when.tzinfo is None or when <= since:
+                continue
+            out.append((when, _sender(msg), _decode(msg.get("Subject")).strip()))
+        out.sort(key=lambda x: x[0], reverse=True)
+        return out[:limit]
+
+    # --- tickets (tickets.py) ---
+
+    def ticket_messages(self, since, limit=50):
+        """Inbox messages received after since, oldest first (see postfach)."""
+        out = []
+        for uid, msg in self._find("INBOX", since=since.date())[:200]:
+            when = _date(msg)
+            if when is not None and when.tzinfo is not None and when <= since:
+                continue
+            name, address = email.utils.parseaddr(_decode(msg.get("From", "")))
+            headers = {k: str(v) for k, v in msg.items()}
+            out.append({"key": msg.get("Message-ID") or f"uid:{uid.decode()}",
+                        "ref": ("INBOX", uid.decode()), "when": when,
+                        "name": name, "address": address,
+                        "subject": _decode(msg.get("Subject")).strip(),
+                        "text": _text(msg),
+                        "auto": postfach.is_automatic(headers, address, self.adresse())})
+        out.sort(key=lambda x: postfach._zeitwert(x["when"]))
+        return out[:limit]
+
+    def ticket_reply(self, ref, subject, body):
+        folder, uid = ref
+        original = self._fetch(folder, uid)
+        reply_to = email.utils.parseaddr(original.get("Reply-To") or original.get("From"))[1]
+        msg = self._new_message([reply_to], [], subject, body, [])
+        if original.get("Message-ID"):
+            msg["In-Reply-To"] = original["Message-ID"]
+            msg["References"] = ((original.get("References") or "") + " "
+                                 + original["Message-ID"]).strip()
+        self._deliver(msg)
+
+    def ticket_forward(self, ref, to, subject, body):
+        folder, uid = ref
+        original = self._fetch(folder, uid)
+        text = (body + "\n\n---------- Weitergeleitete Nachricht ----------\n"
+                f"Von: {_sender(original)}\nDatum: {original.get('Date', '')}\n"
+                f"Betreff: {_decode(original.get('Subject'))}\n\n{_text(original)}")
+        self._deliver(self._new_message(list(to), [], subject, text, []))
 
 
 def _quote(text):

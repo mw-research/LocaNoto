@@ -225,6 +225,14 @@ jobs:
           docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
           tail -1 /tmp/api.log | grep -q "all passed"
 
+      # Mail, calendar, drafts, notices and tickets against stand-ins for
+      # the model and the mailbox (test_mail_tools.py).
+      - name: Postfach und Tickets pruefen
+        if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
+        run: |
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_mail_tools.py 2>&1 | tee /tmp/mail.log
+          tail -1 /tmp/mail.log | grep -q "all checks passed"
+
       # Changing the embedding model against a real pgvector: vectors of a
       # second model from the stored text, switch, refusal of a model
       # without vectors (test_reembed.py).

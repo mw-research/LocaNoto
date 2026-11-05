@@ -1,0 +1,33 @@
+<div class="draft" id="draft-{{ d.id }}">
+{% set args = d.argumente or {} %}
+{% if d.state == 'sent' %}
+  <span class="ok">{{ t('Searched.') if d.kind == 'web' else t('Stored.') if d.server == 'workspace' else t('Added to the calendar.') if d.werkzeug == 'calendar_add' else t('Sent.') }}</span>
+  {% if d.kind == 'web' %}<span class="muted">{{ args.anfrage or args.adresse }}</span>{% elif d.result %}<span class="muted">{{ d.result }}</span>{% endif %}
+{% elif d.state == 'discarded' %}
+  <span class="muted">{{ t('Discarded.') }}</span>{% if d.kind == 'web' %} <span class="muted">{{ args.anfrage or args.adresse }}</span>{% endif %}
+{% elif d.state == 'sending' %}
+  <span class="muted">{{ t('Sending ...') }}</span>
+{% else %}
+  {% if d.state == 'failed' %}<p class="error">{{ t('Not sent') }}: {{ d.error }}</p>{% endif %}
+  {% if d.state == 'unclear' %}<p class="error">{{ t('The server did not answer. Look into your sent folder (or calendar) before you send it again.') }} {{ d.error }}</p>{% endif %}
+  {% if d.kind == 'web' %}
+  <strong>{{ t('Web search proposed') }} – {{ t('waits for your confirmation') }}</strong>
+  <p class="preview">{{ t('This text goes to search engines as it is:') }} <code>{{ args.anfrage or args.adresse }}</code></p>
+  <button type="button" class="primary" data-web-draft="{{ d.id }}">{{ t('Search in the web') }}</button>
+  {% else %}
+  {% if d.server == 'workspace' %}
+  <strong>{{ t('Summary for') }} {{ d.ziel or args.room }} – {{ t('waits for your confirmation') }}</strong>
+  {% elif d.werkzeug == 'meeting_request' %}
+  <strong>{{ t('Meeting request') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
+  {% elif d.werkzeug == 'calendar_add' %}
+  <strong>{{ t('Appointment in your calendar') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
+  {% else %}
+  <strong>{{ t('Draft waiting for you') }}: {{ d.werkzeug }} ({{ d.server }})</strong>
+  {% endif %}
+  {% if d.vorschau %}<p class="preview">{{ d.vorschau }}</p>{% endif %}
+  {% for k, v in args.items() %}<div class="arg"><span>{{ k }}</span><pre>{{ v }}</pre></div>{% endfor %}
+  <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML" class="inline"><button class="primary">{{ t('Save to workspace') if d.server == 'workspace' else t('Add to calendar') if d.werkzeug == 'calendar_add' else t('Send invitation') if d.werkzeug == 'meeting_request' else t('Send draft') }}</button></form>
+  {% endif %}
+  <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/discard" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML" class="inline"><button>{{ t('Discard') }}</button></form>
+{% endif %}
+</div>

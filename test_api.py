@@ -459,6 +459,29 @@ check("calendar drafts show the day and their own buttons",
       and ("In den Kalender eintragen" in _page or "Add to calendar" in _page),
       _page[-1500:])
 
+# A web search the model proposed waits like a mail, with its exact text.
+_msgs = _chats_mod.lade("anna", chat_id)
+_msgs[-1]["entwuerfe"].append(
+    {"id": "dw1", "server": "websuche", "werkzeug": "web_suchen", "kind": "web",
+     "argumente": {"anfrage": "DIN EN 1090 Ausfuehrungsklassen"}})
+_chats_mod.speichere("anna", chat_id, _msgs)
+_page = anna.get(f"/c/{chat_id}").text
+check("a proposed web search shows its text and a confirm button",
+      'data-web-draft="dw1"' in _page and "DIN EN 1090 Ausfuehrungsklassen" in _page,
+      _page[-1500:])
+check("a web search draft is not sent like a mail",
+      anna.post(f"{API}/chats/{chat_id}/drafts/dw1/send", json={}).status_code == 409)
+# A draft that cannot be sent says why, in the draft -- no error page.
+r = anna.post(f"/ui/chats/{chat_id}/drafts/dk2/send")
+check("a failed draft shows the reason and can be tried again",
+      r.status_code == 200 and ("Nicht gesendet" in r.text or "Not sent" in r.text)
+      and ("In den Kalender eintragen" in r.text or "Add to calendar" in r.text), r.text[:500])
+r = anna.post(f"/ui/chats/{chat_id}/drafts/dk2/discard")
+check("and can be discarded", r.status_code == 200
+      and ("Verworfen" in r.text or "Discarded" in r.text), r.text[:300])
+check("a discarded draft is not discarded twice",
+      anna.post(f"{API}/chats/{chat_id}/drafts/dk2/discard").status_code == 409)
+
 # --- database access in the web pages ---
 r = markus.post("/ui/admin/workspaces/sql", data={
     "room": "einkauf", "server": "db.invalid", "port": "1433",
@@ -528,6 +551,79 @@ import mcp as _mcp_t  # noqa: E402
 check("the notice text is stored with it",
       _mcp_t.lies_konfiguration()["info"].get("hinweis") == "Automatically written."
       and _mcp_t.hinweis_an("info"))
+
+# --- ticket system of the shared mailbox (tickets.py) ---
+import datetime as _dt_t  # noqa: E402
+import tickets as _tk  # noqa: E402
+r = markus.post("/ui/admin/mailboxes/info/tickets", data={
+    "enabled": "1", "answer": "Danke, {name}. Nummer {ticket}.", "members": "anna",
+    "forward": "", "prefix": "T", "login_user": "svc@test.invalid",
+    "login_password": "Svc-Passwort-1"})
+check("admin switches the ticket system on for a shared mailbox",
+      r.status_code == 200 and _tk.settings("info")["enabled"]
+      and _tk.settings("info")["has_login"], r.text[:300])
+check("the mailbox login is not stored in clear",
+      "Svc-Passwort-1" not in json.dumps(_tk._read_config()))
+check("only admins set it up", anna.post("/ui/admin/mailboxes/info/tickets", data={
+    "enabled": "1"}).status_code == 403)
+check("the admin page shows the ticket settings",
+      "/ui/admin/mailboxes/info/tickets" in markus.get("/admin/mailboxes").text)
+
+
+class _TicketBox:
+    def __init__(self):
+        self.mails, self.replies = [], []
+
+    def ticket_messages(self, since, limit=50):
+        return [m for m in self.mails if m["when"] > since]
+
+    def ticket_reply(self, ref, subject, body):
+        self.replies.append((subject, body))
+
+    def ticket_forward(self, *_a):
+        pass
+
+    def schliesse(self):
+        pass
+
+
+_tb = _TicketBox()
+_tk.poll_once("info", _tb)
+_tb.mails.append({"key": "<k1@kunde>", "ref": "R1", "name": "Kunde",
+                  "when": _dt_t.datetime.now(_dt_t.timezone.utc) + _dt_t.timedelta(seconds=5),
+                  "address": "kunde@firma.invalid", "subject": "Pumpe defekt",
+                  "text": "Bitte um Rueckruf.", "auto": False})
+_tk.poll_once("info", _tb)
+_tid = _tk.tickets_of("info")[0]["id"]
+check("a new mail gets the standard answer with its number",
+      _tb.replies == [(f"[{_tid}] Pumpe defekt", f"Danke, Kunde. Nummer {_tid}.")], _tb.replies)
+n = anna.get("/ui/notifications").json()
+check("a new ticket is a notice for the members, counted on the tab",
+      any(_tid in x["text"] for x in n["notices"]) and n["tickets"] == 1, n)
+anna.post("/ui/notices/shown", data={"id": [x["id"] for x in n["notices"]]})
+check("a notice shows once", not anna.get("/ui/notifications").json()["notices"])
+_tp = anna.get("/tickets").text
+check("members see the tickets and the tab",
+      _tid in _tp and "Pumpe defekt" in _tp and 'href="/tickets"' in _tp, _tp[-800:])
+check("users without the mailbox do not",
+      "/tickets" not in client_for("bert").get("/").text
+      and client_for("bert").get("/tickets", follow_redirects=False).status_code == 303)
+r = anna.post(f"/ui/tickets/info/{_tid}", data={"action": "take"})
+check("taking a ticket", r.status_code == 200
+      and _tk.ticket("info", _tid)["assignee"] == "anna"
+      and _tk.ticket("info", _tid)["status"] == "in_progress")
+anna.post(f"/ui/tickets/info/{_tid}", data={"action": "note", "note": "Rueckruf morgen"})
+anna.post(f"/ui/tickets/info/{_tid}", data={"action": "status", "status": "closed"})
+_one = anna.get("/tickets", params={"box": "info", "id": _tid, "status": "all"}).text
+check("a ticket with its history", "Rueckruf morgen" in _one and "Bitte um Rueckruf." in _one,
+      _one[:800])
+_home = anna.get("/", params={"ticket": f"info:{_tid}"}).text
+check("answer in the chat puts the ticket into the question box",
+      "Bitte um Rueckruf." in _home and _tid in _home)
+check("another user's ticket does not", "Bitte um Rueckruf." not in
+      client_for("bert").get("/", params={"ticket": f"info:{_tid}"}).text)
+r = markus.post("/ui/admin/mailboxes/info/tickets/check")
+check("check now reports instead of failing", r.status_code == 200, r.text[:300])
 markus.post("/ui/admin/mailboxes/info/delete")
 
 # --- user search instead of one long list ---

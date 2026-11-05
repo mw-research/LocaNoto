@@ -77,6 +77,10 @@ class AskBody(BaseModel):
     history: list[dict] | None = Field(
         default=None, description="with save=false: earlier messages")
     save: bool = Field(default=True, description="keep the chat")
+    web_draft: str | None = Field(
+        default=None, description="confirm the web search draft with this id "
+                                  "(of chat_id): the search runs with its text "
+                                  "and the answer continues the chat")
     source_texts: bool = Field(default=True,
                                description="include the passages")
 
@@ -101,12 +105,12 @@ def _request(p, body, http_request):
         mailboxes=mailbox_headers(p, http_request,
                                   {k: v.model_dump()
                                    for k, v in body.mailboxes.items()}),
-        history=body.history, save=body.save)
+        history=body.history, save=body.save, web_draft=body.web_draft)
 
 
 def public_message(m, with_texts=True):
     """A stored message as the API shows it: no server paths."""
-    out = {k: v for k, v in m.items() if k != "bilder"}
+    out = {k: v for k, v in m.items() if k not in ("bilder", "ids")}
     if m.get("bilder"):
         out["images"] = len(m["bilder"])
     if not with_texts and out.get("sources"):
@@ -225,13 +229,24 @@ def send_draft(chat_id: str, draft_id: str, body: SendDraft,
         result = mailboxes.send_draft(p.name, chat_id, draft_id, headers)
     except ValueError as e:
         raise HTTPException(409, str(e))
+    except mailboxes.NotFound as e:
+        raise HTTPException(404, str(e))
+    except mailboxes.SendFailed as e:
+        # "failed": nothing went out, it may be sent again. "unclear": the
+        # server did not say -- look into the sent folder first.
+        raise HTTPException(502, {"state": e.state, "detail": str(e)})
     return {"sent": draft_id, "result": result[:2000]}
 
 
 @router.post("/chats/{chat_id}/drafts/{draft_id}/discard", tags=["mailboxes"])
 def discard_draft(chat_id: str, draft_id: str,
                   p: Principal = Depends(principal)):
-    mailboxes.discard_draft(p.name, chat_id, draft_id)
+    try:
+        mailboxes.discard_draft(p.name, chat_id, draft_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except mailboxes.NotFound as e:
+        raise HTTPException(404, str(e))
     return {"discarded": draft_id}
 
 

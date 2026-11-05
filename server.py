@@ -260,6 +260,8 @@ def _include():
     app.include_router(web.router)
     import web_admin
     app.include_router(web_admin.router)
+    import web_tickets
+    app.include_router(web_tickets.router)
 
 
 _register_errors()

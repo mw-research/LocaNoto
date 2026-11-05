@@ -290,9 +290,59 @@ dich** mit Empfänger, Betreff und Text.
 - **Senden** → verschickt den Entwurf so, wie er dort steht.
 - **Verwerfen** → verschickt nichts.
 
+Geht beim Senden etwas schief, steht der Grund im Entwurf:
+
+- **Nicht gesendet: …** → nichts ist hinausgegangen; **Senden** versucht
+  es noch einmal.
+- **Der Server hat nicht geantwortet** → vor einem zweiten Versuch im
+  Ordner *Gesendet* (bzw. im Kalender) nachsehen.
+
+Antwortet der Server zu spät, die Mail liegt aber in *Gesendet*, gilt sie
+als gesendet. Was mit einem Entwurf geschah, weiß LocaNoto bei der
+nächsten Frage im selben Chat; ebenso, welche Mails und Termine es zuvor
+gelesen hat.
+
 Nur für ein Funktionspostfach kann ein Admin selbständige Antworten
 freischalten; solche Mails tragen in der Regel einen Hinweis, dass sie
 automatisch erstellt wurden.
+
+### Wie trage ich mit LocaNoto Termine ein?
+
+Bei verbundenem Exchange-Postfach, etwa: „Was steht morgen in meinem
+Kalender?", „Trag mir Dienstag 14 Uhr eine Stunde Fokuszeit ein",
+„Lade huber@firma.de für Freitag 10 Uhr zur Baubesprechung ein".
+
+Eintragen und Einladen sind Entwürfe wie Mails: Der Entwurf nennt
+Wochentag, Datum und Uhrzeit → prüfen → **In den Kalender eintragen** bzw.
+**Einladung senden**. LocaNoto kennt das heutige Datum und die Wochentage
+der umliegenden Wochen; Zeiten gelten in der Zeitzone der Installation
+(Vorgabe Europe/Berlin).
+
+### Wie benachrichtigt mich LocaNoto über neue Mails?
+
+Ist ein Postfach verbunden und LocaNoto in einem Browsertab offen, prüft
+LocaNoto alle paar Minuten auf neue Mails. Neue Mails → Meldung mit
+Absender und Betreff → **Ansehen** öffnet einen Chat mit der Frage nach
+den neuen Nachrichten.
+
+**Einstellungen** → **Postfächer** → **Bei neuer Mail benachrichtigen**
+schaltet das je Postfach aus und an. Ist kein LocaNoto-Tab offen, wird
+nicht geprüft: Die Anmeldedaten liegen nur in der Browsersitzung.
+
+### Wie arbeite ich mit Tickets in LocaNoto?
+
+Hat ein Admin für ein Funktionspostfach das Ticketsystem eingeschaltet und
+dich als Mitglied eingetragen, gibt es den Reiter **Tickets**.
+
+- Jede neue Mail an das Postfach wird ein Ticket (z. B. T-2026-0001). Der
+  Absender bekommt sofort die Standardantwort mit der Nummer; du bekommst
+  eine Meldung. Die Zahl am Reiter zählt offene Tickets ohne Zuständigen.
+- Ticket öffnen → **Übernehmen** (du bist zuständig, Status *in Arbeit*),
+  **Status** setzen, **Notiz hinzufügen**.
+- **Im Chat beantworten** → Chat mit dem Ticket als Frage; die Antwort
+  geht als Entwurf über dein verbundenes Postfach.
+- Antwortet der Kunde mit der Nummer im Betreff, landet die Mail beim
+  selben Ticket und öffnet es wieder; der Zuständige bekommt eine Meldung.
 
 ### Wie suche ich mit LocaNoto im Internet?
 
@@ -310,6 +360,12 @@ Suchbegriff, keine Dokumente.
 Treffer stehen unter der Antwort als **Aus dem Netz** mit [W1], [W2] …,
 getrennt von den Dokumenten. Treffer ankreuzen → **n übernehmen** → sie
 landen in deinem persönlichen Arbeitsbereich.
+
+Ohne eingeschaltete Websuche kann LocaNoto eine Websuche **vorschlagen**,
+etwa wenn die Dokumente nichts liefern oder nach Aktuellem gefragt ist.
+Unter der Antwort steht dann **Websuche vorgeschlagen** mit dem genauen
+Suchtext → **Im Web suchen** → die Antwort geht im selben Chat mit den
+Treffern weiter. **Verwerfen** → nichts geht hinaus.
 
 ### Wie sammle ich mit LocaNoto Quellen aus dem Internet?
 
@@ -623,6 +679,31 @@ Entwurf vor, ohne Ausnahme.
 
 **Werkzeuge abfragen** markiert Werkzeuge, die etwas verschicken, mit
 **[SENDET]**; alle anderen lesen nur.
+
+### Wie richte ich als Admin ein Ticketsystem für ein Funktionspostfach in LocaNoto ein?
+
+**Admin** → **Postfächer** → je Funktionspostfach ein Abschnitt
+**Ticketsystem**:
+
+1. **Ticketsystem an** ankreuzen.
+2. **Anmeldung für das Postfach**: ein Konto, das dieses Postfach lesen
+   und daraus senden darf. Es wird mit dem Installationsschlüssel
+   verschlüsselt gespeichert, weil der Worker ohne angemeldeten Nutzer
+   arbeitet. Leer lassen behält die gespeicherte Anmeldung.
+3. **Standardantwort**: geht sofort an jeden Absender. `{ticket}`,
+   `{subject}` und `{name}` werden eingesetzt.
+4. **Mitglieder**: LocaNoto-Benutzer, die jedes Ticket sehen und gemeldet
+   bekommen. Admins sehen alle Tickets.
+5. Optional **Jede neue Mail weiterleiten an**: Adressen, die jede neue
+   Mail mit Ticketnummer im Betreff bekommen.
+6. **Speichern** → **Jetzt prüfen**. Die erste Prüfung merkt nur die
+   Uhrzeit; ab dann wird jede neue Mail ein Ticket.
+
+Der Worker prüft jede Minute (`TICKET_POLL_SECONDS`). Automatische Mails
+(Abwesenheitsnotizen, Newsletter, Unzustellbarkeitsmeldungen, Mails des
+Postfachs selbst) werden weder Ticket noch beantwortet. Eine Mail wird als
+erledigt markiert, bevor etwas gesendet wird: Sie wird nie zweimal
+beantwortet.
 
 ### Wie funktioniert der Notzugang in LocaNoto?
 

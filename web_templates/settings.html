@@ -59,9 +59,14 @@
       <button type="submit">{{ t('Connect') }}</button>
     {% endif %}
   </form>
+  {% if m.connected %}
+  <form hx-post="/ui/settings/mailbox/{{ m.name }}/watch" hx-trigger="change" hx-target="#mb-{{ loop.index }}" class="inline">
+    <label class="check"><input type="checkbox" name="on" value="1"{% if m.watch %} checked{% endif %}> {{ t('Notify me about new mail') }}</label>
+  </form>
+  {% endif %}
   <div id="mb-{{ loop.index }}"></div>
   {% endfor %}
-  <p class="muted">{{ t('Logins are kept only in this browser session.') }}</p>
+  <p class="muted">{{ t('Logins are kept only in this browser session.') }} {{ t('Checked every few minutes while LocaNoto is open in a browser tab.') }}</p>
 </section>
 {% endif %}
 

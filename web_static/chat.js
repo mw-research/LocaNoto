@@ -3,7 +3,9 @@
 // as HTML); when it is complete, the server renders the message (Markdown
 // with HTML switched off, sources, drafts) and that replaces it. The
 // button "Search in the web" starts a background search (web_research.py)
-// with the text of the question box.
+// with the text of the question box. A web search the model proposed
+// (a draft with data-web-draft) is confirmed here: the answer continues
+// the chat with the hits, without a new question.
 (function () {
   "use strict";
 
@@ -23,14 +25,8 @@
     });
   }
 
-  async function ask(form, ev) {
-    ev.preventDefault();
-    var box = document.getElementById("messages");
-    var question = form.question.value.trim();
-    var files = form.images.files;
-    if (!question && !files.length) return;
+  function options(form, box) {
     var body = {
-      question: question,
       chat_id: box.getAttribute("data-chat-id") || null,
       rooms: Array.prototype.map.call(form.querySelectorAll("input[name=rooms]:checked"), function (c) { return c.value; }),
       model: form.model ? form.model.value : null,
@@ -41,13 +37,41 @@
     };
     if (body.sql && form.sql_room) body.sql_room = form.sql_room.value;
     if (!body.rooms.length) body.rooms = null;
+    return body;
+  }
+
+  async function ask(form, ev) {
+    ev.preventDefault();
+    var box = document.getElementById("messages");
+    var question = form.question.value.trim();
+    var files = form.images.files;
+    if (!question && !files.length) return;
+    var body = options(form, box);
+    body.question = question;
     for (var i = 0; i < files.length; i++) {
       body.images.push({ name: files[i].name, data_base64: await readFile(files[i]) });
     }
-
     var mine = el("article", "msg user");
     mine.appendChild(el("div", "bubble", question));
     box.appendChild(mine);
+    form.question.value = "";
+    form.images.value = "";
+    await stream(form, box, body);
+  }
+
+  // A proposed web search, confirmed: same chat, same options, no question.
+  async function confirmWeb(form, button) {
+    if (form.classList.contains("busy")) return;
+    var box = document.getElementById("messages");
+    var body = options(form, box);
+    body.web_draft = button.getAttribute("data-web-draft");
+    button.disabled = true;
+    await stream(form, box, body, button.closest("article"));
+  }
+
+  // proposing: the answer that holds a confirmed web search draft; it is
+  // shown again afterwards, with the draft as done.
+  async function stream(form, box, body, proposing) {
     var reply = el("article", "msg assistant pending");
     var status = el("div", "status muted", "…");
     var text = el("div", "answer streaming");
@@ -55,8 +79,6 @@
     reply.appendChild(text);
     box.appendChild(reply);
     reply.scrollIntoView({ block: "end" });
-    form.question.value = "";
-    form.images.value = "";
     form.classList.add("busy");
 
     var chatId = body.chat_id;
@@ -108,6 +130,10 @@
         }
       }
       if (chatId && !status.classList.contains("error")) {
+        if (proposing && proposing.id) {
+          var again = await fetch("/ui/chats/" + chatId + "/messages/" + proposing.id.slice(1), { credentials: "same-origin" });
+          if (again.ok) window.hx.swap(proposing, await again.text(), "outerHTML");
+        }
         var rendered = await fetch("/ui/chats/" + chatId + "/messages/-1", { credentials: "same-origin" });
         if (rendered.ok) window.hx.swap(reply, await rendered.text(), "outerHTML");
         var list = await fetch("/ui/chats?current=" + chatId, { credentials: "same-origin" });
@@ -143,6 +169,10 @@
     if (!form) return;
     var web = form.querySelector("[data-web-search]");
     if (web) web.addEventListener("click", function () { webSearch(form, web); });
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest && ev.target.closest("[data-web-draft]");
+      if (b) { ev.preventDefault(); confirmWeb(form, b); }
+    });
     form.addEventListener("submit", function (ev) { ask(form, ev); });
     form.question.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); }

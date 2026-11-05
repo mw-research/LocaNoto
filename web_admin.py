@@ -5,7 +5,8 @@
     /admin/content      prompt templates and the glossary
     /admin/feedback     empty answers and thumbs down; archive
     /admin/storage      OpenCloud: status, set up workspaces, group sync
-    /admin/mailboxes    mailboxes and web search services
+    /admin/mailboxes    mailboxes and web search services; ticket system of
+                        shared mailboxes (tickets.py)
     /admin/lists        list folders per workspace, catalog, read again
 
 The same functions as /api/v1/admin/..., with the same checks. The
@@ -29,8 +30,9 @@ import raeume
 import sicherung
 import statefiles
 import tabellen
+import tickets
 from server import Principal, principal
-from web import _need, _nav, _notice, page_language, render, tm
+from web import _need, _nav, _notice, page_language, render, t, tm
 
 router = APIRouter(include_in_schema=False)
 
@@ -281,9 +283,48 @@ def mailboxes_page(request: Request):
     p, away = _page(request)
     if away:
         return away
+    boxes = mailboxes.overview()
+    shared = [b["name"] for b in boxes
+              if b["kind"] == "mailbox" and not b["personal"]]
     return render("admin_mailboxes.html", request, nav=_nav(p, "admin"),
-                  boxes=mailboxes.overview(), templates=mailboxes.templates(),
-                  notice_default=mailboxes.NOTICE_DEFAULT)
+                  boxes=boxes, templates=mailboxes.templates(),
+                  notice_default=mailboxes.NOTICE_DEFAULT,
+                  ticket_boxes=[(n, tickets.settings(n)) for n in shared])
+
+
+@router.post("/ui/admin/mailboxes/{name}/tickets")
+def mailbox_tickets(name: str, request: Request, enabled: str = Form(""),
+                    answer: str = Form(""), members: str = Form(""),
+                    forward: str = Form(""), prefix: str = Form("T"),
+                    login_user: str = Form(""), login_password: str = Form(""),
+                    p: Principal = Depends(principal)):
+    """Ticket system of a shared mailbox (tickets.configure)."""
+    _admin(p)
+    page_language(p.name)
+    split = lambda text: [x.strip() for x in text.replace(";", ",").split(",") if x.strip()]
+    ok, message = tickets.configure(
+        name, bool(enabled), answer, split(members), split(forward), prefix,
+        login_user.strip(), login_password)
+    if ok:
+        benutzer.protokolliere("tickets", name, p.name, "on" if enabled else "off")
+        return _reload("/admin/mailboxes")
+    return _notice(t(message), False)
+
+
+@router.post("/ui/admin/mailboxes/{name}/tickets/check")
+def mailbox_tickets_check(name: str, request: Request,
+                          p: Principal = Depends(principal)):
+    """Checks the mailbox now -- the same as the worker does every minute."""
+    _admin(p)
+    page_language(p.name)
+    try:
+        first = not tickets._load(name).get("since")
+        n = tickets.poll_once(name)
+    except Exception as e:
+        return _notice(t(str(e)[:300]) or type(e).__name__, False)
+    if first:
+        return _notice(t("First check: from now on new mail becomes a ticket."))
+    return _notice(f"{n} " + t("new mail(s)"))
 
 
 @router.post("/ui/admin/mailboxes")

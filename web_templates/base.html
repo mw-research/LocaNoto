@@ -16,6 +16,7 @@
     <a href="/" class="{{ 'on' if nav.active == 'chat' }}">{{ t('Chat') }}</a>
     <a href="/documents" class="{{ 'on' if nav.active == 'documents' }}">{{ t('Documents') }}</a>
     <a href="/web" class="{{ 'on' if nav.active == 'web' }}">{{ t('Web sources') }}</a>
+    {% if nav.tickets %}<a href="/tickets" class="{{ 'on' if nav.active == 'tickets' }}">{{ t('Tickets') }}</a>{% endif %}
     <a href="/settings" class="{{ 'on' if nav.active == 'settings' }}">{{ t('Settings') }}</a>
     {% if nav.admin %}<a href="/admin" class="{{ 'on' if nav.active == 'admin' }}">{{ t('Admin') }}</a>{% endif %}
   </nav>

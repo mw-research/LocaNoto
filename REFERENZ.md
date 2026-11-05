@@ -482,17 +482,18 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +70 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +73 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +16 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +20 |
-| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `attachments`, `aufnehmen`, `auth` +29 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +23 |
+| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `attachments`, `aufnehmen`, `auth` +32 |
 | `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +16 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `auth`, `benutzer`, `chats`, `feedback` +18 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +22 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +2 |
-| `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `raeume`, `routes_account`, `selbsttest` +3 |
+| `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `mail_watch`, `pipeline`, `raeume` +6 |
+| `local_time.py` | The local time of the installation, and a calendar for the model. | `TIMEZONE` | `imap_mailbox`, `pipeline`, `postfach`, `test_mail_tools` +1 |
 | **Bestand** | | | |
 | `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `answering`, `api` +35 |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +19 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +20 |
 | `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `accounts`, `api`, `app` +21 |
 | `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `compare_search`, `doc_actions` +14 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `answering`, `api`, `app`, `routes_admin` +5 |
@@ -502,19 +503,21 @@ Dateien importieren sie.
 | `vector_columns.py` | Which vector column belongs to which embedding model (Postgres only). | `EMBEDDING_NEXT_DIMENSIONS`, `EMBEDDING_NEXT_MODEL` | `doctor`, `pg_collection`, `reembed`, `test_reembed` |
 | **Fachlogik** | | | |
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +12 |
-| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +4 |
-| `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `imap_mailbox`, `mcp`, `selbsttest` |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mailboxes` +8 |
-| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +2 | `answering`, `api`, `app`, `attachments` +11 |
+| `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +2 |
+| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +5 |
+| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `app`, `attachments` +12 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mail_watch` +11 |
+| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `app`, `routes_account`, `routes_chat`, `server` +4 |
 | `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `attachments`, `doc_actions` +7 |
-| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K` | `app`, `routes_account`, `routes_chat`, `server` +4 |
-| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
-| `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +2 |
 | `imap_mailbox.py` | Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers. | `POSTFACH_HOLGRENZE`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
+| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
+| `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +3 |
+| `tickets.py` | A ticket system for shared mailboxes (info@, service@, ...). | `TICKET_KEEP_DAYS`, `TICKET_POLL_SECONDS` | `test_api`, `test_mail_tools`, `web`, `web_admin` +2 |
 | `created_files.py` | Files the model creates on request: Excel, Word, PDF, PowerPoint. | `CREATED_FILES_KEEP`, `CREATED_FILES_MAX_ROWS`, `FILES_TOOL` | `answering`, `attachments`, `routes_documents`, `selbsttest` |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `app`, `routes_admin` +5 |
+| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `answering`, `doctor`, `routes_account`, `routes_admin` +5 |
 | `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `answering`, `api`, `app`, `doc_actions` +8 |
-| `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `attachments`, `mailboxes` +7 |
+| `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `attachments`, `mailboxes` +8 |
 | `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +6 | `routes_account`, `test_api`, `web` |
 | `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_WINDOW_MINUTES` +3 | `oidc`, `routes_account`, `server`, `web` |
 | `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `selbsttest`, `web` |
@@ -524,11 +527,11 @@ Dateien importieren sie.
 | `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `app`, `routes_admin`, `routes_documents`, `server` +1 |
 | `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `app`, `pipeline`, `routes_account` +5 |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `aufnehmen`, `ingest`, `ingest_images` |
-| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` +2 |
+| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` +1 |
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `app`, `create_token` +7 |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `app`, `routes_account`, `routes_admin` +3 |
-| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `doctor`, `routes_account`, `routes_admin`, `routes_chat` +3 |
+| `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `test_mail_tools`, `web` |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `app`, `attachments`, `bildtext` +2 |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `routes_documents`, `selbsttest` |
 | `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `app`, `sqldb` +1 |
@@ -540,6 +543,7 @@ Dateien importieren sie.
 | `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `web` |
 | `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `selbsttest`, `server`, `test_api` +2 |
 | `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `app`, `routes_admin`, `verwaltung` |
+| `notices.py` | Notices for one user: new mail, new tickets, replies to tickets. | — | `mail_watch`, `test_mail_tools`, `tickets`, `web` |
 | `metrics.py` | Counters in the Prometheus text format, for /metrics. | — | `server` |
 | `quellticket.py` | Ein Ticket fuer genau eine Fundstelle, fuer kurze Zeit. | `QUELLE_TICKET_MINUTEN` | `app`, `selbsttest` |
 | `textutils.py` | Textbereinigung fuer den Ingest. | — | `app`, `aufnehmen`, `ingest`, `tables` |
@@ -548,22 +552,23 @@ Dateien importieren sie.
 | `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
 | `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
 | `test_api.py` | Exercises every endpoint of server.py against a real installation. | `SELFTEST_DATABASE` | — |
-| `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME` | `server`, `web_admin` |
+| `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME` | `server`, `web_admin`, `web_tickets` |
 | `routes_admin.py` | API: the admin area -- everything verwaltung.py and the admin parts of | — | `server` |
 | `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `app`, `routes_admin`, `selbsttest`, `test_api` +2 |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | `selbsttest` |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
+| `test_mail_tools.py` | Mail, calendar and tickets without a mail server. | — | — |
 | `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server` |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
 | `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `uebersetzen.py` | Oberflaechentexte fuer die Uebersetzung einwickeln und einsammeln. | — | `selbsttest` |
-| `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
-| `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
-| `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
 | `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
-| `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +4 |
+| `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
+| `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
+| `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
+| `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +5 |
 | `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
 | `test_multipod.py` | Two server processes and a worker on one database -- as two pods would run. | `SELFTEST_DATABASE` | — |
@@ -572,19 +577,20 @@ Dateien importieren sie.
 | `reembed.py` | Compute the vectors of every passage again -- for a new embedding model. | `EMBEDDING_NEXT_BASE_URL`, `REEMBED_BATCH`, `REEMBED_HOURS` +1 | `selbsttest`, `test_reembed` |
 | `test_migration.py` | End-to-end check of the move to Postgres, without a model server. | `SELFTEST_DATABASE` | — |
 | `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
-| `doctor.py` | Is this installation complete? One check per part, in plain words. | `LOCANOTO_LANG`, `LOCANOTO_PUBLIC_URL`, `SSL_CERT_FILE` | — |
 | `test_reembed.py` | Changing the embedding model on Postgres, end to end, without a model server. | `SELFTEST_DATABASE` | — |
+| `doctor.py` | Is this installation complete? One check per part, in plain words. | `LOCANOTO_LANG`, `LOCANOTO_PUBLIC_URL`, `SSL_CERT_FILE` | — |
 | `compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `test_api`, `test_migration`, `test_multipod`, `test_reembed` |
 | `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
 | `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
-| `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
 | `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
+| `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
 | `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
 | `make_ca.py` | A small certificate authority for installations without a public one. | — | — |
+| `worker.py` | Runs the background jobs queued in Postgres (see jobs.py). | `WORKER_POLL_SECONDS` | — |
 | `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
 | `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
 | `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
-| `worker.py` | Runs the background jobs queued in Postgres (see jobs.py). | `WORKER_POLL_SECONDS` | — |
+| `web_tickets.py` | Tickets of shared mailboxes in the web interface (tickets.py). | — | `server` |
 | `lizenzen.py` | Die Lizenzen der Abhaengigkeiten -- gegen die GEPINNTEN Fassungen. | — | — |
 | `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
 | `trustbundle.py` | One list of trusted certificate authorities for every container. | — | — |
@@ -2520,13 +2526,32 @@ an das Postfach.
 
 Jede Nachricht der Übersicht trägt eine Kurzkennung. Sie steht für die
 EWS-Kennung, die über hundert Zeichen lang ist, und gilt nur für das
-Postfach, aus dem sie stammt. Nach einem Neustart ist sie unbekannt; die
-Nachricht wird dann erneut herausgesucht.
+Postfach, aus dem sie stammt. Sie wird aus der langen Kennung berechnet
+(dieselbe Nachricht, dieselbe Kurzkennung, in jedem Pod) und mit der
+Antwort im Chat gespeichert (`ids`); die nächste Frage und ein Klick auf
+einen Entwurf lösen sie damit auch in einem anderen Pod und nach einem
+Neustart auf.
 
 `POSTFACH_HOLGRENZE` begrenzt, wie viele Nachrichten je Abfrage vom
 Server geholt werden (200), `POSTFACH_TEXTAUSZUG` die Länge des
 Textanfangs in der Übersicht (400 Zeichen), `POSTFACH_TIMEOUT` die
-Wartezeit je Zugriff (30 s).
+Wartezeit je Zugriff (60 s).
+
+**Zeitzone.** Termine, Empfangszeiten und der Kalender im Systemprompt
+gelten in `TIMEZONE` (Vorgabe `Europe/Berlin`, `local_time.py`), nicht in
+der Zeitzone des Containers (UTC). Jeder Systemprompt enthält das heutige
+Datum mit Uhrzeit und eine Tabelle der Wochentage von der Vorwoche bis
+fünf Wochen voraus; das Modell liest Wochentage ab, statt sie zu
+berechnen. Entwürfe für Termine nennen Wochentag und Datum, berechnet im
+Code.
+
+**Gedächtnis des Chats.** Eine Antwort, die Werkzeuge benutzt hat,
+speichert Aufrufe und Ergebnisse (`tool_log`, je Ergebnis höchstens
+`TOOL_LOG_CHARS` Zeichen). Für die nächsten Fragen gehen sie der letzten
+`TOOL_LOG_TURNS` (3) solcher Antworten wieder als Werkzeugaufrufe und
+-ergebnisse an das Modell (`pipeline.history_for_model`). Das Ergebnis
+eines Entwurfs wird dabei durch seinen Ausgang ersetzt: bestätigt und
+ausgeführt, verworfen, fehlgeschlagen, unklar.
 
 Prüfen, ob die Anmeldung steht — Mailadresse und Passwort werden abgefragt, nicht übergeben:
 
@@ -2634,9 +2659,68 @@ ohne Hinweis gibt es nichts anzuhängen. Bedingung 1 bleibt.
 **Ein bestätigter Entwurf trägt keinen Hinweis.** Er ist gelesen; der
 Hinweis gilt Nachrichten, die niemand gesehen hat.
 
+**Ausgang eines Entwurfs.** Antwortet der Server beim Senden nicht oder
+mit einem Fehler, sieht `mailboxes.send_draft` im Ordner *Gesendet* nach
+(bei Terminen im Kalender, `check_sent`):
+
+| Befund | Zustand | Erneut senden |
+|---|---|---|
+| gefunden | `sent` | nein |
+| nicht gefunden | `failed`, mit Grund | ja |
+| Nachsehen nicht möglich | `unclear` | ja, nach einem Blick in *Gesendet* |
+| Fehler vor dem Senden (Anmeldung, Kennung, Angaben) | `failed`, ohne Nachsehen | ja |
+
+Die Oberfläche zeigt den Zustand im Entwurf, nie als Fehlerseite. Dieselbe
+Prüfung gilt für selbständig sendende Funktionspostfächer im Werkzeugkreis.
+
 `MCP_TIMEOUT` begrenzt die Wartezeit je Aufruf (30 s), `MCP_RUNDEN` die
 Zahl der Werkzeugrunden je Antwort (4), `MCP_MAX_WERKZEUGE` die Zahl der
-Werkzeuge, die an das Modell gehen (40).
+Werkzeuge, die an das Modell gehen (40), `TOOL_TIMEOUT` die Dauer einer
+Runde (180 s). Schlägt eine Runde fehl oder ist ein Postfach nicht
+erreichbar, erfährt das Modell es (`werkzeughinweise`) und sagt es,
+statt zu raten. Postfächer ohne Anmeldung in der Sitzung werden nicht
+angeboten.
+
+### Neue Mail melden
+
+`mail_watch.py`: Solange LocaNoto in einem Browsertab offen ist, startet
+die Abfrage `/ui/notifications` höchstens alle `MAIL_CHECK_MINUTES` (5)
+eine Prüfung der verbundenen Postfächer, in einem Faden, mit den
+Anmeldedaten aus dem versiegelten Sitzungs-Cookie. Gespeichert wird je
+Nutzer nur der Zeitpunkt der letzten gesehenen Mail. Neue Mails werden
+eine Meldung (`notices.py`) mit Absendern und Betreffen; der Link öffnet
+den Chat mit einer Frage nach den neuen Nachrichten. Die erste Prüfung
+merkt nur die Zeit. Ohne offenen Tab wird nicht geprüft — die Anmeldedaten
+liegen nirgends sonst.
+
+### Ticketsystem für Funktionspostfächer
+
+`tickets.py`, eingerichtet je Funktionspostfach unter **Admin →
+Postfächer**:
+
+| Angabe | |
+|---|---|
+| Anmeldung | Konto mit Lese- und Senderecht für das Postfach. Verschlüsselt mit dem Installationsschlüssel in `config/tickets.json`, wie die Datenbankkonten; ohne Schlüssel wird nichts gespeichert |
+| Standardantwort | geht sofort an jeden Absender; `{ticket}`, `{subject}`, `{name}` werden eingesetzt |
+| Mitglieder | sehen die Tickets (Reiter **Tickets**) und bekommen Meldungen; Admins sehen alle |
+| Weiterleiten an | Adressen, die jede neue Mail mit `[T-2026-0001]` im Betreff bekommen |
+| Kürzel | `T` als Vorgabe |
+
+Der Worker prüft alle `TICKET_POLL_SECONDS` (60) jedes eingeschaltete
+Postfach unter einer Sperre, die über Pods hinweg gilt. Ablauf je neuer
+Mail:
+
+1. als erledigt markieren (höchstens einmal: ein Absturz danach kostet
+   eine Standardantwort, nie eine zweite),
+2. maschinelle Mail (`Auto-Submitted`, `Precedence`, `List-Id`,
+   no-reply-Absender, das Postfach selbst) → nichts,
+3. Betreff mit bekannter Nummer → Mail zum Ticket, wieder offen, Meldung
+   an den Zuständigen (sonst an die Mitglieder), keine Standardantwort,
+4. sonst neues Ticket → Standardantwort, Weiterleitung, Meldungen.
+
+Tickets liegen verschlüsselt je Postfach unter `data/tickets/`
+(mit Postgres in `state_file`); erledigte werden nach `TICKET_KEEP_DAYS`
+(365) entfernt. Status: offen, in Arbeit (beim Übernehmen), erledigt.
 
 ## 🌐 Websuche
 
@@ -2666,6 +2750,17 @@ Suchmaschinen. Darüber entscheidet bei geteilten Unterlagen der
 Verwalter. Fragt jemand ohne Raumwahl, also in allen seinen Räumen,
 müssen alle die Websuche erlauben; sonst nennt die Seitenleiste die
 Räume, die es nicht tun. Eingeschaltet wird ohne Rückfrage gesucht.
+
+**Vorschlagen statt einschalten.** Ohne Schalter kann das Modell eine
+Websuche vorschlagen (`WEB_TOOL`, Vorgabe `auto`: wenn die Frage danach
+klingt, die Dokumente nichts liefern oder ohnehin ein Postfach verbunden
+ist — jedes Angebot kostet einen Modellaufruf vor der Antwort; `always`,
+`off`). Angeboten wird sie, wenn mindestens ein gefragter Raum sie
+erlaubt. Der Aufruf wird ein Entwurf mit dem genauen Suchtext; der Nutzer
+prüft ihn, bevor etwas hinausgeht. Bestätigt fragt der Chat erneut mit
+`web_draft`: Die Suche läuft mit genau diesem Text, wie bei
+eingeschaltetem Schalter ohne die Räume, die sie nicht erlauben, und die
+Antwort setzt den Chat ohne neue Frage fort.
 
 **Übernehmen.** Treffer stehen unter der Antwort getrennt von den
 Dokumenten, als **🌐 Aus dem Netz** mit `[W1]`, `[W2]` … Angehakt und

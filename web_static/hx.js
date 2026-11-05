@@ -17,6 +17,8 @@
 // /ui/notifications every few seconds (often while a web search runs,
 // rarely otherwise), shows each finished task once with a link to it and
 // a count on the "Web sources" tab, and refreshes the task list there.
+// Notices (new mail, tickets) are shown once each while the page is
+// visible, then marked shown; open tickets are counted on the Tickets tab.
 (function () {
   "use strict";
 
@@ -240,7 +242,7 @@
     if (!t) return;
     t.textContent = item.text + " ";
     var a = document.createElement("a");
-    a.href = "/web?task=" + encodeURIComponent(item.id);
+    a.href = item.href || "/web?task=" + encodeURIComponent(item.id);
     a.textContent = view + " →";
     t.appendChild(a);
     t.className = "show notice" + (item.bad ? " bad" : "");
@@ -248,8 +250,8 @@
     t._timer = setTimeout(function () { t.className = ""; }, 15000);
   }
 
-  function badge(count) {
-    var link = document.querySelector('nav.tabs a[href="/web"]');
+  function badge(count, href) {
+    var link = document.querySelector('nav.tabs a[href="' + (href || "/web") + '"]');
     if (!link) return;
     var b = link.querySelector(".badge");
     if (!count) { if (b) b.remove(); return; }
@@ -277,6 +279,19 @@
         });
         remember(shown);
         badge(n.finished.length);
+        badge(n.tickets || 0, "/tickets");
+        var fresh = (n.notices || []).filter(function (item) { return shown.indexOf(item.id) < 0; });
+        if (fresh.length && !document.hidden) {
+          // one at a time; the next poll shows the next one
+          notice(fresh[0], n.view);
+          shown.push(fresh[0].id);
+          remember(shown);
+          var form = new URLSearchParams();
+          form.append("id", fresh[0].id);
+          fetch("/ui/notices/shown", { method: "POST", credentials: "same-origin",
+            headers: csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" }), body: form });
+          if (fresh.length > 1) wait = 16000;
+        }
         var state = n.running + ":" + n.finished.map(function (i) { return i.id; }).join(",");
         var list = document.getElementById("webtasks");
         if (list && lastState && state !== lastState) {

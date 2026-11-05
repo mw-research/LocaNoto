@@ -35,7 +35,7 @@ SCHICHT = {
         "test_migration", "server", "routes_account", "routes_chat",
         "routes_documents", "routes_admin", "worker", "test_api", "web",
         "test_multipod", "web_admin", "doctor", "make_ca", "trustbundle",
-        "reembed", "test_reembed",
+        "reembed", "test_reembed", "web_tickets", "test_mail_tools",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
@@ -47,13 +47,15 @@ SCHICHT = {
         "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
         "auth", "sicherheit", "datentraeger", "workspace_notes",
         "attachments", "imap_mailbox", "created_files", "web_research",
+        "notices", "mail_watch", "tickets",
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",
         "budget", "pg_collection", "pg_keywords", "vector_columns",
     ),
     "Grundlage": ("paths", "geheim", "llm", "embedding",
-                  "dateisperre", "sprache", "database", "statefiles"),
+                  "dateisperre", "sprache", "database", "statefiles",
+                  "local_time"),
 }
 
 

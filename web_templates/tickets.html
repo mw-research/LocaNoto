@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ t('Tickets') }}</h1>
+<nav class="subnav">
+  {% for b in boxes %}<a href="/tickets?box={{ b|urlencode }}" class="{{ 'on' if b == box }}">{{ b }}</a>{% endfor %}
+  <span class="muted">·</span>
+  <a href="/tickets?box={{ box|urlencode }}" class="{{ 'on' if not status }}">{{ t('open') }} + {{ t('in_progress') }}</a>
+  <a href="/tickets?box={{ box|urlencode }}&amp;status=closed" class="{{ 'on' if status == 'closed' }}">{{ t('closed') }}</a>
+  <a href="/tickets?box={{ box|urlencode }}&amp;status=all" class="{{ 'on' if status == 'all' }}">{{ t('all statuses') }}</a>
+</nav>
+
+{% if current %}
+<section class="card ticket">
+  <h2>{{ current.id }} · {{ current.subject or '-' }}</h2>
+  <p class="muted">{{ t('From') }}: {{ current.from_name }} &lt;{{ current.from_address }}&gt; · {{ t('Received') }}: {{ (current.received or current.created)|local_time }}
+    · {{ t('Status') }}: <strong>{{ t(current.status) }}</strong>
+    · {{ t('Assigned to') }}: {{ current.assignee or t('nobody') }}</p>
+  <pre class="mailtext">{{ current.text }}</pre>
+  <div class="actions">
+    {% if current.assignee != me %}
+    <form hx-post="/ui/tickets/{{ box|urlencode }}/{{ current.id }}" hx-target="#ticket-notice" class="inline"><input type="hidden" name="action" value="take"><button class="primary">{{ t('Take it') }}</button></form>
+    {% else %}
+    <form hx-post="/ui/tickets/{{ box|urlencode }}/{{ current.id }}" hx-target="#ticket-notice" class="inline"><input type="hidden" name="action" value="release"><button>{{ t('Release') }}</button></form>
+    {% endif %}
+    <form hx-post="/ui/tickets/{{ box|urlencode }}/{{ current.id }}" hx-target="#ticket-notice" class="inline">
+      <input type="hidden" name="action" value="status">
+      <select name="status">{% for s in statuses %}<option value="{{ s }}"{% if s == current.status %} selected{% endif %}>{{ t(s) }}</option>{% endfor %}</select>
+      <button>{{ t('Save') }}</button>
+    </form>
+    <a class="button" href="/?ticket={{ box|urlencode }}:{{ current.id }}">{{ t('Answer in the chat') }}</a>
+  </div>
+  <form hx-post="/ui/tickets/{{ box|urlencode }}/{{ current.id }}" hx-target="#ticket-notice">
+    <input type="hidden" name="action" value="note">
+    <label>{{ t('Note') }}<textarea name="note" rows="2"></textarea></label>
+    <button>{{ t('Add note') }}</button>
+  </form>
+  <div id="ticket-notice"></div>
+  <h3>{{ t('History') }}</h3>
+  <ul class="events">
+  {% for e in current.events %}
+    <li><span class="muted">{{ e.at|local_time }}</span> {{ t(e.what) }} · {{ e.by }}{% if e.text %}<pre>{{ e.text }}</pre>{% endif %}</li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <table class="files">
+    <tr><th>Ticket</th><th>{{ t('Received') }}</th><th>{{ t('From') }}</th><th>{{ t('Subject') }}</th><th>{{ t('Status') }}</th><th>{{ t('Assigned to') }}</th></tr>
+  {% for x in items %}
+    <tr class="{{ 'on' if current and current.id == x.id }}">
+      <td><a href="/tickets?box={{ box|urlencode }}&amp;id={{ x.id }}{% if status %}&amp;status={{ status }}{% endif %}">{{ x.id }}</a></td>
+      <td class="muted">{{ (x.received or x.created)|local_time }}</td>
+      <td>{{ x.from_name or x.from_address }}</td>
+      <td>{{ x.subject or '-' }}</td>
+      <td>{{ t(x.status) }}</td>
+      <td>{{ x.assignee or '–' }}</td>
+    </tr>
+  {% else %}
+    <tr><td class="muted" colspan="6">{{ t('No tickets.') }}</td></tr>
+  {% endfor %}
+  </table>
+</section>
+{% endblock %}
