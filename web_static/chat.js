@@ -253,6 +253,14 @@
     var form = document.getElementById("ask");
     if (!form) return;
     Array.prototype.forEach.call(document.querySelectorAll("[data-running]"), follow);
+    // "Database" is on by default where a database is set up; whoever
+    // switches it off keeps it off (this browser only).
+    if (form.sql) {
+      try { if (localStorage.getItem("locanoto_sql") === "0") form.sql.checked = false; } catch (e) { /* private window */ }
+      form.sql.addEventListener("change", function () {
+        try { localStorage.setItem("locanoto_sql", form.sql.checked ? "1" : "0"); } catch (e) { /* private window */ }
+      });
+    }
     var web = form.querySelector("[data-web-search]");
     if (web) web.addEventListener("click", function () { webSearch(form, web); });
     document.addEventListener("click", function (ev) {

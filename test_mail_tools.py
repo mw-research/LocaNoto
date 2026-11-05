@@ -314,6 +314,23 @@ check("answer under way: a failure keeps the text and the reason",
       stored[-1]["content"] == "halb" and stored[-1]["fehler"] == "APIError: 500"
       and not stored[-1].get("laeuft"))
 
+# --- database questions ---
+
+import sqldb  # noqa: E402
+
+marker = sqldb.MARKER_KEINE_ABFRAGE
+query = "SELECT TOP 50 AuftragsNr FROM dbo.Auftraege WHERE Status = 'F'"
+fake_sql = lambda text: ns(chat=ns(completions=ns(create=lambda **_k: ns(
+    choices=[ns(message=ns(content=text))]))))
+check("SQL: the query after the thinking counts, not a 'no query' weighed in it",
+      sqldb.formuliere(fake_sql("<think>vielleicht " + marker + "? nein</think>" + query),
+                       "m", "q", "s") == query)
+check("SQL: 'no query' alone stays no query",
+      sqldb.formuliere(fake_sql(marker), "m", "q", "s") == "")
+check("SQL: the prompt allows lists that are asked for",
+      "TOP 50" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "sql_prompt.txt"), encoding="utf-8").read())
+
 # --- new mail notices ---
 
 import mail_watch  # noqa: E402

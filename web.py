@@ -227,6 +227,10 @@ TEXTS = {
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
     "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
+    "The model does not see the question answerable from the database.":
+        "Die Frage betrifft aus Sicht des Modells nichts in der Datenbank – keine Abfrage.",
+    "No database account for this user.": "Kein Datenbankzugang für dich (Einstellungen > Meine Datenbanken).",
+    "The database has no readable tables.": "Die Datenbank hat keine lesbaren Tabellen.",
     "The answer is being written ...": "Die Antwort wird geschrieben …",
     "The answer broke off.": "Die Antwort wurde abgebrochen.",
     "My databases": "Meine Datenbanken", "Databases": "Datenbanken",

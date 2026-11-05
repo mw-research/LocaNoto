@@ -203,9 +203,14 @@ def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None,
         timeout=zeitlimit if zeitlimit is not None else SQL_TIMEOUT,
     ).choices[0].message.content or "")
 
-    if MARKER_KEINE_ABFRAGE in roh.upper():
+    # A reasoning model weighs "no query" in its thinking and then writes
+    # one; only what comes after the thinking counts.
+    roh = re.sub(r"<think>.*?</think>", " ", roh, flags=re.S | re.I)
+    roh = re.sub(r"<think>.*", " ", roh, flags=re.S | re.I)
+    if MARKER_KEINE_ABFRAGE in roh.upper() and not re.search(
+            r"\b(SELECT|WITH)\b", roh.replace(MARKER_KEINE_ABFRAGE, ""), re.I):
         return ""
-    return bereinige(roh)
+    return bereinige(roh.replace(MARKER_KEINE_ABFRAGE, ""))
 
 
 def fuehre_aus(sql, max_rows=None, zugang=None):

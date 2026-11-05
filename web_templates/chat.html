@@ -39,7 +39,7 @@
             {% for name, label in options.presets %}<option value="{{ name }}">{{ label }}</option>{% endfor %}</select>
         </label>
         {% if options.web %}<label class="check"><input type="checkbox" name="web"> {{ t('Web search') }}</label>{% endif %}
-        {% if options.sql %}<label class="check"><input type="checkbox" name="sql"> {{ t('Database') }}</label>
+        {% if options.sql %}<label class="check"><input type="checkbox" name="sql" checked> {{ t('Database') }}</label>
         {% if options.sql|length > 1 %}<label>{{ t('Database of') }}
           <select name="sql_room">{% for id, label in options.sql %}<option value="{{ id }}">{{ label }}</option>{% endfor %}</select>
         </label>{% endif %}{% endif %}
