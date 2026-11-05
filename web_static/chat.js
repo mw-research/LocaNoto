@@ -218,14 +218,56 @@
     });
   }
 
+  // An answer still being written (left and come back, or opened in another
+  // tab): show it as it is saved, until it is complete. Nothing is locked --
+  // the server answers on without the page.
+  function follow(article) {
+    var box = document.getElementById("messages");
+    var chatId = box && box.getAttribute("data-chat-id");
+    var index = article.id ? article.id.slice(1) : "";
+    if (!chatId || !index) return;
+    setTimeout(async function again() {
+      if (!document.body.contains(article)) return;
+      try {
+        var r = await fetch("/ui/chats/" + chatId + "/messages/" + index, { credentials: "same-origin" });
+        if (r.ok) {
+          var html = await r.text();
+          var tpl = document.createElement("template");
+          tpl.innerHTML = html;
+          var fresh = tpl.content.firstElementChild;
+          window.hx.swap(article, html, "outerHTML");
+          if (fresh && fresh.getAttribute("data-running")) {
+            follow(document.getElementById(article.id));
+          } else {
+            var list = await fetch("/ui/chats?current=" + chatId, { credentials: "same-origin" });
+            if (list.ok) window.hx.swap(document.getElementById("chatlist"), await list.text(), "innerHTML");
+          }
+          return;
+        }
+      } catch (e) { /* offline for a moment */ }
+      setTimeout(again, 4000);
+    }, 2000);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("ask");
     if (!form) return;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-running]"), follow);
     var web = form.querySelector("[data-web-search]");
     if (web) web.addEventListener("click", function () { webSearch(form, web); });
     document.addEventListener("click", function (ev) {
       var b = ev.target.closest && ev.target.closest("[data-web-draft]");
       if (b) { ev.preventDefault(); confirmWeb(form, b); }
+      var r = ev.target.closest && ev.target.closest("[data-retry]");
+      if (r && !form.classList.contains("busy")) {
+        ev.preventDefault();
+        var box = document.getElementById("messages");
+        var article = r.closest("article");
+        var body = options(form, box);
+        body.retry = true;
+        if (article) article.remove();
+        stream(form, box, body);
+      }
     });
     form.addEventListener("submit", function (ev) { ask(form, ev); });
     form.question.addEventListener("keydown", function (ev) {

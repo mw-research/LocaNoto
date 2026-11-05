@@ -227,6 +227,8 @@ TEXTS = {
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
     "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
+    "The answer is being written ...": "Die Antwort wird geschrieben …",
+    "The answer broke off.": "Die Antwort wurde abgebrochen.",
     "My databases": "Meine Datenbanken", "Databases": "Datenbanken",
     "User and password.": "Benutzer und Passwort.",
     "Sign-in to the database failed": "Anmeldung an der Datenbank fehlgeschlagen",
@@ -448,12 +450,23 @@ def _chat_options(p, request=None):
     }
 
 
+# An answer under way that was not updated for this long counts as broken
+# off (its pod went away); a tool round may take TOOL_TIMEOUT without news.
+RUN_STALE_SECONDS = 420
+
+
 def _messages(p, chat_id):
     """Messages for the page: no server paths, each answer with its question."""
     out, question = [], ""
     for i, m in enumerate(chats.lade(p.name, chat_id)):
         entry = {k: v for k, v in m.items() if k != "bilder"}
         entry.update(index=i, images=len(m.get("bilder") or []))
+        if m.get("laeuft"):
+            fresh = time.time() - float(m.get("aktualisiert") or 0) < RUN_STALE_SECONDS
+            entry["running"] = fresh
+            entry["broken"] = not fresh
+        elif m.get("fehler"):
+            entry["broken"] = True
         if m.get("role") == "user":
             question = m.get("content", "")
         else:

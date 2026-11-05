@@ -18,6 +18,8 @@ and position, not by where they lie.
 """
 import base64
 import json
+import queue
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
@@ -148,13 +150,54 @@ def ask(body: AskBody, http_request: Request,
                                                body.source_texts)
         return result
 
+    # The answer runs in a thread of its own and the response reads from
+    # a queue: a page that is left (another tab, another chat) ends the
+    # response, not the answer. It is saved in the chat as it grows
+    # (answering._Run) and announced when it is ready.
+    q = queue.Queue()
+    gone = threading.Event()        # the page went away before the end
+
+    def work():
+        chat_id, title = None, ""
+        try:
+            for event, data in answering.ask(p.name, req):
+                if event == "chat":
+                    chat_id, title = data.get("chat_id"), data.get("title") or ""
+                q.put((event, data))
+        except Exception as e:      # ask() reports its own errors; this is a guard
+            q.put(("error", {"status": 500, "detail": f"{type(e).__name__}"}))
+        finally:
+            q.put(None)
+            if chat_id and req.save and gone.is_set():
+                try:
+                    import notices
+                    import sprache
+                    word = ("Answer ready" if sprache.gewaehlt(p.name) == "en"
+                            else "Antwort fertig")
+                    notices.add(p.name, f"{word}: {title or chat_id}",
+                                href=f"/c/{chat_id}", key=f"answer:{chat_id}")
+                except Exception:
+                    pass
+
+    threading.Thread(target=work, daemon=True, name=f"answer-{p.name}").start()
+
     def events():
-        for event, data in answering.ask(p.name, req):
-            if event == "done":
-                data = dict(data, message=public_message(
-                    data["message"], body.source_texts))
-            yield (f"event: {event}\n"
-                   f"data: {json.dumps(data, ensure_ascii=False, default=str)}\n\n")
+        finished = False
+        try:
+            while True:
+                item = q.get()
+                if item is None:
+                    finished = True
+                    break
+                event, data = item
+                if event == "done":
+                    data = dict(data, message=public_message(
+                        data["message"], body.source_texts))
+                yield (f"event: {event}\n"
+                       f"data: {json.dumps(data, ensure_ascii=False, default=str)}\n\n")
+        finally:
+            if not finished:
+                gone.set()
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",

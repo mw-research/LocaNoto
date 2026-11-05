@@ -459,6 +459,24 @@ check("calendar drafts show the day and their own buttons",
       and ("In den Kalender eintragen" in _page or "Add to calendar" in _page),
       _page[-1500:])
 
+# An answer under way shows as such and follows itself; a broken one offers
+# "ask again" (answering._Run, chat.js follow).
+import time as _time_t  # noqa: E402
+_msgs = _chats_mod.lade("anna", chat_id)
+_chats_mod.speichere("anna", chat_id, _msgs + [
+    {"role": "assistant", "content": "Teil", "unvollstaendig": True, "laeuft": True,
+     "status": "Suche", "aktualisiert": _time_t.time(), "run": "r1"}])
+_page = anna.get(f"/c/{chat_id}").text
+check("an answer under way shows with its text and follows itself",
+      'data-running="1"' in _page and "Teil" in _page, _page[-1200:])
+_msgs2 = _chats_mod.lade("anna", chat_id)
+_msgs2[-1]["aktualisiert"] = _time_t.time() - 3600
+_chats_mod.speichere("anna", chat_id, _msgs2)
+_page = anna.get(f"/c/{chat_id}").text
+check("an answer that stopped long ago offers ask again",
+      "data-retry" in _page and 'data-running="1"' not in _page, _page[-1200:])
+_chats_mod.speichere("anna", chat_id, _msgs)
+
 # A web search the model proposed waits like a mail, with its exact text.
 _msgs = _chats_mod.lade("anna", chat_id)
 _msgs[-1]["entwuerfe"].append(

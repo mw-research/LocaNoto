@@ -190,6 +190,13 @@ und Bildern.
 Neues Thema → neuer Chat, denn LocaNoto bezieht den Verlauf des Chats in
 die Antwort ein.
 
+Während eine Antwort entsteht, darfst du den Reiter oder den Chat
+wechseln: LocaNoto schreibt sie weiter. Zurück im Chat steht „Die Antwort
+wird geschrieben …“ mit dem bisherigen Text, bis sie fertig ist; bist du
+woanders, meldet LocaNoto „Antwort fertig“. Bricht eine Antwort ab (etwa
+weil der Modellserver ausfällt), steht darunter der Grund und **Nochmal
+fragen**.
+
 ### Was bewirken Daumen hoch und Daumen runter in LocaNoto?
 
 Unter jeder Antwort stehen 👍 („Hat geholfen") und 👎 („Hat nicht

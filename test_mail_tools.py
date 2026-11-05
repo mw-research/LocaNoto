@@ -280,6 +280,40 @@ try:
 except mailboxes.SendFailed as e:
     check("draft: not signed in -> failed without looking", e.state == "failed" and not looked)
 
+# --- an answer under way stays in the chat ---
+
+import answering  # noqa: E402
+
+run_chat = chats.neue_kennung()
+chats.speichere(user, run_chat, [{"role": "user", "content": "Frage 1"}], "Lauf")
+run = answering._Run(user, run_chat)
+run.start()
+stored = chats.lade(user, run_chat)
+check("answer under way: in the chat from the start",
+      len(stored) == 2 and stored[1].get("laeuft") and stored[1].get("run") == run.id)
+run.update(status="Suche", text="Teil der Antw", force=True)
+stored = chats.lade(user, run_chat)
+check("answer under way: status and text so far are saved",
+      stored[1]["status"] == "Suche" and stored[1]["content"] == "Teil der Antw")
+# meanwhile a second question in the same chat (another tab)
+chats.speichere(user, run_chat, stored + [{"role": "user", "content": "Frage 2"}])
+check("answer under way: not in the history the model sees",
+      [m["content"] for m in pipeline.history_for_model(chats.lade(user, run_chat))]
+      == ["Frage 1", "Frage 2"])
+run.finish({"role": "assistant", "content": "Fertige Antwort"})
+stored = chats.lade(user, run_chat)
+check("answer under way: the finished answer takes its place, the later question stays",
+      [m["content"] for m in stored] == ["Frage 1", "Fertige Antwort", "Frage 2"]
+      and not stored[1].get("laeuft"), stored)
+run2 = answering._Run(user, run_chat)
+run2.start()
+run2.update(text="halb", force=True)
+run2.fail("APIError: 500")
+stored = chats.lade(user, run_chat)
+check("answer under way: a failure keeps the text and the reason",
+      stored[-1]["content"] == "halb" and stored[-1]["fehler"] == "APIError: 500"
+      and not stored[-1].get("laeuft"))
+
 # --- new mail notices ---
 
 import mail_watch  # noqa: E402

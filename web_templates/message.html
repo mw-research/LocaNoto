@@ -1,10 +1,18 @@
-<article class="msg {{ m.role }}" id="m{{ m.index }}">
+<article class="msg {{ m.role }}{{ ' pending' if m.running }}" id="m{{ m.index }}"{% if m.running %} data-running="1"{% endif %}>
 {% if m.role == 'user' %}
   <div class="bubble">{{ m.content }}</div>
   {% if m.images %}<div class="images">{% for j in range(m.images) %}<img src="/api/v1/chats/{{ chat_id }}/messages/{{ m.index }}/images/{{ j }}" alt="">{% endfor %}</div>{% endif %}
 {% else %}
+  {% if m.running %}
+  <div class="status muted">{{ t('The answer is being written ...') }}{% if m.status %} {{ m.status }}{% endif %}</div>
+  <div class="answer streaming">{{ m.content }}</div>
+  {% else %}
   {% if m.web_search %}<p class="muted">{{ t('Web search') }}: {{ m.web_search.anfrage or m.web_search.adresse }}</p>{% endif %}
   <div class="answer">{{ m|answer_html|safe }}</div>
+  {% if m.broken %}
+  <p class="status error">{{ t('The answer broke off.') }}{% if m.fehler %} {{ m.fehler }}{% endif %}</p>
+  <button type="button" class="primary" data-retry>{{ t('Ask again') }}</button>
+  {% endif %}
   {% if m.zahlen and m.zahlen.vektorausfall %}
   <p class="warn">{{ t('Answer from the keyword search only -- the vector search did not answer for') }}: {{ m.zahlen.vektorausfall|join(', ') }}</p>
   {% endif %}
@@ -69,7 +77,8 @@
     <p class="muted"><a href="/web">{{ t('Web sources') }}</a> → {{ t('Take over') }}</p>
   </details>
   {% endif %}
-  {% if m.question %}
+  {% endif %}
+  {% if m.question and not m.running and not m.broken %}
   <div class="feedback" id="fb{{ m.index }}">
     <form hx-post="/ui/feedback" hx-target="#fb{{ m.index }}" class="inline">
       <input type="hidden" name="question" value="{{ m.question }}">

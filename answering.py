@@ -26,6 +26,14 @@ a draft like a mail, showing the exact search text. Confirming it asks
 again with web_draft set: the search runs with that text, and the answer
 continues the chat without a new question.
 
+AN ANSWER THAT IS UNDER WAY IS IN THE CHAT. From the start it stands
+there as a message marked "laeuft", with the status and the text so far,
+updated every few seconds (_Run). The page that asked may go away -- the
+API keeps answering in a thread (routes_chat) --, and whoever opens the
+chat, in any pod, sees the answer grow and then the finished one. The
+finished answer replaces exactly that message, so a question asked
+meanwhile is not lost.
+
 TOOL RESULTS STAY WITH THE ANSWER ("tool_log", "ids"), so the next
 question still knows the mails it listed (pipeline.history_for_model)
 and their short ids still resolve, in any pod.
@@ -455,6 +463,73 @@ def _unconnected(req):
             and n not in (req.mailboxes or {})]
 
 
+# --- AN ANSWER UNDER WAY, IN THE CHAT ---
+
+class _Run:
+    """The message of an answer while it is written (see module doc)."""
+
+    def __init__(self, user, chat_id):
+        import uuid
+        self.user, self.chat_id = user, chat_id
+        self.id = uuid.uuid4().hex[:12]
+        self.status, self.text, self.last = "", "", 0.0
+
+    def _put(self, message):
+        """Replaces this run's message in the stored chat, or appends it."""
+        import dateisperre
+        message = dict(message, run=self.id)
+        try:
+            with dateisperre.gesperrt(chats._index_pfad(self.user)):
+                stored = chats.lade(self.user, self.chat_id)
+                for i, m in enumerate(stored):
+                    if m.get("run") == self.id:
+                        stored[i] = message
+                        break
+                else:
+                    stored.append(message)
+                chats.speichere(self.user, self.chat_id, stored)
+        except Exception:
+            _log.exception("could not save the answer under way")
+
+    def _running(self):
+        return {"role": "assistant", "content": self.text, "unvollstaendig": True,
+                "laeuft": True, "status": self.status[:300],
+                "aktualisiert": time.time()}
+
+    def start(self):
+        self._put(self._running())
+        self.last = time.time()
+
+    def update(self, status=None, text=None, force=False):
+        if status is not None:
+            self.status = str(status)
+        if text is not None:
+            self.text = text
+        if force or time.time() - self.last >= PARTIAL_SAVE_SECONDS:
+            self.last = time.time()
+            self._put(self._running())
+
+    def fail(self, error):
+        self._put({"role": "assistant", "content": self.text,
+                   "unvollstaendig": True, "fehler": str(error)[:300]})
+
+    def finish(self, message):
+        self._put(message)
+
+
+def _status_of(event, data):
+    """One line for the message under way, from an event."""
+    if event == "probes":
+        return " · ".join(data.get("probes") or [])
+    if event == "search":
+        return f"{data.get('hits', 0)} / {data.get('candidates', 0)}"
+    if event == "tool":
+        return data.get("progress") or ""
+    if event == "sql":
+        return "SQL: " + (data.get("query") or data.get("reason") or "")
+    return None
+
+
 # --- THE FLOW ---
 
 def ask(user, req):
@@ -529,8 +604,21 @@ def _ask(user, req):
     else:
         question, image_texts = yield from _new_question(
             user, req, chat_id, new_chat, messages, model)
-    yield from _answer(user, req, settings, chat_id, messages, question,
-                       image_texts, web_draft)
+    run = _Run(user, chat_id) if req.save else None
+    if run:
+        run.start()
+    try:
+        for event, data in _answer(user, req, settings, chat_id, messages,
+                                   question, image_texts, web_draft, run):
+            if run and event not in ("text", "done", "error"):
+                status = _status_of(event, data)
+                if status is not None:
+                    run.update(status=status)
+            yield event, data
+    except Exception as e:
+        if run:
+            run.fail(f"{type(e).__name__}: {e}")
+        raise
 
 
 def _new_question(user, req, chat_id, new_chat, messages, model):
@@ -571,7 +659,7 @@ def _new_question(user, req, chat_id, new_chat, messages, model):
 
 
 def _answer(user, req, settings, chat_id, messages, question, image_texts,
-            web_draft):
+            web_draft, run=None):
     """Search, tools and the answer to the last question of messages."""
     model = settings["model"]
 
@@ -715,32 +803,24 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                      "was nicht ging. Nichts erfinden.\n</werkzeughinweise>\n")
 
     # 5. the answer, saved every few seconds while it grows
-    parts, last = [], time.time()
+    parts = []
+    if run:
+        run.update(status="", force=True)
     try:
         for piece in pipeline.antwort(client("CHAT", user), model, system,
                                       messages, zusatz=extra):
             piece = piece if isinstance(piece, str) else str(piece)
             parts.append(piece)
             yield "text", {"text": piece}
-            if req.save and time.time() - last >= PARTIAL_SAVE_SECONDS:
-                last = time.time()
-                try:
-                    chats.speichere(user, chat_id, messages + [{
-                        "role": "assistant", "content": "".join(parts),
-                        "unvollstaendig": True}])
-                except Exception:
-                    pass  # a failed partial save must not cost the answer
+            if run:
+                run.update(text="".join(parts))
     except Exception as e:
         # The model server failed mid-answer (a 500 through the gateway).
         # What came stays, marked; "ask again" replaces it.
         _log.exception("answer stream failed for %s", user)
-        if req.save:
-            try:
-                chats.speichere(user, chat_id, messages + [{
-                    "role": "assistant", "content": "".join(parts),
-                    "unvollstaendig": True, "fehler": f"{type(e).__name__}"}])
-            except Exception:
-                pass
+        if run:
+            run.text = "".join(parts)
+            run.fail(f"{type(e).__name__}: {str(e)[:200]}")
         yield "error", {"status": 502, "retry": bool(req.save),
                         "chat_id": chat_id,
                         "detail": f"{type(e).__name__}: {str(e)[:300]}"}
@@ -788,8 +868,8 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
         message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason")
                           if k in sql_info}
     messages.append(message)
-    if req.save:
-        chats.speichere(user, chat_id, messages)
+    if run:
+        run.finish(message)
     yield "done", {"message": message, "chat_id": chat_id}
 
 

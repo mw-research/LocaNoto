@@ -185,6 +185,12 @@ and stored encrypted on the server, including titles and images.
 New topic → new chat, because LocaNoto takes the chat history into
 account in its answer.
 
+While an answer is being written you may switch tabs or chats: LocaNoto
+keeps writing it. Back in the chat it shows "The answer is being written
+…" with the text so far until it is done; elsewhere LocaNoto notifies
+"Answer ready". If an answer breaks off (e.g. the model server fails), the
+reason and **Ask again** appear below it.
+
 ### What do thumbs up and thumbs down do in LocaNoto?
 
 Below every answer are 👍 ("Helpful") and 👎 ("Not helpful").

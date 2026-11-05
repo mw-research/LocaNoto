@@ -522,7 +522,7 @@ def _draft_result(draft):
 
 def history_for_model(nachrichten, anzahl=20):
     """The last messages for the model, with the tool calls of recent answers."""
-    recent = list(nachrichten or [])[-anzahl:]
+    recent = [m for m in (nachrichten or []) if not m.get("laeuft")][-anzahl:]
     logged = [i for i, m in enumerate(recent)
               if m.get("role") == "assistant" and m.get("tool_log")]
     keep = set(logged[-max(0, TOOL_LOG_TURNS):])
