@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use LocaNoto, please cite it as below."
+title: "LocaNoto: local AI knowledge base for companies"
+type: software
+abstract: >-
+  LocaNoto answers questions about a company's own documents, mailboxes,
+  calendars, databases and Excel lists with sources (retrieval-augmented
+  generation). It runs on the company's own premises with local language
+  models, on Docker or Kubernetes.
+authors:
+  - family-names: Wilhelm
+    given-names: Markus
+    affiliation: >-
+      Technical University of Applied Sciences Würzburg-Schweinfurt (THWS),
+      Institute for Digital Engineering (IDEE)
+repository-code: "https://github.com/mw-research/LocaNoto"
+url: "https://mw-research.github.io/LocaNoto/"
+license: AGPL-3.0-only
+keywords:
+  - retrieval-augmented generation
+  - RAG
+  - local LLM
+  - knowledge base
+  - document search
+  - self-hosted
+  - SME

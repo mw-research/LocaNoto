@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LocaNoto – local AI knowledge base for companies (RAG, self-hosted)</title>
+<meta name="description" content="LocaNoto answers questions about your own documents, mailboxes, calendars, databases and Excel lists – with sources. Open source, runs in your own network with local language models, on Docker or Kubernetes.">
+<meta name="keywords" content="LocaNoto, local AI, RAG, knowledge base, document search, enterprise search, self-hosted, on-premise, LLM, private AI, open source">
+<meta name="author" content="Markus Wilhelm, THWS">
+<link rel="canonical" href="https://mw-research.github.io/LocaNoto/en/">
+<link rel="alternate" hreflang="de" href="https://mw-research.github.io/LocaNoto/">
+<link rel="alternate" hreflang="en" href="https://mw-research.github.io/LocaNoto/en/">
+<link rel="alternate" hreflang="x-default" href="https://mw-research.github.io/LocaNoto/en/">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="icon" href="../favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="LocaNoto">
+<meta property="og:title" content="LocaNoto – local AI knowledge base for companies">
+<meta property="og:description" content="Questions to your own documents, mail, calendar and databases – answered with sources. Open source, in your own network.">
+<meta property="og:url" content="https://mw-research.github.io/LocaNoto/en/">
+<meta property="og:image" content="https://mw-research.github.io/LocaNoto/social-preview.png">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "LocaNoto",
+      "url": "https://mw-research.github.io/LocaNoto/en/",
+      "image": "https://mw-research.github.io/LocaNoto/logo.png",
+      "description": "Local AI knowledge base for companies: questions to your own documents, mailboxes, calendars, databases and lists, answered with sources. Runs in your own network.",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Linux, Docker, Kubernetes",
+      "inLanguage": ["en", "de"],
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+      "isAccessibleForFree": true,
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "EUR"},
+      "sameAs": ["https://github.com/mw-research/LocaNoto"],
+      "author": {"@type": "Person", "name": "Markus Wilhelm",
+                 "affiliation": {"@type": "CollegeOrUniversity",
+                                 "name": "Technical University of Applied Sciences Würzburg-Schweinfurt (THWS)"}}
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "name": "LocaNoto",
+      "codeRepository": "https://github.com/mw-research/LocaNoto",
+      "programmingLanguage": "Python",
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="../favicon.png" alt="" width="34" height="34">LocaNoto</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#installation">Installation</a>
+      <a href="https://github.com/mw-research/LocaNoto">GitHub</a>
+      <a href="../" hreflang="de" lang="de">Deutsch</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <h1>Questions to your own documents – <span class="accent">answered with sources</span></h1>
+        <p class="lead">LocaNoto is a local AI knowledge base for companies. It searches documents, mailboxes, calendars, databases and Excel lists and names file and page for every answer. Everything runs in your own network with local language models – the data never leaves it.</p>
+        <div class="buttons">
+          <a class="button primary" href="https://github.com/mw-research/LocaNoto">View on GitHub</a>
+          <a class="button" href="#installation">Install</a>
+        </div>
+      </div>
+      <img class="logo" src="../logo.png" alt="LocaNoto logo: a robot reads while books break up into pixels that flow into its head" width="420" height="420">
+    </div>
+
+    <section id="features">
+      <h2>Features</h2>
+      <div class="grid">
+        <div class="card"><h3>Answers with sources</h3><p>PDF, Word, Markdown, text and scanned pages. Every statement with file and page; one click opens the passage.</p></div>
+        <div class="card"><h3>Workspaces and permissions</h3><p>Shared workspaces per department, a private one per user, sign-in through the company directory (OIDC).</p></div>
+        <div class="card"><h3>Mailbox and calendar</h3><p>Exchange and IMAP: read and summarise mail; replies, appointments and invitations as drafts – nothing is sent before a person confirms.</p></div>
+        <div class="card"><h3>Database and lists</h3><p>Questions to the ERP (Microsoft SQL Server, read-only, with each user's own rights) and to Excel lists on a network drive.</p></div>
+        <div class="card"><h3>Ticket system</h3><p>Shared mailboxes like info@ become tickets: a standard answer with the number, assignees, status and history.</p></div>
+        <div class="card"><h3>Web search on confirmation</h3><p>The model proposes a search; only the search text the user confirms goes out. Hits can be taken over as sources.</p></div>
+        <div class="card"><h3>Create files</h3><p>Excel, Word, PDF and PowerPoint from an answer, stored in the user's own workspace on request.</p></div>
+        <div class="card"><h3>Runs on your premises</h3><p>Docker or Kubernetes, Postgres with pgvector, encrypted storage, OpenCloud/Nextcloud, HTTP API.</p></div>
+      </div>
+    </section>
+
+    <section id="installation">
+      <h2>Installation</h2>
+      <p>Requirements: Python 3.8 or newer, Docker or <code>kubectl</code> and an OpenAI-compatible model server (e.g. vLLM, Ollama, LiteLLM). The installer creates keys and certificates, starts every service, creates the first admin account and checks every part at the end.</p>
+<pre>curl -fsSLO https://raw.githubusercontent.com/mw-research/LocaNoto/main/deploy/locanoto-setup.py
+python3 locanoto-setup.py --en</pre>
+      <p>Kubernetes without questions, all settings and the handbook: <a href="https://github.com/mw-research/LocaNoto/blob/main/README.en.md">README on GitHub</a> · <a href="https://github.com/mw-research/LocaNoto/blob/main/HANDBUCH.en.md">Handbook</a> · <a href="https://github.com/mw-research/LocaNoto/blob/main/REFERENCE.en.md">Reference</a></p>
+    </section>
+
+    <section id="project">
+      <h2>Project</h2>
+      <p>LocaNoto is developed in the project <a href="https://digit.kmu.bayern/">DIG:IT-KMU</a> at the Institute for Digital Engineering (IDEE) of the Technical University of Applied Sciences Würzburg-Schweinfurt (THWS). The aim is AI that small and medium-sized companies can use with their own data and without a cloud. Funded under EFRE Bavaria 2021–2027 by the Bavarian State Ministry of Economic Affairs, Regional Development and Energy, co-financed by the European Union.</p>
+    </section>
+  </main>
+
+  <footer>
+    LocaNoto · open source under the <a href="https://github.com/mw-research/LocaNoto/blob/main/LICENSE">GNU AGPL v3</a> · © 2026 Markus Wilhelm (mw-research) · <a href="https://github.com/mw-research/LocaNoto">github.com/mw-research/LocaNoto</a>
+  </footer>
+</div>
+</body>
+</html>

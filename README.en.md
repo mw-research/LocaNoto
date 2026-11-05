@@ -2,7 +2,9 @@
 
 # LocaNoto
 
-*Deutsch: [README.md](README.md)*
+**Local AI knowledge base for companies** · *Lokale KI-Wissensbasis für Unternehmen*
+
+*Deutsch: [README.md](README.md)* · Website: [mw-research.github.io/LocaNoto](https://mw-research.github.io/LocaNoto/en/)
 
 Questions to your own documents, answered with file and page. LocaNoto runs
 in your own network; the documents do not leave it.

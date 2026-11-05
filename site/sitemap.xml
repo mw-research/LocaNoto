@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://mw-research.github.io/LocaNoto/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mw-research.github.io/LocaNoto/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mw-research.github.io/LocaNoto/en/"/>
+  </url>
+  <url>
+    <loc>https://mw-research.github.io/LocaNoto/en/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="de" href="https://mw-research.github.io/LocaNoto/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mw-research.github.io/LocaNoto/en/"/>
+  </url>
+</urlset>
