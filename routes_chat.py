@@ -33,7 +33,7 @@ import raeume
 import statefiles
 import vision
 import workspace_notes
-from routes_account import mailbox_headers
+from routes_account import mailbox_headers, sql_logins
 from server import Principal, principal
 
 router = APIRouter()
@@ -81,6 +81,9 @@ class AskBody(BaseModel):
         default=None, description="confirm the web search draft with this id "
                                   "(of chat_id): the search runs with its text "
                                   "and the answer continues the chat")
+    retry: bool = Field(default=False,
+                        description="answer the last question of chat_id again; "
+                                    "a failed or broken-off answer is replaced")
     source_texts: bool = Field(default=True,
                                description="include the passages")
 
@@ -105,7 +108,8 @@ def _request(p, body, http_request):
         mailboxes=mailbox_headers(p, http_request,
                                   {k: v.model_dump()
                                    for k, v in body.mailboxes.items()}),
-        history=body.history, save=body.save, web_draft=body.web_draft)
+        history=body.history, save=body.save, web_draft=body.web_draft,
+        retry=body.retry, sql_logins=sql_logins(p, http_request))
 
 
 def public_message(m, with_texts=True):

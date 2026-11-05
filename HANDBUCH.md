@@ -247,18 +247,33 @@ Abfrage benutzt wurde. **Erkannte Blätter** zeigt Blätter und Spalten,
 
 ### Wie frage ich in LocaNoto die Datenbank ab?
 
-Ist eine Fachdatenbank angebunden, steht in der Seitenleiste **Datenbank**.
+Ist für einen deiner Arbeitsbereiche eine Datenbank eingerichtet, steht im
+Chat unter „Arbeitsbereiche · Modell“ **Datenbank**.
 
-- **Datenbank einbeziehen** einschalten → LocaNoto schreibt zu deiner Frage
-  eine lesende Abfrage (SELECT) und nutzt das Ergebnis. Ändern kann
-  LocaNoto an der Datenbank nichts.
-- Unter der Antwort zeigt **Datenbankabfrage** die Abfrage und das Konto.
-- „Keine Datenbankverbindung" → Antworten nur aus den Dokumenten;
-  **Neu verbinden** versucht es erneut, **Treibermeldung** zeigt Details.
+- **Datenbank** ankreuzen → LocaNoto schreibt zu deiner Frage eine lesende
+  Abfrage (SELECT) und nutzt das Ergebnis. Ändern kann LocaNoto an der
+  Datenbank nichts.
+- Unter der Antwort zeigt **Datenbankabfrage** die Abfrage.
+- „No database connection: …“ → nennt den Grund (Server nicht
+  erreichbar, Anmeldung abgelehnt …); die Antwort kommt dann nur aus den
+  Dokumenten.
 
-**Mein Datenbankzugang:** eigenes Konto (**Benutzer**, **Passwort**)
-eintragen → **Übernehmen** → Abfragen laufen mit deinen Rechten, LocaNoto
-sieht nur deine Tabellen.
+**Eigenes SQL-Login** (klassische Oberfläche: **Mein Datenbankzugang**): **Einstellungen** → **Meine Datenbanken** →
+Benutzer und Passwort, die du vom Datenbank-Admin bekommen hast →
+**Verbinden**. Abfragen laufen dann mit deinen Rechten in der Datenbank.
+Das Login bleibt nur in der Browsersitzung. Hat der Admin ein gemeinsames
+Lesekonto hinterlegt, geht es auch ohne eigenes Login.
+
+### Wie arbeite ich in LocaNoto mit meinen eigenen Listen?
+
+**Einstellungen** → **Meine Listen** zeigt deinen Ordner, z. B.
+`/mnt/listen/LISTE/anna`: Der Admin legt eine Wurzel fest, jeder bekommt
+darin einen Ordner mit seinem Benutzernamen. Excel- und CSV-Dateien dort
+werden bei jeder Frage mit Listen gelesen; nur du siehst sie.
+
+- **Unterordner (optional)** → nur dieser Teil deines Ordners zählt.
+- **Listen neu einlesen** → nach neuen Dateien oder geänderten Spalten;
+  neue Zeilen wirken ohne Zutun.
 
 ### Wie verbinde ich mein Postfach mit LocaNoto?
 
@@ -574,10 +589,14 @@ Listen werden nicht vektorisiert: ein Katalog kennt Blätter und Spalten,
 die Zeilen liest LocaNoto bei jeder Frage frisch. In der Seitenleiste unter
 **Listen**:
 
-- **Listenquellen je Arbeitsbereich:** eine Zeile je Quelle,
-  `arbeitsbereich = pfad`; der Arbeitsbereich bestimmt, wer die Listen
-  sieht. `@privat = /pfad/{benutzer}/Listen` gibt jedem Nutzer einen
-  eigenen Ordner. → **Speichern und einlesen**.
+- **Admin** → **Listen** → **Listenordner je Arbeitsbereich**: ein Ordner
+  je geteiltem Arbeitsbereich; der Arbeitsbereich bestimmt, wer die
+  Listen sieht.
+- **Wurzel der persönlichen Ordner**, z. B. `/mnt/listen/LISTE` → jeder
+  Nutzer bekommt `/mnt/listen/LISTE/<Benutzername>` und sieht ihn unter
+  **Einstellungen** → **Meine Listen**. Auch `owncloud:/LISTE` geht.
+- Freigaben auf mehreren Servern: im Installer `"lists_pvc": {"name":
+  "claim", …}`, eingehängt unter `/mnt/listen/<name>`.
 - **Liste hochladen:** Dateien wählen, **Hochladen in** (Unterordner)
   wählen → **n Datei(en) hochladen**. Nur bei beschreibbarem Ordner.
 - **Listen neu einlesen:** nötig bei neuen Dateien oder geänderten
@@ -686,20 +705,23 @@ Entwurf vor, ohne Ausnahme.
 **Ticketsystem**:
 
 1. **Ticketsystem an** ankreuzen.
-2. **Anmeldung für das Postfach**: ein Konto, das dieses Postfach lesen
-   und daraus senden darf. Es wird mit dem Installationsschlüssel
-   verschlüsselt gespeichert, weil der Worker ohne angemeldeten Nutzer
-   arbeitet. Leer lassen behält die gespeicherte Anmeldung.
+2. Es wird **keine Anmeldung gespeichert**. Mitglieder verbinden das
+   Postfach unter **Einstellungen** → **Postfächer** mit ihrem eigenen
+   Konto (Rechte auf das Postfach in Exchange, zum Antworten „Senden als“).
 3. **Standardantwort**: geht sofort an jeden Absender. `{ticket}`,
    `{subject}` und `{name}` werden eingesetzt.
 4. **Mitglieder**: LocaNoto-Benutzer, die jedes Ticket sehen und gemeldet
    bekommen. Admins sehen alle Tickets.
 5. Optional **Jede neue Mail weiterleiten an**: Adressen, die jede neue
    Mail mit Ticketnummer im Betreff bekommen.
-6. **Speichern** → **Jetzt prüfen**. Die erste Prüfung merkt nur die
-   Uhrzeit; ab dann wird jede neue Mail ein Ticket.
+6. **Speichern** → **Jetzt prüfen** (mit deinem eigenen verbundenen
+   Login). Die erste Prüfung merkt nur die Uhrzeit; ab dann wird jede neue
+   Mail ein Ticket.
 
-Der Worker prüft jede Minute (`TICKET_POLL_SECONDS`). Automatische Mails
+Geprüft wird jede Minute (`TICKET_POLL_SECONDS`), solange ein Mitglied mit
+verbundenem Postfach LocaNoto offen hat. Ist niemand online, werden die
+inzwischen eingegangenen Mails beim nächsten Mal bearbeitet, samt
+Standardantwort. Automatische Mails
 (Abwesenheitsnotizen, Newsletter, Unzustellbarkeitsmeldungen, Mails des
 Postfachs selbst) werden weder Ticket noch beantwortet. Eine Mail wird als
 erledigt markiert, bevor etwas gesendet wird: Sie wird nie zweimal

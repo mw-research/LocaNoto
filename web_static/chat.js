@@ -88,7 +88,12 @@
         headers: window.hx.csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body)
       });
-      if (!response.ok) { status.textContent = await window.hx.errorText(response); status.className = "status error"; return; }
+      if (!response.ok) {
+        status.textContent = await window.hx.errorText(response);
+        status.className = "status error";
+        if (response.status >= 500 && chatId) retryButton(form, box, reply, chatId);
+        return;
+      }
       var reader = response.body.getReader();
       var decoder = new TextDecoder();
       var buffer = "";
@@ -123,6 +128,8 @@
           } else if (event === "error") {
             status.textContent = d.detail;
             status.className = "status error";
+            if (d.chat_id) chatId = d.chat_id;
+            if (d.retry && chatId) retryButton(form, box, reply, chatId);
             done = true;
           } else if (event === "done") {
             done = true;
@@ -140,28 +147,75 @@
         if (list.ok) window.hx.swap(document.getElementById("chatlist"), await list.text(), "innerHTML");
       }
     } catch (e) {
+      // the connection broke (a proxy timeout, the server gone)
       status.textContent = String(e);
       status.className = "status error";
+      if (chatId) retryButton(form, box, reply, chatId);
     } finally {
       form.classList.remove("busy");
       reply.classList.remove("pending");
     }
   }
 
-  // Start a web search with the text of the question box; it runs in the
+  // "Ask again" under a failed answer: the same chat answers its last
+  // question again; the failed answer is replaced.
+  function retryButton(form, box, reply, chatId) {
+    var b = el("button", "primary", form.getAttribute("data-retry") || "Ask again");
+    b.type = "button";
+    b.addEventListener("click", async function () {
+      if (form.classList.contains("busy")) return;
+      reply.remove();
+      var body = options(form, box);
+      body.chat_id = chatId;
+      body.retry = true;
+      await stream(form, box, body);
+    });
+    reply.appendChild(b);
+  }
+
+  // Start a web search with the text of the question box. The exact text
+  // is shown in the chat first and goes out only on a click; then the box
+  // is emptied and the chat says the search runs. It runs in the
   // background, the notice comes wherever the user is by then.
-  async function webSearch(form, button) {
+  function webSearch(form, button) {
     var query = form.question.value.trim().replace(/\s+/g, " ").slice(0, 200);
     if (query.length < 2) { form.question.focus(); return; }
-    if (!window.confirm(button.getAttribute("data-confirm") + "\n\n" + query)) return;
-    var response = await fetch("/ui/web/tasks", {
-      method: "POST", credentials: "same-origin",
-      headers: window.hx.csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" }),
-      body: new URLSearchParams({ query: query })
+    var box = document.getElementById("messages");
+    var card = el("article", "msg assistant draft webconfirm");
+    var p = el("p", "preview", button.getAttribute("data-confirm") + " ");
+    p.appendChild(el("code", "", query));
+    card.appendChild(p);
+    var go = el("button", "primary", button.textContent);
+    go.type = "button";
+    var cancel = el("button", "", button.getAttribute("data-cancel") || "Cancel");
+    cancel.type = "button";
+    card.appendChild(go);
+    card.appendChild(document.createTextNode(" "));
+    card.appendChild(cancel);
+    box.appendChild(card);
+    card.scrollIntoView({ block: "end" });
+    cancel.addEventListener("click", function () { card.remove(); });
+    go.addEventListener("click", async function () {
+      go.disabled = cancel.disabled = true;
+      var response = await fetch("/ui/web/tasks", {
+        method: "POST", credentials: "same-origin",
+        headers: window.hx.csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" }),
+        body: new URLSearchParams({ query: query })
+      });
+      if (!response.ok) {
+        var bad = el("p", "error", await window.hx.errorText(response));
+        card.appendChild(bad);
+        go.disabled = cancel.disabled = false;
+        return;
+      }
+      if (form.question.value.trim().replace(/\s+/g, " ").slice(0, 200) === query) form.question.value = "";
+      card.textContent = "";
+      card.appendChild(el("p", "ok", button.getAttribute("data-started") + " "));
+      var link = el("a", "", query);
+      link.href = "/web";
+      card.firstChild.appendChild(link);
+      window.hx.poll();
     });
-    if (!response.ok) { window.hx.toast(await window.hx.errorText(response), true); return; }
-    window.hx.toast(button.getAttribute("data-started"));
-    window.hx.poll();
   }
 
   document.addEventListener("DOMContentLoaded", function () {

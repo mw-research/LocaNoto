@@ -2700,15 +2700,18 @@ Postfächer**:
 
 | Angabe | |
 |---|---|
-| Anmeldung | Konto mit Lese- und Senderecht für das Postfach. Verschlüsselt mit dem Installationsschlüssel in `config/tickets.json`, wie die Datenbankkonten; ohne Schlüssel wird nichts gespeichert |
+| Anmeldung | wird nicht gespeichert: Mitglieder verbinden das Postfach unter Einstellungen mit ihrem eigenen Konto; das Login bleibt im versiegelten Sitzungs-Cookie |
 | Standardantwort | geht sofort an jeden Absender; `{ticket}`, `{subject}`, `{name}` werden eingesetzt |
 | Mitglieder | sehen die Tickets (Reiter **Tickets**) und bekommen Meldungen; Admins sehen alle |
 | Weiterleiten an | Adressen, die jede neue Mail mit `[T-2026-0001]` im Betreff bekommen |
 | Kürzel | `T` als Vorgabe |
 
-Der Worker prüft alle `TICKET_POLL_SECONDS` (60) jedes eingeschaltete
-Postfach unter einer Sperre, die über Pods hinweg gilt. Ablauf je neuer
-Mail:
+Die Abfrage `/ui/notifications` eines Mitglieds mit verbundenem Postfach
+startet höchstens alle `TICKET_POLL_SECONDS` (60) eine Prüfung, in einem
+Faden, mit dem Login dieser Sitzung, unter einer Sperre, die über Pods
+hinweg gilt (`tickets.maybe_poll`). Ohne ein solches Mitglied online wird
+nicht geprüft; Mails dazwischen werden beim nächsten Mal bearbeitet.
+Ablauf je neuer Mail:
 
 1. als erledigt markieren (höchstens einmal: ein Absturz danach kostet
    eine Standardantwort, nie eine zweite),

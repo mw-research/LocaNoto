@@ -414,6 +414,53 @@ def setze_raum(raum, pfad, benutzer="?", ist_verwalter=False):
     return speichere(quellen)
 
 
+# --- THE OWN LIST FOLDER, FOR THE SETTINGS PAGE ---
+#
+# The admin enters ONE root for everybody (Admin > Lists), e.g.
+# /mnt/listen/LISTE or owncloud:/LISTE; each user's folder is
+# <root>/<user name>. In Settings a user sees that folder and may pick a
+# subfolder of it -- never a folder beside it.
+
+def own_area(user):
+    """The folder the root gives this user, unresolved ("" without a root)."""
+    for q in liste():
+        if q.get("raum") == MUSTER_RAUM:
+            return (q.get("pfad") or "").replace(PLATZHALTER, _dateiname(user))
+    return ""
+
+
+def own_folder(user):
+    """(area, folder in use, subfolder) of a user."""
+    import raeume
+    area = own_area(user)
+    folder = pfad_von(raeume.privat_kennung(user)) or area
+    sub = ""
+    if area and folder != area and folder.startswith(area.rstrip("/") + "/"):
+        sub = folder[len(area.rstrip("/")) + 1:]
+    return area, folder, sub
+
+
+def set_subfolder(user, sub):
+    """The own folder: the area itself (sub empty) or a subfolder of it."""
+    import raeume
+    area = own_area(user)
+    if not area:
+        return False, ("Für persönliche Ordner ist kein Muster hinterlegt – ein Admin muss es einmal eintragen.")
+    parts = [x for x in re.split(r"[\\/]+", str(sub or "").strip()) if x and x != "."]
+    if any(x == ".." for x in parts):
+        return False, "Ohne '..'."
+    room = raeume.privat_kennung(user)
+    if not parts:
+        return setze_raum(room, "", benutzer=user)
+    path = area.rstrip("/") + "/" + "/".join(parts)
+    if path.startswith("owncloud:"):
+        # Not a file system path: no realpath; ".." is excluded above.
+        quellen = [q for q in liste() if q.get("raum") != room]
+        quellen.append({"raum": room, "pfad": path})
+        return speichere(quellen)
+    return setze_raum(room, path, benutzer=user)
+
+
 def pfad_von(raum):
     """Der eingetragene Pfad eines Raums, oder ""."""
     for q in liste():

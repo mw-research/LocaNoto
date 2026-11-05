@@ -8,6 +8,7 @@
     /admin/mailboxes    mailboxes and web search services; ticket system of
                         shared mailboxes (tickets.py)
     /admin/lists        list folders per workspace, catalog, read again
+    /admin/databases    SQL databases per workspace: shared account or personal logins
 
 The same functions as /api/v1/admin/..., with the same checks. The
 emergency page is open to admins and to the role notzugang (the second
@@ -28,6 +29,7 @@ import paths
 import prompts
 import raeume
 import sicherung
+import sqlquellen
 import statefiles
 import tabellen
 import tickets
@@ -260,6 +262,10 @@ def lists_folder(request: Request, room: str = Form(...), path: str = Form(""),
     page_language(p.name)
     if room != listenquellen.MUSTER_RAUM and room not in raeume.liste():
         raise HTTPException(404, "Unknown workspace.")
+    if room == listenquellen.MUSTER_RAUM and path.strip() \
+            and listenquellen.PLATZHALTER not in path:
+        # The root of the personal folders: each user gets <root>/<name>.
+        path = path.strip().rstrip("/") + "/" + listenquellen.PLATZHALTER
     ok, message = listenquellen.setze_raum(room, path, benutzer=p.name,
                                            ist_verwalter=True)
     if not ok:
@@ -274,6 +280,48 @@ def lists_rebuild(request: Request, p: Principal = Depends(principal)):
     page_language(p.name)
     tabellen.baue_katalog()
     return _reload("/admin/lists")
+
+
+# --- DATABASES ---
+
+@router.get("/admin/databases")
+def databases_page(request: Request):
+    p, away = _page(request)
+    if away:
+        return away
+    entries = []
+    for z in sqlquellen.liste():
+        room = z.get("raum")
+        entries.append({"room": room, "label": raeume.bezeichnung(room),
+                        "server": z.get("server", ""), "port": z.get("port", ""),
+                        "database": z.get("datenbank", ""),
+                        "shared": z.get("benutzer", "") if z.get("passwort") else ""})
+    targets = [(r, raeume.bezeichnung(r)) for r in sorted(raeume.liste())
+               if not raeume.ist_privat(r)]
+    return render("admin_databases.html", request, nav=_nav(p, "admin"),
+                  entries=entries, targets=targets)
+
+
+@router.post("/ui/admin/databases/{room}/test")
+def database_test(room: str, request: Request, p: Principal = Depends(principal)):
+    """Connects with the stored settings and reads the table list."""
+    import answering
+    import sqldb
+    _admin(p)
+    page_language(p.name)
+    access = sqlquellen.zugang(room)
+    if not access:
+        return _notice(t("Unknown database."), False)
+    if not (access.get("benutzer") and access.get("passwort")):
+        return _notice(t("No shared account: members test with their own login under Settings."))
+    try:
+        schema = sqldb.lade_schema(access)
+    except Exception as e:
+        return _notice(f"{type(e).__name__}: {str(e)[:400]}", False)
+    answering.forget_schema(room)
+    tables = sum(1 for line in (schema or "").splitlines() if line.strip())
+    return _notice(t("Connected.") + (f" {tables} " + t("tables") if tables else "")
+                   + (" " + t("but no readable tables") if not schema else ""), bool(schema))
 
 
 # --- MAILBOXES ---
@@ -296,15 +344,13 @@ def mailboxes_page(request: Request):
 def mailbox_tickets(name: str, request: Request, enabled: str = Form(""),
                     answer: str = Form(""), members: str = Form(""),
                     forward: str = Form(""), prefix: str = Form("T"),
-                    login_user: str = Form(""), login_password: str = Form(""),
                     p: Principal = Depends(principal)):
     """Ticket system of a shared mailbox (tickets.configure)."""
     _admin(p)
     page_language(p.name)
     split = lambda text: [x.strip() for x in text.replace(";", ",").split(",") if x.strip()]
     ok, message = tickets.configure(
-        name, bool(enabled), answer, split(members), split(forward), prefix,
-        login_user.strip(), login_password)
+        name, bool(enabled), answer, split(members), split(forward), prefix)
     if ok:
         benutzer.protokolliere("tickets", name, p.name, "on" if enabled else "off")
         return _reload("/admin/mailboxes")
@@ -314,12 +360,16 @@ def mailbox_tickets(name: str, request: Request, enabled: str = Form(""),
 @router.post("/ui/admin/mailboxes/{name}/tickets/check")
 def mailbox_tickets_check(name: str, request: Request,
                           p: Principal = Depends(principal)):
-    """Checks the mailbox now -- the same as the worker does every minute."""
+    """Checks the mailbox now, with the admin's own login from the session
+    (Settings > Mailboxes) -- the same a member's open page does every minute."""
     _admin(p)
     page_language(p.name)
+    import sessions
+    from server import SEALED_COOKIE
+    header = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE)).get(name)
     try:
         first = not tickets._load(name).get("since")
-        n = tickets.poll_once(name)
+        n = tickets.poll_once(name, header=header)
     except Exception as e:
         return _notice(t(str(e)[:300]) or type(e).__name__, False)
     if first:

@@ -2,11 +2,6 @@
 
 An admin switches it on for a shared mailbox (Admin > Mailboxes) and sets
 
-  * a login for the mailbox. The worker has no user session to take one
-    from, so this one is stored -- encrypted with the installation key,
-    like the database accounts (sqlquellen.py). Without that key nothing
-    is stored. Use an account that may read and send for this mailbox
-    and nothing else.
   * the standard answer, sent at once to every new mail. {ticket},
     {subject} and {name} are filled in.
   * members: LocaNoto users who get every ticket (a notice, and the
@@ -14,9 +9,17 @@ An admin switches it on for a shared mailbox (Admin > Mailboxes) and sets
   * forward to: mail addresses that get every new mail, with the ticket
     number in the subject
 
-The worker runs poll_all() every TICKET_POLL_SECONDS (worker.py). A new
-mail becomes ticket T-2026-0001: the sender gets the standard answer with
-the number in the subject, the forward addresses get the mail, the
+NO LOGIN IS STORED -- the same rule as for personal mailboxes. A member
+connects the shared mailbox under Settings with their own account (one
+with rights on it in Exchange); the login stays sealed in their browser
+session. While a member with the mailbox connected has LocaNoto open,
+the page's notice request (/ui/notifications) checks the mailbox every
+TICKET_POLL_SECONDS, in a thread, with that login (maybe_poll). With no
+such member online nothing is checked; mail that came meanwhile is
+handled -- standard answer included -- when the next one is.
+
+A new mail becomes ticket T-2026-0001: the sender gets the standard answer
+with the number in the subject, the forward addresses get the mail, the
 members a notice. A mail whose subject carries a known number of this
 mailbox is added to that ticket (and reopens it) -- no second standard
 answer. Machine-made mail (auto replies, mailing lists, bounces, the
@@ -24,20 +27,22 @@ mailbox itself) never gets one: two auto-responders would answer each
 other without end. It is not made a ticket either.
 
 At most once: a mail is marked as handled before anything is sent, so a
-crash in between costs a standard answer, never a second one.
+crash in between costs a standard answer, never a second one. A mailbox
+is checked under a lock that holds across pods.
 
-The very first run only notes the time; mail that was there before does
-not become tickets.
+The very first check only notes the time; mail that was there before
+does not become tickets.
 
-    settings(server) / configure(server, ...) / poll_once(server) / poll_all()
-    boxes_for(user, is_admin) / tickets_of(server) / ticket(server, id)
+    settings(server) / configure(server, ...) / maybe_poll(user, headers)
+    poll_once(server, header=...) / boxes_for(user, is_admin)
+    tickets_of(server) / ticket(server, id)
     update(server, id, by, assignee=None, status=None, note=None)
 """
-import base64
 import datetime
 import json
 import os
 import re
+import threading
 
 import dateisperre
 import geheim
@@ -48,7 +53,7 @@ import statefiles
 
 CONFIG = os.path.join(paths.CONFIG_DIR, "tickets.json")
 STATE_DIR = os.path.join(paths.DATA_DIR, "tickets")
-POLL_SECONDS = paths.env_float("TICKET_POLL_SECONDS", 60)
+POLL_SECONDS = paths.env_float("TICKET_POLL_SECONDS", 60)   # 0 = off
 KEEP_CLOSED_DAYS = paths.env_int("TICKET_KEEP_DAYS", 365)
 TEXT_LIMIT = 20000
 SEEN_LIMIT = 5000
@@ -93,22 +98,16 @@ def _write_config(data):
 def settings(server):
     """The ticket settings of a mailbox, without the password."""
     c = dict(_read_config().get(server) or {})
-    has_login = bool(c.pop("login", None))
+    c.pop("login", None)
     c.setdefault("enabled", False)
     c.setdefault("answer", DEFAULT_ANSWER)
     c.setdefault("members", [])
     c.setdefault("forward", [])
     c.setdefault("prefix", "T")
-    c["has_login"] = has_login
     return c
 
 
-def _aad(server):
-    return f"tickets-login:{server}".encode("utf-8")
-
-
-def configure(server, enabled, answer="", members=(), forward=(), prefix="T",
-              login_user="", login_password=""):
+def configure(server, enabled, answer="", members=(), forward=(), prefix="T"):
     """Sets the ticket settings of a mailbox. (ok, message)."""
     entry = mcp.lies_konfiguration().get(server)
     if not entry or entry.get("art") == "websuche":
@@ -121,35 +120,13 @@ def configure(server, enabled, answer="", members=(), forward=(), prefix="T",
         return False, "Not a mail address: " + ", ".join(bad)
     with dateisperre.gesperrt(CONFIG):
         data = _read_config()
-        old = data.get(server) or {}
-        new = {"enabled": bool(enabled), "answer": str(answer or "").strip(),
-               "members": sorted({m.strip() for m in members if m.strip()}),
-               "forward": list(dict.fromkeys(a.strip() for a in forward if a.strip())),
-               "prefix": prefix}
-        if login_user or login_password:
-            if not (login_user and login_password):
-                return False, "User AND password for the mailbox."
-            if not geheim.verfuegbar():
-                return False, "Without the installation key no password is stored."
-            blob = geheim.verschluessele(
-                json.dumps([login_user, login_password]).encode("utf-8"), _aad(server))
-            new["login"] = base64.b64encode(blob).decode("ascii")
-        elif old.get("login"):
-            new["login"] = old["login"]
-        if new["enabled"] and not new.get("login"):
-            return False, "A login for the mailbox is needed."
-        data[server] = new
+        # A login stored by an earlier version goes with this save.
+        data[server] = {"enabled": bool(enabled), "answer": str(answer or "").strip(),
+                        "members": sorted({m.strip() for m in members if m.strip()}),
+                        "forward": list(dict.fromkeys(a.strip() for a in forward if a.strip())),
+                        "prefix": prefix}
         _write_config(data)
     return True, "Saved."
-
-
-def _login(server):
-    blob = (_read_config().get(server) or {}).get("login")
-    if not blob:
-        raise Refused("No login stored for this mailbox.")
-    raw = geheim.entschluessele(base64.b64decode(blob), _aad(server))
-    user, password = json.loads(raw.decode("utf-8"))
-    return user, password
 
 
 def enabled_boxes():
@@ -253,9 +230,9 @@ def _href(server, ticket_id):
 
 # --- POLLING ---
 
-def _connect(server):
-    user, password = _login(server)
-    header = mcp.kopf_fuer(server, user, password)
+def _connect(server, header):
+    if not header:
+        raise Refused("Connect this mailbox under Settings first.")
     connections = mcp.verbinde({server: header},
                                ohne=set(mcp.lies_konfiguration()) - {server})
     conn = connections.get(server)
@@ -264,21 +241,50 @@ def _connect(server):
     return conn
 
 
-def poll_all(log=None):
-    """One round over every mailbox with tickets. {server: count or error}."""
-    out = {}
-    for server in enabled_boxes():
-        try:
-            out[server] = poll_once(server)
-        except Exception as e:
-            out[server] = f"{type(e).__name__}: {e}"
-            if log:
-                log(f"tickets {server}: {out[server]}")
-    return out
+_running = set()
+_running_lock = threading.Lock()
 
 
-def poll_once(server, conn=None):
-    """Turns new mail of one mailbox into tickets. Returns how many mails."""
+def maybe_poll(user, headers, is_admin=False):
+    """From a member's notice request: check the mailboxes with tickets
+    this user has connected, if a check is due. Returns the servers started."""
+    started = []
+    for server in boxes_for(user, is_admin):
+        header = (headers or {}).get(server)
+        if not header or POLL_SECONDS <= 0:
+            continue
+        with dateisperre.gesperrt(_state_path(server)):
+            state = _load(server)
+            last = state.get("polled")
+            if last and (_now() - datetime.datetime.fromisoformat(last)
+                         < datetime.timedelta(seconds=POLL_SECONDS)):
+                continue
+            state["polled"] = _now().isoformat()
+            _save(server, state)
+        with _running_lock:
+            if server in _running:
+                continue
+            _running.add(server)
+        threading.Thread(target=_poll_thread, args=(server, header), daemon=True,
+                         name=f"tickets-{server}").start()
+        started.append(server)
+    return started
+
+
+def _poll_thread(server, header):
+    try:
+        poll_once(server, header=header)
+    except Exception:
+        pass        # not reachable now: the next member's request tries again
+    finally:
+        with _running_lock:
+            _running.discard(server)
+
+
+def poll_once(server, conn=None, header=None):
+    """Turns new mail of one mailbox into tickets. Returns how many mails.
+
+    The login comes as header (a member's session) or as an open conn."""
     cfg = _read_config().get(server) or {}
     if not cfg.get("enabled"):
         return 0
@@ -290,7 +296,7 @@ def poll_once(server, conn=None):
             _save(server, state)
             return 0
         since = datetime.datetime.fromisoformat(state["since"]) - OVERLAP
-        conn = conn or _connect(server)
+        conn = conn or _connect(server, header)
         try:
             handled = 0
             seen = set(state["seen"])

@@ -336,23 +336,22 @@ class Shared(Box):
 mcp.schreibe_konfiguration({"info": {"transport": "exchange", "postfach": "info@test.de",
                                      "persoenlich": False},
                             "mine": {"transport": "exchange", "persoenlich": True}})
-ok, msg = tickets.configure("mine", True, login_user="x", login_password="y")
+ok, msg = tickets.configure("mine", True)
 check("tickets: not for a personal mailbox", not ok)
-ok, msg = tickets.configure("info", True)
-check("tickets: not without a login", not ok)
 ok, msg = tickets.configure("info", True, "Hallo {name}, Ihre Nummer: {ticket}",
-                            ["anna", "bernd"], ["team@test.de"], "T",
-                            "svc@test.de", "geheim")
-check("tickets: switched on with a login", ok, msg)
-check("tickets: the password is not in the file in clear",
-      "geheim" not in open(tickets.CONFIG, encoding="utf-8").read())
-check("tickets: the login comes back for the worker", tickets._login("info") == ("svc@test.de", "geheim"))
+                            ["anna", "bernd"], ["team@test.de"], "T")
+check("tickets: switched on, no login stored", ok and "login" not in tickets._read_config()["info"], msg)
 check("tickets: members see the mailbox, others not",
       tickets.boxes_for("anna") == ["info"] and tickets.boxes_for("carl") == []
       and tickets.boxes_for("carl", is_admin=True) == ["info"])
 
 box = Shared()
 check("tickets: the first run only notes the time", tickets.poll_once("info", box) == 0)
+try:
+    tickets.poll_once("info")
+    check("tickets: no check without a member's login", False)
+except tickets.Refused:
+    check("tickets: no check without a member's login", True)
 t0 = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=5)
 box.mails.append({"key": "<a1@kunde>", "ref": "R1", "when": t0, "name": "Kunde",
                   "address": "kunde@firma.de", "subject": "Reklamation Pumpe",
@@ -384,6 +383,25 @@ check("tickets: a reply goes to the ticket and reopens it",
 check("tickets: no second standard answer", len(box.replies) == 1)
 t = tickets.update("info", tid, "bernd", assignee="bernd")
 check("tickets: taking it sets in progress", t["assignee"] == "bernd" and t["status"] == "in_progress")
+
+# checked from a member's open page, with the login of that session
+polled = []
+real_poll = tickets.poll_once
+tickets.poll_once = lambda server, conn=None, header=None: polled.append((server, header))
+try:
+    started = tickets.maybe_poll("anna", {"info": {"Authorization": "Basic x"}})
+    again = tickets.maybe_poll("anna", {"info": {"Authorization": "Basic x"}})
+    other = tickets.maybe_poll("carl", {"info": {"Authorization": "Basic x"}})
+    import time as _time
+    for _ in range(50):
+        if polled:
+            break
+        _time.sleep(0.05)
+finally:
+    tickets.poll_once = real_poll
+check("tickets: a member's page checks with the session's login",
+      started == ["info"] and polled == [("info", {"Authorization": "Basic x"})], (started, polled))
+check("tickets: not again within the minute, not for non-members", again == [] and other == [])
 
 print()
 if failures:

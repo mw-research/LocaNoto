@@ -15,10 +15,10 @@
         <input name="path" value="{{ path }}" placeholder="/mnt/listen/{{ room }}" aria-label="{{ label }}">
         <button type="submit">{{ t('Save') }}</button></form></td></tr>
   {% endfor %}
-    <tr><td>{{ t('Personal folders (pattern with {benutzer})') }}</td>
+    <tr><td>{{ t('Root of the personal folders') }}<br><span class="muted">{{ t('every user gets <root>/<user name>, e.g. /mnt/listen/LISTE/anna') }}</span></td>
       <td><form hx-post="/ui/admin/lists/folder" hx-target="#ls-notice" class="inline wide">
         <input type="hidden" name="room" value="{{ pattern_room }}">
-        <input name="path" value="{{ pattern }}" placeholder="/mnt/heim/{benutzer}/Listen">
+        <input name="path" value="{{ pattern }}" placeholder="/mnt/listen/LISTE">
         <button type="submit">{{ t('Save') }}</button></form></td></tr>
   </table>
   <div id="ls-notice"></div>

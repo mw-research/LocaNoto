@@ -226,6 +226,36 @@ TEXTS = {
     "Interrupted (server restarted).": "Abgebrochen (Server neu gestartet).",
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
+    "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
+    "My databases": "Meine Datenbanken", "Databases": "Datenbanken",
+    "User and password.": "Benutzer und Passwort.",
+    "Sign-in to the database failed": "Anmeldung an der Datenbank fehlgeschlagen",
+    "your login": "dein Login", "shared account": "gemeinsames Konto",
+    "not connected": "nicht verbunden",
+    "Sign in with the SQL login your database admin gave you; your rights in the database apply. The login is kept only in this browser session. LocaNoto only reads (SELECT).":
+        "Mit dem SQL-Login anmelden, das du vom Datenbank-Admin bekommen hast; es gelten deine Rechte in der Datenbank. Das Login bleibt nur in dieser Browsersitzung. LocaNoto liest nur (SELECT).",
+    "Databases per workspace": "Datenbanken je Arbeitsbereich",
+    "Microsoft SQL Server. LocaNoto only reads (SELECT). Without user and password every member signs in with their own SQL login under Settings (kept only in the session), and the database's own rights apply per person. With user and password that account is shared by all members (stored encrypted) -- use a read-only one (db_datareader). Everything empty removes the database.":
+        "Microsoft SQL Server. LocaNoto liest nur (SELECT). Ohne Benutzer und Passwort meldet sich jedes Mitglied unter Einstellungen mit seinem eigenen SQL-Login an (nur in der Sitzung), und es gelten die Rechte der Datenbank je Person. Mit Benutzer und Passwort nutzen alle Mitglieder dieses Konto (verschlüsselt gespeichert) – dafür ein reines Lesekonto (db_datareader). Alles leer entfernt die Datenbank.",
+    "personal logins": "persönliche Logins", "Remove": "Entfernen",
+    "Test connection": "Verbindung testen", "Connected.": "Verbunden.",
+    "tables": "Tabellen", "but no readable tables": "aber keine lesbaren Tabellen",
+    "Unknown database.": "Unbekannte Datenbank.",
+    "No shared account: members test with their own login under Settings.":
+        "Kein gemeinsames Konto: Mitglieder testen mit ihrem eigenen Login unter Einstellungen.",
+    "-- the text itself, e.g. the content of sql-hint.txt, not a file name":
+        "– der Text selbst, z. B. der Inhalt von sql-hint.txt, kein Dateiname",
+    "Root of the personal folders": "Wurzel der persönlichen Ordner",
+    "every user gets <root>/<user name>, e.g. /mnt/listen/LISTE/anna":
+        "jeder Nutzer bekommt <Wurzel>/<Benutzername>, z. B. /mnt/listen/LISTE/anna",
+    "My lists": "Meine Listen", "Your folder": "Dein Ordner",
+    "Subfolder (optional)": "Unterordner (optional)",
+    "Excel and CSV files in this folder are read at every question that uses lists; only you see them.":
+        "Excel- und CSV-Dateien in diesem Ordner werden bei jeder Frage mit Listen gelesen; nur du siehst sie.",
+    "No root for personal folders is set up yet -- an admin enters it under Admin > Lists.":
+        "Noch keine Wurzel für persönliche Ordner eingerichtet – ein Admin trägt sie unter Admin > Listen ein.",
+    "Lists of your workspaces": "Listen deiner Arbeitsbereiche",
+    "Your sheets": "Deine Blätter", "No sheets found yet.": "Noch keine Blätter gefunden.",
     "Searched.": "Gesucht.", "Sending ...": "Wird gesendet …",
     "Not sent": "Nicht gesendet",
     "The server did not answer. Look into your sent folder (or calendar) before you send it again.":
@@ -247,27 +277,23 @@ TEXTS = {
     "forward_failed": "Weiterleitung fehlgeschlagen", "mail": "Mail",
     "assigned": "zugewiesen", "status": "Status", "note": "Notiz",
     "Ticket system on": "Ticketsystem an",
-    "Login for the mailbox (stored encrypted; empty keeps the stored one)":
-        "Anmeldung für das Postfach (verschlüsselt gespeichert; leer lässt die gespeicherte)",
     "Standard answer ({ticket}, {subject}, {name} are filled in)":
         "Standardantwort ({ticket}, {subject}, {name} werden eingesetzt)",
     "Members (get every ticket)": "Mitglieder (bekommen jedes Ticket)",
     "Forward every new mail to (addresses, comma separated)":
         "Jede neue Mail weiterleiten an (Adressen, durch Komma)",
     "Ticket prefix": "Ticketkürzel", "Check now": "Jetzt prüfen",
-    "login stored": "Anmeldung gespeichert", "no login stored": "keine Anmeldung gespeichert",
-    "New mail becomes a ticket: the sender gets the standard answer at once, the members a notice, the forward addresses the mail. Replies with the ticket number in the subject go to the same ticket. Checked by the worker every minute.":
-        "Neue Mail wird zum Ticket: Der Absender bekommt sofort die Standardantwort, die Mitglieder eine Benachrichtigung, die Weiterleitungsadressen die Mail. Antworten mit der Ticketnummer im Betreff landen beim selben Ticket. Der Worker prüft jede Minute.",
+    "New mail becomes a ticket: the sender gets the standard answer at once, the members a notice, the forward addresses the mail. Replies with the ticket number in the subject go to the same ticket.":
+        "Neue Mail wird zum Ticket: Der Absender bekommt sofort die Standardantwort, die Mitglieder eine Benachrichtigung, die Weiterleitungsadressen die Mail. Antworten mit der Ticketnummer im Betreff landen beim selben Ticket.",
+    "No login is stored. Members connect this mailbox under Settings with their own account; while one of them has LocaNoto open, the mailbox is checked every minute.":
+        "Es wird keine Anmeldung gespeichert. Mitglieder verbinden dieses Postfach unter Einstellungen mit ihrem eigenen Konto; solange eine/r davon LocaNoto offen hat, wird das Postfach jede Minute geprüft.",
+    "Connect this mailbox under Settings first.": "Dieses Postfach zuerst unter Einstellungen verbinden.",
+    "This mailbox kind has no ticket support.": "Diese Postfachart unterstützt keine Tickets.",
     "First check: from now on new mail becomes a ticket.":
         "Erste Prüfung: Ab jetzt wird neue Mail zum Ticket.",
     "new mail(s)": "neue Mail(s)",
     "Unknown mailbox.": "Unbekanntes Postfach.",
     "Tickets only for shared mailboxes.": "Tickets nur für Funktionspostfächer.",
-    "User AND password for the mailbox.": "Benutzer UND Passwort für das Postfach.",
-    "Without the installation key no password is stored.":
-        "Ohne Installationsschlüssel wird kein Passwort gespeichert.",
-    "A login for the mailbox is needed.": "Eine Anmeldung für das Postfach ist nötig.",
-    "No login stored for this mailbox.": "Für dieses Postfach ist keine Anmeldung gespeichert.",
     "Unknown ticket.": "Unbekanntes Ticket.", "Unknown status.": "Unbekannter Status.",
 }
 
@@ -404,7 +430,9 @@ def login_page(request: Request, next: str = "/"):
 
 # --- CHAT ---
 
-def _chat_options(p):
+def _chat_options(p, request=None):
+    from routes_account import sql_logins
+    logins = sql_logins(p, request) if request is not None else {}
     emergency = notzugang.raeume_fuer(p.name)
     return {
         "workspaces": [(r, raeume.bezeichnung(r))
@@ -416,7 +444,7 @@ def _chat_options(p):
         # workspaces whose database this user may query ("" = the one from
         # the environment)
         "sql": [(r, raeume.bezeichnung(r) if r else t("Database"))
-                for r, _account in answering.sql_accounts(p.name)],
+                for r, _account in answering.sql_accounts(p.name, logins)],
     }
 
 
@@ -461,7 +489,7 @@ def home(request: Request, mail: str = "", ticket: str = ""):
     p = _need(request)
     return render("chat.html", request, nav=_nav(p, "chat"),
                   chats=chats.liste(p.name), chat_id="", messages=[],
-                  options=_chat_options(p), prefill=_prefill(p, mail, ticket))
+                  options=_chat_options(p, request), prefill=_prefill(p, mail, ticket))
 
 
 @router.get("/c/{chat_id}")
@@ -471,7 +499,7 @@ def chat_page(chat_id: str, request: Request):
         return RedirectResponse("/", status_code=303)
     return render("chat.html", request, nav=_nav(p, "chat"),
                   chats=chats.liste(p.name), chat_id=chat_id,
-                  messages=_messages(p, chat_id), options=_chat_options(p))
+                  messages=_messages(p, chat_id), options=_chat_options(p, request))
 
 
 @router.get("/ui/chats")
@@ -720,9 +748,13 @@ def notifications(request: Request, p: Principal = Depends(principal)):
     items = web_research.tasks(p.name)
     finished = [t_ for t_ in items if t_["state"] != "running" and not t_.get("seen")]
     if p.via == "session":
+        sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
         try:
-            mail_watch.maybe_check(
-                p.name, sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE)))
+            mail_watch.maybe_check(p.name, sealed)
+        except Exception:
+            pass
+        try:
+            tickets.maybe_poll(p.name, sealed, p.is_admin)
         except Exception:
             pass
     return JSONResponse({
@@ -785,7 +817,42 @@ def _settings_context(p, request):
                       if m["kind"] == "mailbox"],
         "tokens": [(k[:12], e.get("bezeichnung", ""), e.get("erstellt", ""))
                    for k, e in auth.liste() if e.get("benutzer") == p.name],
+        "lists": _my_lists(p),
+        "databases": _my_databases(p, request),
     }
+
+
+def _my_databases(p, request):
+    """The databases of the user's workspaces and how they connect."""
+    from routes_account import sql_logins
+    logins = sql_logins(p, request)
+    out = []
+    for room, z in sqlquellen.fuer_benutzer(p.name, notzugang.raeume_fuer(p.name)):
+        mine = logins.get(room) or {}
+        out.append({"room": room, "label": raeume.bezeichnung(room),
+                    "server": z.get("server", ""), "database": z.get("datenbank", ""),
+                    "mine": mine.get("benutzer", ""),
+                    "shared": z.get("benutzer", "") if z.get("passwort") else ""})
+    return out
+
+
+def _my_lists(p):
+    """The own list folder and the shared ones this user reads."""
+    import listenquellen
+    import tabellen
+    area, folder, sub = listenquellen.own_folder(p.name)
+    own = raeume.privat_kennung(p.name)
+    try:
+        sheets = [e for e in tabellen.sichtbar(
+            tabellen.lies_katalog().get("eintraege", []), p.name)
+            if e.get("raum") == own]
+    except Exception:
+        sheets = []
+    readable = raeume.lesbar(p.name, notzugang.raeume_fuer(p.name))
+    shared = [(raeume.bezeichnung(r), listenquellen.pfad_von(r)) for r in readable
+              if r != own and listenquellen.pfad_von(r)]
+    return {"area": area, "folder": folder, "sub": sub, "sheets": sheets,
+            "shared": shared}
 
 
 @router.get("/settings")
@@ -855,6 +922,59 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
     return response
 
 
+@router.post("/ui/settings/sql/{room}")
+def connect_database(room: str, request: Request, user: str = Form(""),
+                     secret: str = Form(""), action: str = Form("connect"),
+                     p: Principal = Depends(principal)):
+    """The own SQL login for a workspace's database: checked once, then
+    kept sealed in the session cookie like a mailbox login -- never on the
+    server."""
+    from routes_account import SQL_PREFIX
+    import sqldb
+    page_language(p.name)
+    rooms = {r: z for r, z in sqlquellen.fuer_benutzer(
+        p.name, notzugang.raeume_fuer(p.name))}
+    if room not in rooms:
+        raise HTTPException(404, "Unknown database.")
+    sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
+    if action == "disconnect":
+        sealed.pop(SQL_PREFIX + room, None)
+    else:
+        if not user.strip() or not secret:
+            return _notice(t("User and password."), False)
+        login = {"benutzer": user.strip(), "passwort": secret}
+        access = dict(rooms[room], **login)
+        try:
+            sqldb.lade_schema(access)
+        except Exception as e:
+            return _notice(f"{t('Sign-in to the database failed')}: {str(e)[:200]}", False)
+        sealed[SQL_PREFIX + room] = login
+        answering.forget_schema(room)
+    response = HTMLResponse("")
+    response.set_cookie(SEALED_COOKIE, sessions.seal(p.name, sealed),
+                        httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", path="/")
+    response.headers["HX-Redirect"] = "/settings"
+    return response
+
+
+@router.post("/ui/settings/lists")
+def set_my_lists(request: Request, sub: str = Form(""), action: str = Form("save"),
+                 p: Principal = Depends(principal)):
+    """The own list folder (a subfolder of the admin's root) and reading again."""
+    import listenquellen
+    import tabellen
+    page_language(p.name)
+    if action == "save":
+        ok, message = listenquellen.set_subfolder(p.name, sub)
+        if not ok:
+            return _notice(tm(message), False)
+    tabellen.baue_katalog()
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = "/settings"
+    return response
+
+
 @router.post("/ui/settings/mailbox/{server}/watch")
 def watch_mailbox(server: str, request: Request, on: str = Form(""),
                   p: Principal = Depends(principal)):
@@ -893,9 +1013,6 @@ def _admin_context(p):
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
         "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
-        "sql_rooms": sorted(sqlquellen.raeume_mit_zugang()),
-        "sql_targets": [(r, raeume.bezeichnung(r))
-                        for r in sorted(raeume.liste()) if not raeume.ist_privat(r)],
     }
 
 
@@ -1024,8 +1141,10 @@ def admin_set_sql_account(request: Request, room: str = Form(...),
         "datenbank": database, "benutzer": user, "passwort": password,
         "hinweis": note}, benutzer=p.name, ist_verwalter=True)
     if ok:
-        answering._schema_cache.pop(room, None)
-        return _back_to_admin()
+        answering.forget_schema(room)
+        response = HTMLResponse("")
+        response.headers["HX-Redirect"] = "/admin/databases"
+        return response
     return _notice(tm(message), False)
 
 

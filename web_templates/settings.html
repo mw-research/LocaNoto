@@ -70,6 +70,52 @@
 </section>
 {% endif %}
 
+{% if databases %}
+<section class="card">
+  <h2>{{ t('My databases') }}</h2>
+  <p class="muted">{{ t('Sign in with the SQL login your database admin gave you; your rights in the database apply. The login is kept only in this browser session. LocaNoto only reads (SELECT).') }}</p>
+  {% for d in databases %}
+  <form hx-post="/ui/settings/sql/{{ d.room|urlencode }}" hx-target="#db-{{ loop.index }}" class="inline wide">
+    <strong>{{ d.label }}</strong> <span class="muted">{{ d.server }} · {{ d.database }}</span>
+    {% if d.mine %}
+      <span class="ok">{{ t('your login') }}: {{ d.mine }}</span>
+      <input type="hidden" name="action" value="disconnect">
+      <button type="submit">{{ t('Disconnect') }}</button>
+    {% else %}
+      {% if d.shared %}<span class="muted">{{ t('shared account') }} {{ d.shared }}</span>{% else %}<span class="muted">{{ t('not connected') }}</span>{% endif %}
+      <input name="user" placeholder="{{ t('User') }}" autocomplete="off">
+      <input type="password" name="secret" placeholder="{{ t('Password') }}" autocomplete="off">
+      <button type="submit">{{ t('Connect') }}</button>
+    {% endif %}
+  </form>
+  <div id="db-{{ loop.index }}"></div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>{{ t('My lists') }}</h2>
+  {% if lists.area %}
+  <p>{{ t('Your folder') }}: <code>{{ lists.folder }}</code></p>
+  <p class="muted">{{ t('Excel and CSV files in this folder are read at every question that uses lists; only you see them.') }}</p>
+  <form hx-post="/ui/settings/lists" hx-target="#lists-notice" class="inline wide">
+    <label>{{ t('Subfolder (optional)') }} <input name="sub" value="{{ lists.sub }}" placeholder="Einkauf/2026"></label>
+    <button type="submit" name="action" value="save">{{ t('Save') }}</button>
+    <button type="submit" name="action" value="read">{{ t('Read lists again') }}</button>
+  </form>
+  <div id="lists-notice"></div>
+  <h3>{{ t('Your sheets') }} ({{ lists.sheets|length }})</h3>
+  {% if lists.sheets %}<ul>{% for e in lists.sheets %}<li>{{ e.datei }}{% if e.blatt %} · {{ e.blatt }}{% endif %} <span class="muted">{{ e.zeilen }} {{ t('rows') }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted">{{ t('No sheets found yet.') }}</p>{% endif %}
+  {% else %}
+  <p class="muted">{{ t('No root for personal folders is set up yet -- an admin enters it under Admin > Lists.') }}</p>
+  {% endif %}
+  {% if lists.shared %}
+  <h3>{{ t('Lists of your workspaces') }}</h3>
+  <ul>{% for label, path in lists.shared %}<li>{{ label }} <span class="muted"><code>{{ path }}</code></span></li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
 {% if tokens %}
 <section class="card">
   <h2>{{ t('API tokens') }}</h2>

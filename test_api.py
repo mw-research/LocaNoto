@@ -487,8 +487,25 @@ r = markus.post("/ui/admin/workspaces/sql", data={
     "room": "einkauf", "server": "db.invalid", "port": "1433",
     "database": "DemoERP", "user": "locanoto_lesen", "password": "Lese-Passwort-1",
     "note": "Status O = offen"})
-check("admin sets a workspace's database account in the web page",
-      r.status_code == 200 and "einkauf" in markus.get("/admin").text, r.text[:300])
+import sqlquellen as _sqlq_t  # noqa: E402
+check("admin sets a workspace's database account in the Databases tab",
+      r.status_code == 200 and "db.invalid" in markus.get("/admin/databases").text,
+      r.text[:300])
+r = markus.post("/ui/admin/workspaces/sql", data={
+    "room": "allgemein", "server": "db.invalid", "port": "1433", "database": "DemoERP"})
+check("a database without a shared account: personal logins",
+      r.status_code == 200 and "allgemein" in _sqlq_t.raeume_mit_zugang()
+      and not (_sqlq_t.zugang("allgemein") or {}).get("passwort"), r.text[:300])
+_set = anna.get("/settings").text
+check("members see it under My databases with a login form",
+      "/ui/settings/sql/allgemein" in _set, _set[-1500:])
+r = anna.post("/ui/settings/sql/allgemein", data={"user": "anna_sql", "secret": "x"})
+check("a wrong personal login is refused and not kept",
+      r.status_code == 200 and ("fehlgeschlagen" in r.text or "failed" in r.text)
+      and "/ui/settings/sql/allgemein" in anna.get("/settings").text, r.text[:300])
+check("only readable workspaces", anna.post("/ui/settings/sql/geheimraum",
+                                            data={"user": "x", "secret": "y"}).status_code == 404)
+markus.post("/ui/admin/workspaces/sql", data={"room": "allgemein"})
 check("only admins set database accounts", anna.post("/ui/admin/workspaces/sql", data={
     "room": "einkauf", "user": "x", "password": "y"}).status_code == 403)
 _chatpage = anna.get(f"/c/{chat_id}").text
@@ -557,13 +574,10 @@ import datetime as _dt_t  # noqa: E402
 import tickets as _tk  # noqa: E402
 r = markus.post("/ui/admin/mailboxes/info/tickets", data={
     "enabled": "1", "answer": "Danke, {name}. Nummer {ticket}.", "members": "anna",
-    "forward": "", "prefix": "T", "login_user": "svc@test.invalid",
-    "login_password": "Svc-Passwort-1"})
-check("admin switches the ticket system on for a shared mailbox",
+    "forward": "", "prefix": "T"})
+check("admin switches the ticket system on for a shared mailbox, no login stored",
       r.status_code == 200 and _tk.settings("info")["enabled"]
-      and _tk.settings("info")["has_login"], r.text[:300])
-check("the mailbox login is not stored in clear",
-      "Svc-Passwort-1" not in json.dumps(_tk._read_config()))
+      and "login" not in _tk._read_config()["info"], r.text[:300])
 check("only admins set it up", anna.post("/ui/admin/mailboxes/info/tickets", data={
     "enabled": "1"}).status_code == 403)
 check("the admin page shows the ticket settings",
@@ -605,9 +619,11 @@ check("a notice shows once", not anna.get("/ui/notifications").json()["notices"]
 _tp = anna.get("/tickets").text
 check("members see the tickets and the tab",
       _tid in _tp and "Pumpe defekt" in _tp and 'href="/tickets"' in _tp, _tp[-800:])
+# (no further sign-in here: the sign-in limit counts this test's failed ones)
+import web as _web_t  # noqa: E402
+_bert = types.SimpleNamespace(name="bert", is_admin=False)
 check("users without the mailbox do not",
-      "/tickets" not in client_for("bert").get("/").text
-      and client_for("bert").get("/tickets", follow_redirects=False).status_code == 303)
+      _tk.boxes_for("bert") == [] and not _web_t._nav(_bert, "chat")["tickets"])
 r = anna.post(f"/ui/tickets/info/{_tid}", data={"action": "take"})
 check("taking a ticket", r.status_code == 200
       and _tk.ticket("info", _tid)["assignee"] == "anna"
@@ -620,10 +636,11 @@ check("a ticket with its history", "Rueckruf morgen" in _one and "Bitte um Rueck
 _home = anna.get("/", params={"ticket": f"info:{_tid}"}).text
 check("answer in the chat puts the ticket into the question box",
       "Bitte um Rueckruf." in _home and _tid in _home)
-check("another user's ticket does not", "Bitte um Rueckruf." not in
-      client_for("bert").get("/", params={"ticket": f"info:{_tid}"}).text)
+check("another user's ticket does not",
+      _web_t._prefill(_bert, "", f"info:{_tid}") == "")
 r = markus.post("/ui/admin/mailboxes/info/tickets/check")
-check("check now reports instead of failing", r.status_code == 200, r.text[:300])
+check("check now without a connected mailbox says so",
+      r.status_code == 200 and ("Einstellungen" in r.text or "Settings" in r.text), r.text[:300])
 markus.post("/ui/admin/mailboxes/info/delete")
 
 # --- user search instead of one long list ---

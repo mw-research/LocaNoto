@@ -350,5 +350,14 @@ check("an unreachable model fails with a hint",
       any(x["check"] == "Chat-Modell" and not x["ok"] and x["fix"] for x in rows))
 check("and the exit code says so", r.returncode == 1)
 
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location("setup_mod", os.path.join(HERE, "locanoto-setup.py"))
+_setup = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_setup)
+check("list shares on several servers each get their own folder",
+      _setup.list_shares({"verwaltung": "nfs-claim", "werk2": "smb-claim", "../x": ""})
+      == [("/mnt/listen/verwaltung", "nfs-claim"), ("/mnt/listen/werk2", "smb-claim")]
+      and _setup.list_shares("one-claim") == [("/mnt/listen", "one-claim")])
+
 print(f"\n{len(failures)} failed" if failures else "\nall passed")
 sys.exit(1 if failures else 0)

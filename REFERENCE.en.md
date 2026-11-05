@@ -129,8 +129,17 @@ every new mail becomes a ticket (`T-2026-0001`), the sender gets a
 standard answer with the number at once, members get a notice and see the
 **Tickets** tab, optional addresses get the mail forwarded. Replies with
 the number go to the same ticket. Machine mail (auto replies, lists,
-bounces) is ignored. The worker checks every `TICKET_POLL_SECONDS` with a
-login for the mailbox that is stored encrypted with the installation key.
+bounces) is ignored. No login is stored: while a member who connected the
+shared mailbox in their session has LocaNoto open, it is checked every
+`TICKET_POLL_SECONDS` with that login.
+
+**Databases** (Admin → Databases): per workspace a SQL Server database,
+read only. With a shared read account stored by the admin, or without:
+then every member signs in with their own SQL login under Settings (kept
+only in the session) and the database's rights apply per person.
+
+**Lists**: shared folders per workspace, and one root for personal
+folders: every user gets `<root>/<user name>` (Settings → My lists).
 
 ### Web search
 

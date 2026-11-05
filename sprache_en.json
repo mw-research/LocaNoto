@@ -474,7 +474,8 @@
   "👑 **Admin: fremde persönliche Arbeitsbereiche**": "👑 **Admin: other users' personal workspaces**",
   "📊 *Listen nicht verwendet: ": "📊 *Lists not used: ",
   "📚 **Quellen:**": "📚 **Sources:**",
-  "🧠 *Suchsonden:* \n- `": "🧠 *Search probes:* \n- `"
+  "🧠 *Suchsonden:* \n- `": "🧠 *Search probes:* \n- `",
+  "Ohne '..'.": "Without '..'."
  },
  "muster": {
   " ({} offen)": " ({} open)",

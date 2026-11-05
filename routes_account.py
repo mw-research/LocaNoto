@@ -345,10 +345,23 @@ def mailbox_logout(server: str, request: Request, response: Response,
     return {"server": server, "connected": False}
 
 
+SQL_PREFIX = "sql:"
+
+
+def sql_logins(p, request):
+    """Personal SQL logins of this session: {room: {"benutzer", "passwort"}}."""
+    if p.via != "session":
+        return {}
+    sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
+    return {k[len(SQL_PREFIX):]: v for k, v in sealed.items()
+            if k.startswith(SQL_PREFIX) and isinstance(v, dict)}
+
+
 def mailbox_headers(p, request, given=None):
     """Headers for this request: sealed cookie plus logins sent along."""
     headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE)) \
         if p.via == "session" else {}
+    headers = {k: v for k, v in headers.items() if not k.startswith(SQL_PREFIX)}
     for server, login in (given or {}).items():
         headers[server] = mailboxes.header_for(
             server, login.get("user", ""), login.get("secret", ""))

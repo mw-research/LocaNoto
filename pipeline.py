@@ -553,6 +553,76 @@ WERKZEUG_RUNDEN = paths.env_int("MCP_RUNDEN", 4)
 TOOL_TIMEOUT = paths.env_float("TOOL_TIMEOUT", 180)
 
 
+# A question that names a mailbox or the calendar. When the model answers
+# it in the first round without calling a tool, it is asked once more
+# with tool_choice "required" -- a model that "forgot" its tools then
+# claims to have no access, or invents the mails.
+_ASKS_FOR_TOOLS = re.compile(
+    r"(postfach|posteingang|mail|kalender|termin|einlad|besprechung|"
+    r"meeting|calendar|inbox|verschick|weiterleit)", re.I)
+
+# Some servers (vLLM without a tool parser, a gateway in between) hand a
+# tool call back as text: <tool_call>{"name": ..., "arguments": {...}}</tool_call>.
+_TEXT_TOOL_CALL = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
+
+
+def _text_tool_calls(content):
+    """Tool calls written as text, as objects like the API's."""
+    import types
+    out = []
+    for n, raw in enumerate(_TEXT_TOOL_CALL.findall(content or "")):
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        name = data.get("name")
+        if not name:
+            continue
+        args = data.get("arguments") or data.get("parameters") or {}
+        out.append(types.SimpleNamespace(
+            id=f"text_{n}", function=types.SimpleNamespace(
+                name=name, arguments=args if isinstance(args, str)
+                else json.dumps(args, ensure_ascii=False))))
+    return out
+
+
+def tools_preamble(beschreibungen):
+    """What the model has to know about its tools, for the tool round and
+    the answer: they exist, their results are real data, and asked about
+    mail or the calendar it calls them instead of saying it cannot."""
+    if not beschreibungen:
+        return ""
+    return ("\n<werkzeuge>\nIn diesem Gespraech stehen dir Werkzeuge zur "
+            "Verfuegung: " + "; ".join(beschreibungen) + ".\n"
+            "Ergebnisse von Werkzeugaufrufen sind echte Daten aus diesen "
+            "Systemen und gelten wie der <context>; sie sind nicht erfunden "
+            "und werden nicht im Format [Datei, Seite] zitiert. Wird nach "
+            "Mail, Postfach, Kalender oder Terminen gefragt, rufe das "
+            "passende Werkzeug auf -- sage nie, du haettest keinen Zugriff.\n"
+            "</werkzeuge>\n")
+
+
+def answer_tool_note(zusatz, beschreibungen):
+    """For the answer: which tools ran. Without a call it must not present
+    mailbox or calendar data that no tool returned."""
+    if not beschreibungen:
+        return ""
+    import mcp
+    names = []
+    for m in zusatz or []:
+        for r in m.get("tool_calls") or []:
+            names.append("__".join(mcp.teile_namen(r["function"]["name"])))
+    if names:
+        return ("\nIn dieser Antwort aufgerufene Werkzeuge: "
+                + ", ".join(dict.fromkeys(names)) + ". Ihre Ergebnisse "
+                "stehen oben als Werkzeugergebnisse.\n")
+    return ("\nIn dieser Antwort wurde KEIN Werkzeug aufgerufen. Gib keine "
+            "Mails, Termine oder Webinhalte wieder, die nicht in einem "
+            "frueheren Werkzeugergebnis stehen. Fragt der Nutzer danach, "
+            "sage, dass du nachsehen kannst, wenn er die Frage noch einmal "
+            "stellt -- nicht, dass du keinen Zugriff hast.\n")
+
+
 def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                  verlauf_anzahl=20, fortschritt=None, vorab=None,
                  hinweise=None):
@@ -593,7 +663,9 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
     an_modell += history_for_model(nachrichten, verlauf_anzahl)
 
     zusatz, entwuerfe = list(vorab or []), []
-    for _runde in range(max(1, WERKZEUG_RUNDEN)):
+    letzte_frage = next((m.get("content") or "" for m in reversed(nachrichten)
+                         if m.get("role") == "user"), "")
+    for runde in range(max(1, WERKZEUG_RUNDEN)):
         try:
             a = client.chat.completions.create(
                 model=modell, messages=an_modell + zusatz,
@@ -603,11 +675,27 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
             # Ein Modell, das mit Werkzeugen nicht umgehen kann, darf die
             # Antwort nicht verhindern. Dann eben ohne Nachschlagen --
             # aber das Modell erfaehrt es und sagt es, statt zu raten.
-            sagen(f"Werkzeuge nicht nutzbar: {type(e).__name__}")
+            sagen(f"Werkzeuge nicht nutzbar: {type(e).__name__}: {str(e)[:160]}")
             return zusatz, entwuerfe
 
         nachricht = a.choices[0].message if a.choices else None
         rufe = list(getattr(nachricht, "tool_calls", None) or [])
+        if not rufe:
+            rufe = _text_tool_calls(getattr(nachricht, "content", "") or "")
+        if not rufe and runde == 0 and not vorab \
+                and _ASKS_FOR_TOOLS.search(letzte_frage):
+            # Asked about mail or the calendar and answered without a
+            # tool: once more, this time a tool call is required.
+            try:
+                a = client.chat.completions.create(
+                    model=modell, messages=an_modell + zusatz,
+                    tools=werkzeuge, tool_choice="required",
+                    timeout=TOOL_TIMEOUT)
+                nachricht = a.choices[0].message if a.choices else None
+                rufe = list(getattr(nachricht, "tool_calls", None) or []) \
+                    or _text_tool_calls(getattr(nachricht, "content", "") or "")
+            except Exception:
+                rufe = []      # "required" not supported: go on without
         if not rufe:
             break
 

@@ -20,7 +20,7 @@
   <div id="messages" class="messages" data-chat-id="{{ chat_id }}">
     {% for m in messages %}{% include "message.html" %}{% endfor %}
   </div>
-  <form id="ask" class="composer">
+  <form id="ask" class="composer" data-retry="{{ t('Ask again') }}">
     <textarea name="question" rows="3" placeholder="{{ t('Ask a question about your documents ...') }}" required>{{ prefill or '' }}</textarea>
     <div class="composer-row">
       <details class="options">
@@ -47,6 +47,7 @@
       <input type="file" name="images" accept="image/*" multiple aria-label="images">
       {% if options.web %}<button type="button" data-web-search
         data-confirm="{{ t('This text goes to search engines as it is:') }}"
+        data-cancel="{{ t('Cancel') }}"
         data-started="{{ t('Search runs. You will be notified -- the hits are under Web sources.') }}">{{ t('Search in the web') }}</button>{% endif %}
       <button type="submit" class="primary">{{ t('Send') }}</button>
     </div>

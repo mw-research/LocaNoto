@@ -239,18 +239,31 @@ only you see its lists.
 
 ### How do I query the database in LocaNoto?
 
-If a specialist database is connected, the sidebar shows **Database**.
+If a database is set up for one of your workspaces, the chat shows
+**Database** under "Workspaces · Model".
 
-- Switch on **Include database** → LocaNoto writes a read-only query
-  (SELECT) for your question and uses the result. LocaNoto cannot change
-  anything in the database.
-- Below the answer, **Database query** shows the query and the account.
-- "No database connection" → answers come only from the documents;
-  **Reconnect** tries again, **Driver message** shows details.
+- Tick **Database** → LocaNoto writes a read-only query (SELECT) for your
+  question and uses the result. LocaNoto cannot change anything in the
+  database.
+- Below the answer, **Database query** shows the query.
+- "No database connection: …" → names the reason (server not reachable,
+  login refused, …); the answer then comes from the documents only.
 
-**My database access:** enter your own account (**User**, **Password**) →
-**Apply** → queries run with your permissions, and LocaNoto only sees your
-tables.
+**Own SQL login** (classic interface: **My database access**): **Settings** → **My databases** → the user and password
+your database admin gave you → **Connect**. Queries then run with your
+rights in the database. The login stays only in the browser session. If
+the admin stored a shared read account, it also works without one.
+
+### How do I work with my own lists in LocaNoto?
+
+**Settings** → **My lists** shows your folder, e.g.
+`/mnt/listen/LISTE/anna`: the admin sets a root, everybody gets a folder
+named after their user name in it. Excel and CSV files there are read at
+every question that uses lists; only you see them.
+
+- **Subfolder (optional)** → only this part of your folder counts.
+- **Read lists again** → after new files or changed columns; new rows
+  work without it.
 
 ### How do I connect my mailbox to LocaNoto?
 
@@ -551,10 +564,13 @@ processed.
 Lists are not vectorized: a catalog knows sheets and columns, and LocaNoto
 reads the rows fresh with every question. In the sidebar under **Lists**:
 
-- **List sources per workspace:** one line per source,
-  `arbeitsbereich = pfad`; the workspace determines who sees the lists.
-  `@privat = /pfad/{benutzer}/Listen` gives every user their own folder.
-  → **Save and ingest**.
+- **Admin** → **Lists** → **List folders per workspace**: one folder per
+  shared workspace; the workspace determines who sees the lists.
+- **Root of the personal folders**, e.g. `/mnt/listen/LISTE` → every user
+  gets `/mnt/listen/LISTE/<user name>` and sees it under **Settings** →
+  **My lists**. `owncloud:/LISTE` works as well.
+- Shares on several servers: in the installer `"lists_pvc": {"name":
+  "claim", …}`, mounted at `/mnt/listen/<name>`.
 - **Upload list:** choose files, choose **Upload to** (subfolder) →
   **Upload n file(s)**. Only if the folder is writable.
 - **Re-ingest lists:** needed for new files or changed columns; new rows
@@ -661,19 +677,22 @@ others only read.
 system**:
 
 1. Tick **Ticket system on**.
-2. **Login for the mailbox**: an account that may read this mailbox and
-   send from it. It is stored encrypted with the installation key, because
-   the worker runs without a signed-in user. Empty keeps the stored login.
+2. **No login is stored.** Members connect the mailbox under **Settings**
+   → **Mailboxes** with their own account (rights on the mailbox in
+   Exchange, "Send As" for the answers).
 3. **Standard answer**: goes to every sender at once. `{ticket}`,
    `{subject}` and `{name}` are filled in.
 4. **Members**: LocaNoto users who see every ticket and get a notice.
    Admins see all tickets.
 5. Optional **Forward every new mail to**: addresses that get every new
    mail with the ticket number in the subject.
-6. **Save** → **Check now**. The first check only notes the time; from
-   then on every new mail becomes a ticket.
+6. **Save** → **Check now** (with your own connected login). The first
+   check only notes the time; from then on every new mail becomes a
+   ticket.
 
-The worker checks every minute (`TICKET_POLL_SECONDS`). Machine mail
+It is checked every minute (`TICKET_POLL_SECONDS`) while a member with the
+mailbox connected has LocaNoto open. With nobody online, mail that came
+meanwhile is handled the next time, standard answer included. Machine mail
 (out-of-office replies, newsletters, bounces, mail of the mailbox itself)
 neither becomes a ticket nor gets an answer. A mail is marked handled
 before anything is sent: it is never answered twice.

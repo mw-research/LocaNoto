@@ -32,14 +32,10 @@
 {% for name, ts in ticket_boxes %}
 <section class="card">
   <h2>{{ t('Ticket system') }}: {{ name }}</h2>
-  <p class="muted">{{ t('New mail becomes a ticket: the sender gets the standard answer at once, the members a notice, the forward addresses the mail. Replies with the ticket number in the subject go to the same ticket. Checked by the worker every minute.') }}</p>
+  <p class="muted">{{ t('New mail becomes a ticket: the sender gets the standard answer at once, the members a notice, the forward addresses the mail. Replies with the ticket number in the subject go to the same ticket.') }}</p>
   <form hx-post="/ui/admin/mailboxes/{{ name|urlencode }}/tickets" hx-target="#tk-{{ loop.index }}">
     <label class="check"><input type="checkbox" name="enabled" value="1"{% if ts.enabled %} checked{% endif %}> {{ t('Ticket system on') }}</label>
-    <fieldset>
-      <legend>{{ t('Login for the mailbox (stored encrypted; empty keeps the stored one)') }} – {{ t('login stored') if ts.has_login else t('no login stored') }}</legend>
-      <input name="login_user" placeholder="name@example.com" autocomplete="off">
-      <input type="password" name="login_password" placeholder="{{ t('Password') }}" autocomplete="new-password">
-    </fieldset>
+    <p class="muted">{{ t('No login is stored. Members connect this mailbox under Settings with their own account; while one of them has LocaNoto open, the mailbox is checked every minute.') }}</p>
     <label>{{ t('Standard answer ({ticket}, {subject}, {name} are filled in)') }}<textarea name="answer" rows="7">{{ ts.answer }}</textarea></label>
     <label>{{ t('Members (get every ticket)') }}<input name="members" value="{{ ts.members|join(', ') }}" data-userpick data-multiple></label>
     <label>{{ t('Forward every new mail to (addresses, comma separated)') }}<input name="forward" value="{{ ts.forward|join(', ') }}"></label>

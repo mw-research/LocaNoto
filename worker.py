@@ -8,11 +8,6 @@ time. Each takes the next queued job, runs its script, writes the output
 and a heartbeat into the row every few seconds, and stops the script when
 an admin cancels it. SIGTERM (a pod being moved) stops the running
 script and gives the job back as failed, so it can be started again.
-
-Beside the jobs, every worker checks the shared mailboxes with a ticket
-system every TICKET_POLL_SECONDS (tickets.py). Several workers do not
-answer a mail twice: a mailbox is checked under a lock that holds across
-pods, and a mail is marked handled before anything is sent.
 """
 import os
 import signal
@@ -26,7 +21,6 @@ import database
 import hintergrund
 import jobs
 import paths
-import tickets
 
 POLL_SECONDS = paths.env_float("WORKER_POLL_SECONDS", 3)
 BEAT_SECONDS = 5
@@ -67,19 +61,6 @@ def run(job_id, name, worker):
     jobs.finish(job_id, proc.returncode, cancelled=cancelled)
 
 
-def ticket_loop():
-    """Shared mailboxes with tickets, every TICKET_POLL_SECONDS."""
-    while not _stop.wait(max(10.0, tickets.POLL_SECONDS)):
-        try:
-            done = tickets.poll_all(log=lambda t: print(t, flush=True))
-        except Exception as e:
-            print(f"tickets: {type(e).__name__}: {e}", flush=True)
-            continue
-        for server, n in done.items():
-            if isinstance(n, int) and n:
-                print(f"tickets {server}: {n} new mail(s)", flush=True)
-
-
 def main():
     if not database.active():
         print("DATABASE_URL is not set -- without it jobs run in place "
@@ -88,8 +69,6 @@ def main():
     worker = f"{socket.gethostname()}:{os.getpid()}"
     signal.signal(signal.SIGTERM, lambda *_: _stop.set())
     once = "--once" in sys.argv
-    if not once and tickets.POLL_SECONDS > 0:
-        threading.Thread(target=ticket_loop, daemon=True, name="tickets").start()
     print(f"worker {worker} waiting for jobs", flush=True)
     while not _stop.is_set():
         claimed = jobs.claim(worker)

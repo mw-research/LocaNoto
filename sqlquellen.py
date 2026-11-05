@@ -32,6 +32,12 @@ auf einem anderen Volume.
 Ohne Installationsschluessel wird kein Zugang gespeichert. Das ist
 unbequem und richtig: ein Datenbankpasswort im Klartext in einer
 JSON-Datei waere schlechter als gar kein Feature.
+
+A DATABASE WITHOUT A SHARED ACCOUNT. An entry may hold only server, port,
+database and note. Then every user signs in with their own SQL login
+(Settings > My databases); that login stays in the browser session like a
+mailbox login and is never stored here (answering.Request.sql_logins).
+The rights are then the database's own, per person.
 """
 import json
 import os
@@ -128,14 +134,15 @@ def setze(raum, angaben, benutzer="?", ist_verwalter=False):
     uebrig = [z for z in liste() if z.get("raum") != raum]
     angaben = {k: (v.strip() if isinstance(v, str) else v)
                for k, v in (angaben or {}).items() if k in FELDER}
-    if not angaben.get("benutzer") and not angaben.get("passwort"):
+    if not any(angaben.get(k) for k in ("benutzer", "passwort", "server",
+                                        "datenbank")):
         ok, _m = _speichere(uebrig)
         return ok, ("Zugang entfernt." if ok else _m)
 
-    if not angaben.get("benutzer") or not angaben.get("passwort"):
+    if bool(angaben.get("benutzer")) != bool(angaben.get("passwort")):
         return False, ("Benutzer UND Passwort angeben.")
 
-    if not raumschluessel.verfuegbar():
+    if angaben.get("passwort") and not raumschluessel.verfuegbar():
         return False, ("Ohne Installationsschlüssel wird kein Passwort gespeichert.")
 
     eintrag = {"raum": raum}

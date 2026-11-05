@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('Databases') }}</h1>
+<section class="card">
+  <h2>{{ t('Databases per workspace') }}</h2>
+  <p class="muted">{{ t('Microsoft SQL Server. LocaNoto only reads (SELECT). Without user and password every member signs in with their own SQL login under Settings (kept only in the session), and the database\'s own rights apply per person. With user and password that account is shared by all members (stored encrypted) -- use a read-only one (db_datareader). Everything empty removes the database.') }}</p>
+  <table class="files">
+  {% for d in entries %}
+    <tr><td><strong>{{ d.label }}</strong></td>
+      <td class="muted">{{ d.server or '–' }}{% if d.port %}:{{ d.port }}{% endif %} · {{ d.database or '–' }}</td>
+      <td>{% if d.shared %}{{ t('shared account') }} <code>{{ d.shared }}</code>{% else %}{{ t('personal logins') }}{% endif %}</td>
+      <td><form hx-post="/ui/admin/databases/{{ d.room|urlencode }}/test" hx-target="#sql-notice" class="inline">
+        <button type="submit">{{ t('Test connection') }}</button></form>
+        <form hx-post="/ui/admin/workspaces/sql" hx-target="#sql-notice" class="inline">
+        <input type="hidden" name="room" value="{{ d.room }}">
+        <button type="submit" class="danger">{{ t('Remove') }}</button></form></td></tr>
+  {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
+  </table>
+</section>
+<section class="card">
+  <h2>{{ t('Create') }}</h2>
+  <form hx-post="/ui/admin/workspaces/sql" hx-target="#sql-notice">
+    <label>{{ t('Workspace') }}
+      <select name="room">{% for id, label in targets %}<option value="{{ id }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>{{ t('Server') }} <input name="server" placeholder="demo-erp" required></label>
+    <label>{{ t('Port') }} <input name="port" type="number" value="1433"></label>
+    <label>{{ t('Database name') }} <input name="database" placeholder="DemoERP" required></label>
+    <fieldset>
+      <legend>{{ t('shared account') }} (optional)</legend>
+      <label>{{ t('User') }} <input name="user" autocomplete="off"></label>
+      <label>{{ t('Password') }} <input name="password" type="password" autocomplete="new-password"></label>
+    </fieldset>
+    <label>{{ t('Note for the model (status codes, which table holds what)') }} <span class="muted">{{ t('-- the text itself, e.g. the content of sql-hint.txt, not a file name') }}</span>
+      <textarea name="note" rows="4" class="mono"></textarea></label>
+    <button type="submit" class="primary">{{ t('Save') }}</button>
+  </form>
+  <div id="sql-notice"></div>
+</section>
+{% endblock %}

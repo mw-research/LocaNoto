@@ -45,6 +45,7 @@ sqlquellen.fuer_benutzer.
 """
 import dataclasses
 import json
+import logging
 import os
 import re
 import threading
@@ -76,6 +77,7 @@ PARTIAL_SAVE_SECONDS = 2.0
 DEFAULT_IMAGE_QUESTION = ("Was ist auf dem Bild zu sehen, und was sagt die "
                           "Dokumentation dazu?")
 
+_log = logging.getLogger("locanoto.answering")
 _clients = {}
 _clients_lock = threading.Lock()
 _reranker = None
@@ -123,6 +125,10 @@ class Request:
     history: list | None = None         # for stateless calls (save=False)
     save: bool = True
     web_draft: str | None = None        # confirmed web search draft of this chat
+    retry: bool = False                 # answer the last question of chat_id again
+    sql_logins: dict = dataclasses.field(default_factory=dict)
+    # {room: {"benutzer", "passwort"}} -- personal SQL logins of this
+    # session, like mailbox logins never stored
 
 
 class Refused(Exception):
@@ -227,11 +233,25 @@ def clean_title(text):
 
 # --- SQL AND LISTS ---
 
-def sql_accounts(user):
+def sql_access(room, logins=None):
+    """The connection of a room: the personal login of this session if
+    there is one (the database's rights per person), else the shared
+    account the admin stored. None without either."""
+    access = sqlquellen.zugang(room) if room else None
+    mine = (logins or {}).get(room) if room else None
+    if mine and mine.get("benutzer") and mine.get("passwort"):
+        return dict(access or {}, benutzer=mine["benutzer"],
+                    passwort=mine["passwort"])
+    return access
+
+
+def sql_accounts(user, logins=None):
     """[(room, account_user)] the user may query with; "" = environment."""
-    out = [(r, (z or {}).get("benutzer", ""))
-           for r, z in sqlquellen.fuer_benutzer(
-               user, notzugang=notzugang.raeume_fuer(user))]
+    out = []
+    for r, z in sqlquellen.fuer_benutzer(user, notzugang=notzugang.raeume_fuer(user)):
+        access = sql_access(r, logins)
+        if access and access.get("benutzer") and access.get("passwort"):
+            out.append((r, access["benutzer"]))
     if sqldb.ist_konfiguriert():
         out.append(("", ""))
     return out
@@ -240,12 +260,17 @@ def sql_accounts(user):
 _schema_cache = {}
 
 
-def sql_schema(room):
-    """(schema, error) of an account, kept for an hour like the page does."""
-    hit = _schema_cache.get(room)
+def sql_schema(room, access=None):
+    """(schema, error) of an account, kept for an hour like the page does.
+
+    Per room AND account: with personal logins two people see different
+    tables of the same database."""
+    if access is None and room:
+        access = sqlquellen.zugang(room)
+    key = (room, (access or {}).get("benutzer", ""))
+    hit = _schema_cache.get(key)
     if hit and time.time() - hit[0] < 3600:
         return hit[1], hit[2]
-    access = sqlquellen.zugang(room) if room else None
     if not sqldb.ist_konfiguriert(access):
         result = ("", "")
     else:
@@ -253,21 +278,28 @@ def sql_schema(room):
             result = (sqldb.lade_schema(access), "")
         except Exception as e:
             result = ("", f"{type(e).__name__}: {e}")
-    _schema_cache[room] = (time.time(),) + result
+    _schema_cache[key] = (time.time(),) + result
     return result
 
 
+def forget_schema(room):
+    for key in [k for k in _schema_cache if k[0] == room]:
+        _schema_cache.pop(key, None)
+
+
 def _sql_block(user, req, question, model, history_text):
-    rooms = {r for r, _a in sql_accounts(user)}
+    rooms = {r for r, _a in sql_accounts(user, req.sql_logins)}
     room = req.sql_room if req.sql_room is not None else \
         (next(iter(sorted(rooms - {""})), "") if rooms else None)
     if room is None or room not in rooms:
         return [], {"reason": "No database account for this user."}
-    schema, error = sql_schema(room)
+    access = sql_access(room, req.sql_logins) if room else None
+    schema, error = sql_schema(room, access)
     if not schema:
-        return [], {"reason": "No database connection." if error
+        # The driver's reason, not just "no connection": a wrong host, a
+        # network policy and a wrong password each need another fix.
+        return [], {"reason": f"No database connection: {error[:300]}" if error
                     else "The database has no readable tables."}
-    access = sqlquellen.zugang(room) if room else None
     try:
         query = sqldb.formuliere(client("SQL", user), llm.modell("SQL", model),
                                  question, schema, history_text,
@@ -391,6 +423,31 @@ def _chat_ids(messages):
     return known
 
 
+def _describe(connections, web_confirm):
+    """One line per tool server for the model: what it is."""
+    out = []
+    for name, c in connections.items():
+        if name == workspace_notes.SERVER:
+            out.append("Zusammenfassungen als Dokument ablegen (als Entwurf)")
+        elif name == created_files.SERVER:
+            out.append("Dateien erstellen (Excel, Word, PDF, PowerPoint)")
+        elif hasattr(c, "adresse"):
+            try:
+                addr = c.adresse()
+            except Exception:
+                addr = name
+            kind = ("Mails lesen und als Entwurf senden"
+                    if not hasattr(c, "_events") else
+                    "Mails und Kalender lesen; Mails, Termine und Einladungen "
+                    "als Entwurf")
+            out.append(f"Postfach {name} ({addr}): {kind}")
+        elif web_confirm and getattr(c, "confirm", None) is not None:
+            out.append(f"Websuche {name} (nur nach Bestaetigung des Nutzers)")
+        else:
+            out.append(f"Werkzeugserver {name}")
+    return out
+
+
 def _unconnected(req):
     """Mailboxes that need a login this request does not carry."""
     return [n for n, a in mcp.lies_konfiguration().items()
@@ -401,7 +458,12 @@ def _unconnected(req):
 # --- THE FLOW ---
 
 def ask(user, req):
-    """Answer a question. Yields (event, data); see the module docstring."""
+    """Answer a question. Yields (event, data); see the module docstring.
+
+    Every failure ends in an "error" event, also one in the middle of the
+    streamed answer (the model server answering 500): a stream that just
+    stops looks like a hang. retry=true answers the last question again.
+    """
     try:
         yield from _ask(user, req)
     except Refused as e:
@@ -410,6 +472,10 @@ def ask(user, req):
         yield "error", {"status": 429, "detail": str(e),
                         "reason": "budget",
                         "retry_after": budget.FENSTER_MINUTEN * 60}
+    except Exception as e:
+        _log.exception("answer failed for %s", user)
+        yield "error", {"status": 502, "retry": True,
+                        "detail": f"{type(e).__name__}: {str(e)[:300]}"}
 
 
 def _ask(user, req):
@@ -436,7 +502,21 @@ def _ask(user, req):
                     if m.get("role") in ("user", "assistant")]
 
     web_draft = None
-    if req.web_draft:
+    if req.retry:
+        # The last answer failed or broke off: drop it, ask again.
+        if not (req.save and chat_id):
+            raise Refused(400, "Only a saved chat can be asked again.")
+        while messages and messages[-1].get("role") == "assistant" and (
+                messages[-1].get("unvollstaendig") or messages[-1].get("fehler")):
+            messages.pop()
+        if not messages or messages[-1].get("role") != "user":
+            raise Refused(409, "The last answer is complete.")
+        chats.speichere(user, chat_id, messages)
+        question = messages[-1].get("content") or ""
+        yield "chat", {"chat_id": chat_id, "new": False,
+                       "title": chats.titel(user, chat_id)}
+        image_texts = []
+    elif req.web_draft:
         if not (req.save and chat_id):
             raise Refused(400, "A web search draft belongs to a chat.")
         web_draft = _claim_web_draft(user, chat_id, req.web_draft)
@@ -608,6 +688,8 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
     if req.save and created_files.offered(question, connections):
         file_tools = created_files.Tools(user)
         connections[created_files.SERVER] = file_tools
+    described = _describe(connections, web_confirm)
+    system += pipeline.tools_preamble(described)
     if connections:
         progress = []
         try:
@@ -626,6 +708,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                     pass
         for p in progress:
             yield "tool", {"progress": p}
+    system += pipeline.answer_tool_note(extra, described)
     if notes:
         system += ("\n<werkzeughinweise>\n" + "\n".join(notes[:10])
                    + "\nBetrifft die Frage diese Werkzeuge: dem Nutzer sagen, "
@@ -633,19 +716,35 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
 
     # 5. the answer, saved every few seconds while it grows
     parts, last = [], time.time()
-    for piece in pipeline.antwort(client("CHAT", user), model, system, messages,
-                                  zusatz=extra):
-        piece = piece if isinstance(piece, str) else str(piece)
-        parts.append(piece)
-        yield "text", {"text": piece}
-        if req.save and time.time() - last >= PARTIAL_SAVE_SECONDS:
-            last = time.time()
+    try:
+        for piece in pipeline.antwort(client("CHAT", user), model, system,
+                                      messages, zusatz=extra):
+            piece = piece if isinstance(piece, str) else str(piece)
+            parts.append(piece)
+            yield "text", {"text": piece}
+            if req.save and time.time() - last >= PARTIAL_SAVE_SECONDS:
+                last = time.time()
+                try:
+                    chats.speichere(user, chat_id, messages + [{
+                        "role": "assistant", "content": "".join(parts),
+                        "unvollstaendig": True}])
+                except Exception:
+                    pass  # a failed partial save must not cost the answer
+    except Exception as e:
+        # The model server failed mid-answer (a 500 through the gateway).
+        # What came stays, marked; "ask again" replaces it.
+        _log.exception("answer stream failed for %s", user)
+        if req.save:
             try:
                 chats.speichere(user, chat_id, messages + [{
                     "role": "assistant", "content": "".join(parts),
-                    "unvollstaendig": True}])
+                    "unvollstaendig": True, "fehler": f"{type(e).__name__}"}])
             except Exception:
-                pass  # a failed partial save must not cost the answer
+                pass
+        yield "error", {"status": 502, "retry": bool(req.save),
+                        "chat_id": chat_id,
+                        "detail": f"{type(e).__name__}: {str(e)[:300]}"}
+        return
 
     for i, d in enumerate(drafts):
         d["id"] = f"d{len(messages)}_{i}"
