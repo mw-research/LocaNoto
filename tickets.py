@@ -265,20 +265,44 @@ def maybe_poll(user, headers, is_admin=False):
             if server in _running:
                 continue
             _running.add(server)
-        threading.Thread(target=_poll_thread, args=(server, header), daemon=True,
-                         name=f"tickets-{server}").start()
+        threading.Thread(target=_poll_thread, args=(server, header, user),
+                         daemon=True, name=f"tickets-{server}").start()
         started.append(server)
     return started
 
 
-def _poll_thread(server, header):
+def _poll_thread(server, header, user=""):
     try:
-        poll_once(server, header=header)
-    except Exception:
-        pass        # not reachable now: the next member's request tries again
+        n = poll_once(server, header=header)
+        _note_check(server, user, f"ok, {n}")
+    except Exception as e:
+        # not reachable now: the next member's request tries again -- but
+        # the admin and the members see why (status()).
+        _note_check(server, user, f"{type(e).__name__}: {str(e)[:300]}")
     finally:
         with _running_lock:
             _running.discard(server)
+
+
+def _note_check(server, user, result):
+    try:
+        with dateisperre.gesperrt(_state_path(server)):
+            state = _load(server)
+            state["checked"] = {"at": _now().isoformat(), "by": user,
+                                "result": result}
+            _save(server, state)
+    except Exception:
+        pass
+
+
+def status(server):
+    """{"polled", "checked": {"at", "by", "result"}, "since"} of a mailbox."""
+    try:
+        state = _load(server)
+    except Exception as e:
+        return {"error": f"{type(e).__name__}"}
+    return {"polled": state.get("polled"), "checked": state.get("checked") or {},
+            "since": state.get("since")}
 
 
 def poll_once(server, conn=None, header=None):

@@ -796,7 +796,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                     pass
         for p in progress:
             yield "tool", {"progress": p}
-    system += pipeline.answer_tool_note(extra, described)
+    system += pipeline.answer_tool_note(extra, described, drafts)
     if notes:
         system += ("\n<werkzeughinweise>\n" + "\n".join(notes[:10])
                    + "\nBetrifft die Frage diese Werkzeuge: dem Nutzer sagen, "
@@ -837,7 +837,9 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                 or raeume.privat_kennung(user)
             d["ziel"] = raeume.bezeichnung(room)
     answer = "".join(parts)
-    cited, others = pipeline.cited_sources(pipeline.quellen(hits), answer)
+    cited, others = pipeline.cited_sources(
+        pipeline.quellen(hits), answer,
+        tools_used=any(m.get("tool_calls") for m in extra))
     message = {"role": "assistant", "content": answer,
                "sources": cited, "sources_more": others, "sonden": probes,
                "zahlen": numbers, "entwuerfe": drafts,

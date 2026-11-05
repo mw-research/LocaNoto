@@ -543,7 +543,10 @@ def history_for_model(nachrichten, anzahl=20):
 # Wie oft das Modell hoechstens nachschlagen darf, bevor es antworten
 # muss. Ohne Grenze kann es sich im Kreis drehen -- und jede Runde
 # kostet einen Modellaufruf und die Wartezeit des Menschen davor.
-WERKZEUG_RUNDEN = paths.env_int("MCP_RUNDEN", 4)
+# Eight: "check my mail and invite A and B" is a mail search, one search
+# per address, a look into the calendar and the invitation -- with four
+# the invitation never came, and the answer announced it all the same.
+WERKZEUG_RUNDEN = paths.env_int("MCP_RUNDEN", 8)
 
 # How long one round of the tool loop may take. It sends the whole
 # history and every tool description; on a local model that took longer
@@ -602,9 +605,10 @@ def tools_preamble(beschreibungen):
             "</werkzeuge>\n")
 
 
-def answer_tool_note(zusatz, beschreibungen):
-    """For the answer: which tools ran. Without a call it must not present
-    mailbox or calendar data that no tool returned."""
+def answer_tool_note(zusatz, beschreibungen, entwuerfe=()):
+    """For the answer: which tools ran and which drafts wait. Without a
+    call it must not present mailbox or calendar data that no tool
+    returned; without a draft it must not say it creates or sends one."""
     if not beschreibungen:
         return ""
     import mcp
@@ -612,10 +616,19 @@ def answer_tool_note(zusatz, beschreibungen):
     for m in zusatz or []:
         for r in m.get("tool_calls") or []:
             names.append("__".join(mcp.teile_namen(r["function"]["name"])))
+    if entwuerfe:
+        drafts = ("Unter der Antwort liegen dem Nutzer diese Entwuerfe zur "
+                  "Bestaetigung vor: " + "; ".join(
+                      f"{d.get('werkzeug')} ({d.get('vorschau') or d.get('server')})"
+                      for d in entwuerfe) + ". Sage ihm, dass er sie dort bestaetigt.")
+    else:
+        drafts = ("Es liegt KEIN Entwurf vor: schreibe nicht, du legst einen "
+                  "Termin, eine Einladung oder eine Mail an oder habest es "
+                  "getan.")
     if names:
         return ("\nIn dieser Antwort aufgerufene Werkzeuge: "
                 + ", ".join(dict.fromkeys(names)) + ". Ihre Ergebnisse "
-                "stehen oben als Werkzeugergebnisse.\n")
+                "stehen oben als Werkzeugergebnisse. " + drafts + "\n")
     return ("\nIn dieser Antwort wurde KEIN Werkzeug aufgerufen. Gib keine "
             "Mails, Termine oder Webinhalte wieder, die nicht in einem "
             "frueheren Werkzeugergebnis stehen. Fragt der Nutzer danach, "
@@ -667,10 +680,23 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                          if m.get("role") == "user"), "")
     for runde in range(max(1, WERKZEUG_RUNDEN)):
         try:
-            a = client.chat.completions.create(
-                model=modell, messages=an_modell + zusatz,
-                tools=werkzeuge, tool_choice="auto",
-                timeout=TOOL_TIMEOUT)
+            try:
+                a = client.chat.completions.create(
+                    model=modell, messages=an_modell + zusatz,
+                    tools=werkzeuge, tool_choice="auto",
+                    timeout=TOOL_TIMEOUT)
+            except Exception as e:
+                # A dropped connection or a 500 of the gateway ("Server
+                # disconnected") is often gone a moment later: once more.
+                # A timeout is not tried again -- it would cost another
+                # TOOL_TIMEOUT.
+                if "timeout" in type(e).__name__.lower():
+                    raise
+                time.sleep(2)
+                a = client.chat.completions.create(
+                    model=modell, messages=an_modell + zusatz,
+                    tools=werkzeuge, tool_choice="auto",
+                    timeout=TOOL_TIMEOUT)
         except Exception as e:
             # Ein Modell, das mit Werkzeugen nicht umgehen kann, darf die
             # Antwort nicht verhindern. Dann eben ohne Nachschlagen --
@@ -774,6 +800,14 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
 
             zusatz.append({"role": "tool", "tool_call_id": r.id,
                            "content": (ergebnis or "")[:8000]})
+    else:
+        # Every round used and the model still calling: what it meant to
+        # do next did not happen, and the answer has to say so.
+        if zusatz and zusatz[-1].get("role") == "tool":
+            hinweise.append(f"Grenze von {WERKZEUG_RUNDEN} Werkzeugrunden erreicht; "
+                            f"weitere Schritte wurden nicht ausgefuehrt. Dem "
+                            f"Nutzer sagen, was fehlt, und ihn bitten, es "
+                            f"noch einmal zu verlangen.")
 
     return zusatz, entwuerfe
 
@@ -894,8 +928,11 @@ def _cited_pages(answer):
     return cited
 
 
-def cited_sources(sources, answer):
+def cited_sources(sources, answer, tools_used=False):
     """(cited, others): the sources the answer cites, and the rest.
+
+    tools_used: an answer from a mailbox, the calendar or the web that
+    cites no document has no document source -- then all are "others".
 
     The model gets every passage the search found; below the answer only
     those it actually cites belong first. A file name counts with or
@@ -905,7 +942,7 @@ def cited_sources(sources, answer):
     """
     pages = _cited_pages(answer)
     if not pages:
-        return list(sources), []
+        return ([], list(sources)) if tools_used else (list(sources), [])
     cited, others = [], []
     for s in sources:
         name = str(s.get("file", "")).casefold()

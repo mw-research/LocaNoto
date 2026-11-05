@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block main %}
 <h1>{{ t('Tickets') }}</h1>
+{% if check %}<p class="muted">{{ t('Last check') }}: {% if check.checked and check.checked.at %}{{ check.checked.at|local_time }} – <span class="{{ 'ok' if (check.checked.result or '').startswith('ok') else 'error' }}">{{ check.checked.result }}</span>{% else %}{{ t('never yet') }}{% endif %}{% if not connected %} · {{ t('Connect this mailbox under Settings: it is checked while a member with it connected has LocaNoto open.') }}{% endif %}</p>{% endif %}
 <nav class="subnav">
   {% for b in boxes %}<a href="/tickets?box={{ b|urlencode }}" class="{{ 'on' if b == box }}">{{ b }}</a>{% endfor %}
   <span class="muted">·</span>

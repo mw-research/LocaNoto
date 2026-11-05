@@ -2674,7 +2674,7 @@ Die Oberfläche zeigt den Zustand im Entwurf, nie als Fehlerseite. Dieselbe
 Prüfung gilt für selbständig sendende Funktionspostfächer im Werkzeugkreis.
 
 `MCP_TIMEOUT` begrenzt die Wartezeit je Aufruf (30 s), `MCP_RUNDEN` die
-Zahl der Werkzeugrunden je Antwort (4), `MCP_MAX_WERKZEUGE` die Zahl der
+Zahl der Werkzeugrunden je Antwort (8), `MCP_MAX_WERKZEUGE` die Zahl der
 Werkzeuge, die an das Modell gehen (40), `TOOL_TIMEOUT` die Dauer einer
 Runde (180 s). Schlägt eine Runde fehl oder ist ein Postfach nicht
 erreichbar, erfährt das Modell es (`werkzeughinweise`) und sagt es,

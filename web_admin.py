@@ -337,7 +337,8 @@ def mailboxes_page(request: Request):
     return render("admin_mailboxes.html", request, nav=_nav(p, "admin"),
                   boxes=boxes, templates=mailboxes.templates(),
                   notice_default=mailboxes.NOTICE_DEFAULT,
-                  ticket_boxes=[(n, dict(s_, members_chosen=[(m, m) for m in s_["members"]]))
+                  ticket_boxes=[(n, dict(s_, members_chosen=[(m, m) for m in s_["members"]],
+                                         status=tickets.status(n)))
                                 for n, s_ in ((n, tickets.settings(n)) for n in shared)])
 
 
@@ -375,6 +376,7 @@ def mailbox_tickets_check(name: str, request: Request,
         n = tickets.poll_once(name, header=header)
     except Exception as e:
         return _notice(t(str(e)[:300]) or type(e).__name__, False)
+    tickets._note_check(name, p.name, f"ok, {n}")
     if first:
         return _notice(t("First check: from now on new mail becomes a ticket."))
     return _notice(f"{n} " + t("new mail(s)"))

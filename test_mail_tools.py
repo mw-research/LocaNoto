@@ -176,6 +176,22 @@ check("tool loop: a timed-out mail found in the sent folder counts as sent",
       any((m.get("content") or "").startswith("Gesendet.") for m in extra if m["role"] == "tool"),
       extra)
 
+# every round used: the answer is told the rest did not happen
+endless = Model([[("box__mails_lesen", "{}")]] * (pipeline.WERKZEUG_RUNDEN + 2))
+notes = []
+pipeline.werkzeuglauf(endless, "m", "sys", chat, {"box": Box()}, hinweise=notes)
+check("tool loop: running out of rounds is told, not hidden",
+      any("Werkzeugrunden" in n for n in notes) and pipeline.WERKZEUG_RUNDEN >= 8, notes)
+note = pipeline.answer_tool_note([{"role": "assistant", "tool_calls": [call]}], ["Postfach box"], [])
+check("answer: without a draft it must not claim to create one", "KEIN Entwurf" in note)
+note = pipeline.answer_tool_note([{"role": "assistant", "tool_calls": [call]}], ["Postfach box"],
+                                 [{"werkzeug": "meeting_request", "vorschau": "Mi 11.11.2026 11:00"}])
+check("answer: a waiting draft is named", "meeting_request" in note and "11.11.2026" in note)
+src = [{"file": "Scholar.md", "page": 2}]
+check("sources: a tool answer without citations shows no document as its source",
+      pipeline.cited_sources(src, "Zwei neue Mails.", tools_used=True) == ([], src)
+      and pipeline.cited_sources(src, "Keine Angabe.") == (src, []))
+
 # --- short ids ---
 
 import postfach  # noqa: E402

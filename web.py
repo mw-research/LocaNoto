@@ -227,6 +227,11 @@ TEXTS = {
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
     "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
+    "Last check": "Zuletzt geprüft", "never yet": "noch nie",
+    "never yet -- a member has to connect the mailbox under Settings and have LocaNoto open":
+        "noch nie – ein Mitglied muss das Postfach unter Einstellungen verbinden und LocaNoto offen haben",
+    "Connect this mailbox under Settings: it is checked while a member with it connected has LocaNoto open.":
+        "Verbinde dieses Postfach unter Einstellungen: Geprüft wird, solange ein Mitglied mit verbundenem Postfach LocaNoto offen hat.",
     "selected": "ausgewählt", "Search workspaces": "Arbeitsbereiche suchen",
     "Search user and add ...": "Benutzer suchen und hinzufügen …",
     "Search workspace and add ...": "Arbeitsbereich suchen und hinzufügen …",

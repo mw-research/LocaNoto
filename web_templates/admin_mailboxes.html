@@ -44,6 +44,8 @@
     <button type="submit" class="primary">{{ t('Save') }}</button>
   </form>
   {% if ts.enabled %}
+  {% set st = ts.status or {} %}
+  <p class="muted">{{ t('Last check') }}: {% if st.checked and st.checked.at %}{{ st.checked.at|local_time }} ({{ st.checked.by or '–' }}) – <span class="{{ 'ok' if (st.checked.result or '').startswith('ok') else 'error' }}">{{ st.checked.result }}</span>{% else %}{{ t('never yet -- a member has to connect the mailbox under Settings and have LocaNoto open') }}{% endif %}</p>
   <form hx-post="/ui/admin/mailboxes/{{ name|urlencode }}/tickets/check" hx-target="#tk-{{ loop.index }}" class="inline"><button>{{ t('Check now') }}</button></form>
   {% endif %}
   <div id="tk-{{ loop.index }}"></div>

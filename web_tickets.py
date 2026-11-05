@@ -49,9 +49,13 @@ def tickets_page(request: Request, box: str = "", id: str = "", status: str = ""
     elif status != "all":
         items = [x for x in items if x["status"] != "closed"]
     current = tickets.ticket(box, id) if id else None
+    import sessions
+    from server import SEALED_COOKIE
+    connected = box in sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
     return render("tickets.html", request, nav=_nav(p, "tickets"), boxes=boxes,
                   box=box, items=items, status=status, current=current,
-                  statuses=tickets.STATUSES, me=p.name)
+                  statuses=tickets.STATUSES, me=p.name,
+                  connected=connected, check=tickets.status(box))
 
 
 @router.post("/ui/tickets/{box}/{ticket_id}")
