@@ -223,6 +223,8 @@ jobs:
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
           docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
+          # failures as annotations: readable on the run page without the log
+          grep -E "FAIL|Traceback|Error" /tmp/api.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_api::/' || true
           tail -1 /tmp/api.log | grep -q "all passed"
 
       # Mail, calendar, drafts, notices and tickets against stand-ins for
@@ -231,6 +233,7 @@ jobs:
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
           docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_mail_tools.py 2>&1 | tee /tmp/mail.log
+          grep -E "FAIL|Traceback|Error" /tmp/mail.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_mail_tools::/' || true
           tail -1 /tmp/mail.log | grep -q "all checks passed"
 
       # Changing the embedding model against a real pgvector: vectors of a
