@@ -1,0 +1,11 @@
+{# A list of check boxes with a search field (hx.js picklist).
+   name: field name; options: [(value, label, checked, disabled)] #}
+<div class="picklist" data-picklist>
+  <input type="search" placeholder="{{ t('Search') }} …" aria-label="{{ t('Search') }}" autocomplete="off">
+  <span class="muted"><span data-count>0</span> {{ t('selected') }}</span>
+  <div class="options">
+  {% for value, label, checked, disabled in options %}
+    <label class="pick"><input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}> {{ label }}</label>
+  {% else %}<span class="muted">{{ t('none') }}</span>{% endfor %}
+  </div>
+</div>

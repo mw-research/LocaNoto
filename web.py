@@ -227,6 +227,17 @@ TEXTS = {
     "No web search is set up.": "Keine Websuche eingerichtet.",
     "Delete this document?": "Dieses Dokument löschen?",
     "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
+    "selected": "ausgewählt", "Search workspaces": "Arbeitsbereiche suchen",
+    "Edit": "Bearbeiten", "Description": "Beschreibung", "Members": "Mitglieder",
+    "Visible to everybody (no member list)": "Für alle sichtbar (ohne Mitgliederliste)",
+    "only used when not visible to everybody": "gilt nur, wenn nicht für alle sichtbar",
+    "Group from the directory or the file store (optional)":
+        "Gruppe aus dem Verzeichnis oder der Dateiablage (optional)",
+    "Remove the workspace? Its documents stay in the store until it is wiped.":
+        "Arbeitsbereich entfernen? Seine Dokumente bleiben im Bestand, bis er geleert wird.",
+    "Remove workspace": "Arbeitsbereich entfernen", "New workspace": "Neuer Arbeitsbereich",
+    "Workspaces of": "Arbeitsbereiche von", "everybody": "alle",
+    "Id and label.": "Kennung und Bezeichnung.",
     "The model does not see the question answerable from the database.":
         "Die Frage betrifft aus Sicht des Modells nichts in der Datenbank – keine Abfrage.",
     "No database account for this user.": "Kein Datenbankzugang für dich (Einstellungen > Meine Datenbanken).",
@@ -1030,6 +1041,7 @@ def _admin_context(p):
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
         "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
+        "new_members": [(n, n, False, False) for n in benutzer.namen()],
     }
 
 
@@ -1124,14 +1136,133 @@ def admin_delete_user(name: str, request: Request,
 
 
 @router.post("/ui/admin/workspaces")
-def admin_create_workspace(request: Request, id: str = Form(...),
-                           label: str = Form(...), members: str = Form(""),
-                           p: Principal = Depends(principal)):
+async def admin_create_workspace(request: Request,
+                                 p: Principal = Depends(principal)):
     _admin(p)
     page_language(p.name)
-    ok, message = raeume.anlegen(
-        id, label, "", [m.strip() for m in members.split(",") if m.strip()])
+    form = await request.form()
+    # ticked boxes, or one comma separated text as older pages send it
+    members = [m.strip() for part in form.getlist("members")
+               for m in str(part).split(",") if m.strip()]
+    room_id, label = str(form.get("id") or "").strip(), str(form.get("label") or "").strip()
+    if not room_id or not label:
+        return _notice(t("Id and label."), False)
+    ok, message = raeume.anlegen(room_id, label, "", members)
+    if ok:
+        benutzer.protokolliere("raum_angelegt", room_id, p.name)
     return _back_to_admin() if ok else _notice(tm(message), False)
+
+
+def _shared_rooms():
+    return [r for r in sorted(raeume.liste()) if not raeume.ist_privat(r)]
+
+
+@router.get("/ui/admin/workspaces/{room}/edit")
+def admin_workspace_edit(room: str, request: Request,
+                         p: Principal = Depends(principal)):
+    """The edit form of a workspace: label, members to tick, group, web search."""
+    _admin(p)
+    page_language(p.name)
+    data = raeume.liste().get(room)
+    if data is None or raeume.ist_privat(room):
+        raise HTTPException(404, "No such workspace.")
+    current = [m for m in (data.get("mitglieder") or []) if m != "*"]
+    names = sorted(set(benutzer.namen()) | set(current))
+    # the ticked ones first, so a long list shows who is in at a glance
+    members = sorted(((n, n, n in current, False) for n in names),
+                     key=lambda o: (not o[2], o[0]))
+    return render("admin_ws_edit.html", request, room=room,
+                  label=raeume.bezeichnung(room),
+                  description=data.get("beschreibung") or "",
+                  open_to_all="*" in (data.get("mitglieder") or []),
+                  members=members, group=data.get("gruppe") or "",
+                  web=raeume.websuche_erlaubt(room))
+
+
+@router.post("/ui/admin/workspaces/{room}/delete")
+def admin_workspace_delete(room: str, request: Request,
+                           p: Principal = Depends(principal)):
+    """The same as DELETE /api/v1/admin/workspaces/{room}: its passages stay."""
+    _admin(p)
+    page_language(p.name)
+    if room not in raeume.liste() or raeume.ist_privat(room):
+        raise HTTPException(404, "No such workspace.")
+    ok, message = raeume.entfernen(room)
+    if ok:
+        benutzer.protokolliere("raum_entfernt", room, p.name)
+    return _back_to_admin() if ok else _notice(tm(message), False)
+
+
+@router.post("/ui/admin/workspaces/{room}/save")
+async def admin_workspace_save(room: str, request: Request,
+                               p: Principal = Depends(principal)):
+    """The same as PATCH /api/v1/admin/workspaces/{room}."""
+    _admin(p)
+    page_language(p.name)
+    if room not in raeume.liste() or raeume.ist_privat(room):
+        raise HTTPException(404, "No such workspace.")
+    form = await request.form()
+    steps = [raeume.beschriften(room, str(form.get("label") or "").strip() or None,
+                                str(form.get("description") or "").strip())]
+    if form.get("open") == "1":
+        steps.append(raeume.fuer_alle_oeffnen(room))
+    else:
+        steps.append(raeume.mitglieder_setzen(
+            room, [str(m) for m in form.getlist("members") if str(m).strip()]))
+    steps.append(raeume.gruppe_setzen(room, str(form.get("group") or "").strip()))
+    steps.append(raeume.websuche_setzen(room, form.get("web") == "1"))
+    failed = [m for ok, m in steps if not ok]
+    benutzer.protokolliere("raum_geaendert", room, p.name, "web page")
+    if failed:
+        return _notice(" ".join(tm(m) for m in failed), False)
+    return _back_to_admin()
+
+
+@router.get("/ui/admin/users/{name}/workspaces")
+def admin_user_workspaces(name: str, request: Request,
+                          p: Principal = Depends(principal)):
+    """The shared workspaces to tick for one user."""
+    _admin(p)
+    page_language(p.name)
+    if not benutzer.eintrag(name):
+        raise HTTPException(404, "No such user.")
+    rooms = []
+    for r in _shared_rooms():
+        members = raeume.liste()[r].get("mitglieder") or []
+        everybody = "*" in members
+        label = raeume.bezeichnung(r) + (f" ({t('everybody')})" if everybody else "")
+        rooms.append((r, label, everybody or name in members, everybody))
+    rooms.sort(key=lambda o: (not o[2], o[1].lower()))
+    return render("admin_user_ws.html", request, user=name, rooms=rooms)
+
+
+@router.post("/ui/admin/users/{name}/workspaces")
+async def admin_user_workspaces_save(name: str, request: Request,
+                                     p: Principal = Depends(principal)):
+    """Adds the user to the ticked workspaces and removes them from the
+    others. Workspaces visible to everybody stay as they are."""
+    _admin(p)
+    page_language(p.name)
+    if not benutzer.eintrag(name):
+        raise HTTPException(404, "No such user.")
+    form = await request.form()
+    wanted = set(str(r) for r in form.getlist("rooms"))
+    failed = []
+    for r in _shared_rooms():
+        members = list(raeume.liste()[r].get("mitglieder") or [])
+        if "*" in members:
+            continue
+        has = name in members
+        if (r in wanted) == has:
+            continue
+        new = members + [name] if r in wanted else [m for m in members if m != name]
+        ok, message = raeume.mitglieder_setzen(r, new)
+        if not ok:
+            failed.append(tm(message))
+    benutzer.protokolliere("raeume_des_nutzers", name, p.name, ", ".join(sorted(wanted)))
+    if failed:
+        return _notice(" ".join(failed), False)
+    return _back_to_admin()
 
 
 @router.post("/ui/admin/workspaces/{room}/websearch")

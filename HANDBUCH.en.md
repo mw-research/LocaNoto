@@ -544,6 +544,11 @@ all** → reverts that.
 Personal workspaces have exactly one reader; members cannot be added
 there.
 
+In the web interface: **Admin** → **Workspaces** → search field above the
+list → **Edit** opens the member list to tick, with its own search field.
+The other way round: **Users** → **Workspaces** at a user → tick the
+workspaces they should be a member of.
+
 ### How do I fill the shared collection in LocaNoto as an admin?
 
 Only admins write to **General**. Three ways:

@@ -1,0 +1,13 @@
+<form hx-post="/ui/admin/workspaces/{{ room|urlencode }}/save" hx-target="#ws-notice">
+  <label>{{ t('Label') }} <input name="label" value="{{ label }}" required></label>
+  <label>{{ t('Description') }} <input name="description" value="{{ description }}"></label>
+  <label class="check"><input type="checkbox" name="open" value="1"{% if open_to_all %} checked{% endif %}> {{ t('Visible to everybody (no member list)') }}</label>
+  <p class="muted">{{ t('Members') }}{% if open_to_all %} – {{ t('only used when not visible to everybody') }}{% endif %}</p>
+  {% set name = "members" %}{% set options = members %}{% include "picklist.html" %}
+  <label>{{ t('Group from the directory or the file store (optional)') }} <input name="group" value="{{ group }}"></label>
+  <label class="check"><input type="checkbox" name="web" value="1"{% if web %} checked{% endif %}> {{ t('Web search allowed') }}</label>
+  <button type="submit" class="primary">{{ t('Save') }}</button>
+</form>
+<form hx-post="/ui/admin/workspaces/{{ room|urlencode }}/delete" hx-target="#ws-notice" hx-confirm="{{ t('Remove the workspace? Its documents stay in the store until it is wiped.') }}" class="inline">
+  <button type="submit" class="danger">{{ t('Remove workspace') }}</button>
+</form>

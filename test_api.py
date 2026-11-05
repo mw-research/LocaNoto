@@ -669,6 +669,38 @@ check("user names are suggested while typing",
 check("only admins search users", anna.get("/ui/users/suggest", params={"q": "a"})
       .status_code == 403)
 
+# --- workspaces and their members in the admin page ---
+_adm = markus.get("/admin").text
+check("the admin page has a search over workspaces and pick lists",
+      'data-filter="#ws-table"' in _adm and "data-picklist" in _adm
+      and "/ui/admin/workspaces/einkauf/edit" in _adm, _adm[-1500:])
+_ed = markus.get("/ui/admin/workspaces/einkauf/edit").text
+check("editing a workspace shows its members ticked",
+      'value="anna" checked' in _ed and 'value="bert"' in _ed
+      and 'value="bert" checked' not in _ed, _ed[:1500])
+r = markus.post("/ui/admin/workspaces/einkauf/save", data={
+    "label": "Einkauf", "description": "Bestellwesen",
+    "members": ["markus", "anna", "bert"]})
+check("members are saved from the pick list",
+      r.status_code == 200 and set(raeume.liste()["einkauf"]["mitglieder"])
+      == {"markus", "anna", "bert"}
+      and raeume.liste()["einkauf"].get("beschreibung") == "Bestellwesen", r.text[:300])
+_uw = markus.get("/ui/admin/users/bert/workspaces").text
+check("a user's workspaces to tick", 'value="einkauf" checked' in _uw, _uw[:1200])
+r = markus.post("/ui/admin/users/bert/workspaces", data={"rooms": []})
+check("unticked: the user leaves the workspace, the others stay",
+      r.status_code == 200 and set(raeume.liste()["einkauf"]["mitglieder"])
+      == {"markus", "anna"}, raeume.liste()["einkauf"])
+check("only admins edit workspaces",
+      anna.post("/ui/admin/workspaces/einkauf/save", data={"label": "x"}).status_code == 403)
+r = markus.post("/ui/admin/workspaces", data={"id": "pickprobe", "label": "Probe",
+                                              "members": ["anna", "bert"]})
+check("a new workspace with members ticked",
+      r.status_code == 200 and set(raeume.liste().get("pickprobe", {}).get("mitglieder") or [])
+      == {"anna", "bert"}, r.text[:300])
+markus.post("/ui/admin/workspaces/pickprobe/delete")
+check("and removed again", "pickprobe" not in raeume.liste())
+
 # --- web search per workspace ---
 markus.post("/ui/admin/workspaces/einkauf/websearch", data={"allow": "1"})
 check("an admin allows web search for a workspace in the page",

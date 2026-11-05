@@ -567,6 +567,11 @@ Bestehenden Arbeitsbereich wählen → dort änderbar:
 Persönliche Arbeitsbereiche haben genau einen Leser; Mitglieder lassen sich
 dort nicht eintragen.
 
+In der Web-Oberfläche: **Admin** → **Arbeitsbereiche** → Suchfeld über der
+Liste → **Bearbeiten** öffnet die Mitgliederliste zum Ankreuzen, mit
+eigenem Suchfeld. Umgekehrt **Benutzer** → **Arbeitsbereiche** bei einem
+Nutzer → die Bereiche ankreuzen, in denen er Mitglied sein soll.
+
 ### Wie befülle ich als Admin den gemeinsamen Bestand in LocaNoto?
 
 In **Allgemein** schreiben nur Admins. Drei Wege:

@@ -1,7 +1,7 @@
 <p class="muted">{{ users.total }} {{ t('users') }}{% if users.query %} · „{{ users.query }}“{% endif %}{% if users.total > users.rows|length %} · {{ users.offset + 1 }}–{{ users.offset + users.rows|length }}{% endif %}</p>
 <table class="files">
 {% for name, role, kind in users.rows %}
-  <tr>
+  <tr data-row>
     <td>{{ name }}</td><td class="muted">{{ kind }}</td>
     <td>
       {% if role in roles %}
@@ -12,11 +12,13 @@
       {% else %}<span class="muted">{{ role }}</span>{% endif %}
     </td>
     <td>
+      <button type="button" hx-get="/ui/admin/users/{{ name|urlencode }}/workspaces" hx-target="#uws-{{ loop.index }}">{{ t('Workspaces') }}</button>
       <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">
         <button type="submit" class="danger">{{ t('Delete') }}</button>
       </form>
     </td>
   </tr>
+  <tr class="edit-row"><td colspan="4" id="uws-{{ loop.index }}"></td></tr>
 {% else %}
   <tr><td class="muted">{{ t('none') }}</td></tr>
 {% endfor %}

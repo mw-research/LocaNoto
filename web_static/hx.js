@@ -13,7 +13,10 @@
 // session cookie. Errors show as a short message, never as page content.
 // Plus helpers for this app: sign-in, sign-out, upload forms,
 // data-userpick -- a text field that suggests user names while typing
-// (comma separated lists too) -- and notices: every signed-in page asks
+// (comma separated lists too) --, data-picklist -- a list of check boxes
+// with a search field that hides what does not match and counts what is
+// ticked --, data-filter="#table" -- a search field that hides table rows
+// not matching --, and notices: every signed-in page asks
 // /ui/notifications every few seconds (often while a web search runs,
 // rarely otherwise), shows each finished task once with a link to it and
 // a count on the "Web sources" tab, and refreshes the task list there.
@@ -103,7 +106,47 @@
     }
   }
 
+  function picklist(box) {
+    if (box._pick) return;
+    box._pick = true;
+    var search = box.querySelector("input[type=search]");
+    var count = box.querySelector("[data-count]");
+    function update() {
+      var q = search ? search.value.trim().toLowerCase() : "";
+      var n = 0;
+      box.querySelectorAll("label.pick").forEach(function (l) {
+        var c = l.querySelector("input");
+        if (c && c.checked) n++;
+        l.hidden = !!q && l.textContent.toLowerCase().indexOf(q) < 0;
+      });
+      if (count) count.textContent = String(n);
+    }
+    if (search) search.addEventListener("input", update);
+    box.addEventListener("change", update);
+    update();
+  }
+
+  function rowFilter(input) {
+    if (input._filter) return;
+    input._filter = true;
+    input.addEventListener("input", function () {
+      var q = input.value.trim().toLowerCase();
+      var table = document.querySelector(input.getAttribute("data-filter"));
+      if (!table) return;
+      table.querySelectorAll("tr[data-row]").forEach(function (tr) {
+        tr.hidden = !!q && tr.textContent.toLowerCase().indexOf(q) < 0;
+      });
+    });
+  }
+
   function process(root) {
+    if (root.querySelectorAll) {
+      root.querySelectorAll("[data-picklist]").forEach(picklist);
+      root.querySelectorAll("input[data-filter]").forEach(rowFilter);
+      root.querySelectorAll("input[data-userpick]").forEach(function (i) {
+        if (!i._userpick) { i._userpick = true; userpick(i); }
+      });
+    }
     var els = root.querySelectorAll ? root.querySelectorAll("[hx-get],[hx-post]") : [];
     if (root.matches && root.matches("[hx-get],[hx-post]")) els = [root].concat(Array.prototype.slice.call(els));
     Array.prototype.forEach.call(els, function (el) {
@@ -202,7 +245,6 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("input[data-userpick]").forEach(userpick);
     var accent = document.documentElement.getAttribute("data-accent");
     if (accent) document.documentElement.style.setProperty("--accent", accent);
     process(document.body);

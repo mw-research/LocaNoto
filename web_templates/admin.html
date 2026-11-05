@@ -21,21 +21,28 @@
 
 <section class="card">
   <h2>{{ t('Workspaces') }}</h2>
-  <table class="files">
+  <input type="search" data-filter="#ws-table" placeholder="{{ t('Search workspaces') }}" autocomplete="off">
+  <table class="files" id="ws-table">
   {% for id, label, members, group, web in workspaces %}
-    <tr><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ members }}</td><td class="muted">{{ group }}</td>
+    <tr data-row><td><code>{{ id }}</code></td><td>{{ label }}</td><td class="muted">{{ members }}</td><td class="muted">{{ group }}</td>
       <td><form hx-post="/ui/admin/workspaces/{{ id }}/websearch" hx-target="#ws-notice" class="inline">
         <input type="hidden" name="allow" value="{{ '0' if web else '1' }}">
         <span class="{{ '' if web else 'muted' }}">{{ t('Web search allowed') if web else t('Web search blocked') }}</span>
         <button type="submit">{{ t('Block') if web else t('Allow') }}</button>
-      </form></td></tr>
+      </form></td>
+      <td><button type="button" hx-get="/ui/admin/workspaces/{{ id|urlencode }}/edit" hx-target="#ws-edit-{{ loop.index }}">{{ t('Edit') }}</button></td></tr>
+    <tr class="edit-row"><td colspan="6" id="ws-edit-{{ loop.index }}"></td></tr>
   {% endfor %}
   </table>
   <p class="muted">{{ t('Web search next to a workspace means: the model writes search terms while passages of that workspace are in its context, and what ends up in a search term goes to search engines. Taken-over results always land in the own workspace, never in a shared one. The general workspace is therefore blocked by default; with web search, a question over all workspaces simply leaves it out.') }}</p>
-  <form hx-post="/ui/admin/workspaces" hx-target="#ws-notice" class="inline wide">
-    <input name="id" placeholder="id" required pattern="[a-z0-9_-]+">
-    <input name="label" placeholder="{{ t('Label') }}" required>
-    <input name="members" placeholder="{{ t('Members (comma separated)') }}" data-userpick data-multiple>
+  <h3>{{ t('New workspace') }}</h3>
+  <form hx-post="/ui/admin/workspaces" hx-target="#ws-notice">
+    <div class="inline wide">
+      <input name="id" placeholder="id" required pattern="[a-z0-9_-]+">
+      <input name="label" placeholder="{{ t('Label') }}" required>
+    </div>
+    <p class="muted">{{ t('Members') }}</p>
+    {% set name = "members" %}{% set options = new_members %}{% include "picklist.html" %}
     <button type="submit" class="primary">{{ t('Create') }}</button>
   </form>
   <div id="ws-notice"></div>

@@ -1,0 +1,5 @@
+<form hx-post="/ui/admin/users/{{ user|urlencode }}/workspaces" hx-target="#user-notice">
+  <p class="muted">{{ t('Workspaces of') }} <strong>{{ user }}</strong></p>
+  {% set name = "rooms" %}{% set options = rooms %}{% include "picklist.html" %}
+  <button type="submit" class="primary">{{ t('Save') }}</button>
+</form>
