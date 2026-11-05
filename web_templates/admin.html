@@ -20,7 +20,7 @@
 </section>
 
 <section class="card">
-  <h2>{{ t('Workspaces') }}</h2>
+  <h2>{{ t('Workspaces') }} ({{ workspaces|length }})</h2>
   <input type="search" data-filter="#ws-table" placeholder="{{ t('Search workspaces') }}" autocomplete="off">
   <table class="files" id="ws-table">
   {% for id, label, members, group, web in workspaces %}
@@ -42,7 +42,7 @@
       <input name="label" placeholder="{{ t('Label') }}" required>
     </div>
     <p class="muted">{{ t('Members') }}</p>
-    {% set name = "members" %}{% set options = new_members %}{% include "picklist.html" %}
+    {% set name = "members" %}{% set chosen = [] %}{% set source = "/ui/users/suggest" %}{% set placeholder = t('Search user and add ...') %}{% include "chooser.html" %}
     <button type="submit" class="primary">{{ t('Create') }}</button>
   </form>
   <div id="ws-notice"></div>

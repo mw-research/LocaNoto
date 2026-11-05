@@ -2,8 +2,8 @@
   <label>{{ t('Label') }} <input name="label" value="{{ label }}" required></label>
   <label>{{ t('Description') }} <input name="description" value="{{ description }}"></label>
   <label class="check"><input type="checkbox" name="open" value="1"{% if open_to_all %} checked{% endif %}> {{ t('Visible to everybody (no member list)') }}</label>
-  <p class="muted">{{ t('Members') }}{% if open_to_all %} – {{ t('only used when not visible to everybody') }}{% endif %}</p>
-  {% set name = "members" %}{% set options = members %}{% include "picklist.html" %}
+  <p class="muted">{{ t('Members') }} ({{ members|length }}){% if open_to_all %} – {{ t('only used when not visible to everybody') }}{% endif %}</p>
+  {% set name = "members" %}{% set chosen = members %}{% set source = "/ui/users/suggest" %}{% set placeholder = t('Search user and add ...') %}{% include "chooser.html" %}
   <label>{{ t('Group from the directory or the file store (optional)') }} <input name="group" value="{{ group }}"></label>
   <label class="check"><input type="checkbox" name="web" value="1"{% if web %} checked{% endif %}> {{ t('Web search allowed') }}</label>
   <button type="submit" class="primary">{{ t('Save') }}</button>

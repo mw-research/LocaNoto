@@ -1,5 +1,6 @@
 <form hx-post="/ui/admin/users/{{ user|urlencode }}/workspaces" hx-target="#user-notice">
-  <p class="muted">{{ t('Workspaces of') }} <strong>{{ user }}</strong></p>
-  {% set name = "rooms" %}{% set options = rooms %}{% include "picklist.html" %}
+  <p class="muted">{{ t('Workspaces of') }} <strong>{{ user }}</strong>{% if everybody %} · {{ t('also, visible to everybody') }}: {{ everybody|join(', ') }}{% endif %}</p>
+  <input type="hidden" name="sent" value="1">
+  {% set name = "rooms" %}{% set chosen = rooms %}{% set source = "/ui/admin/workspaces/suggest" %}{% set placeholder = t('Search workspace and add ...') %}{% include "chooser.html" %}
   <button type="submit" class="primary">{{ t('Save') }}</button>
 </form>

@@ -167,10 +167,10 @@ ul.events { list-style: none; padding: 0; }
 ul.events li { border-top: 1px solid var(--border); padding: .35rem 0; }
 ul.events pre { white-space: pre-wrap; margin: .25rem 0 0; }
 tr.on td { background: var(--bg); }
-.picklist { border: 1px solid var(--border); border-radius: 6px; padding: .5rem; margin: .25rem 0 .75rem; }
-.picklist .options { max-height: 260px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .1rem .75rem; margin-top: .4rem; }
-.picklist label.pick { display: flex; gap: .4rem; align-items: center; }
-.picklist label.pick[hidden] { display: none; }
+.chooser { margin: .25rem 0 .75rem; }
+.chooser .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .3rem; }
+.chip { display: inline-flex; align-items: center; gap: .2rem; padding: .1rem .5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+.chip button { padding: 0 .2rem; }
 .edit-row td { background: var(--bg); }
 .pill { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; }
 textarea.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85rem; }

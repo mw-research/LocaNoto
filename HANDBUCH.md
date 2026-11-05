@@ -568,9 +568,12 @@ Persönliche Arbeitsbereiche haben genau einen Leser; Mitglieder lassen sich
 dort nicht eintragen.
 
 In der Web-Oberfläche: **Admin** → **Arbeitsbereiche** → Suchfeld über der
-Liste → **Bearbeiten** öffnet die Mitgliederliste zum Ankreuzen, mit
-eigenem Suchfeld. Umgekehrt **Benutzer** → **Arbeitsbereiche** bei einem
-Nutzer → die Bereiche ankreuzen, in denen er Mitglied sein soll.
+Liste → **Bearbeiten**. Die Mitglieder stehen dort als Kärtchen (× nimmt
+eines heraus); hinzu kommt jemand über **Benutzer suchen und hinzufügen**:
+einen Teil des Namens tippen, Vorschlag anklicken. Umgekehrt **Benutzer**
+→ Namen suchen → **Arbeitsbereiche** → ebenso Bereiche suchen und
+hinzufügen. Eine Liste aller Nutzer gibt es nicht; ab 20 Nutzern zeigt
+die Benutzerliste erst nach einer Suche Treffer.
 
 ### Wie befülle ich als Admin den gemeinsamen Bestand in LocaNoto?
 

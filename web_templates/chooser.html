@@ -1,0 +1,12 @@
+{# Chosen entries as chips, a search field that suggests more (hx.js chooser).
+   name: field name; chosen: [(value, label)]; source: suggest URL;
+   placeholder: text in the search field #}
+<div class="chooser" data-chooser data-source="{{ source }}" data-name="{{ name }}">
+  <div class="chips">
+  {% for value, label in chosen %}
+    <span class="chip"><input type="hidden" name="{{ name }}" value="{{ value }}">{{ label }} <button type="button" class="link" data-remove aria-label="{{ t('Remove') }}">×</button></span>
+  {% endfor %}
+  </div>
+  <input type="search" placeholder="{{ placeholder }}" autocomplete="off" aria-label="{{ placeholder }}">
+  <div class="userpick" hidden></div>
+</div>

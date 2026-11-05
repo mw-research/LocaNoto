@@ -228,6 +228,10 @@ TEXTS = {
     "Delete this document?": "Dieses Dokument löschen?",
     "Ask again": "Nochmal fragen", "Cancel": "Abbrechen",
     "selected": "ausgewählt", "Search workspaces": "Arbeitsbereiche suchen",
+    "Search user and add ...": "Benutzer suchen und hinzufügen …",
+    "Search workspace and add ...": "Arbeitsbereich suchen und hinzufügen …",
+    "also, visible to everybody": "außerdem, für alle sichtbar",
+    "type a part of a name to see them": "einen Teil des Namens eingeben, um sie zu sehen",
     "Edit": "Bearbeiten", "Description": "Beschreibung", "Members": "Mitglieder",
     "Visible to everybody (no member list)": "Für alle sichtbar (ohne Mitgliederliste)",
     "only used when not visible to everybody": "gilt nur, wenn nicht für alle sichtbar",
@@ -1041,11 +1045,13 @@ def _admin_context(p):
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
         "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
-        "new_members": [(n, n, False, False) for n in benutzer.namen()],
     }
 
 
 USER_PAGE = 50
+# Up to this many users the list shows them all; above it, only after a
+# search -- a list of everybody is no help to find one.
+USER_LIST_ALL = 20
 
 
 def _user_page(query, offset):
@@ -1061,7 +1067,11 @@ def _user_page(query, offset):
     for n in names[offset:offset + USER_PAGE]:
         entry = benutzer.eintrag(n) or {}
         rows.append((n, entry.get("rolle", "nutzer"), entry.get("anmeldung", "lokal")))
+    hidden = not q and len(names) > USER_LIST_ALL
+    if hidden:
+        rows = []
     return {"rows": rows, "total": len(names), "offset": offset, "query": query or "",
+            "hidden": hidden,
             "next": offset + USER_PAGE if offset + USER_PAGE < len(names) else None,
             "previous": max(0, offset - USER_PAGE) if offset else None}
 
@@ -1166,11 +1176,7 @@ def admin_workspace_edit(room: str, request: Request,
     data = raeume.liste().get(room)
     if data is None or raeume.ist_privat(room):
         raise HTTPException(404, "No such workspace.")
-    current = [m for m in (data.get("mitglieder") or []) if m != "*"]
-    names = sorted(set(benutzer.namen()) | set(current))
-    # the ticked ones first, so a long list shows who is in at a glance
-    members = sorted(((n, n, n in current, False) for n in names),
-                     key=lambda o: (not o[2], o[0]))
+    members = [(m, m) for m in sorted(m for m in (data.get("mitglieder") or []) if m != "*")]
     return render("admin_ws_edit.html", request, room=room,
                   label=raeume.bezeichnung(room),
                   description=data.get("beschreibung") or "",
@@ -1226,14 +1232,34 @@ def admin_user_workspaces(name: str, request: Request,
     page_language(p.name)
     if not benutzer.eintrag(name):
         raise HTTPException(404, "No such user.")
-    rooms = []
+    rooms, everybody = [], []
     for r in _shared_rooms():
         members = raeume.liste()[r].get("mitglieder") or []
-        everybody = "*" in members
-        label = raeume.bezeichnung(r) + (f" ({t('everybody')})" if everybody else "")
-        rooms.append((r, label, everybody or name in members, everybody))
-    rooms.sort(key=lambda o: (not o[2], o[1].lower()))
-    return render("admin_user_ws.html", request, user=name, rooms=rooms)
+        if "*" in members:
+            everybody.append(raeume.bezeichnung(r))
+        elif name in members:
+            rooms.append((r, raeume.bezeichnung(r)))
+    return render("admin_user_ws.html", request, user=name, rooms=rooms,
+                  everybody=everybody)
+
+
+@router.get("/ui/admin/workspaces/suggest")
+def suggest_workspaces(q: str = "", p: Principal = Depends(principal)):
+    """Up to ten shared workspaces with a member list whose id or label
+    contains q: [[id, label], ...]."""
+    _admin(p)
+    q = q.strip().lower()
+    if not q:
+        return JSONResponse([])
+    out = []
+    for r in _shared_rooms():
+        if "*" in (raeume.liste()[r].get("mitglieder") or []):
+            continue
+        label = raeume.bezeichnung(r)
+        if q in r.lower() or q in label.lower():
+            out.append([r, label])
+    out.sort(key=lambda x: (not x[1].lower().startswith(q), x[1].lower()))
+    return JSONResponse(out[:10])
 
 
 @router.post("/ui/admin/users/{name}/workspaces")
@@ -1246,6 +1272,8 @@ async def admin_user_workspaces_save(name: str, request: Request,
     if not benutzer.eintrag(name):
         raise HTTPException(404, "No such user.")
     form = await request.form()
+    if form.get("sent") != "1":
+        raise HTTPException(400, "Incomplete form.")
     wanted = set(str(r) for r in form.getlist("rooms"))
     failed = []
     for r in _shared_rooms():

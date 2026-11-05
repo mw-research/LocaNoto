@@ -1,3 +1,6 @@
+{% if users.hidden %}
+<p class="muted">{{ users.total }} {{ t('users') }} – {{ t('type a part of a name to see them') }}</p>
+{% else %}
 <p class="muted">{{ users.total }} {{ t('users') }}{% if users.query %} · „{{ users.query }}“{% endif %}{% if users.total > users.rows|length %} · {{ users.offset + 1 }}–{{ users.offset + users.rows|length }}{% endif %}</p>
 <table class="files">
 {% for name, role, kind in users.rows %}
@@ -28,4 +31,5 @@
   {% if users.previous is not none %}<button class="link" hx-get="/ui/admin/users?q={{ users.query|urlencode }}&offset={{ users.previous }}" hx-target="#user-rows">← {{ t('previous') }}</button>{% endif %}
   {% if users.next %}<button class="link" hx-get="/ui/admin/users?q={{ users.query|urlencode }}&offset={{ users.next }}" hx-target="#user-rows">{{ t('next') }} →</button>{% endif %}
 </p>
+{% endif %}
 {% endif %}

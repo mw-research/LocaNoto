@@ -671,13 +671,13 @@ check("only admins search users", anna.get("/ui/users/suggest", params={"q": "a"
 
 # --- workspaces and their members in the admin page ---
 _adm = markus.get("/admin").text
-check("the admin page has a search over workspaces and pick lists",
-      'data-filter="#ws-table"' in _adm and "data-picklist" in _adm
+check("the admin page has a search over workspaces and search choosers",
+      'data-filter="#ws-table"' in _adm and "data-chooser" in _adm
       and "/ui/admin/workspaces/einkauf/edit" in _adm, _adm[-1500:])
 _ed = markus.get("/ui/admin/workspaces/einkauf/edit").text
-check("editing a workspace shows its members ticked",
-      'value="anna" checked' in _ed and 'value="bert"' in _ed
-      and 'value="bert" checked' not in _ed, _ed[:1500])
+check("editing a workspace shows its members, not everybody",
+      'name="members" value="anna"' in _ed and 'value="bert"' not in _ed
+      and "/ui/users/suggest" in _ed, _ed[:1500])
 r = markus.post("/ui/admin/workspaces/einkauf/save", data={
     "label": "Einkauf", "description": "Bestellwesen",
     "members": ["markus", "anna", "bert"]})
@@ -686,8 +686,11 @@ check("members are saved from the pick list",
       == {"markus", "anna", "bert"}
       and raeume.liste()["einkauf"].get("beschreibung") == "Bestellwesen", r.text[:300])
 _uw = markus.get("/ui/admin/users/bert/workspaces").text
-check("a user's workspaces to tick", 'value="einkauf" checked' in _uw, _uw[:1200])
-r = markus.post("/ui/admin/users/bert/workspaces", data={"rooms": []})
+check("a user's workspaces with a search to add more",
+      'name="rooms" value="einkauf"' in _uw and "/ui/admin/workspaces/suggest" in _uw, _uw[:1200])
+check("workspaces are suggested by a part of the name",
+      ["einkauf", "Einkauf"] in markus.get("/ui/admin/workspaces/suggest", params={"q": "kau"}).json())
+r = markus.post("/ui/admin/users/bert/workspaces", data={"sent": "1"})
 check("unticked: the user leaves the workspace, the others stay",
       r.status_code == 200 and set(raeume.liste()["einkauf"]["mitglieder"])
       == {"markus", "anna"}, raeume.liste()["einkauf"])

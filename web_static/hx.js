@@ -13,10 +13,10 @@
 // session cookie. Errors show as a short message, never as page content.
 // Plus helpers for this app: sign-in, sign-out, upload forms,
 // data-userpick -- a text field that suggests user names while typing
-// (comma separated lists too) --, data-picklist -- a list of check boxes
-// with a search field that hides what does not match and counts what is
-// ticked --, data-filter="#table" -- a search field that hides table rows
-// not matching --, and notices: every signed-in page asks
+// (comma separated lists too) --, data-chooser -- the chosen entries as
+// chips with a remove button and a search field that suggests more from
+// data-source (no list of everybody) --, data-filter="#table" -- a search
+// field that hides table rows not matching --, and notices: every signed-in page asks
 // /ui/notifications every few seconds (often while a web search runs,
 // rarely otherwise), shows each finished task once with a link to it and
 // a count on the "Web sources" tab, and refreshes the task list there.
@@ -106,24 +106,65 @@
     }
   }
 
-  function picklist(box) {
-    if (box._pick) return;
-    box._pick = true;
+  function chooser(box) {
+    if (box._chooser) return;
+    box._chooser = true;
     var search = box.querySelector("input[type=search]");
-    var count = box.querySelector("[data-count]");
-    function update() {
-      var q = search ? search.value.trim().toLowerCase() : "";
-      var n = 0;
-      box.querySelectorAll("label.pick").forEach(function (l) {
-        var c = l.querySelector("input");
-        if (c && c.checked) n++;
-        l.hidden = !!q && l.textContent.toLowerCase().indexOf(q) < 0;
-      });
-      if (count) count.textContent = String(n);
+    var list = box.querySelector(".userpick");
+    var chips = box.querySelector(".chips");
+    var name = box.getAttribute("data-name");
+    var timer = null;
+    function chosen() {
+      return Array.prototype.map.call(chips.querySelectorAll("input[type=hidden]"), function (i) { return i.value; });
     }
-    if (search) search.addEventListener("input", update);
-    box.addEventListener("change", update);
-    update();
+    function add(value, label) {
+      if (chosen().indexOf(value) >= 0) return;
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      var hidden = document.createElement("input");
+      hidden.type = "hidden"; hidden.name = name; hidden.value = value;
+      var x = document.createElement("button");
+      x.type = "button"; x.className = "link"; x.setAttribute("data-remove", ""); x.textContent = "×";
+      chip.appendChild(hidden);
+      chip.appendChild(document.createTextNode(label + " "));
+      chip.appendChild(x);
+      chips.appendChild(chip);
+    }
+    box.addEventListener("click", function (ev) {
+      var x = ev.target.closest && ev.target.closest("[data-remove]");
+      if (x) { ev.preventDefault(); x.closest(".chip").remove(); }
+    });
+    search.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") ev.preventDefault();   // Enter picks, it does not send the form
+    });
+    search.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(async function () {
+        var q = search.value.trim();
+        if (!q) { list.hidden = true; return; }
+        var r = await fetch(box.getAttribute("data-source") + "?q=" + encodeURIComponent(q), { credentials: "same-origin" });
+        if (!r.ok) { list.hidden = true; return; }
+        var found = await r.json();
+        var have = chosen();
+        list.innerHTML = "";
+        found.forEach(function (item) {
+          var value = Array.isArray(item) ? item[0] : item;
+          var label = Array.isArray(item) ? item[1] : item;
+          if (have.indexOf(value) >= 0) return;
+          var b = document.createElement("button");
+          b.type = "button";
+          b.textContent = label;
+          b.addEventListener("click", function () {
+            add(value, label);
+            search.value = "";
+            list.hidden = true;
+            search.focus();
+          });
+          list.appendChild(b);
+        });
+        list.hidden = !list.children.length;
+      }, 200);
+    });
   }
 
   function rowFilter(input) {
@@ -141,7 +182,7 @@
 
   function process(root) {
     if (root.querySelectorAll) {
-      root.querySelectorAll("[data-picklist]").forEach(picklist);
+      root.querySelectorAll("[data-chooser]").forEach(chooser);
       root.querySelectorAll("input[data-filter]").forEach(rowFilter);
       root.querySelectorAll("input[data-userpick]").forEach(function (i) {
         if (!i._userpick) { i._userpick = true; userpick(i); }

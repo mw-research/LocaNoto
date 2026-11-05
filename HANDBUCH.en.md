@@ -545,9 +545,12 @@ Personal workspaces have exactly one reader; members cannot be added
 there.
 
 In the web interface: **Admin** → **Workspaces** → search field above the
-list → **Edit** opens the member list to tick, with its own search field.
-The other way round: **Users** → **Workspaces** at a user → tick the
-workspaces they should be a member of.
+list → **Edit**. The members show as chips (× removes one); someone is
+added with **Search user and add**: type a part of the name, click the
+suggestion. The other way round: **Users** → search the name →
+**Workspaces** → search and add workspaces the same way. There is no list
+of all users; from 20 users on, the user list shows hits only after a
+search.
 
 ### How do I fill the shared collection in LocaNoto as an admin?
 

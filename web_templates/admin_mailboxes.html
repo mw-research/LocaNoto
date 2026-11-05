@@ -37,7 +37,8 @@
     <label class="check"><input type="checkbox" name="enabled" value="1"{% if ts.enabled %} checked{% endif %}> {{ t('Ticket system on') }}</label>
     <p class="muted">{{ t('No login is stored. Members connect this mailbox under Settings with their own account; while one of them has LocaNoto open, the mailbox is checked every minute.') }}</p>
     <label>{{ t('Standard answer ({ticket}, {subject}, {name} are filled in)') }}<textarea name="answer" rows="7">{{ ts.answer }}</textarea></label>
-    <label>{{ t('Members (get every ticket)') }}<input name="members" value="{{ ts.members|join(', ') }}" data-userpick data-multiple></label>
+    <p class="muted">{{ t('Members (get every ticket)') }}</p>
+    {% set name = "members" %}{% set chosen = ts.members_chosen %}{% set source = "/ui/users/suggest" %}{% set placeholder = t('Search user and add ...') %}{% include "chooser.html" %}
     <label>{{ t('Forward every new mail to (addresses, comma separated)') }}<input name="forward" value="{{ ts.forward|join(', ') }}"></label>
     <label>{{ t('Ticket prefix') }}<input name="prefix" value="{{ ts.prefix }}" maxlength="6"></label>
     <button type="submit" class="primary">{{ t('Save') }}</button>

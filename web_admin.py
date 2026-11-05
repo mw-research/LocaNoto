@@ -337,20 +337,23 @@ def mailboxes_page(request: Request):
     return render("admin_mailboxes.html", request, nav=_nav(p, "admin"),
                   boxes=boxes, templates=mailboxes.templates(),
                   notice_default=mailboxes.NOTICE_DEFAULT,
-                  ticket_boxes=[(n, tickets.settings(n)) for n in shared])
+                  ticket_boxes=[(n, dict(s_, members_chosen=[(m, m) for m in s_["members"]]))
+                                for n, s_ in ((n, tickets.settings(n)) for n in shared)])
 
 
 @router.post("/ui/admin/mailboxes/{name}/tickets")
-def mailbox_tickets(name: str, request: Request, enabled: str = Form(""),
-                    answer: str = Form(""), members: str = Form(""),
-                    forward: str = Form(""), prefix: str = Form("T"),
-                    p: Principal = Depends(principal)):
+async def mailbox_tickets(name: str, request: Request,
+                          p: Principal = Depends(principal)):
     """Ticket system of a shared mailbox (tickets.configure)."""
     _admin(p)
     page_language(p.name)
-    split = lambda text: [x.strip() for x in text.replace(";", ",").split(",") if x.strip()]
+    form = await request.form()
+    split = lambda text: [x.strip() for x in str(text).replace(";", ",").split(",") if x.strip()]
+    members = [m for part in form.getlist("members") for m in split(part)]
+    enabled = form.get("enabled") or ""
     ok, message = tickets.configure(
-        name, bool(enabled), answer, split(members), split(forward), prefix)
+        name, bool(enabled), str(form.get("answer") or ""), members,
+        split(form.get("forward") or ""), str(form.get("prefix") or "T"))
     if ok:
         benutzer.protokolliere("tickets", name, p.name, "on" if enabled else "off")
         return _reload("/admin/mailboxes")
