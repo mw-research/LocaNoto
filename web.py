@@ -61,6 +61,9 @@ from server import (SEALED_COOKIE, COOKIE_SECURE, Principal, principal,
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRAND = os.getenv("UI_BRAND_NAME", "LocaNoto").strip() or "LocaNoto"
+# The logo in the header, on the sign-in page and in the browser tab;
+# UI_LOGO= (empty) leaves it out, a path under /static/ replaces it.
+LOGO = os.getenv("UI_LOGO", "/static/logo.png").strip()
 ACCENT = os.getenv("UI_ACCENT_COLOR", "").strip()
 
 router = APIRouter(include_in_schema=False)
@@ -343,6 +346,7 @@ def tm(message):
 
 def render(name, request=None, **context):
     context.setdefault("brand", BRAND)
+    context.setdefault("logo", LOGO)
     context.setdefault("accent", ACCENT)
     context.update(t=t, tm=tm, lang=sprache.aktuell(),
                    csrf=(request.cookies.get("locanoto_csrf", "")
@@ -445,6 +449,15 @@ def _nav(p, active):
 
 
 # --- SIGN-IN ---
+
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Browsers ask for it at the root, whatever the page says."""
+    from fastapi.responses import FileResponse
+    return FileResponse(os.path.join(HERE, "web_static", "favicon.ico"),
+                        media_type="image/x-icon",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
 
 @router.get("/login")
 def login_page(request: Request, next: str = "/"):

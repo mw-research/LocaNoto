@@ -238,6 +238,13 @@ check("health without sign-in", anon.get(f"{API}/health").json()["status"] == "o
 check("ready", anon.get(f"{API}/ready").status_code == 200)
 check("me without sign-in is 401", anon.get(f"{API}/me").status_code == 401)
 
+r = anon.get("/favicon.ico")
+check("the browser tab icon", r.status_code == 200 and r.content[:4] == bytes([0, 0, 1, 0]))
+_login_page = anon.get("/login").text
+check("the logo on the sign-in page and as tab icon",
+      "/static/logo.png" in _login_page and "/static/favicon.ico" in _login_page)
+check("the logo file is served", anon.get("/static/logo.png").status_code == 200)
+
 # --- sign-in ---
 check("wrong password is 401", anon.post(f"{API}/auth/login", json={
     "username": "anna", "password": "falsch"}).status_code == 401)

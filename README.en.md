@@ -1,3 +1,5 @@
+<p align="center"><img src="web_static/logo.png" width="180" alt="LocaNoto"></p>
+
 # LocaNoto
 
 *Deutsch: [README.md](README.md)*

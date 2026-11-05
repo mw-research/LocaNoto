@@ -46,7 +46,9 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font
   background: var(--surface); border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
-.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.brand { font-weight: 700; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: .45rem; }
+.brand img { width: 30px; height: 30px; }
+.login-logo { display: block; width: 160px; height: 160px; margin: 0 auto 1rem; }
 .tabs { display: flex; gap: .25rem; flex: 1; flex-wrap: wrap; }
 .tabs a {
   padding: .35rem .7rem; border-radius: 6px; color: var(--muted);

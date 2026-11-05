@@ -5,13 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{{ brand }}{% endblock %}</title>
 <link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" href="/static/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <script src="/static/hx.js" defer></script>
 {% block head %}{% endblock %}
 </head>
 <body>
 {% if nav %}
 <header class="top">
-  <a class="brand" href="/">{{ brand }}</a>
+  <a class="brand" href="/">{% if logo %}<img src="{{ logo }}" alt="" width="30" height="30">{% endif %}{{ brand }}</a>
   <nav class="tabs">
     <a href="/" class="{{ 'on' if nav.active == 'chat' }}">{{ t('Chat') }}</a>
     <a href="/documents" class="{{ 'on' if nav.active == 'documents' }}">{{ t('Documents') }}</a>

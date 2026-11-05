@@ -3,7 +3,7 @@
 {% block mainclass %}login{% endblock %}
 {% block main %}
 <section class="card narrow">
-  <h1>{{ brand }}</h1>
+  {% if logo %}<img class="login-logo" src="{{ logo }}" alt="{{ brand }}" width="160" height="160">{% else %}<h1>{{ brand }}</h1>{% endif %}
   <form data-login data-next="{{ next }}">
     <label>{{ t('Name') }}<input name="username" autocomplete="username" required autofocus></label>
     <label>{{ t('Password') }}<input name="password" type="password" autocomplete="current-password" required></label>
