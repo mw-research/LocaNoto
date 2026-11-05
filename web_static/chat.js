@@ -160,7 +160,7 @@
   // "Ask again" under a failed answer: the same chat answers its last
   // question again; the failed answer is replaced.
   function retryButton(form, box, reply, chatId) {
-    var b = el("button", "primary", form.getAttribute("data-retry") || "Ask again");
+    var b = el("button", "primary", form.getAttribute("data-retry-label") || "Ask again");
     b.type = "button";
     b.addEventListener("click", async function () {
       if (form.classList.contains("busy")) return;
@@ -266,7 +266,7 @@
     document.addEventListener("click", function (ev) {
       var b = ev.target.closest && ev.target.closest("[data-web-draft]");
       if (b) { ev.preventDefault(); confirmWeb(form, b); }
-      var r = ev.target.closest && ev.target.closest("[data-retry]");
+      var r = ev.target.closest && ev.target.closest("button[data-retry]");
       if (r && !form.classList.contains("busy")) {
         ev.preventDefault();
         var box = document.getElementById("messages");

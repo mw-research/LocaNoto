@@ -20,7 +20,7 @@
   <div id="messages" class="messages" data-chat-id="{{ chat_id }}">
     {% for m in messages %}{% include "message.html" %}{% endfor %}
   </div>
-  <form id="ask" class="composer" data-retry="{{ t('Ask again') }}">
+  <form id="ask" class="composer" data-retry-label="{{ t('Ask again') }}">
     <textarea name="question" rows="3" placeholder="{{ t('Ask a question about your documents ...') }}" required>{{ prefill or '' }}</textarea>
     <div class="composer-row">
       <details class="options">

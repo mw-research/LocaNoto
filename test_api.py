@@ -460,6 +460,9 @@ _msgs[-1].setdefault("entwuerfe", []).extend([
      "argumente": {"subject": "Fokuszeit"}}])
 _chats_mod.speichere("anna", chat_id, _msgs)
 _page = anna.get(f"/c/{chat_id}").text
+_composer = _page[_page.find('<form id="ask"'):][:200]
+check("the question form is no ask-again button (a click on Send would ask again)",
+      "data-retry=" not in _composer and "data-retry-label=" in _composer, _composer)
 check("calendar drafts show the day and their own buttons",
       "Statik Halle 3 | Mi 12.11.2026 14:00-15:00" in _page
       and ("Einladung senden" in _page or "Send invitation" in _page)
