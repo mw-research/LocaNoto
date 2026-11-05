@@ -315,7 +315,9 @@ def _sql_block(user, req, question, model, history_text):
     except Exception as e:
         return [], {"reason": f"Query not generated: {e}"}
     if not query:
-        return [], {"reason": "The model does not see the question "
+        # "none": nothing went wrong, the question is not one for the
+        # database -- the page does not mention it under every answer
+        return [], {"none": True, "reason": "The model does not see the question "
                               "answerable from the database."}
     try:
         columns, rows = sqldb.fuehre_aus(query, zugang=access)
@@ -867,7 +869,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
     if sql_info:
         # The query stays with the answer: it is what the numbers rest on,
         # as a source page is for a quote.
-        message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason")
+        message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason", "none")
                           if k in sql_info}
     messages.append(message)
     if run:

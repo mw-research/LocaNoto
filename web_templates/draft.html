@@ -1,8 +1,9 @@
 <div class="draft" id="draft-{{ d.id }}">
 {% set args = d.argumente or {} %}
 {% if d.state == 'sent' %}
-  <span class="ok">{{ t('Searched.') if d.kind == 'web' else t('Stored.') if d.server == 'workspace' else t('Added to the calendar.') if d.werkzeug == 'calendar_add' else t('Sent.') }}</span>
-  {% if d.kind == 'web' %}<span class="muted">{{ args.anfrage or args.adresse }}</span>{% elif d.result %}<span class="muted">{{ d.result }}</span>{% endif %}
+  {% set done = t('Searched.') if d.kind == 'web' else t('Stored.') if d.server == 'workspace' else t('Added to the calendar.') if d.werkzeug == 'calendar_add' else t('Sent.') %}
+  <span class="ok">{{ done }}</span>
+  {% if d.kind == 'web' %}<span class="muted">{{ args.anfrage or args.adresse }}</span>{% elif d.result and d.result|trim|lower != done|trim|lower %}<span class="muted">{{ d.result }}</span>{% endif %}
 {% elif d.state == 'discarded' %}
   <span class="muted">{{ t('Discarded.') }}</span>{% if d.kind == 'web' %} <span class="muted">{{ args.anfrage or args.adresse }}</span>{% endif %}
 {% elif d.state == 'sending' %}

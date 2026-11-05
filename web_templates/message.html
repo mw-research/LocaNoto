@@ -27,7 +27,7 @@
     <summary>{{ t('Database query') }} ({% if m.sql.rows is defined %}{{ m.sql.rows }} {{ t('rows') }}{% else %}{{ t(m.sql.reason) }}{% endif %})</summary>
     <pre>{{ m.sql.query }}</pre>
   </details>
-  {% elif m.sql and m.sql.reason %}
+  {% elif m.sql and m.sql.reason and not m.sql.none and 'does not see the question' not in m.sql.reason %}
   <p class="muted">{{ t('Database') }}: {{ t(m.sql.reason) }}</p>
   {% endif %}
   {% if m.sources %}

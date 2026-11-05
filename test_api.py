@@ -487,6 +487,18 @@ check("an answer that stopped long ago offers ask again",
       "data-retry" in _page and 'data-running="1"' not in _page, _page[-1200:])
 _chats_mod.speichere("anna", chat_id, _msgs)
 
+# "No query, the question is not for the database" is no news under every answer.
+_msgs = _chats_mod.lade("anna", chat_id)
+_msgs.append({"role": "assistant", "content": "Kurz.", "sql": {
+    "reason": "The model does not see the question answerable from the database.", "none": True}})
+_msgs.append({"role": "assistant", "content": "Kurz.", "sql": {"reason": "No database connection: timeout"}})
+_chats_mod.speichere("anna", chat_id, _msgs)
+_page = anna.get(f"/c/{chat_id}").text
+check("no database note when the question is not for the database; a real problem shows",
+      "does not see the question" not in _page and "betrifft aus Sicht des Modells" not in _page
+      and "No database connection: timeout" in _page, _page[-800:])
+_chats_mod.speichere("anna", chat_id, _msgs[:-2])
+
 # A web search the model proposed waits like a mail, with its exact text.
 _msgs = _chats_mod.lade("anna", chat_id)
 _msgs[-1]["entwuerfe"].append(
