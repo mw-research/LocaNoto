@@ -1,10 +1,11 @@
 """Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers.
 
 The same tools as an Exchange mailbox (postfach.py) -- mails_lesen,
-mail_volltext, mail_thread, mail_senden, antwort_senden -- with the same
-names, so the confirmation before sending, the notice under automatic
-answers and attachments (attachments.py) work unchanged. No calendar:
-IMAP has none.
+mail_volltext, mail_thread, mail_senden, antwort_senden, mail_attachments,
+mail_mark, mail_forward, mail_move -- with the same names, so the
+confirmation before sending, the notice under automatic answers and
+attachments (attachments.py) work unchanged. No calendar, address book or
+out-of-office reply: IMAP has none.
 
 Entry (mcp.lege_an, template "imap"), target "imap-host[:port], smtp-host[:port]":
 
@@ -37,7 +38,8 @@ import postfach
 
 TIMEOUT = paths.env_float("POSTFACH_TIMEOUT", 30)
 FETCH_LIMIT = paths.env_int("POSTFACH_HOLGRENZE", 200)
-TOOLS = ("mails_lesen", "mail_volltext", "mail_thread", "mail_senden", "antwort_senden")
+TOOLS = ("mails_lesen", "mail_volltext", "mail_thread", "mail_senden", "antwort_senden",
+         "mail_attachments", "mail_mark", "mail_forward", "mail_move")
 
 
 def parse_target(target):
@@ -175,7 +177,19 @@ class ImapMailbox:
         return out
 
     def pruefe_entwurf(self, name, argumente=None):
-        return postfach.Postfach.pruefe_entwurf(self, name, argumente)
+        """Like Postfach.pruefe_entwurf, for what IMAP has (no address book)."""
+        a = argumente if argumente is not None else {}
+        if name == "mail_forward":
+            return self._forward_plan(a)["preview"]
+        if name == "mail_move":
+            return self._move_plan(a)["preview"]
+        if name == "mail_senden" and a.get("anhaenge"):
+            files = self._anhaenge(a["anhaenge"])
+            return ("Anhänge: " + ", ".join(f"{n} ({len(d) // 1024 + 1} KB)"
+                                            for n, d, _m in files))
+        if name == "antwort_senden" and a.get("anhaenge"):
+            raise postfach.Fehler("Anhänge gehen nur mit einer neuen Nachricht (mail_senden).")
+        return None
 
     def _anhaenge(self, names):
         return postfach.Postfach._anhaenge(self, names)
@@ -192,6 +206,14 @@ class ImapMailbox:
             return self._send_new(a)
         if name == "antwort_senden":
             return self._reply(a)
+        if name == "mail_attachments":
+            return self._attachments(a)
+        if name == "mail_mark":
+            return self._mark(a)
+        if name == "mail_forward":
+            return self._forward(a)
+        if name == "mail_move":
+            return self._move(a)
         raise postfach.Fehler(f"{self.name}: kein Werkzeug namens '{name}'.")
 
     # --- reading ---
@@ -215,9 +237,9 @@ class ImapMailbox:
                 return name
         return None
 
-    def _select(self, folder):
+    def _select(self, folder, write=False):
         imap = self._connect()
-        typ, _data = imap.select(_quote(folder), readonly=True)
+        typ, _data = imap.select(_quote(folder), readonly=not write)
         if typ != "OK":
             raise postfach.Fehler(f"{self.name}: Ordner {folder} nicht lesbar.")
         return imap
@@ -419,6 +441,113 @@ class ImapMailbox:
                                  + original["Message-ID"]).strip()
         self._deliver(msg)
         return f"Antwort an {reply_to} gesendet."
+
+    # --- attachments, read state, forward, move ---
+
+    def _attachments(self, a):
+        _folder, _uid, msg = self._message(a.get("kennung"))
+        want = str(a.get("name") or "").strip().lower()
+        parts = [p for p in msg.iter_attachments()
+                 if not want or want in (p.get_filename() or "").lower()]
+        if not parts:
+            return ("Kein Anhang namens '" + want + "'.") if want else "Die Nachricht hat keine Anhänge."
+        lines, total = [], 0
+        for part in parts:
+            name = _decode(part.get_filename()) or "(ohne Namen)"
+            data = part.get_payload(decode=True) or b""
+            lines.append(f"- {name} ({len(data) // 1024 + 1} KB)")
+            if total < postfach.ATTACHMENT_TOTAL:
+                text = postfach.attachment_text(name, data)[:postfach.ATTACHMENT_TOTAL - total]
+                if text:
+                    total += len(text)
+                    lines.append(f"  Inhalt: {text}")
+        return f"{len(parts)} Anhang/Anhänge:\n" + "\n".join(lines)
+
+    def _mark(self, a):
+        folder, uid, msg = self._message(a.get("kennung"))
+        read = a.get("read")
+        read = read if isinstance(read, bool) else str(read).lower() in ("true", "1", "ja", "yes")
+        imap = self._select(folder, write=True)
+        typ, _d = imap.uid("STORE", uid, "+FLAGS" if read else "-FLAGS", "(\\Seen)")
+        if typ != "OK":
+            raise postfach.Fehler(f"{self.name}: nicht markiert.")
+        return f"Als {'gelesen' if read else 'ungelesen'} markiert: {_decode(msg.get('Subject')) or '-'}"
+
+    def _forward_plan(self, a):
+        _folder, _uid, msg = self._message(a.get("kennung"))
+        to, cc = postfach._liste(a.get("an")), postfach._liste(a.get("kopie"))
+        if not to:
+            raise postfach.Fehler("Kein Empfaenger angegeben.")
+        wrong = [x for x in to + cc if not postfach._MAIL.fullmatch(x)]
+        if wrong:
+            raise postfach.Fehler("Keine Mailadresse: " + ", ".join(wrong)
+                                  + ". Adressen nicht raten -- beim Nutzer nachfragen.")
+        subject = _decode(msg.get("Subject"))
+        subject = subject if re.match(r"^\s*(wg|fw|fwd)\s*:", subject, re.I) else "WG: " + subject
+        names = [_decode(p.get_filename()) for p in msg.iter_attachments() if p.get_filename()]
+        preview = (f"Weiterleiten: {subject} | an: {', '.join(to)}"
+                   + (f" | Kopie: {', '.join(cc)}" if cc else "")
+                   + (f" | mit Anhängen: {', '.join(names)}" if names else ""))
+        return {"message": msg, "to": to, "cc": cc, "subject": subject, "preview": preview}
+
+    def _forward(self, a):
+        p = self._forward_plan(a)
+        original = p["message"]
+        text = (str(a.get("body") or "") + "\n\n---------- Weitergeleitete Nachricht ----------\n"
+                f"Von: {_sender(original)}\nDatum: {original.get('Date', '')}\n"
+                f"Betreff: {_decode(original.get('Subject'))}\n\n{_text(original)}")
+        files = [(_decode(part.get_filename()) or "anhang", part.get_payload(decode=True) or b"",
+                  part.get_content_type()) for part in original.iter_attachments()]
+        self._deliver(self._new_message(p["to"], p["cc"], p["subject"], text, files))
+        return "Weitergeleitet: " + p["preview"].split(": ", 1)[1]
+
+    # Special-use flags (RFC 6154) first, then the usual names.
+    _FOLDER_FLAGS = {"papierkorb": "\\Trash", "archiv": "\\Archive"}
+    _FOLDER_NAMES = {
+        "papierkorb": ("trash", "papierkorb", "gelöschte elemente", "deleted items",
+                       "[gmail]/trash", "[gmail]/papierkorb"),
+        "archiv": ("archive", "archiv", "[gmail]/all mail", "[gmail]/alle nachrichten"),
+        "posteingang": ("inbox",)}
+    _FOLDER_ALIASES = {"trash": "papierkorb", "archive": "archiv", "inbox": "posteingang"}
+
+    def _target_folder(self, wanted):
+        n = " ".join(str(wanted or "").split()).lower()
+        if not n:
+            raise postfach.Fehler("Kein Ordner angegeben.")
+        n = self._FOLDER_ALIASES.get(n, n)
+        self._sent_folder()                  # fills self._folders
+        flag = self._FOLDER_FLAGS.get(n)
+        names = self._FOLDER_NAMES.get(n, (n,))
+        for flags, name in self._folders or []:
+            if flag and flag in flags:
+                return name
+        for _flags, name in self._folders or []:
+            if name.lower() in names:
+                return name
+        raise postfach.Fehler(f"Kein Ordner '{wanted}' in {self.adresse()}.")
+
+    def _move_plan(self, a):
+        folder, uid, msg = self._message(a.get("kennung"))
+        target = self._target_folder(a.get("ordner"))
+        preview = (f"Verschieben: {_decode(msg.get('Subject')) or '(ohne Betreff)'} "
+                   f"(von {_sender(msg)}) → {target}")
+        return {"folder": folder, "uid": uid, "target": target, "preview": preview}
+
+    def _move(self, a):
+        p = self._move_plan(a)
+        imap = self._select(p["folder"], write=True)
+        try:
+            typ, _d = imap.uid("MOVE", p["uid"], _quote(p["target"]))
+        except imaplib.IMAP4.error:
+            typ = "NO"
+        if typ != "OK":
+            # servers without MOVE (RFC 6851): copy, then mark and expunge
+            typ, _d = imap.uid("COPY", p["uid"], _quote(p["target"]))
+            if typ != "OK":
+                raise postfach.Fehler(f"{self.name}: nicht verschoben.")
+            imap.uid("STORE", p["uid"], "+FLAGS", "(\\Deleted)")
+            imap.expunge()
+        return "Verschoben: " + p["preview"].split(": ", 1)[1]
 
     # --- did it go out? ---
 

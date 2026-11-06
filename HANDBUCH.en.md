@@ -344,6 +344,22 @@ Answering invitations: "Which invitations are still open?" (marked
 "Accept tentatively". Draft → **Accept**, **Accept tentatively** or
 **Decline**; the answer goes to the organizer.
 
+### What else can LocaNoto do with my mailbox?
+
+| Question, for example | Exchange | IMAP (Gmail, GMX …) | Confirmation |
+|---|---|---|---|
+| "What is Vladyslav Borysenko's mail address?" – the organisation's address book and own contacts | yes | – | no |
+| "Invite Vlad and Rodolfo" – names instead of addresses; LocaNoto looks them up, asks back on several matches | yes | – | – |
+| "When do Borysenko and I have an hour next week?" – free/busy | yes | – | no |
+| "What is in the attachment of Meier's mail?" – attachments, text of PDF, Word, text | yes | yes | no |
+| "Mark the mail as unread" | yes | yes | no |
+| "Forward the mail to Rodolfo" – with attachments | yes | yes | yes |
+| "Move the mail to the archive / the trash / to Projects" | yes | yes | yes |
+| "Is my out-of-office on?" / "Set it for next week" | yes | – | setting: yes |
+
+The trash is the folder "Deleted Items": a mail can be restored from
+there. LocaNoto deletes nothing for good.
+
 ### How does LocaNoto notify me of new mail?
 
 With a mailbox connected and LocaNoto open in a browser tab, LocaNoto

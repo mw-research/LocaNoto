@@ -26,8 +26,12 @@ Postfach laedt exchangelib nie.
 import base64
 import datetime
 import hashlib
+import html
+import io
 import json
+import os
 import re
+import zipfile
 from urllib.parse import urlsplit
 
 import local_time
@@ -182,7 +186,8 @@ WERKZEUGE = (
             "type": "object",
             "properties": {
                 "an": {"type": "string", "description":
-                       "Empfaenger, mehrere durch Komma getrennt."},
+                       "Empfaenger, Mailadressen oder Namen (Adressbuch), "
+                       "mehrere durch Komma getrennt."},
                 "kopie": {"type": "string"},
                 "betreff": {"type": "string"},
                 "body": {"type": "string", "description":
@@ -302,15 +307,16 @@ WERKZEUGE = WERKZEUGE + (
             "Eine Besprechungsanfrage aus {label} an andere verschicken: "
             "Einladung mit Zeit, Ort und Text, der Termin steht danach auch "
             "im eigenen Kalender. Heute ist {today}. Teilnehmer als "
-            "Mailadressen -- nicht raten; unbekannte Adressen erst "
-            "erfragen. Alle Teilnehmer in EINE Anfrage. Soll jemand zu "
+            "Mailadressen oder Namen: Namen sucht LocaNoto im Adressbuch, "
+            "nur bei keinem oder mehreren Treffern den Nutzer fragen. Freie "
+            "Zeiten zeigt calendar_free. Alle Teilnehmer in EINE Anfrage. Soll jemand zu "
             "einem Termin dazukommen, den es schon gibt (auch einem gerade "
             "verschickten), keine zweite Anfrage, sondern calendar_update. "
             "Der Nutzer bestaetigt vor dem Versand."),
         "schema": {"type": "object", "properties": dict(
             _TERMIN_FELDER,
             attendees={"type": "string", "description":
-                       "Teilnehmer, Mailadressen durch Komma."},
+                       "Teilnehmer, Mailadressen oder Namen, durch Komma."},
             optional_attendees={"type": "string", "description":
                                 "Optionale Teilnehmer, Mailadressen."}),
             "required": ["subject", "start", "attendees"]},
@@ -369,13 +375,130 @@ WERKZEUGE = WERKZEUGE + (
     },
 )
 
-SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
+WERKZEUGE = WERKZEUGE + (
+    # --- reading, no confirmation ---
+    {
+        "name": "address_lookup",
+        "beschreibung": (
+            "Personen im Adressbuch der Organisation (globale Adressliste) "
+            "und in den Kontakten von {label} suchen: Name, Teil des Namens "
+            "oder Abteilung. Gibt Name, Mailadresse, Abteilung, Funktion und "
+            "Telefon zurueck. Vor einer Mail, Weiterleitung oder Einladung an "
+            "jemanden, dessen Adresse nicht genannt ist, hier nachsehen statt "
+            "den Nutzer zu fragen; bei mehreren Treffern den Nutzer waehlen "
+            "lassen."),
+        "schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Name, Teil davon oder Abteilung."}},
+            "required": ["query"]},
+    },
+    {
+        "name": "calendar_free",
+        "beschreibung": (
+            "Freie Zeiten fuer eine Besprechung finden: Frei/Gebucht des "
+            "eigenen Kalenders von {label} und der Teilnehmer, werktags in "
+            "der Arbeitszeit. Gibt gemeinsame freie Zeiten und die belegten "
+            "Zeiten je Person zurueck. Heute ist {today}."),
+        "schema": {"type": "object", "properties": {
+            "attendees": {"type": "string", "description":
+                          "Teilnehmer, Mailadressen oder Namen, durch Komma."},
+            "from": {"type": "string", "description": "Erster Tag, JJJJ-MM-TT. Vorgabe heute."},
+            "days": {"type": "integer", "description": "Wie viele Tage, Vorgabe 5, hoechstens 14."},
+            "duration": {"type": "integer", "description": "Dauer in Minuten, Vorgabe 60."},
+            "day_start": {"type": "string", "description": "Beginn der Arbeitszeit, Vorgabe 08:00."},
+            "day_end": {"type": "string", "description": "Ende der Arbeitszeit, Vorgabe 17:00."}},
+            "required": ["attendees"]},
+    },
+    {
+        "name": "mail_attachments",
+        "beschreibung": (
+            "Die Anhaenge einer Nachricht aus {label} auflisten und den Text "
+            "von PDF-, Word- und Textanhaengen lesen. Die Kennung stammt aus "
+            "mails_lesen."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "name": {"type": "string", "description": "Nur dieser Anhang, wahlweise."}},
+            "required": ["kennung"]},
+    },
+    {
+        "name": "mail_mark",
+        "beschreibung": (
+            "Eine Nachricht in {label} als gelesen oder ungelesen markieren. "
+            "Die Kennung stammt aus mails_lesen."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "read": {"type": "boolean", "description": "true = gelesen, false = ungelesen."}},
+            "required": ["kennung", "read"]},
+    },
+    {
+        "name": "out_of_office",
+        "beschreibung": "Die Abwesenheitsnotiz (automatische Antworten) von {label} anzeigen.",
+        "schema": {"type": "object", "properties": {}},
+    },
+    # --- sending or changing: the person confirms ---
+    {
+        "name": "mail_forward",
+        "beschreibung": (
+            "Eine Nachricht aus {label} mit ihren Anhaengen weiterleiten. Die "
+            "Kennung stammt aus mails_lesen. Empfaenger als Mailadressen oder "
+            "Namen (werden im Adressbuch aufgeloest). Der Nutzer bestaetigt "
+            "vor dem Versand."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "an": {"type": "string", "description": "Empfaenger, durch Komma."},
+            "kopie": {"type": "string"},
+            "body": {"type": "string", "description": "Text ueber der weitergeleiteten Nachricht."}},
+            "required": ["kennung", "an"]},
+    },
+    {
+        "name": "mail_move",
+        "beschreibung": (
+            "Eine Nachricht in {label} in einen Ordner verschieben: "
+            "'archiv', 'papierkorb', 'posteingang' oder der Name eines "
+            "eigenen Ordners. Die Kennung stammt aus mails_lesen. Der Nutzer "
+            "bestaetigt vorher."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "ordner": {"type": "string"}},
+            "required": ["kennung", "ordner"]},
+    },
+    {
+        "name": "out_of_office_set",
+        "beschreibung": (
+            "Die Abwesenheitsnotiz von {label} ein- oder ausschalten. Mit "
+            "start und end nur fuer diesen Zeitraum. Heute ist {today}. Der "
+            "Nutzer bestaetigt vorher."),
+        "schema": {"type": "object", "properties": {
+            "state": {"type": "string", "enum": ["on", "off"]},
+            "start": {"type": "string", "description": "Beginn, 'JJJJ-MM-TT' oder 'JJJJ-MM-TT HH:MM'."},
+            "end": {"type": "string", "description": "Ende, ebenso."},
+            "internal_reply": {"type": "string", "description": "Antwort an Absender im Haus."},
+            "external_reply": {"type": "string", "description":
+                               "Antwort nach aussen; leer = dieselbe wie im Haus."},
+            "external_audience": {"type": "string", "enum": ["none", "known", "all"],
+                                  "description": "Wer ausserhalb eine Antwort bekommt, Vorgabe all."}},
+            "required": ["state"]},
+    },
+)
+
+SENDEWERKZEUGE = ("mail_senden", "antwort_senden", "mail_forward")
 
 # Writing to a calendar always waits for a person, also in a mailbox that
 # may send on its own: an invitation goes out to people, and an entry in
 # the own calendar at the wrong day is found only when it is too late.
 KALENDERWERKZEUGE = ("calendar_add", "meeting_request", "calendar_update",
                      "calendar_cancel", "calendar_respond")
+
+# Everything that waits for a person in every mailbox, also in one that may
+# answer on its own: the calendar, moving mail, the out-of-office reply.
+# mcp.sendet/braucht_bestaetigung take it from here, not from the list an
+# entry got when it was created -- a tool added later never runs unasked.
+CONFIRM_TOOLS = KALENDERWERKZEUGE + ("mail_move", "out_of_office_set")
+
+# Fields with recipients or attendees: names in them are looked up in the
+# address book (Exchange) before a draft is shown.
+PEOPLE_FIELDS = {"mail_senden": ("an", "kopie"), "mail_forward": ("an", "kopie"),
+                 "meeting_request": ("attendees", "optional_attendees"),
+                 "calendar_update": ("add_attendees",), "calendar_free": ("attendees",)}
 
 # Tools that change an appointment that already exists (by its id).
 CHANGE_TOOLS = ("calendar_update", "calendar_cancel", "calendar_respond")
@@ -568,6 +691,25 @@ class Postfach:
 
     def rufe(self, name, argumente=None):
         a = dict(argumente or {})
+        # names instead of addresses: looked up here as well, for a mailbox
+        # that sends on its own (no draft, so no pruefe_entwurf before)
+        self._resolve_people(name, a)
+        if name == "address_lookup":
+            return self._address_lookup(a)
+        if name == "calendar_free":
+            return self._calendar_free(a)
+        if name == "mail_attachments":
+            return self._attachments(a)
+        if name == "mail_mark":
+            return self._mark(a)
+        if name == "out_of_office":
+            return self._oof_show()
+        if name == "mail_forward":
+            return self._forward(a)
+        if name == "mail_move":
+            return self._move(a)
+        if name == "out_of_office_set":
+            return self._oof_set(a)
         if name == "mails_lesen":
             return self._lesen(a)
         if name == "mail_volltext":
@@ -602,22 +744,40 @@ class Postfach:
         here and not only when it runs: the model can still correct a
         wrong date, the person on the button can no longer.
         """
-        if name == "mail_senden" and (argumente or {}).get("anhaenge"):
+        if argumente is None:
+            argumente = {}
+        # Names become addresses in the draft itself (argumente is what is
+        # stored), so the person sees and confirms the addresses.
+        resolver = getattr(self, "_resolve_people", None)
+        found = resolver(name, argumente) if resolver else []
+        preview = self._draft_preview(name, argumente)
+        if found:
+            note = "Adressbuch: " + "; ".join(found)
+            preview = f"{preview} | {note}" if preview else note
+        return preview
+
+    def _draft_preview(self, name, argumente):
+        if name == "mail_senden" and argumente.get("anhaenge"):
             files = self._anhaenge(argumente["anhaenge"])
             return ("Anhänge: " + ", ".join(f"{n} ({len(d) // 1024 + 1} KB)"
                                             for n, d, _m in files))
-        if name == "antwort_senden" and (argumente or {}).get("anhaenge"):
+        if name == "antwort_senden" and argumente.get("anhaenge"):
             raise Fehler("Anhänge gehen nur mit einer neuen Nachricht (mail_senden).")
+        if name == "mail_forward":
+            return self._forward_plan(argumente)["preview"]
+        if name == "mail_move":
+            return self._move_plan(argumente)["preview"]
+        if name == "out_of_office_set":
+            return self._oof_plan(argumente)["preview"]
         if name not in KALENDERWERKZEUGE:
             return None
         if name == "calendar_update":
-            return self._update_plan(argumente or {})["preview"]
+            return self._update_plan(argumente)["preview"]
         if name == "calendar_cancel":
-            return self._cancel_plan(argumente or {})["preview"]
+            return self._cancel_plan(argumente)["preview"]
         if name == "calendar_respond":
-            return self._respond_plan(argumente or {})["preview"]
-        return _termin_vorschau(_termin_angaben(argumente or {},
-                                                name == "meeting_request"))
+            return self._respond_plan(argumente)["preview"]
+        return _termin_vorschau(_termin_angaben(argumente, name == "meeting_request"))
 
     def schliesse(self):
         if self._konto is not None:
@@ -1108,6 +1268,318 @@ class Postfach:
             raise Fehler(f"{self.name}: keine Antwort gesendet ({_kurz(e)}).")
         return "Geantwortet: " + p["preview"]
 
+    # --- ADDRESS BOOK ---
+
+    def _lookup(self, query):
+        """[{name, email, department, title, phone}] from the organisation's
+        address book and the own contacts -- what Exchange resolves."""
+        konto = self._verbindung()
+        try:
+            found = konto.protocol.resolve_names(
+                names=[str(query)], return_full_contact_data=True,
+                search_scope="ActiveDirectoryContacts")
+        except Exception as e:
+            if "NoResults" in type(e).__name__ or "NoResults" in str(e):
+                return []
+            raise Fehler(f"{self.name}: Adressbuch nicht erreichbar ({_kurz(e)}).")
+        out, seen = [], set()
+        for entry in found or []:
+            if isinstance(entry, Exception):
+                continue
+            box, contact = entry if isinstance(entry, tuple) else (entry, None)
+            mail = (getattr(box, "email_address", "") or "").strip()
+            if "@" not in mail or mail.lower() in seen:
+                continue
+            seen.add(mail.lower())
+            phones = [getattr(p, "phone_number", "") for p in
+                      (getattr(contact, "phone_numbers", None) or [])
+                      if getattr(p, "phone_number", "")]
+            out.append({
+                "name": (getattr(contact, "display_name", "") or getattr(box, "name", "")
+                         or "").strip(),
+                "email": mail,
+                "department": (getattr(contact, "department", "") or "").strip(),
+                "title": (getattr(contact, "job_title", "") or "").strip(),
+                "phone": phones[0] if phones else ""})
+            if len(out) >= 20:
+                break
+        return out
+
+    def _address_lookup(self, a):
+        query = " ".join(str(a.get("query") or "").split())
+        if not query:
+            raise Fehler("Wonach suchen? 'query' fehlt.")
+        hits = self._lookup(query)
+        if not hits:
+            return f"Niemand im Adressbuch gefunden für '{query}'."
+        lines = []
+        for h in hits:
+            extra = [x for x in (h["department"], h["title"], h["phone"] and f"Tel. {h['phone']}")
+                     if x]
+            lines.append(f"- {h['name'] or h['email']} <{h['email']}>"
+                         + (" | " + " | ".join(extra) if extra else ""))
+        return f"{len(hits)} Treffer im Adressbuch für '{query}':\n" + "\n".join(lines)
+
+    def _resolve_people(self, name, a):
+        """Names in recipient or attendee fields -> addresses, in place.
+
+        Exactly one match: taken. None or several: refused, so the model
+        asks the person instead of guessing. Returns 'name = address' for
+        what was looked up."""
+        notes = []
+        for key in PEOPLE_FIELDS.get(name, ()):
+            if not a.get(key):
+                continue
+            out = []
+            for item in _liste(a[key]):
+                if _MAIL.fullmatch(item):
+                    out.append(item)
+                    continue
+                inner = re.search(r"<([^<>\s]+@[^<>\s]+)>", item)
+                if inner:
+                    out.append(inner.group(1))
+                    continue
+                hits = self._lookup(item)
+                exact = [h for h in hits if h["name"].lower() == item.lower()]
+                hits = exact or hits
+                if len(hits) == 1:
+                    out.append(hits[0]["email"])
+                    notes.append(f"{item} = {hits[0]['email']}")
+                elif not hits:
+                    raise Fehler(f"Für '{item}' steht keine Adresse im Adressbuch. "
+                                 "Beim Nutzer nachfragen.")
+                else:
+                    raise Fehler(f"'{item}' ist mehrdeutig: " + "; ".join(
+                        f"{h['name']} <{h['email']}>" for h in hits[:6])
+                        + ". Den Nutzer wählen lassen.")
+            a[key] = ", ".join(out)
+        return notes
+
+    # --- FREE/BUSY ---
+
+    def _calendar_free(self, a):
+        from exchangelib import EWSDateTime
+
+        konto = self._verbindung()
+        tz = _zeitzone(konto)
+        own = self.adresse()
+        people = [own] + [x for x in _liste(a.get("attendees")) if x.lower() != own.lower()]
+        first = _tag(a.get("from")) or _heute(tz)
+        try:
+            days = max(1, min(int(a.get("days") or 5), 14))
+            minutes = max(15, min(int(a.get("duration") or 60), 600))
+        except (TypeError, ValueError):
+            raise Fehler("'days' und 'duration' sind Zahlen.")
+        day_start, day_end = _clock(a.get("day_start"), (8, 0)), _clock(a.get("day_end"), (17, 0))
+        start = EWSDateTime(first.year, first.month, first.day, tzinfo=tz)
+        end = start + datetime.timedelta(days=days)
+        try:
+            views = list(konto.protocol.get_free_busy_info(
+                accounts=[(p, "Required", False) for p in people], start=start, end=end,
+                requested_view="FreeBusy"))
+        except Exception as e:
+            raise Fehler(f"{self.name}: Frei/Gebucht nicht abrufbar ({_kurz(e)}).")
+        busy, missing = {}, []
+        for person, view in zip(people, views):
+            if view is None or isinstance(view, Exception):
+                missing.append(person)
+                continue
+            blocks = []
+            for ev in getattr(view, "calendar_events", None) or []:
+                if str(getattr(ev, "busy_type", "")) in ("Free", "WorkingElsewhere"):
+                    continue
+                blocks.append((_naive_local(ev.start, tz), _naive_local(ev.end, tz)))
+            busy[person] = sorted(blocks)
+        slots = _common_free(busy, first, days, day_start, day_end, minutes)
+        lines = [f"Gemeinsam frei (mindestens {minutes} Min., werktags "
+                 f"{day_start[0]:02d}:{day_start[1]:02d}–{day_end[0]:02d}:{day_end[1]:02d}, "
+                 f"Zeiten in {tz}):"]
+        lines += [f"- {_WOCHENTAGE[s.weekday()]} {s:%d.%m.%Y %H:%M}–{e:%H:%M}" for s, e in slots] \
+            or ["- keine gemeinsame freie Zeit in diesem Zeitraum"]
+        lines.append("Belegt:")
+        for person in people:
+            if person in busy:
+                shown = [f"{_WOCHENTAGE[s.weekday()]} {s:%d.%m. %H:%M}–{e:%H:%M}"
+                         for s, e in busy[person][:12]]
+                lines.append(f"- {person}: " + (", ".join(shown) or "nichts"))
+        if missing:
+            lines.append("Keine Frei/Gebucht-Angaben für: " + ", ".join(missing)
+                         + " (außerhalb der Organisation oder nicht freigegeben).")
+        return "\n".join(lines)
+
+    # --- ATTACHMENTS, READ STATE ---
+
+    def _attachments(self, a):
+        m = self._nachricht(a.get("kennung"))
+        want = str(a.get("name") or "").strip().lower()
+        atts = [x for x in (getattr(m, "attachments", None) or [])
+                if not want or want in (getattr(x, "name", "") or "").lower()]
+        if not atts:
+            return ("Kein Anhang namens '" + want + "'.") if want else "Die Nachricht hat keine Anhänge."
+        lines, total = [], 0
+        for att in atts:
+            name = getattr(att, "name", "") or "(ohne Namen)"
+            if getattr(att, "content", None) is None and hasattr(att, "item"):
+                inner = getattr(att, "item", None)
+                lines.append(f"- {name} (eingebettete Nachricht: "
+                             f"{getattr(inner, 'subject', '') or '-'})")
+                continue
+            data = att.content or b""
+            lines.append(f"- {name} ({len(data) // 1024 + 1} KB)")
+            if total < ATTACHMENT_TOTAL:
+                text = attachment_text(name, data)[:ATTACHMENT_TOTAL - total]
+                if text:
+                    total += len(text)
+                    lines.append(f"  Inhalt: {text}")
+        return f"{len(atts)} Anhang/Anhänge:\n" + "\n".join(lines)
+
+    def _mark(self, a):
+        m = self._nachricht(a.get("kennung"))
+        read = a.get("read")
+        read = read if isinstance(read, bool) else str(read).lower() in ("true", "1", "ja", "yes")
+        try:
+            m.is_read = read
+            m.save(update_fields=["is_read"])
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht markiert ({_kurz(e)}).")
+        return f"Als {'gelesen' if read else 'ungelesen'} markiert: {getattr(m, 'subject', '') or '-'}"
+
+    # --- FORWARD, MOVE ---
+
+    def _forward_plan(self, a):
+        m = self._nachricht(a.get("kennung"))
+        an, kopie = _liste(a.get("an")), _liste(a.get("kopie"))
+        if not an:
+            raise Fehler("Kein Empfaenger angegeben.")
+        wrong = [x for x in an + kopie if not _MAIL.fullmatch(x)]
+        if wrong:
+            raise Fehler("Keine Mailadresse: " + ", ".join(wrong)
+                         + ". Im Adressbuch suchen (address_lookup) oder nachfragen.")
+        subject = getattr(m, "subject", "") or ""
+        betreff = subject if re.match(r"^\s*(wg|fw|fwd)\s*:", subject, re.I) else "WG: " + subject
+        names = [getattr(x, "name", "") for x in (getattr(m, "attachments", None) or [])]
+        preview = (f"Weiterleiten: {betreff} | an: {', '.join(an)}"
+                   + (f" | Kopie: {', '.join(kopie)}" if kopie else "")
+                   + (f" | mit Anhängen: {', '.join(n for n in names if n)}" if names else ""))
+        return {"message": m, "an": an, "kopie": kopie, "betreff": betreff, "preview": preview}
+
+    def _forward(self, a):
+        p = self._forward_plan(a)
+        try:
+            p["message"].forward(subject=p["betreff"], body=str(a.get("body") or ""),
+                                 to_recipients=p["an"], cc_recipients=p["kopie"] or None)
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht weitergeleitet ({_kurz(e)}).")
+        return "Weitergeleitet: " + p["preview"].split(": ", 1)[1]
+
+    def _target_folder(self, wanted):
+        """(folder, label) for 'archiv', 'papierkorb', 'posteingang' or a name."""
+        konto = self._verbindung()
+        n = " ".join(str(wanted or "").split()).lower()
+        if not n:
+            raise Fehler("Kein Ordner angegeben.")
+        if n in ("papierkorb", "trash", "gelöschte elemente", "geloeschte elemente",
+                 "deleted items"):
+            return konto.trash, "Gelöschte Elemente"
+        if n in ("posteingang", "inbox"):
+            return konto.inbox, "Posteingang"
+        names = ("archiv", "archive") if n in ("archiv", "archive") else (n,)
+        try:
+            for folder in konto.msg_folder_root.walk():
+                if (getattr(folder, "name", "") or "").lower() in names:
+                    return folder, folder.name
+        except Exception as e:
+            raise Fehler(f"{self.name}: Ordner nicht lesbar ({_kurz(e)}).")
+        raise Fehler(f"Kein Ordner '{wanted}' in {self.adresse()}.")
+
+    def _move_plan(self, a):
+        m = self._nachricht(a.get("kennung"))
+        folder, label = self._target_folder(a.get("ordner"))
+        preview = (f"Verschieben: {getattr(m, 'subject', '') or '(ohne Betreff)'} "
+                   f"(von {_absender(m)}) → {label}")
+        return {"message": m, "folder": folder, "label": label, "preview": preview}
+
+    def _move(self, a):
+        p = self._move_plan(a)
+        try:
+            p["message"].move(p["folder"])
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht verschoben ({_kurz(e)}).")
+        return "Verschoben: " + p["preview"].split(": ", 1)[1]
+
+    # --- OUT OF OFFICE ---
+
+    def _oof_show(self):
+        konto = self._verbindung()
+        try:
+            s = konto.oof_settings
+        except Exception as e:
+            raise Fehler(f"{self.name}: Abwesenheitsnotiz nicht lesbar ({_kurz(e)}).")
+        state = str(getattr(s, "state", "") or "Disabled")
+        lines = ["Abwesenheitsnotiz: " + {"Enabled": "eingeschaltet", "Scheduled": "geplant",
+                                          "Disabled": "ausgeschaltet"}.get(state, state)]
+        if state == "Scheduled":
+            lines.append(f"Zeitraum: {_datum(_lokal(s.start))} bis {_datum(_lokal(s.end))}")
+        for label, field in (("Im Haus", "internal_reply"), ("Nach außen", "external_reply")):
+            text = _ohne_html(getattr(s, field, "") or "")
+            if text:
+                lines.append(f"{label}: {text[:600]}")
+        return "\n".join(lines)
+
+    def _oof_plan(self, a):
+        state = str(a.get("state") or "").strip().lower()
+        if state not in ("on", "off"):
+            raise Fehler("'state' ist on oder off.")
+        if state == "off":
+            return {"state": "Disabled", "preview": "Abwesenheitsnotiz ausschalten"}
+        internal = str(a.get("internal_reply") or "").strip()
+        if not internal:
+            raise Fehler("Der Text der Abwesenheitsnotiz fehlt (internal_reply).")
+        external = str(a.get("external_reply") or "").strip() or internal
+        audience = {"none": "None", "known": "Known", "all": "All"}.get(
+            str(a.get("external_audience") or "all").strip().lower(), "All")
+        start = end = None
+        if a.get("start") or a.get("end"):
+            if not (a.get("start") and a.get("end")):
+                raise Fehler("'start' und 'end' zusammen angeben.")
+            start, end = _zeitpunkt(a["start"], "start"), _zeitpunkt(a["end"], "end")
+            if not isinstance(start, datetime.datetime):
+                start = datetime.datetime(start.year, start.month, start.day, 0, 0)
+            if not isinstance(end, datetime.datetime):
+                end = datetime.datetime(end.year, end.month, end.day, 23, 59)
+            if end <= start:
+                raise Fehler("Das Ende liegt nicht nach dem Beginn.")
+        when = (f"{_WOCHENTAGE[start.weekday()]} {start:%d.%m.%Y %H:%M} bis "
+                f"{_WOCHENTAGE[end.weekday()]} {end:%d.%m.%Y %H:%M}" if start
+                else "ab sofort bis zum Ausschalten")
+        who = {"None": "niemand", "Known": "nur bekannte Kontakte", "All": "alle"}[audience]
+        preview = (f"Abwesenheitsnotiz einschalten: {when} | Antwort nach außen an: {who} "
+                   f"| Text: {internal[:160]}")
+        return {"state": "Scheduled" if start else "Enabled", "start": start, "end": end,
+                "internal": internal, "external": external, "audience": audience,
+                "preview": preview}
+
+    def _oof_set(self, a):
+        from exchangelib import EWSDateTime
+        from exchangelib.settings import OofSettings
+
+        p = self._oof_plan(a)
+        konto = self._verbindung()
+        tz = _zeitzone(konto)
+        try:
+            if p["state"] == "Disabled":
+                konto.oof_settings = OofSettings(state="Disabled")
+                return "Abwesenheitsnotiz ausgeschaltet."
+            fields = dict(state=p["state"], internal_reply=p["internal"],
+                          external_reply=p["external"], external_audience=p["audience"])
+            if p["start"]:
+                fields.update(start=EWSDateTime(*p["start"].timetuple()[:5], tzinfo=tz),
+                              end=EWSDateTime(*p["end"].timetuple()[:5], tzinfo=tz))
+            konto.oof_settings = OofSettings(**fields)
+        except Exception as e:
+            raise Fehler(f"{self.name}: Abwesenheitsnotiz nicht gesetzt ({_kurz(e)}).")
+        return "Abwesenheitsnotiz gesetzt: " + p["preview"].split(": ", 1)[1]
+
     # --- SENDEN ---
     #
     # Ob ueberhaupt gesendet werden darf, steht NICHT hier. Das
@@ -1226,7 +1698,8 @@ class Postfach:
         else:
             original = self._nachricht(a.get("kennung"))
             betreff = _grundbetreff(getattr(original, "subject", "") or "")
-            an = set()
+            an = ({x.lower() for x in _liste(a.get("an"))} if name == "mail_forward"
+                  else set())
         seit = (EWSDateTime.now(tz=UTC)
                 - datetime.timedelta(minutes=SENT_LOOKBACK_MINUTES))
         posten = (konto.sent.filter(datetime_created__gte=seit)
@@ -1518,6 +1991,76 @@ def _termin_angaben(a, einladen):
 
 
 _MAIL = re.compile(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+")
+
+# Text of attachments for the model: per attachment and per call.
+ATTACHMENT_CHARS = 4000
+ATTACHMENT_TOTAL = 8000
+
+
+def attachment_text(name, data, limit=ATTACHMENT_CHARS):
+    """The text of a PDF, Word or plain-text attachment; '' for the rest."""
+    import db_files
+    kind = db_files.sniff(data)
+    try:
+        if kind == "pdf":
+            return db_files.pdf_text(data, limit)
+        if kind == "docx":
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                xml = z.read("word/document.xml").decode("utf-8", "replace")
+            xml = re.sub(r"</w:p>", "\n", xml)
+            return " ".join(html.unescape(re.sub(r"<[^>]+>", "", xml)).split())[:limit]
+        if not kind and os.path.splitext(str(name).lower())[1] in (
+                ".txt", ".csv", ".md", ".log", ".json", ".xml"):
+            return " ".join(bytes(data).decode("utf-8", "replace").split())[:limit]
+    except Exception:
+        return ""
+    return ""
+
+
+def _ohne_html(text):
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", str(text or ""))
+    text = re.sub(r"(?i)<br\s*/?>|</p>", "\n", text)
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", text)).split())
+
+
+def _clock(value, default):
+    """'08:00' -> (8, 0); the default when empty or unreadable."""
+    m = re.fullmatch(r"\s*(\d{1,2})[:.](\d{2})\s*", str(value or ""))
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        return default
+    return int(m.group(1)), int(m.group(2))
+
+
+def _naive_local(value, tz):
+    """A time from Exchange as a naive datetime in the mailbox's zone."""
+    if getattr(value, "tzinfo", None) is not None:
+        value = value.astimezone(tz)
+    return datetime.datetime(value.year, value.month, value.day,
+                             getattr(value, "hour", 0), getattr(value, "minute", 0))
+
+
+def _common_free(busy, first, days, day_start, day_end, minutes, limit=10):
+    """[(start, end)] where nobody in busy is booked, weekdays only, within
+    the working hours, at least minutes long."""
+    blocks = sorted(b for bs in busy.values() for b in bs)
+    out = []
+    for i in range(days):
+        day = first + datetime.timedelta(days=i)
+        if day.weekday() >= 5:
+            continue
+        cur = datetime.datetime(day.year, day.month, day.day, *day_start)
+        stop = datetime.datetime(day.year, day.month, day.day, *day_end)
+        for s, e in blocks:
+            if e <= cur or s >= stop:
+                continue
+            if (s - cur) >= datetime.timedelta(minutes=minutes):
+                out.append((cur, s))
+            cur = max(cur, e)
+        if (stop - cur) >= datetime.timedelta(minutes=minutes):
+            out.append((cur, stop))
+        if len(out) >= limit:
+            break
+    return out[:limit]
 
 
 def _ews_times(t, tz):

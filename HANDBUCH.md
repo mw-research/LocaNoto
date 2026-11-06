@@ -360,6 +360,22 @@ mit „Antwort offen" markiert), „Sag dem Projekttreffen am Donnerstag zu",
 „Sag vorläufig zu". Entwurf → **Zusagen**, **Vorläufig zusagen** bzw.
 **Absagen**; die Antwort geht an den Organisator.
 
+### Was kann LocaNoto sonst noch mit meinem Postfach?
+
+| Frage, zum Beispiel | Exchange | IMAP (Gmail, GMX …) | Bestätigung |
+|---|---|---|---|
+| „Wie ist die Mailadresse von Vladyslav Borysenko?“ – Adressbuch der Organisation und eigene Kontakte | ja | – | nein |
+| „Lade Vlad und Rodolfo ein“ – Namen statt Adressen; LocaNoto sucht sie im Adressbuch, bei mehreren Treffern fragt es nach | ja | – | – |
+| „Wann haben Borysenko und ich nächste Woche eine Stunde Zeit?“ – Frei/Gebucht | ja | – | nein |
+| „Was steht im Anhang der Mail von Meier?“ – Anhänge, Text von PDF, Word, Text | ja | ja | nein |
+| „Markiere die Mail als ungelesen“ | ja | ja | nein |
+| „Leite die Mail an Rodolfo weiter“ – mit Anhängen | ja | ja | ja |
+| „Verschieb die Mail ins Archiv / in den Papierkorb / nach Projekte“ | ja | ja | ja |
+| „Ist meine Abwesenheitsnotiz an?“ / „Stell sie für nächste Woche ein“ | ja | – | Setzen: ja |
+
+Der Papierkorb ist der Ordner „Gelöschte Elemente“: Eine Mail lässt sich
+dort wiederherstellen. Endgültig löscht LocaNoto nichts.
+
 ### Wie benachrichtigt mich LocaNoto über neue Mails?
 
 Ist ein Postfach verbunden und LocaNoto in einem Browsertab offen, prüft

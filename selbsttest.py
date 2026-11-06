@@ -3387,6 +3387,7 @@ _MAILS_I = {
         _mail_i(b"4", "Shop <news@shop.example>", "Newsletter", "Angebote",
                 "Thu, 15 Oct 2026 08:00:00 +0200", "<n4@x>"),
     ],
+    "INBOX-ATT": [],
     "Sent": [
         _mail_i(b"2", "anna@example.com", "RE: Angebot Ölpumpe", "Bitte 3 % Skonto.",
                 "Tue, 13 Oct 2026 08:00:00 +0200", "<a2@x>", "<a1@x>"),
@@ -3407,7 +3408,9 @@ class _FakeImap:
         _FakeImap.log.append(("login", user))
 
     def list(self):
-        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Sent) "/" "Sent"']
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Sent) "/" "Sent"',
+                      b'(\\HasNoChildren \\Trash) "/" "Papierkorb"',
+                      b'(\\HasNoChildren) "/" "Archiv"']
 
     def select(self, folder, readonly=False):
         self.folder = folder.strip('"')
@@ -3433,6 +3436,10 @@ class _FakeImap:
             for uid, raw in mails:
                 if uid == args[0] or uid.decode() == args[0]:
                     return "OK", [(b"1 (BODY[] {n}", raw), b")"]
+            return "OK", []
+        if command in ("STORE", "MOVE"):
+            _FakeImap.log.append((command, self.folder) + tuple(
+                a.decode() if isinstance(a, bytes) else a for a in args))
             return "OK", []
         raise AssertionError(command)
 
@@ -3461,6 +3468,14 @@ class _FakeSmtp:
 
     def quit(self):
         pass
+
+
+def _wirft_i(call):
+    try:
+        call()
+    except _pfi.Fehler:
+        return True
+    return False
 
 
 _real_imap, _real_smtp = _imb.imaplib.IMAP4_SSL, _imb.smtplib.SMTP
@@ -3503,6 +3518,41 @@ try:
           _rep_i["In-Reply-To"] == "<a3@x>" and "<a1@x>" in _rep_i["References"]
           and _rep_i["Subject"].startswith("AW:") and _rep_i["To"] == "meier@example.com",
           (_rep_i["Subject"], _rep_i["To"]))
+    # attachments, read state, forward, move
+    _att_m = _EMi()
+    _att_m["From"], _att_m["To"], _att_m["Subject"] = ("Lieferant <l@example.com>",
+                                                       "anna@example.com", "Lieferschein 24004")
+    _att_m["Date"], _att_m["Message-ID"] = "Fri, 16 Oct 2026 08:00:00 +0200", "<l5@x>"
+    _att_m.set_content("Anbei der Lieferschein.")
+    _att_m.add_attachment("Lieferung vollständig, 3 Paletten".encode(), maintype="text",
+                          subtype="plain", filename="lieferschein.txt")
+    _MAILS_I["INBOX"].append((b"5", _att_m.as_bytes()))
+    _k5_i = _pfi.remember(_box, ("INBOX", "5"))
+    _ai = _box.rufe("mail_attachments", {"kennung": _k5_i})
+    pruef("IMAP: attachments listed with their text",
+          "lieferschein.txt" in _ai and "3 Paletten" in _ai, _ai)
+    _box.rufe("mail_mark", {"kennung": _k5_i, "read": True})
+    pruef("IMAP: marked read with the Seen flag",
+          ("STORE", "INBOX", "5", "+FLAGS", "(\\Seen)") in _FakeImap.log, _FakeImap.log[-2:])
+    _vfi = _box.pruefe_entwurf("mail_forward", {"kennung": _k5_i, "an": "meier@example.com"})
+    pruef("IMAP: forward preview with subject and attachment",
+          "WG: Lieferschein 24004" in _vfi and "lieferschein.txt" in _vfi, _vfi)
+    _box.rufe("mail_forward", {"kennung": _k5_i, "an": "meier@example.com", "body": "Zur Info"})
+    _fw_i = _FakeSmtp.sent[-1]
+    pruef("IMAP: forwarded with the original text and its attachment",
+          _fw_i["Subject"] == "WG: Lieferschein 24004" and "Anbei der Lieferschein" in
+          _fw_i.get_body().get_content()
+          and [a.get_filename() for a in _fw_i.iter_attachments()] == ["lieferschein.txt"],
+          _fw_i["Subject"])
+    pruef("IMAP: a forward to a name without address is refused (no address book)",
+          _wirft_i(lambda: _box.pruefe_entwurf("mail_forward", {"kennung": _k5_i,
+                                                                 "an": "Herr Meier"})))
+    _vmi = _box.pruefe_entwurf("mail_move", {"kennung": _k5_i, "ordner": "papierkorb"})
+    pruef("IMAP: the trash is found by its special-use flag",
+          "→ Papierkorb" in _vmi, _vmi)
+    _box.rufe("mail_move", {"kennung": _k5_i, "ordner": "archiv"})
+    pruef("IMAP: moved with MOVE into the archive",
+          ("MOVE", "INBOX", "5", '"Archiv"') in _FakeImap.log, _FakeImap.log[-2:])
     _box.schliesse()
     _bad = _imb.ImapMailbox("mail", {"imap_host": "x", "smtp_host": "y"}, {
         "Authorization": "Basic " + _b64i.b64encode(b"anna@example.com:wrong").decode()})
@@ -4119,6 +4169,159 @@ pruef("nur accept, tentative oder decline",
       _wirft(lambda: _pfk.pruefe_entwurf("calendar_respond",
                                          {"kennung": _k14, "response": "vielleicht"})))
 
+# --- address book ---
+_gal = [("Vladyslav Borysenko", "vladyslav.borysenko@thws.de", "IDEE", "Wiss. Mitarbeiter",
+         "+49 9721 940-1"),
+        ("Rodolfo Cacacho", "rodolfo.cacacho@thws.de", "IDEE", "", ""),
+        ("Vlad Tester", "vlad.tester@thws.de", "", "", "")]
+
+
+def _resolve(names, return_full_contact_data=False, search_scope=None):
+    q = names[0].lower()
+    hits = [(_ns(name=n, email_address=m),
+             _ns(display_name=n, department=d, job_title=t,
+                 phone_numbers=[_ns(phone_number=ph)] if ph else []))
+            for n, m, d, t, ph in _gal if q in n.lower()]
+    if not hits:
+        raise RuntimeError("ErrorNameResolutionNoResults")
+    return hits
+
+
+_pfk._konto.protocol.resolve_names = _resolve
+_al = _pfk.rufe("address_lookup", {"query": "Borysenko"})
+pruef("Adressbuch: Name, Adresse, Abteilung, Telefon",
+      "Vladyslav Borysenko <vladyslav.borysenko@thws.de>" in _al and "IDEE" in _al
+      and "Tel. +49 9721 940-1" in _al, _al)
+pruef("Adressbuch: niemand gefunden",
+      "Niemand" in _pfk.rufe("address_lookup", {"query": "Unbekannt"}))
+_arg_ab = {"subject": "Faschingsanfang", "start": f"{_tag_s} 11:00",
+           "attendees": "Vladyslav Borysenko, rodolfo.cacacho@thws.de"}
+_vs_ab = _pfk.pruefe_entwurf("meeting_request", _arg_ab)
+pruef("Einladung: Namen werden im Entwurf zu Adressen, die Vorschau sagt es",
+      _arg_ab["attendees"] == "vladyslav.borysenko@thws.de, rodolfo.cacacho@thws.de"
+      and "Adressbuch: Vladyslav Borysenko = vladyslav.borysenko@thws.de" in _vs_ab, _vs_ab)
+try:
+    _pfk.pruefe_entwurf("meeting_request", {"subject": "x", "start": f"{_tag_s} 11:00",
+                                            "attendees": "Vlad"})
+    pruef("ein mehrdeutiger Name wird nicht geraten", False)
+except _pfc.Fehler as _e:
+    pruef("ein mehrdeutiger Name wird nicht geraten",
+          "mehrdeutig" in str(_e) and "vlad.tester@thws.de" in str(_e), str(_e))
+pruef("ein unbekannter Name wird nicht geraten",
+      _wirft(lambda: _pfk.pruefe_entwurf("mail_senden", {"an": "Niemand Bekannt",
+                                                          "betreff": "x", "body": "y"})))
+
+# --- free/busy ---
+_mo = _heute_c + datetime.timedelta(days=(7 - _heute_c.weekday()))       # next Monday
+
+
+def _at(day, h, m=0):
+    return datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=_tz_c)
+
+
+def _free_busy(accounts, start, end, requested_view=None):
+    out = []
+    for who, _kind, _x in accounts:
+        if who == "anna@test.de":
+            out.append(_ns(calendar_events=[_ns(start=_at(_mo, 9), end=_at(_mo, 12),
+                                                busy_type="Busy")]))
+        elif who == "vladyslav.borysenko@thws.de":
+            out.append(_ns(calendar_events=[_ns(start=_at(_mo, 13), end=_at(_mo, 15),
+                                                busy_type="Tentative"),
+                                            _ns(start=_at(_mo, 15), end=_at(_mo, 16),
+                                                busy_type="Free")]))
+        else:
+            out.append(RuntimeError("no free/busy"))
+    return iter(out)
+
+
+_pfk._konto.protocol.get_free_busy_info = _free_busy
+_fb = _pfk.rufe("calendar_free", {"attendees": "Vladyslav Borysenko, extern@firma.de",
+                                  "from": f"{_mo:%Y-%m-%d}", "days": 1})
+pruef("Frei/Gebucht: gemeinsame Lücken in der Arbeitszeit, Name aufgelöst",
+      "08:00–09:00" in _fb and "12:00–13:00" in _fb and "15:00–17:00" in _fb
+      and "09:00" not in _fb.split("Belegt:")[0].replace("08:00–09:00", ""), _fb)
+pruef("Frei/Gebucht: wer keine Angaben liefert, wird genannt",
+      "Keine Frei/Gebucht-Angaben für: extern@firma.de" in _fb, _fb)
+
+# --- attachments, read state, forward, move ---
+import created_files as _cf_m  # noqa: E402
+
+
+class _Mail(_tyc.SimpleNamespace):
+    def save(self, update_fields=None):
+        self.saved = list(update_fields or [])
+
+    def forward(self, **k):
+        self.forwarded = k
+
+    def move(self, folder):
+        self.moved_to = folder
+
+
+_pdf_m = _cf_m.build_pdf("Angebot", "Angebot 4711 über 12.400 EUR, Lieferung KW 47")
+_m5 = _Mail(id="M5", subject="Angebot Meier", datetime_received=_t0, is_read=True,
+            sender=_ns(name="Meier", email_address="meier@test.de"), text_body="Anbei.",
+            attachments=[_ns(name="Angebot.pdf", content=_pdf_m),
+                         _ns(name="notiz.txt", content="Liefertermin bestätigt".encode()),
+                         _ns(name="Alte Nachricht", item=_ns(subject="Anfrage"))])
+_mails.append(_m5)
+_k5 = _pfc._merke_kennung(_pfk._bereich(), "M5")
+_att = _pfk.rufe("mail_attachments", {"kennung": _k5})
+pruef("Anhänge: Liste mit dem Text von PDF und Textdatei, eingebettete Mail benannt",
+      "Angebot.pdf" in _att and "12.400 EUR" in _att and "Liefertermin bestätigt" in _att
+      and "eingebettete Nachricht: Anfrage" in _att, _att)
+_pfk.rufe("mail_mark", {"kennung": _k5, "read": False})
+pruef("als ungelesen markiert", _m5.is_read is False and _m5.saved == ["is_read"])
+_arg_fw = {"kennung": _k5, "an": "Rodolfo Cacacho", "body": "Zur Info"}
+_vf = _pfk.pruefe_entwurf("mail_forward", _arg_fw)
+pruef("Weiterleiten: Vorschau mit Betreff, aufgelöster Adresse und Anhängen",
+      "WG: Angebot Meier" in _vf and "rodolfo.cacacho@thws.de" in _vf
+      and "mit Anhängen: Angebot.pdf" in _vf, _vf)
+_pfk.rufe("mail_forward", _arg_fw)
+pruef("Weiterleiten: an die Adresse, mit Text",
+      _m5.forwarded["to_recipients"] == ["rodolfo.cacacho@thws.de"]
+      and _m5.forwarded["subject"] == "WG: Angebot Meier" and _m5.forwarded["body"] == "Zur Info",
+      _m5.forwarded)
+_pfk._konto.trash = _ns(name="Gelöschte Elemente")
+_pfk._konto.msg_folder_root = _ns(walk=lambda: [_ns(name="Projekte"), _ns(name="Archiv")])
+_vm = _pfk.pruefe_entwurf("mail_move", {"kennung": _k5, "ordner": "archiv"})
+pruef("Verschieben: Vorschau nennt Mail und Ziel", "Angebot Meier" in _vm and "→ Archiv" in _vm, _vm)
+_pfk.rufe("mail_move", {"kennung": _k5, "ordner": "papierkorb"})
+pruef("in den Papierkorb heißt: Gelöschte Elemente, wiederherstellbar",
+      _m5.moved_to.name == "Gelöschte Elemente")
+pruef("ein unbekannter Ordner wird abgewiesen",
+      _wirft(lambda: _pfk.pruefe_entwurf("mail_move", {"kennung": _k5, "ordner": "Gibtsnicht"})))
+
+# --- out of office ---
+_echte_settings = sys.modules.get("exchangelib.settings")
+sys.modules["exchangelib.settings"] = _tyc.SimpleNamespace(OofSettings=lambda **k: _ns(**k))
+_pfk._konto.oof_settings = _ns(state="Scheduled", start=_at(_mo, 0), end=_at(_mo, 18),
+                               internal_reply="<p>Bin <b>unterwegs</b></p>", external_reply="")
+_oof = _pfk.rufe("out_of_office", {})
+pruef("Abwesenheitsnotiz lesen: Zustand, Zeitraum, Text ohne HTML",
+      "geplant" in _oof and "Bin unterwegs" in _oof, _oof)
+_vo = _pfk.pruefe_entwurf("out_of_office_set", {
+    "state": "on", "start": f"{_mo:%Y-%m-%d}", "end": f"{_mo + datetime.timedelta(days=4):%Y-%m-%d}",
+    "internal_reply": "Ich bin bis Freitag nicht im Haus."})
+pruef("Abwesenheitsnotiz setzen: Vorschau mit Zeitraum und Text",
+      f"{_mo:%d.%m.%Y} 00:00" in _vo and "23:59" in _vo and "nicht im Haus" in _vo, _vo)
+_pfk.rufe("out_of_office_set", {"state": "on", "start": f"{_mo:%Y-%m-%d}",
+                                "end": f"{_mo + datetime.timedelta(days=4):%Y-%m-%d}",
+                                "internal_reply": "Ich bin bis Freitag nicht im Haus."})
+_os = _pfk._konto.oof_settings
+pruef("geplant, mit Zeitraum in Ortszeit, außen derselbe Text",
+      _os.state == "Scheduled" and _os.start.hour == 0 and _os.end.hour == 23
+      and _os.external_reply == _os.internal_reply and _os.external_audience == "All", _os)
+_pfk.rufe("out_of_office_set", {"state": "off"})
+pruef("ausschalten", _pfk._konto.oof_settings.state == "Disabled")
+pruef("einschalten ohne Text wird abgewiesen",
+      _wirft(lambda: _pfk.pruefe_entwurf("out_of_office_set", {"state": "on"})))
+if _echte_settings is None:
+    del sys.modules["exchangelib.settings"]
+else:
+    sys.modules["exchangelib.settings"] = _echte_settings
+
 if _echtes_ews is None:
     del sys.modules["exchangelib"]
 else:
@@ -4145,6 +4348,14 @@ pruef("und warten auch im automatischen Postfach auf einen Menschen",
       and _mcp_w.braucht_bestaetigung("info", "calendar_add", {}))
 pruef("Lesen im Kalender bleibt ohne Rueckfrage",
       not _mcp_w.braucht_bestaetigung("info", "calendar_events", {}))
+pruef("Weiterleiten, Verschieben, Abwesenheitsnotiz: auch in alten Eintraegen mit Rueckfrage",
+      _mcp_w.braucht_bestaetigung("info", "mail_move", {})
+      and _mcp_w.braucht_bestaetigung("info", "out_of_office_set", {})
+      and _mcp_w.sendet("info", "mail_forward"))
+pruef("Adressbuch, Frei/Gebucht, Anhaenge, Markieren ohne Rueckfrage",
+      not any(_mcp_w.braucht_bestaetigung("info", _w, {})
+              for _w in ("address_lookup", "calendar_free", "mail_attachments", "mail_mark",
+                         "out_of_office")))
 os.remove(_mcp_w.KONFIG)
 _mcp_w.KONFIG = _konfig_alt
 
@@ -4280,7 +4491,7 @@ pruef("beide Bauarten haben dieselben drei Methoden",
 _erkannt = {_w["name"] for _w in _pf0.WERKZEUGE
             if _mcp0.sendet("markus", _w["name"])}
 pruef("genau die Sende- und Kalenderwerkzeuge gelten als sendend",
-      _erkannt == set(_pf0.SENDEWERKZEUGE) | set(_pf0.KALENDERWERKZEUGE),
+      _erkannt == set(_pf0.SENDEWERKZEUGE) | set(_pf0.CONFIRM_TOOLS),
       sorted(_erkannt))
 
 _namen = {_w["name"] for _w in _pf0.WERKZEUGE}
