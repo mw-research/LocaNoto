@@ -32,7 +32,16 @@ TABLES = [
         ("Ort", "nvarchar(50) NOT NULL", "Ort"),
         ("Ansprechpartner", "nvarchar(80) NOT NULL", "Ansprechpartner beim Kunden"),
         ("Email", "nvarchar(100) NOT NULL", "Mailadresse des Ansprechpartners"),
+        ("Telefon", "nvarchar(30) NOT NULL", "Telefonnummer des Ansprechpartners"),
         ("KundeSeit", "date NOT NULL", "Beginn der Geschäftsbeziehung"),
+    ]),
+    ("Lieferanten", "Lieferantenstamm.", [
+        ("LieferantenNr", "int NOT NULL PRIMARY KEY", "Lieferantennummer"),
+        ("Firma", "nvarchar(100) NOT NULL", "Name des Lieferanten"),
+        ("Ort", "nvarchar(50) NOT NULL", "Ort"),
+        ("Ansprechpartner", "nvarchar(80) NOT NULL", "Ansprechpartner beim Lieferanten"),
+        ("Telefon", "nvarchar(30) NOT NULL", "Telefonnummer"),
+        ("Email", "nvarchar(100) NOT NULL", "Mailadresse"),
     ]),
     ("Artikel", "Artikelstamm mit Lagerbestand.", [
         ("ArtikelNr", "nvarchar(20) NOT NULL PRIMARY KEY", "Artikelnummer, z. B. DB-2000"),
@@ -58,6 +67,34 @@ TABLES = [
         ("Menge", "int NOT NULL", "bestellte Menge"),
         ("Einzelpreis", "decimal(10,2) NOT NULL", "vereinbarter Preis netto je Einheit"),
         ("RabattProzent", "decimal(5,2) NOT NULL", "Rabatt in Prozent auf die Position"),
+    ]),
+    ("Rechnungen", "Ausgangsrechnungen an Kunden.", [
+        ("RechnungsNr", "int NOT NULL PRIMARY KEY", "Rechnungsnummer"),
+        ("AuftragsNr", "int NOT NULL REFERENCES dbo.Auftraege(AuftragsNr)", "berechneter Auftrag"),
+        ("KundenNr", "int NOT NULL REFERENCES dbo.Kunden(KundenNr)", "Rechnungsempfänger"),
+        ("Rechnungsdatum", "date NOT NULL", "Tag der Rechnung"),
+        ("Faellig", "date NOT NULL", "Zahlungsziel"),
+        ("Betrag", "decimal(12,2) NOT NULL", "Rechnungsbetrag brutto in EUR"),
+        ("Bezahlt", "decimal(12,2) NOT NULL", "bisher bezahlter Betrag in EUR"),
+        ("BezahltAm", "date NULL", "Tag der letzten Zahlung, leer wenn nichts bezahlt"),
+        ("Status", "nvarchar(20) NOT NULL", "offen, teilweise bezahlt oder bezahlt"),
+        ("Mahnstufe", "int NOT NULL", "0 = nicht gemahnt, 1 bis 3 = Mahnstufe"),
+    ]),
+    ("Lagerplaetze", "Wo der Bestand eines Artikels liegt.", [
+        ("ArtikelNr", "nvarchar(20) NOT NULL REFERENCES dbo.Artikel(ArtikelNr)", "Artikel"),
+        ("Lager", "nvarchar(30) NOT NULL", "Hauptlager oder Außenlager"),
+        ("Lagerplatz", "nvarchar(20) NOT NULL", "Regal und Fach, z. B. R03-F2"),
+        ("Menge", "int NOT NULL", "Menge an diesem Platz; die Summe je Artikel ist der Lagerbestand"),
+    ]),
+    ("Bestellungen", "Bestellungen bei Lieferanten (Einkauf).", [
+        ("BestellNr", "int NOT NULL PRIMARY KEY", "Bestellnummer"),
+        ("LieferantenNr", "int NOT NULL REFERENCES dbo.Lieferanten(LieferantenNr)", "Lieferant"),
+        ("ArtikelNr", "nvarchar(20) NOT NULL REFERENCES dbo.Artikel(ArtikelNr)", "bestellter Artikel"),
+        ("Menge", "int NOT NULL", "bestellte Menge"),
+        ("Einkaufspreis", "decimal(10,2) NOT NULL", "Einkaufspreis netto je Einheit in EUR"),
+        ("Bestelldatum", "date NOT NULL", "Tag der Bestellung"),
+        ("ErwartetAm", "date NOT NULL", "zugesagter Liefertag"),
+        ("Status", "nvarchar(20) NOT NULL", "bestellt, teilgeliefert oder geliefert"),
     ]),
     ("Anlagen", "Anlagen beim Kunden, die wir prüfen und warten.", [
         ("AnlagenNr", "nvarchar(20) NOT NULL PRIMARY KEY", "Anlagennummer, z. B. AN-0003"),
@@ -97,13 +134,25 @@ JOIN dbo.Kunden k ON k.KundenNr = a.KundenNr
 JOIN dbo.Auftragspositionen p ON p.AuftragsNr = a.AuftragsNr
 WHERE a.Status IN ('O', 'F')
 GROUP BY a.AuftragsNr, a.KundenNr, k.Firma, a.Auftragsdatum, a.Liefertermin, a.Status, a.Bearbeiter"""),
+    ("v_OffeneRechnungen",
+     "Nicht vollständig bezahlte Rechnungen mit Kunde, Restbetrag und Tagen über dem Zahlungsziel.",
+     """SELECT r.RechnungsNr, r.KundenNr, k.Firma, r.AuftragsNr, r.Rechnungsdatum, r.Faellig,
+       r.Betrag, r.Bezahlt, r.Betrag - r.Bezahlt AS Restbetrag,
+       CASE WHEN r.Faellig < CAST(GETDATE() AS date)
+            THEN DATEDIFF(day, r.Faellig, CAST(GETDATE() AS date)) ELSE 0 END AS TageUeberfaellig,
+       r.Mahnstufe, r.Status
+FROM dbo.Rechnungen r
+JOIN dbo.Kunden k ON k.KundenNr = r.KundenNr
+WHERE r.Status <> N'bezahlt'"""),
 ]
 
 HINT = """Status in dbo.Auftraege: O = offen, F = in Fertigung, G = geliefert, S = storniert. "Offen" im Sinne von noch nicht geliefert heisst Status IN ('O','F').
 dbo.v_OffeneAuftraege enthaelt offene Auftraege mit Kunde und Auftragswert (netto, nach Rabatt).
 Pruefart in dbo.Pruefungen: A = aeussere, I = innere, F = Festigkeitspruefung. Faellig ist eine Pruefung am Datum in NaechstePruefung; je Anlage und Pruefart zaehlt die juengste Pruefung.
 Kunden werden ueber Firma gesucht (LIKE '%Meier%'), Anlagen ueber AnlagenNr (AN-0001) oder Bezeichnung.
-Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR."""
+Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR.
+Rechnung offen = Status <> 'bezahlt'; Restbetrag = Betrag - Bezahlt; ueberfaellig = offen und Faellig vor heute. dbo.v_OffeneRechnungen enthaelt sie mit Firma, Restbetrag und TageUeberfaellig.
+Wo ein Artikel liegt: dbo.Lagerplaetze (Lager, Lagerplatz, Menge). Offene Bestellungen beim Lieferanten: dbo.Bestellungen mit Status <> 'geliefert', erwartet am ErwartetAm."""
 
 # --- SAMPLE DATA ---
 
@@ -136,6 +185,17 @@ ITEMS = [
     ("PS-01", "Prüfservice Druckbehälter (Pauschale)", "Service", "Stk", 320.00, 999, 0),
 ]
 
+SUPPLIERS = [
+    (70001, "Armaturen Süd GmbH", "Nürnberg", "Petra Haas", "0911 2233-40"),
+    (70002, "Behälterbau Franken KG", "Bamberg", "Uwe Stein", "0951 8800-12"),
+    (70003, "MessTec Instruments", "Erlangen", "Nina Ott", "09131 4455-0"),
+    (70004, "Kompressorenwerk Ost", "Chemnitz", "Karl Brandt", "0371 6060-21"),
+]
+# Warengruppe -> supplier
+SUPPLIED_BY = {"Armaturen": 70001, "Dichtungen": 70001, "Rohrleitung": 70001,
+               "Druckbehälter": 70002, "Messtechnik": 70003, "Zubehör": 70003,
+               "Kompressoren": 70004, "Service": 70004}
+
 PEOPLE = ["K. Lang", "M. Roth", "S. Braun", "T. Krause"]
 INSPECTORS = ["Dr. Weiß (ZÜS)", "H. Vogel (ZÜS)", "befähigte Person J. Kern"]
 # Inspection kind -> interval in years (as in the demo's own inspection rule)
@@ -154,11 +214,27 @@ def build_data(rng):
     rows = {t[0]: [] for t in TABLES}
     for nr, firm, branch, plz, city, contact in CUSTOMERS:
         mail = contact.split()[0].lower() + "@" + firm.split()[0].lower() + ".example.com"
+        phone = f"0{rng.randint(931, 9799)} {rng.randint(100, 9999)}-{rng.randint(0, 99)}"
         rows["Kunden"].append([str(nr), q(firm), q(branch), q(plz), q(city), q(contact),
-                               q(mail), day(-rng.randint(400, 4000))])
+                               q(mail), q(phone), day(-rng.randint(400, 4000))])
+    for nr, firm, city, contact, phone in SUPPLIERS:
+        mail = contact.split()[0].lower() + "@" + firm.split()[0].lower() + ".example.com"
+        rows["Lieferanten"].append([str(nr), q(firm), q(city), q(contact), q(phone), q(mail)])
     for nr, name, group, unit, price, stock, minimum in ITEMS:
         rows["Artikel"].append([q(nr), q(name), q(group), q(unit), f"{price:.2f}",
                                 str(stock), str(minimum)])
+        if group == "Service" and unit == "Stk":
+            continue                    # a service lies nowhere
+        if group in ("Druckbehälter", "Kompressoren"):
+            places = [("Außenlager", f"H{rng.randint(1, 4)}-{rng.randint(1, 12):02d}", stock)]
+        elif stock > 20:
+            main = stock * rng.randint(55, 80) // 100
+            places = [("Hauptlager", f"R{rng.randint(1, 12):02d}-F{rng.randint(1, 6)}", main),
+                      ("Außenlager", f"H{rng.randint(1, 4)}-{rng.randint(1, 12):02d}", stock - main)]
+        else:
+            places = [("Hauptlager", f"R{rng.randint(1, 12):02d}-F{rng.randint(1, 6)}", stock)]
+        for store, place, qty in places:
+            rows["Lagerplaetze"].append([q(nr), q(store), q(place), str(qty)])
 
     # Orders: Meier gets a fixed, demo-friendly mix; the rest is random.
     orders = []
@@ -171,14 +247,64 @@ def build_data(rng):
         nr = 24001 + i
         ordered = -rng.randint(3, 25) if status in "OF" else -rng.randint(30, 200)
         delivery = ordered + rng.randint(14, 60)
-        orders.append(nr)
         rows["Auftraege"].append([str(nr), str(cust), day(ordered), day(delivery),
                                   q(status)[1:], q(rng.choice(PEOPLE))])
+        net = 0.0
         for pos, item in enumerate(rng.sample(ITEMS, rng.randint(1, 4)), start=1):
             qty = 1 if item[2] in ("Druckbehälter", "Kompressoren") else rng.randint(2, 40)
             rebate = rng.choice([0, 0, 0, 3, 5, 10])
+            net += qty * item[4] * (100 - rebate) / 100
             rows["Auftragspositionen"].append([str(nr), str(pos), q(item[0]), str(qty),
                                                f"{item[4]:.2f}", f"{rebate:.2f}"])
+        orders.append((nr, cust, status, delivery, round(net * 1.19, 2)))
+
+    # Invoices for delivered orders. Meier: one paid, one overdue with a
+    # reminder, one partly paid -- the rest by chance.
+    meier_plan = iter([("bezahlt", 0), ("offen", 1), ("teilweise bezahlt", 0)])
+    invoice = 2025101
+    for nr, cust, status, delivery, gross in orders:
+        if status != "G":
+            continue
+        issued = min(delivery, -2)
+        due = issued + 30
+        if cust == 10001:
+            state, reminder = next(meier_plan, ("bezahlt", 0))
+        elif due >= 0:
+            state, reminder = rng.choice([("offen", 0), ("offen", 0), ("bezahlt", 0)])
+        else:
+            state, reminder = rng.choice([("bezahlt", 0)] * 4 + [("offen", 1), ("offen", 2),
+                                                                 ("teilweise bezahlt", 0)])
+        if state == "offen" and cust == 10001:
+            issued, due = -45, -15          # overdue for the demo
+        paid = {"bezahlt": gross, "offen": 0.0,
+                "teilweise bezahlt": round(gross * 0.5, 2)}[state]
+        paid_on = "NULL" if not paid else day(min(due - rng.randint(0, 20), -1))
+        rows["Rechnungen"].append([str(invoice), str(nr), str(cust), day(issued), day(due),
+                                   f"{gross:.2f}", f"{paid:.2f}", paid_on, q(state),
+                                   str(reminder)])
+        invoice += 1
+
+    # Purchase orders: what is below the minimum is on order, a few came in.
+    po = 450001
+    for nr, name, group, unit, price, stock, minimum in ITEMS:
+        if group == "Service" and unit == "Stk":
+            continue
+        supplier = SUPPLIED_BY[group]
+        buy = round(price * 0.62, 2)
+        if stock < minimum:
+            rows["Bestellungen"].append([str(po), str(supplier), q(nr),
+                                         str(max(minimum * 2 - stock, 1)), f"{buy:.2f}",
+                                         day(-rng.randint(2, 10)), day(rng.randint(3, 21)),
+                                         q("bestellt")])
+            po += 1
+        if rng.random() < 0.6:
+            ordered = -rng.randint(30, 120)
+            rows["Bestellungen"].append([str(po), str(supplier), q(nr),
+                                         str(rng.randint(2, 50) if unit != "Stk" or price < 500
+                                             else rng.randint(1, 3)), f"{buy:.2f}",
+                                         day(ordered), day(ordered + rng.randint(7, 21)),
+                                         q("geliefert")])
+            po += 1
 
     # Plants and their inspections
     plants = [
@@ -245,7 +371,8 @@ def seed_sql(rows):
     ]
     for table, _desc, columns in TABLES:
         cols = ",\n  ".join(f"{c} {t}" for c, t, _d in columns)
-        extra = ",\n  PRIMARY KEY (AuftragsNr, PosNr)" if table == "Auftragspositionen" else ""
+        extra = {"Auftragspositionen": ",\n  PRIMARY KEY (AuftragsNr, PosNr)",
+                 "Lagerplaetze": ",\n  PRIMARY KEY (ArtikelNr, Lagerplatz)"}.get(table, "")
         out.append(f"CREATE TABLE dbo.{table} (\n  {cols}{extra}\n);")
     out.append("GO")
     for name, _desc, body in VIEWS:
@@ -287,6 +414,9 @@ def data_model_md(rows):
         "jede Position verweist auf einen **Artikel**.",
         "- Ein **Kunde** betreibt **Anlagen**; zu jeder Anlage gibt es **Prüfungen**.",
         "- Eine **Reklamation** gehört zu genau einem **Auftrag**.",
+        "- Ein gelieferter **Auftrag** wird mit einer **Rechnung** an den Kunden berechnet.",
+        "- Der **Lagerbestand** eines Artikels liegt auf einem oder mehreren **Lagerplätzen**.",
+        "- **Bestellungen** gehen an **Lieferanten** und betreffen je einen **Artikel**.",
         "",
         "## Statuswerte",
         "",
@@ -299,13 +429,18 @@ def data_model_md(rows):
         "| Pruefungen | Pruefart | A | äußere Prüfung, alle 2 Jahre |",
         "| Pruefungen | Pruefart | I | innere Prüfung, alle 5 Jahre |",
         "| Pruefungen | Pruefart | F | Festigkeitsprüfung, alle 10 Jahre |",
+        "| Rechnungen | Status | offen | nichts bezahlt |",
+        "| Rechnungen | Status | teilweise bezahlt | ein Teil ist bezahlt |",
+        "| Rechnungen | Status | bezahlt | vollständig bezahlt |",
+        "| Bestellungen | Status | bestellt | beim Lieferanten bestellt, noch nicht da |",
+        "| Bestellungen | Status | geliefert | eingetroffen |",
         "",
     ]
     for table, desc, columns in TABLES:
         lines += [f"## Tabelle {table}", "", desc + f" {len(rows[table])} Zeilen.", "",
                   "| Spalte | Typ | Bedeutung |", "|---|---|---|"]
         for c, t, d in columns:
-            typ = t.split(" NOT NULL")[0]
+            typ = t.split(" NOT NULL")[0].split(" NULL")[0]
             key = " (Schlüssel)" if "PRIMARY KEY" in t else ""
             ref = ""
             if "REFERENCES" in t:
@@ -323,6 +458,16 @@ def data_model_md(rows):
         "- Wann ist die nächste äußere Prüfung der Anlage AN-0003 fällig?",
         "- Welche Artikel liegen unter dem Mindestbestand?",
         "- Welche Reklamationen sind noch offen, und zu welchem Auftrag gehören sie?",
+        "- Welche Rechnungen der Meier GmbH sind offen?",
+        "- Welche Rechnungen sind überfällig, und wie viel steht insgesamt aus?",
+        "- Hat die Schmitt Metallbau KG ihre letzte Rechnung bezahlt?",
+        "- Wie viele Manometer haben wir, und wo liegen sie?",
+        "- Was ist bei Lieferanten bestellt und noch nicht da?",
+        "- Wann kommen die Kondensatableiter?",
+        "- Wer ist Ansprechpartner bei Becker Druckluft, mit Telefonnummer?",
+        "- Welche Kunden hatten dieses Jahr den größten Umsatz?",
+        "- Was hat die Meier GmbH zuletzt bestellt?",
+        "- Welche Aufträge betreut K. Lang?",
         "",
     ]
     return "\n".join(lines)

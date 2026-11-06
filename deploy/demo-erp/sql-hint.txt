@@ -3,3 +3,5 @@ dbo.v_OffeneAuftraege enthaelt offene Auftraege mit Kunde und Auftragswert (nett
 Pruefart in dbo.Pruefungen: A = aeussere, I = innere, F = Festigkeitspruefung. Faellig ist eine Pruefung am Datum in NaechstePruefung; je Anlage und Pruefart zaehlt die juengste Pruefung.
 Kunden werden ueber Firma gesucht (LIKE '%Meier%'), Anlagen ueber AnlagenNr (AN-0001) oder Bezeichnung.
 Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR.
+Rechnung offen = Status <> 'bezahlt'; Restbetrag = Betrag - Bezahlt; ueberfaellig = offen und Faellig vor heute. dbo.v_OffeneRechnungen enthaelt sie mit Firma, Restbetrag und TageUeberfaellig.
+Wo ein Artikel liegt: dbo.Lagerplaetze (Lager, Lagerplatz, Menge). Offene Bestellungen beim Lieferanten: dbo.Bestellungen mit Status <> 'geliefert', erwartet am ErwartetAm.

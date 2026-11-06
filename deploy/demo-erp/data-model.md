@@ -7,6 +7,9 @@ Beispieldatenbank für LocaNoto (Microsoft SQL Server, Datenbank `DemoERP`, Sche
 - Ein **Kunde** hat viele **Aufträge**, ein Auftrag viele **Auftragspositionen**, jede Position verweist auf einen **Artikel**.
 - Ein **Kunde** betreibt **Anlagen**; zu jeder Anlage gibt es **Prüfungen**.
 - Eine **Reklamation** gehört zu genau einem **Auftrag**.
+- Ein gelieferter **Auftrag** wird mit einer **Rechnung** an den Kunden berechnet.
+- Der **Lagerbestand** eines Artikels liegt auf einem oder mehreren **Lagerplätzen**.
+- **Bestellungen** gehen an **Lieferanten** und betreffen je einen **Artikel**.
 
 ## Statuswerte
 
@@ -19,6 +22,11 @@ Beispieldatenbank für LocaNoto (Microsoft SQL Server, Datenbank `DemoERP`, Sche
 | Pruefungen | Pruefart | A | äußere Prüfung, alle 2 Jahre |
 | Pruefungen | Pruefart | I | innere Prüfung, alle 5 Jahre |
 | Pruefungen | Pruefart | F | Festigkeitsprüfung, alle 10 Jahre |
+| Rechnungen | Status | offen | nichts bezahlt |
+| Rechnungen | Status | teilweise bezahlt | ein Teil ist bezahlt |
+| Rechnungen | Status | bezahlt | vollständig bezahlt |
+| Bestellungen | Status | bestellt | beim Lieferanten bestellt, noch nicht da |
+| Bestellungen | Status | geliefert | eingetroffen |
 
 ## Tabelle Kunden
 
@@ -33,7 +41,21 @@ Kundenstamm. 10 Zeilen.
 | Ort | nvarchar(50) | Ort |
 | Ansprechpartner | nvarchar(80) | Ansprechpartner beim Kunden |
 | Email | nvarchar(100) | Mailadresse des Ansprechpartners |
+| Telefon | nvarchar(30) | Telefonnummer des Ansprechpartners |
 | KundeSeit | date | Beginn der Geschäftsbeziehung |
+
+## Tabelle Lieferanten
+
+Lieferantenstamm. 4 Zeilen.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| LieferantenNr | int | Lieferantennummer (Schlüssel) |
+| Firma | nvarchar(100) | Name des Lieferanten |
+| Ort | nvarchar(50) | Ort |
+| Ansprechpartner | nvarchar(80) | Ansprechpartner beim Lieferanten |
+| Telefon | nvarchar(30) | Telefonnummer |
+| Email | nvarchar(100) | Mailadresse |
 
 ## Tabelle Artikel
 
@@ -64,7 +86,7 @@ Kundenaufträge (Kopf). 34 Zeilen.
 
 ## Tabelle Auftragspositionen
 
-Positionen eines Auftrags. 87 Zeilen.
+Positionen eines Auftrags. 82 Zeilen.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|
@@ -74,6 +96,49 @@ Positionen eines Auftrags. 87 Zeilen.
 | Menge | int | bestellte Menge |
 | Einzelpreis | decimal(10,2) | vereinbarter Preis netto je Einheit |
 | RabattProzent | decimal(5,2) | Rabatt in Prozent auf die Position |
+
+## Tabelle Rechnungen
+
+Ausgangsrechnungen an Kunden. 22 Zeilen.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| RechnungsNr | int | Rechnungsnummer (Schlüssel) |
+| AuftragsNr | int | berechneter Auftrag → Auftraege |
+| KundenNr | int | Rechnungsempfänger → Kunden |
+| Rechnungsdatum | date | Tag der Rechnung |
+| Faellig | date | Zahlungsziel |
+| Betrag | decimal(12,2) | Rechnungsbetrag brutto in EUR |
+| Bezahlt | decimal(12,2) | bisher bezahlter Betrag in EUR |
+| BezahltAm | date | Tag der letzten Zahlung, leer wenn nichts bezahlt |
+| Status | nvarchar(20) | offen, teilweise bezahlt oder bezahlt |
+| Mahnstufe | int | 0 = nicht gemahnt, 1 bis 3 = Mahnstufe |
+
+## Tabelle Lagerplaetze
+
+Wo der Bestand eines Artikels liegt. 17 Zeilen.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| ArtikelNr | nvarchar(20) | Artikel → Artikel |
+| Lager | nvarchar(30) | Hauptlager oder Außenlager |
+| Lagerplatz | nvarchar(20) | Regal und Fach, z. B. R03-F2 |
+| Menge | int | Menge an diesem Platz; die Summe je Artikel ist der Lagerbestand |
+
+## Tabelle Bestellungen
+
+Bestellungen bei Lieferanten (Einkauf). 8 Zeilen.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| BestellNr | int | Bestellnummer (Schlüssel) |
+| LieferantenNr | int | Lieferant → Lieferanten |
+| ArtikelNr | nvarchar(20) | bestellter Artikel → Artikel |
+| Menge | int | bestellte Menge |
+| Einkaufspreis | decimal(10,2) | Einkaufspreis netto je Einheit in EUR |
+| Bestelldatum | date | Tag der Bestellung |
+| ErwartetAm | date | zugesagter Liefertag |
+| Status | nvarchar(20) | bestellt, teilgeliefert oder geliefert |
 
 ## Tabelle Anlagen
 
@@ -90,7 +155,7 @@ Anlagen beim Kunden, die wir prüfen und warten. 10 Zeilen.
 
 ## Tabelle Pruefungen
 
-Durchgeführte wiederkehrende Prüfungen der Anlagen. 25 Zeilen.
+Durchgeführte wiederkehrende Prüfungen der Anlagen. 23 Zeilen.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|
@@ -130,6 +195,21 @@ WHERE a.Status IN ('O', 'F')
 GROUP BY a.AuftragsNr, a.KundenNr, k.Firma, a.Auftragsdatum, a.Liefertermin, a.Status, a.Bearbeiter
 ```
 
+## Sicht v_OffeneRechnungen
+
+Nicht vollständig bezahlte Rechnungen mit Kunde, Restbetrag und Tagen über dem Zahlungsziel.
+
+```sql
+SELECT r.RechnungsNr, r.KundenNr, k.Firma, r.AuftragsNr, r.Rechnungsdatum, r.Faellig,
+       r.Betrag, r.Bezahlt, r.Betrag - r.Bezahlt AS Restbetrag,
+       CASE WHEN r.Faellig < CAST(GETDATE() AS date)
+            THEN DATEDIFF(day, r.Faellig, CAST(GETDATE() AS date)) ELSE 0 END AS TageUeberfaellig,
+       r.Mahnstufe, r.Status
+FROM dbo.Rechnungen r
+JOIN dbo.Kunden k ON k.KundenNr = r.KundenNr
+WHERE r.Status <> N'bezahlt'
+```
+
 ## Beispielfragen
 
 - Welche Aufträge der Meier GmbH sind noch offen?
@@ -138,3 +218,13 @@ GROUP BY a.AuftragsNr, a.KundenNr, k.Firma, a.Auftragsdatum, a.Liefertermin, a.S
 - Wann ist die nächste äußere Prüfung der Anlage AN-0003 fällig?
 - Welche Artikel liegen unter dem Mindestbestand?
 - Welche Reklamationen sind noch offen, und zu welchem Auftrag gehören sie?
+- Welche Rechnungen der Meier GmbH sind offen?
+- Welche Rechnungen sind überfällig, und wie viel steht insgesamt aus?
+- Hat die Schmitt Metallbau KG ihre letzte Rechnung bezahlt?
+- Wie viele Manometer haben wir, und wo liegen sie?
+- Was ist bei Lieferanten bestellt und noch nicht da?
+- Wann kommen die Kondensatableiter?
+- Wer ist Ansprechpartner bei Becker Druckluft, mit Telefonnummer?
+- Welche Kunden hatten dieses Jahr den größten Umsatz?
+- Was hat die Meier GmbH zuletzt bestellt?
+- Welche Aufträge betreut K. Lang?

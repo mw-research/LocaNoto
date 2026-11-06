@@ -428,11 +428,17 @@ sqldb.formuliere(capture("SELECT 1"), "m", "Wie viele Absperrhähne liegen im La
 check("SQL: the second try names the first query and asks for a broader search",
       "ergab 0 Zeilen" in prompts_seen[-1] and "%Absperrh%" in prompts_seen[-1]
       and "Oberbegriffe" in prompts_seen[-1])
+check("SQL: the query model knows today's date (overdue, this month)",
+      prompts_seen[-1].startswith("Heute ist ")
+      and f"{local_time.today():%Y-%m-%d}" in prompts_seen[-1].split("\n")[0], prompts_seen[-1][:80])
 sql_prompt_text = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "sql_prompt.txt"), encoding="utf-8").read()
 check("SQL: the prompt searches names by their stem and stock as quantity, not COUNT(*)",
       "Wortstamm" in sql_prompt_text and "kein COUNT(*)" in sql_prompt_text
       and "Lagerort" in sql_prompt_text)
+check("SQL: the prompt covers everyday questions (names, open, overdue, periods, latest)",
+      all(w in sql_prompt_text for w in ("Stammtabelle", "vollständig bezahlt", "Überfällig",
+                                         "letzten Monat", "TOP 1", "Ansprechpartner")))
 
 
 class FakeCursor:

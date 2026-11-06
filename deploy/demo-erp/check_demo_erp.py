@@ -28,9 +28,12 @@ def check(name, ok, detail=""):
 
 schema = sqldb.lade_schema(ACCESS)
 check("schema readable with all tables and the view",
-      all(f"dbo.{t}(" in schema for t in ("Kunden", "Artikel", "Auftraege",
-                                          "Auftragspositionen", "Anlagen", "Pruefungen",
-                                          "Reklamationen", "v_OffeneAuftraege")), schema)
+      all(f"dbo.{t}(" in schema for t in ("Kunden", "Lieferanten", "Artikel", "Auftraege",
+                                          "Auftragspositionen", "Rechnungen", "Lagerplaetze",
+                                          "Bestellungen", "Anlagen", "Pruefungen",
+                                          "Reklamationen", "v_OffeneAuftraege",
+                                          "v_OffeneRechnungen")), schema)
+check("schema carries example values", "Beispiele:" in schema, schema[:500])
 
 QUESTIONS = {
     "open orders of Meier GmbH":
@@ -51,9 +54,41 @@ QUESTIONS = {
     "open complaints with their order":
         "SELECT r.ReklamationsNr, r.AuftragsNr, r.Grund FROM dbo.Reklamationen r "
         "WHERE r.Status <> N'erledigt'",
+    "open invoices of Meier GmbH":
+        "SELECT RechnungsNr, Faellig, Restbetrag, Mahnstufe FROM dbo.v_OffeneRechnungen "
+        "WHERE Firma LIKE N'%Meier%'",
+    "overdue invoices and the total outstanding":
+        "SELECT COUNT(*) AS Anzahl, SUM(Restbetrag) AS Offen FROM dbo.v_OffeneRechnungen "
+        "WHERE TageUeberfaellig > 0",
+    "where the pressure gauges lie":
+        "SELECT a.ArtikelNr, a.Bezeichnung, a.Lagerbestand, l.Lager, l.Lagerplatz, l.Menge "
+        "FROM dbo.Artikel a JOIN dbo.Lagerplaetze l ON l.ArtikelNr = a.ArtikelNr "
+        "WHERE a.Bezeichnung LIKE N'%Manometer%'",
+    "ordered from suppliers and not yet in":
+        "SELECT b.BestellNr, a.Bezeichnung, b.Menge, b.ErwartetAm, l.Firma "
+        "FROM dbo.Bestellungen b JOIN dbo.Artikel a ON a.ArtikelNr = b.ArtikelNr "
+        "JOIN dbo.Lieferanten l ON l.LieferantenNr = b.LieferantenNr "
+        "WHERE b.Status <> N'geliefert'",
+    "contact at Becker Druckluft":
+        "SELECT Firma, Ansprechpartner, Telefon, Email FROM dbo.Kunden "
+        "WHERE Firma LIKE N'%Becker%'",
+    "customers by revenue in the last 12 months":
+        "SELECT TOP 5 k.Firma, SUM(r.Betrag) AS Umsatz FROM dbo.Rechnungen r "
+        "JOIN dbo.Kunden k ON k.KundenNr = r.KundenNr "
+        "WHERE r.Rechnungsdatum >= DATEADD(month, -12, CAST(GETDATE() AS date)) "
+        "GROUP BY k.Firma ORDER BY Umsatz DESC",
 }
 expected_rows = {"open orders of Meier GmbH": 3, "inspections due in the next 30 days": 3,
-                 "open complaints with their order": 3}
+                 "open complaints with their order": 3, "open invoices of Meier GmbH": 2,
+                 "ordered from suppliers and not yet in": 3}
+try:
+    _c, wrong = sqldb.fuehre_aus(
+        "SELECT a.ArtikelNr FROM dbo.Artikel a JOIN dbo.Lagerplaetze l "
+        "ON l.ArtikelNr = a.ArtikelNr GROUP BY a.ArtikelNr, a.Lagerbestand "
+        "HAVING a.Lagerbestand <> SUM(l.Menge)", zugang=ACCESS)
+    check("storage places add up to the stock", wrong == [], wrong)
+except Exception as e:
+    check("storage places add up to the stock", False, f"{type(e).__name__}: {e}")
 for name, sql in QUESTIONS.items():
     try:
         columns, rows = sqldb.fuehre_aus(sql, zugang=ACCESS)

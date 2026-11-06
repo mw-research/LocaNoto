@@ -22,6 +22,7 @@ Schranken:
 import os
 import re
 
+import local_time
 import paths
 import sqlpruefung
 
@@ -248,6 +249,12 @@ def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None,
               .replace("{HISTORY}", verlauf)
               .replace("{FRAGE}", frage)
               .replace("{MARKER}", MARKER_KEINE_ABFRAGE))
+    # Today first: "overdue", "this month", "last week" need it, and the
+    # model has no clock. In front, not a placeholder, so a prompt edited
+    # under Admin gets it as well.
+    heute = local_time.today()
+    prompt = (f"Heute ist {local_time.weekday(heute)}, {heute:%Y-%m-%d} "
+              f"({heute:%d.%m.%Y}).\n\n") + prompt
     if vorher:
         # appended, not a placeholder: a prompt edited under Admin keeps working
         prompt += RETRY_NOTE.format(query=vorher, marker=MARKER_KEINE_ABFRAGE)

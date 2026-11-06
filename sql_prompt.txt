@@ -17,6 +17,16 @@ Gegenstände beim Namen:
 - Nennt die Frage einen Gegenstand mit seinem Namen statt einer Nummer ("Absperrhähne", "Manometer", "Meier"), suche ihn mit LIKE über den Wortstamm, ohne Endung und ohne Plural: "Absperrhähne" -> N'%Absperrh%', "Manometer" -> N'%Manometer%'. Suche in allen Textspalten, in denen der Name stehen kann (Bezeichnung, Beschreibung, Kurztext, Warengruppe), mit OR verbunden. Welche Spalte die Namen enthält, zeigen die Beispielwerte im Schema.
 - Mengenfragen ("wie viele ... im Lager", "haben wir noch ...", "Bestand von ...") fragen nach der Menge in der Bestandsspalte, nicht nach der Zahl der Datensätze: kein COUNT(*), sondern die passenden Einträge mit Nummer, Bezeichnung, Bestand und Einheit und dem, was das Schema an Umfeld hergibt (Lagerort, Lagerplatz, Mindestbestand, Warengruppe, reservierte oder bestellte Menge). Passen mehrere Einträge, liefere alle (TOP 50).
 
+Alltagsfragen:
+
+- Kunden, Lieferanten, Personen beim Namen ("Rechnungen von Meier", "Aufträge von Schmitt"): über ihre Stammtabelle mit LIKE auf den Namen verbinden (JOIN), nie eine Nummer raten. In der Ausgabe stehen Name und Nummer, nicht nur Schlüssel.
+- "Offen" heisst je nach Gegenstand etwas anderes: eine Rechnung ist offen, solange sie nicht vollständig bezahlt ist (Status, Restbetrag, Zahlungsdatum leer); ein Auftrag, solange er nicht geliefert oder abgeschlossen ist; eine Bestellung, solange die Ware nicht da ist. "Überfällig" heisst offen und das Fälligkeitsdatum liegt vor heute. Statuswerte aus den Hinweisen und Beispielwerten nehmen.
+- Zeitangaben in feste Grenzen umsetzen, ausgehend vom Datum oben: "heute", "diese Woche", "letzten Monat", "dieses Jahr", "in den nächsten 30 Tagen", "seit März" -- mit CAST(GETDATE() AS date), DATEADD, YEAR, MONTH.
+- "Zuletzt", "neueste", "letzte Rechnung" -> nach dem Datum absteigend sortieren und TOP 1 bzw. TOP 5. "Größte", "meiste", "Top 10" -> summieren, absteigend sortieren, TOP n.
+- Beträge mit Summe und Anzahl, Restbeträge als Differenz ausweisen; Tage bis oder seit einem Datum mit DATEDIFF.
+- "Wer ist zuständig", "Ansprechpartner", "Telefonnummer", "Mail von ..." -> die Stammdatenspalten dazu.
+- Ja-Nein-Fragen ("Hat Meier bezahlt?", "Ist der Auftrag raus?") -> die betreffenden Einträge mit Status und Datum liefern; die Antwort leitet daraus ab.
+
 Nur wenn eine Liste ohne jede Einschränkung tausende Zeilen hätte ("alle Schrauben"), verdichte stattdessen. Nennt die Frage Tabellen, Spalten oder Werte aus dem Schema, ist eine Abfrage richtig -- auch wenn die Frage allgemein klingt.
 
 Erlaubt ist genau EINE Anweisung. Brauchst du Angaben aus mehreren Tabellen, verbinde sie mit JOIN, statt mehrere Abfragen zu schreiben. Passen die Angaben nicht in eine Abfrage, nimm die, die zur Frage am meisten beiträgt.

@@ -1,10 +1,12 @@
 # Demo-ERP für LocaNoto
 
 Eine Beispieldatenbank (Microsoft SQL Server 2022) mit erfundenen Firmendaten:
-Kunden, Artikel, Aufträge, Anlagen, Prüfungen und Reklamationen. Damit lassen
-sich Datenbankfragen in LocaNoto vorführen, etwa „Welche Aufträge der Meier
-GmbH sind noch offen?“ oder „Welche Prüfungen sind in den nächsten 30 Tagen
-fällig?“.
+Kunden, Lieferanten, Artikel mit Lagerplätzen, Aufträge, Rechnungen,
+Bestellungen, Anlagen, Prüfungen und Reklamationen. Damit lassen sich
+Datenbankfragen in LocaNoto vorführen, etwa „Welche Rechnungen der Meier GmbH
+sind offen?“, „Wie viele Manometer haben wir, und wo liegen sie?“ oder
+„Welche Prüfungen sind in den nächsten 30 Tagen fällig?“. Weitere
+Beispielfragen stehen am Ende von `data-model.md`.
 
 | Datei | Inhalt |
 |---|---|

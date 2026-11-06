@@ -18,7 +18,16 @@ CREATE TABLE dbo.Kunden (
   Ort nvarchar(50) NOT NULL,
   Ansprechpartner nvarchar(80) NOT NULL,
   Email nvarchar(100) NOT NULL,
+  Telefon nvarchar(30) NOT NULL,
   KundeSeit date NOT NULL
+);
+CREATE TABLE dbo.Lieferanten (
+  LieferantenNr int NOT NULL PRIMARY KEY,
+  Firma nvarchar(100) NOT NULL,
+  Ort nvarchar(50) NOT NULL,
+  Ansprechpartner nvarchar(80) NOT NULL,
+  Telefon nvarchar(30) NOT NULL,
+  Email nvarchar(100) NOT NULL
 );
 CREATE TABLE dbo.Artikel (
   ArtikelNr nvarchar(20) NOT NULL PRIMARY KEY,
@@ -45,6 +54,35 @@ CREATE TABLE dbo.Auftragspositionen (
   Einzelpreis decimal(10,2) NOT NULL,
   RabattProzent decimal(5,2) NOT NULL,
   PRIMARY KEY (AuftragsNr, PosNr)
+);
+CREATE TABLE dbo.Rechnungen (
+  RechnungsNr int NOT NULL PRIMARY KEY,
+  AuftragsNr int NOT NULL REFERENCES dbo.Auftraege(AuftragsNr),
+  KundenNr int NOT NULL REFERENCES dbo.Kunden(KundenNr),
+  Rechnungsdatum date NOT NULL,
+  Faellig date NOT NULL,
+  Betrag decimal(12,2) NOT NULL,
+  Bezahlt decimal(12,2) NOT NULL,
+  BezahltAm date NULL,
+  Status nvarchar(20) NOT NULL,
+  Mahnstufe int NOT NULL
+);
+CREATE TABLE dbo.Lagerplaetze (
+  ArtikelNr nvarchar(20) NOT NULL REFERENCES dbo.Artikel(ArtikelNr),
+  Lager nvarchar(30) NOT NULL,
+  Lagerplatz nvarchar(20) NOT NULL,
+  Menge int NOT NULL,
+  PRIMARY KEY (ArtikelNr, Lagerplatz)
+);
+CREATE TABLE dbo.Bestellungen (
+  BestellNr int NOT NULL PRIMARY KEY,
+  LieferantenNr int NOT NULL REFERENCES dbo.Lieferanten(LieferantenNr),
+  ArtikelNr nvarchar(20) NOT NULL REFERENCES dbo.Artikel(ArtikelNr),
+  Menge int NOT NULL,
+  Einkaufspreis decimal(10,2) NOT NULL,
+  Bestelldatum date NOT NULL,
+  ErwartetAm date NOT NULL,
+  Status nvarchar(20) NOT NULL
 );
 CREATE TABLE dbo.Anlagen (
   AnlagenNr nvarchar(20) NOT NULL PRIMARY KEY,
@@ -82,17 +120,31 @@ JOIN dbo.Auftragspositionen p ON p.AuftragsNr = a.AuftragsNr
 WHERE a.Status IN ('O', 'F')
 GROUP BY a.AuftragsNr, a.KundenNr, k.Firma, a.Auftragsdatum, a.Liefertermin, a.Status, a.Bearbeiter;
 GO
+CREATE VIEW dbo.v_OffeneRechnungen AS
+SELECT r.RechnungsNr, r.KundenNr, k.Firma, r.AuftragsNr, r.Rechnungsdatum, r.Faellig,
+       r.Betrag, r.Bezahlt, r.Betrag - r.Bezahlt AS Restbetrag,
+       CASE WHEN r.Faellig < CAST(GETDATE() AS date)
+            THEN DATEDIFF(day, r.Faellig, CAST(GETDATE() AS date)) ELSE 0 END AS TageUeberfaellig,
+       r.Mahnstufe, r.Status
+FROM dbo.Rechnungen r
+JOIN dbo.Kunden k ON k.KundenNr = r.KundenNr
+WHERE r.Status <> N'bezahlt';
+GO
 DECLARE @heute date = CAST(GETDATE() AS date);
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10001, N'Meier GmbH', N'Maschinenbau', N'97070', N'Würzburg', N'Anna Meier', N'anna@meier.example.com', DATEADD(day, -887, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10002, N'Schmitt Metallbau KG', N'Metallbau', N'97421', N'Schweinfurt', N'Jonas Schmitt', N'jonas@schmitt.example.com', DATEADD(day, -1708, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10003, N'Hofmann Lebensmittel GmbH', N'Lebensmittel', N'97318', N'Kitzingen', N'Lea Hofmann', N'lea@hofmann.example.com', DATEADD(day, -2458, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10004, N'Wagner Kunststofftechnik', N'Kunststoff', N'97080', N'Würzburg', N'Paul Wagner', N'paul@wagner.example.com', DATEADD(day, -2496, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10005, N'Becker Druckluft GmbH', N'Druckluft', N'97424', N'Schweinfurt', N'Mia Becker', N'mia@becker.example.com', DATEADD(day, -3050, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10006, N'Fischer Haustechnik', N'Haustechnik', N'97199', N'Ochsenfurt', N'Tim Fischer', N'tim@fischer.example.com', DATEADD(day, -3922, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10007, N'Klein Maschinenbau AG', N'Maschinenbau', N'97816', N'Lohr am Main', N'Sara Klein', N'sara@klein.example.com', DATEADD(day, -820, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10008, N'Wolf Chemie GmbH', N'Chemie', N'63739', N'Aschaffenburg', N'Ben Wolf', N'ben@wolf.example.com', DATEADD(day, -1314, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10009, N'Neumann Getränke', N'Getränke', N'96450', N'Coburg', N'Ida Neumann', N'ida@neumann.example.com', DATEADD(day, -2861, @heute));
-INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, KundeSeit) VALUES (10010, N'Schwarz Logistik', N'Logistik', N'97437', N'Haßfurt', N'Max Schwarz', N'max@schwarz.example.com', DATEADD(day, -2945, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10001, N'Meier GmbH', N'Maschinenbau', N'97070', N'Würzburg', N'Anna Meier', N'anna@meier.example.com', N'02882 5334-64', DATEADD(day, -2496, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10002, N'Schmitt Metallbau KG', N'Metallbau', N'97421', N'Schweinfurt', N'Jonas Schmitt', N'jonas@schmitt.example.com', N'02612 3758-76', DATEADD(day, -2945, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10003, N'Hofmann Lebensmittel GmbH', N'Lebensmittel', N'97318', N'Kitzingen', N'Lea Hofmann', N'lea@hofmann.example.com', N'07822 9480-70', DATEADD(day, -3850, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10004, N'Wagner Kunststofftechnik', N'Kunststoff', N'97080', N'Würzburg', N'Paul Wagner', N'paul@wagner.example.com', N'08973 9709-56', DATEADD(day, -1382, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10005, N'Becker Druckluft GmbH', N'Druckluft', N'97424', N'Schweinfurt', N'Mia Becker', N'mia@becker.example.com', N'0972 1422-14', DATEADD(day, -1576, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10006, N'Fischer Haustechnik', N'Haustechnik', N'97199', N'Ochsenfurt', N'Tim Fischer', N'tim@fischer.example.com', N'02537 7467-1', DATEADD(day, -3737, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10007, N'Klein Maschinenbau AG', N'Maschinenbau', N'97816', N'Lohr am Main', N'Sara Klein', N'sara@klein.example.com', N'08963 5248-26', DATEADD(day, -2027, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10008, N'Wolf Chemie GmbH', N'Chemie', N'63739', N'Aschaffenburg', N'Ben Wolf', N'ben@wolf.example.com', N'05051 5796-45', DATEADD(day, -3697, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10009, N'Neumann Getränke', N'Getränke', N'96450', N'Coburg', N'Ida Neumann', N'ida@neumann.example.com', N'07097 8514-81', DATEADD(day, -712, @heute));
+INSERT INTO dbo.Kunden (KundenNr, Firma, Branche, PLZ, Ort, Ansprechpartner, Email, Telefon, KundeSeit) VALUES (10010, N'Schwarz Logistik', N'Logistik', N'97437', N'Haßfurt', N'Max Schwarz', N'max@schwarz.example.com', N'06508 1569-71', DATEADD(day, -2603, @heute));
+INSERT INTO dbo.Lieferanten (LieferantenNr, Firma, Ort, Ansprechpartner, Telefon, Email) VALUES (70001, N'Armaturen Süd GmbH', N'Nürnberg', N'Petra Haas', N'0911 2233-40', N'petra@armaturen.example.com');
+INSERT INTO dbo.Lieferanten (LieferantenNr, Firma, Ort, Ansprechpartner, Telefon, Email) VALUES (70002, N'Behälterbau Franken KG', N'Bamberg', N'Uwe Stein', N'0951 8800-12', N'uwe@behälterbau.example.com');
+INSERT INTO dbo.Lieferanten (LieferantenNr, Firma, Ort, Ansprechpartner, Telefon, Email) VALUES (70003, N'MessTec Instruments', N'Erlangen', N'Nina Ott', N'09131 4455-0', N'nina@messtec.example.com');
+INSERT INTO dbo.Lieferanten (LieferantenNr, Firma, Ort, Ansprechpartner, Telefon, Email) VALUES (70004, N'Kompressorenwerk Ost', N'Chemnitz', N'Karl Brandt', N'0371 6060-21', N'karl@kompressorenwerk.example.com');
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'DB-0500', N'Druckbehälter 500 l, 11 bar', N'Druckbehälter', N'Stk', 1890.00, 4, 2);
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'DB-1000', N'Druckbehälter 1.000 l, 11 bar', N'Druckbehälter', N'Stk', 2780.00, 1, 2);
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'DB-2000', N'Druckbehälter 2.000 l, 11 bar', N'Druckbehälter', N'Stk', 4350.00, 2, 1);
@@ -106,127 +158,169 @@ INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpre
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WS-KO', N'Wartungsset Kompressor', N'Service', N'Set', 189.00, 14, 5);
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'RE-28', N'Edelstahlrohr 28 mm, 1 m', N'Rohrleitung', N'm', 18.75, 420, 200);
 INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'PS-01', N'Prüfservice Druckbehälter (Pauschale)', N'Service', N'Stk', 320.00, 999, 0);
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24001, 10001, DATEADD(day, -5, @heute), DATEADD(day, 44, @heute), 'O', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24002, 10001, DATEADD(day, -3, @heute), DATEADD(day, 56, @heute), 'O', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24003, 10001, DATEADD(day, -6, @heute), DATEADD(day, 35, @heute), 'F', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24004, 10001, DATEADD(day, -163, @heute), DATEADD(day, -107, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24005, 10001, DATEADD(day, -169, @heute), DATEADD(day, -139, @heute), 'G', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24006, 10001, DATEADD(day, -32, @heute), DATEADD(day, -16, @heute), 'G', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24007, 10002, DATEADD(day, -172, @heute), DATEADD(day, -116, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24008, 10002, DATEADD(day, -96, @heute), DATEADD(day, -54, @heute), 'S', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24009, 10002, DATEADD(day, -145, @heute), DATEADD(day, -131, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24010, 10002, DATEADD(day, -169, @heute), DATEADD(day, -150, @heute), 'G', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24011, 10003, DATEADD(day, -192, @heute), DATEADD(day, -156, @heute), 'S', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24012, 10003, DATEADD(day, -155, @heute), DATEADD(day, -97, @heute), 'S', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24013, 10003, DATEADD(day, -159, @heute), DATEADD(day, -127, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24014, 10003, DATEADD(day, -126, @heute), DATEADD(day, -112, @heute), 'S', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24015, 10004, DATEADD(day, -107, @heute), DATEADD(day, -65, @heute), 'G', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24016, 10004, DATEADD(day, -21, @heute), DATEADD(day, 32, @heute), 'F', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24017, 10004, DATEADD(day, -22, @heute), DATEADD(day, 6, @heute), 'O', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24018, 10004, DATEADD(day, -153, @heute), DATEADD(day, -94, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24019, 10005, DATEADD(day, -24, @heute), DATEADD(day, 1, @heute), 'O', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24020, 10005, DATEADD(day, -97, @heute), DATEADD(day, -54, @heute), 'G', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24021, 10006, DATEADD(day, -100, @heute), DATEADD(day, -80, @heute), 'G', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24022, 10006, DATEADD(day, -13, @heute), DATEADD(day, 27, @heute), 'O', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24023, 10007, DATEADD(day, -173, @heute), DATEADD(day, -116, @heute), 'G', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24024, 10007, DATEADD(day, -175, @heute), DATEADD(day, -115, @heute), 'G', N'M. Roth');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24025, 10007, DATEADD(day, -73, @heute), DATEADD(day, -53, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24026, 10007, DATEADD(day, -5, @heute), DATEADD(day, 27, @heute), 'F', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24027, 10008, DATEADD(day, -136, @heute), DATEADD(day, -122, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24028, 10008, DATEADD(day, -61, @heute), DATEADD(day, -41, @heute), 'G', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24029, 10008, DATEADD(day, -182, @heute), DATEADD(day, -139, @heute), 'G', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24030, 10009, DATEADD(day, -94, @heute), DATEADD(day, -56, @heute), 'G', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24031, 10009, DATEADD(day, -61, @heute), DATEADD(day, -28, @heute), 'G', N'T. Krause');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24032, 10009, DATEADD(day, -58, @heute), DATEADD(day, -34, @heute), 'G', N'K. Lang');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24033, 10010, DATEADD(day, -163, @heute), DATEADD(day, -127, @heute), 'G', N'S. Braun');
-INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24034, 10010, DATEADD(day, -121, @heute), DATEADD(day, -81, @heute), 'G', N'T. Krause');
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 1, N'KO-75', 1, 6980.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 2, N'DB-2000', 1, 4350.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 3, N'WS-KO', 38, 189.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 1, N'KO-75', 1, 6980.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 2, N'KH-DN25', 39, 31.20, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 3, N'DB-1000', 1, 2780.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 1, N'KA-01', 32, 219.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 2, N'MA-016', 35, 42.90, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 3, N'KH-DN25', 38, 31.20, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 4, N'DM-016', 10, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 1, N'KO-75', 1, 6980.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 2, N'DB-2000', 1, 4350.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 3, N'PS-01', 31, 320.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 4, N'SV-DN25', 32, 148.50, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24005, 1, N'KA-01', 32, 219.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24005, 2, N'WS-KO', 29, 189.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24005, 3, N'PS-01', 20, 320.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 1, N'PS-01', 14, 320.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 2, N'KA-01', 33, 219.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 3, N'KO-75', 1, 6980.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 4, N'FD-DN50', 33, 6.80, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 1, N'FD-DN50', 30, 6.80, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 2, N'KO-75', 1, 6980.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 3, N'DB-1000', 1, 2780.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 1, N'RE-28', 33, 18.75, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 2, N'KO-75', 1, 6980.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 3, N'DB-1000', 1, 2780.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 4, N'MA-016', 28, 42.90, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24009, 1, N'KO-75', 1, 6980.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24010, 1, N'DB-1000', 1, 2780.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24010, 2, N'DM-016', 36, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24011, 1, N'FD-DN50', 39, 6.80, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24012, 1, N'KO-75', 1, 6980.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24012, 2, N'DM-016', 40, 96.40, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 1, N'WS-KO', 21, 189.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 2, N'DB-2000', 1, 4350.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 3, N'RE-28', 26, 18.75, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 4, N'DM-016', 35, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 1, N'DB-1000', 1, 2780.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 2, N'DB-0500', 1, 1890.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 3, N'FD-DN50', 34, 6.80, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 4, N'WS-KO', 22, 189.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24015, 1, N'KO-75', 1, 6980.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24016, 1, N'DM-016', 15, 96.40, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24016, 2, N'KA-01', 23, 219.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24017, 1, N'DB-0500', 1, 1890.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24017, 2, N'SV-DN25', 36, 148.50, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24017, 3, N'WS-KO', 30, 189.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24017, 4, N'DB-2000', 1, 4350.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24018, 1, N'WS-KO', 15, 189.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24018, 2, N'KA-01', 10, 219.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 1, N'KH-DN25', 7, 31.20, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 2, N'KA-01', 21, 219.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 3, N'PS-01', 24, 320.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 1, N'MA-016', 35, 42.90, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 2, N'KO-75', 1, 6980.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 3, N'DB-2000', 1, 4350.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 4, N'FD-DN50', 35, 6.80, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24021, 1, N'DB-0500', 1, 1890.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24021, 2, N'DB-1000', 1, 2780.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24022, 1, N'FD-DN50', 12, 6.80, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24023, 1, N'DM-016', 19, 96.40, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 1, N'DM-016', 37, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 2, N'MA-016', 8, 42.90, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 3, N'WS-KO', 8, 189.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 1, N'RE-28', 8, 18.75, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 2, N'DB-2000', 1, 4350.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 3, N'WS-KO', 19, 189.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24026, 1, N'MA-016', 6, 42.90, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24026, 2, N'PS-01', 28, 320.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24027, 1, N'SV-DN25', 3, 148.50, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 1, N'PS-01', 4, 320.00, 3.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 2, N'KO-75', 1, 6980.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 3, N'DM-016', 40, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24029, 1, N'WS-KO', 25, 189.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 1, N'DB-0500', 1, 1890.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 2, N'RE-28', 20, 18.75, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 3, N'KH-DN25', 23, 31.20, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 1, N'DM-016', 23, 96.40, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 2, N'DB-0500', 1, 1890.00, 5.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 3, N'KA-01', 5, 219.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24032, 1, N'DB-0500', 1, 1890.00, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24033, 1, N'KH-DN25', 39, 31.20, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24034, 1, N'SV-DN25', 10, 148.50, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24034, 2, N'KH-DN25', 36, 31.20, 0.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24034, 3, N'WS-KO', 36, 189.00, 10.00);
-INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24034, 4, N'PS-01', 37, 320.00, 3.00);
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24001, 10001, DATEADD(day, -18, @heute), DATEADD(day, 19, @heute), 'O', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24002, 10001, DATEADD(day, -4, @heute), DATEADD(day, 28, @heute), 'O', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24003, 10001, DATEADD(day, -23, @heute), DATEADD(day, 8, @heute), 'F', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24004, 10001, DATEADD(day, -145, @heute), DATEADD(day, -94, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24005, 10001, DATEADD(day, -192, @heute), DATEADD(day, -156, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24006, 10001, DATEADD(day, -155, @heute), DATEADD(day, -97, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24007, 10002, DATEADD(day, -159, @heute), DATEADD(day, -127, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24008, 10002, DATEADD(day, -15, @heute), DATEADD(day, -1, @heute), 'F', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24009, 10003, DATEADD(day, -107, @heute), DATEADD(day, -65, @heute), 'G', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24010, 10003, DATEADD(day, -176, @heute), DATEADD(day, -123, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24011, 10004, DATEADD(day, -183, @heute), DATEADD(day, -155, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24012, 10004, DATEADD(day, -153, @heute), DATEADD(day, -94, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24013, 10004, DATEADD(day, -199, @heute), DATEADD(day, -174, @heute), 'G', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24014, 10005, DATEADD(day, -97, @heute), DATEADD(day, -54, @heute), 'G', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24015, 10005, DATEADD(day, -100, @heute), DATEADD(day, -80, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24016, 10005, DATEADD(day, -114, @heute), DATEADD(day, -74, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24017, 10005, DATEADD(day, -173, @heute), DATEADD(day, -116, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24018, 10006, DATEADD(day, -175, @heute), DATEADD(day, -115, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24019, 10006, DATEADD(day, -73, @heute), DATEADD(day, -53, @heute), 'S', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24020, 10006, DATEADD(day, -46, @heute), DATEADD(day, -14, @heute), 'G', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24021, 10007, DATEADD(day, -136, @heute), DATEADD(day, -122, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24022, 10007, DATEADD(day, -61, @heute), DATEADD(day, -41, @heute), 'G', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24023, 10007, DATEADD(day, -182, @heute), DATEADD(day, -139, @heute), 'S', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24024, 10007, DATEADD(day, -94, @heute), DATEADD(day, -56, @heute), 'G', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24025, 10008, DATEADD(day, -6, @heute), DATEADD(day, 27, @heute), 'F', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24026, 10008, DATEADD(day, -58, @heute), DATEADD(day, -34, @heute), 'G', N'K. Lang');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24027, 10008, DATEADD(day, -163, @heute), DATEADD(day, -127, @heute), 'S', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24028, 10009, DATEADD(day, -14, @heute), DATEADD(day, 26, @heute), 'O', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24029, 10009, DATEADD(day, -11, @heute), DATEADD(day, 12, @heute), 'O', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24030, 10009, DATEADD(day, -20, @heute), DATEADD(day, 24, @heute), 'F', N'T. Krause');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24031, 10010, DATEADD(day, -196, @heute), DATEADD(day, -150, @heute), 'G', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24032, 10010, DATEADD(day, -44, @heute), DATEADD(day, -16, @heute), 'G', N'M. Roth');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24033, 10010, DATEADD(day, -151, @heute), DATEADD(day, -94, @heute), 'S', N'S. Braun');
+INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24034, 10010, DATEADD(day, -31, @heute), DATEADD(day, 5, @heute), 'G', N'T. Krause');
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 1, N'RE-28', 34, 18.75, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 2, N'KO-75', 1, 6980.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24001, 3, N'PS-01', 37, 320.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 1, N'PS-01', 18, 320.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 2, N'DB-1000', 1, 2780.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 3, N'KO-75', 1, 6980.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24002, 4, N'KA-01', 32, 219.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 1, N'DB-1000', 1, 2780.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 2, N'SV-DN25', 30, 148.50, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24003, 3, N'KH-DN25', 7, 31.20, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 1, N'SV-DN25', 4, 148.50, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24004, 2, N'DB-1000', 1, 2780.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24005, 1, N'FD-DN50', 39, 6.80, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 1, N'KO-75', 1, 6980.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24006, 2, N'DM-016', 40, 96.40, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 1, N'WS-KO', 21, 189.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 2, N'DB-2000', 1, 4350.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 3, N'RE-28', 26, 18.75, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24007, 4, N'DM-016', 35, 96.40, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 1, N'DB-1000', 1, 2780.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 2, N'DB-0500', 1, 1890.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 3, N'FD-DN50', 34, 6.80, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24008, 4, N'WS-KO', 22, 189.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24009, 1, N'KO-75', 1, 6980.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24010, 1, N'DM-016', 15, 96.40, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24010, 2, N'KA-01', 23, 219.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24011, 1, N'DB-0500', 1, 1890.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24011, 2, N'SV-DN25', 36, 148.50, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24011, 3, N'WS-KO', 30, 189.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24011, 4, N'DB-2000', 1, 4350.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24012, 1, N'WS-KO', 15, 189.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24012, 2, N'KA-01', 10, 219.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 1, N'KH-DN25', 7, 31.20, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 2, N'KA-01', 21, 219.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24013, 3, N'PS-01', 24, 320.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 1, N'MA-016', 35, 42.90, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 2, N'KO-75', 1, 6980.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 3, N'DB-2000', 1, 4350.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24014, 4, N'FD-DN50', 35, 6.80, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24015, 1, N'DB-0500', 1, 1890.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24015, 2, N'DB-1000', 1, 2780.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24016, 1, N'FD-DN50', 12, 6.80, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24017, 1, N'DM-016', 19, 96.40, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24018, 1, N'DM-016', 37, 96.40, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24018, 2, N'MA-016', 8, 42.90, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24018, 3, N'WS-KO', 8, 189.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 1, N'RE-28', 8, 18.75, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 2, N'DB-2000', 1, 4350.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24019, 3, N'WS-KO', 19, 189.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 1, N'MA-016', 6, 42.90, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24020, 2, N'PS-01', 28, 320.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24021, 1, N'SV-DN25', 3, 148.50, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24022, 1, N'PS-01', 4, 320.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24022, 2, N'KO-75', 1, 6980.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24022, 3, N'DM-016', 40, 96.40, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24023, 1, N'WS-KO', 25, 189.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 1, N'DB-0500', 1, 1890.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 2, N'RE-28', 20, 18.75, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24024, 3, N'KH-DN25', 23, 31.20, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 1, N'DM-016', 23, 96.40, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 2, N'DB-0500', 1, 1890.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24025, 3, N'KA-01', 5, 219.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24026, 1, N'DB-0500', 1, 1890.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24027, 1, N'KH-DN25', 39, 31.20, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 1, N'SV-DN25', 10, 148.50, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 2, N'KH-DN25', 36, 31.20, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 3, N'WS-KO', 36, 189.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24028, 4, N'PS-01', 37, 320.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24029, 1, N'DB-0500', 1, 1890.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 1, N'FD-DN50', 39, 6.80, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 2, N'DB-2000', 1, 4350.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24030, 3, N'WS-KO', 37, 189.00, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 1, N'WS-KO', 5, 189.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 2, N'KA-01', 2, 219.00, 10.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24031, 3, N'FD-DN50', 17, 6.80, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24032, 1, N'RE-28', 19, 18.75, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24032, 2, N'FD-DN50', 14, 6.80, 0.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24032, 3, N'SV-DN25', 24, 148.50, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24032, 4, N'KA-01', 31, 219.00, 5.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24033, 1, N'DB-2000', 1, 4350.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24033, 2, N'WS-KO', 11, 189.00, 3.00);
+INSERT INTO dbo.Auftragspositionen (AuftragsNr, PosNr, ArtikelNr, Menge, Einzelpreis, RabattProzent) VALUES (24034, 1, N'WS-KO', 13, 189.00, 0.00);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025101, 24004, 10001, DATEADD(day, -94, @heute), DATEADD(day, -64, @heute), 3979.72, 3979.72, DATEADD(day, -73, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025102, 24005, 10001, DATEADD(day, -45, @heute), DATEADD(day, -15, @heute), 299.81, 0.00, NULL, N'offen', 1);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025103, 24006, 10001, DATEADD(day, -97, @heute), DATEADD(day, -67, @heute), 12435.98, 6217.99, DATEADD(day, -78, @heute), N'teilweise bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025104, 24007, 10002, DATEADD(day, -127, @heute), DATEADD(day, -97, @heute), 14103.34, 0.00, NULL, N'offen', 1);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025105, 24009, 10003, DATEADD(day, -65, @heute), DATEADD(day, -35, @heute), 8057.01, 0.00, NULL, N'offen', 2);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025106, 24010, 10003, DATEADD(day, -123, @heute), DATEADD(day, -93, @heute), 7483.33, 7483.33, DATEADD(day, -97, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025107, 24011, 10004, DATEADD(day, -155, @heute), DATEADD(day, -125, @heute), 19859.91, 0.00, NULL, N'offen', 2);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025108, 24012, 10004, DATEADD(day, -94, @heute), DATEADD(day, -64, @heute), 5811.07, 0.00, NULL, N'offen', 2);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025109, 24013, 10004, DATEADD(day, -174, @heute), DATEADD(day, -144, @heute), 14864.11, 14864.11, DATEADD(day, -144, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025110, 24014, 10005, DATEADD(day, -54, @heute), DATEADD(day, -24, @heute), 15235.75, 0.00, NULL, N'offen', 1);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025111, 24015, 10005, DATEADD(day, -80, @heute), DATEADD(day, -50, @heute), 5159.01, 5159.01, DATEADD(day, -68, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025112, 24016, 10005, DATEADD(day, -74, @heute), DATEADD(day, -44, @heute), 97.10, 97.10, DATEADD(day, -62, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025113, 24017, 10005, DATEADD(day, -116, @heute), DATEADD(day, -86, @heute), 2070.62, 2070.62, DATEADD(day, -98, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025114, 24018, 10006, DATEADD(day, -115, @heute), DATEADD(day, -85, @heute), 6398.20, 6398.20, DATEADD(day, -102, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025115, 24020, 10006, DATEADD(day, -14, @heute), DATEADD(day, 16, @heute), 10968.71, 10968.71, DATEADD(day, -4, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025116, 24021, 10007, DATEADD(day, -122, @heute), DATEADD(day, -92, @heute), 530.14, 0.00, NULL, N'offen', 2);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025117, 24022, 10007, DATEADD(day, -41, @heute), DATEADD(day, -11, @heute), 14372.34, 14372.34, DATEADD(day, -27, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025118, 24024, 10007, DATEADD(day, -56, @heute), DATEADD(day, -26, @heute), 3504.67, 3504.67, DATEADD(day, -28, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025119, 24026, 10008, DATEADD(day, -34, @heute), DATEADD(day, -4, @heute), 2249.10, 2249.10, DATEADD(day, -16, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025120, 24031, 10010, DATEADD(day, -150, @heute), DATEADD(day, -120, @heute), 1614.63, 1614.63, DATEADD(day, -137, @heute), N'bezahlt', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025121, 24032, 10010, DATEADD(day, -16, @heute), DATEADD(day, 14, @heute), 12326.12, 0.00, NULL, N'offen', 0);
+INSERT INTO dbo.Rechnungen (RechnungsNr, AuftragsNr, KundenNr, Rechnungsdatum, Faellig, Betrag, Bezahlt, BezahltAm, Status, Mahnstufe) VALUES (2025122, 24034, 10010, DATEADD(day, -2, @heute), DATEADD(day, 28, @heute), 2923.83, 0.00, NULL, N'offen', 0);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'DB-0500', N'Außenlager', N'H3-05', 4);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'DB-1000', N'Außenlager', N'H4-03', 1);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'DB-2000', N'Außenlager', N'H3-01', 2);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'SV-DN25', N'Hauptlager', N'R06-F3', 26);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'SV-DN25', N'Außenlager', N'H4-07', 9);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'MA-016', N'Hauptlager', N'R02-F4', 12);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'FD-DN50', N'Hauptlager', N'R09-F4', 175);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'FD-DN50', N'Außenlager', N'H1-07', 65);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'KH-DN25', N'Hauptlager', N'R10-F4', 42);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'KH-DN25', N'Außenlager', N'H4-09', 18);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'KO-75', N'Außenlager', N'H3-07', 1);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'KA-01', N'Hauptlager', N'R10-F4', 8);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'DM-016', N'Hauptlager', N'R09-F1', 15);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'DM-016', N'Außenlager', N'H2-03', 7);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WS-KO', N'Hauptlager', N'R01-F6', 14);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'RE-28', N'Hauptlager', N'R11-F1', 298);
+INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'RE-28', N'Außenlager', N'H4-08', 122);
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450001, 70002, N'DB-0500', 3, 1171.80, DATEADD(day, -105, @heute), DATEADD(day, -86, @heute), N'geliefert');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450002, 70002, N'DB-1000', 3, 1723.60, DATEADD(day, -5, @heute), DATEADD(day, 8, @heute), N'bestellt');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450003, 70002, N'DB-2000', 2, 2697.00, DATEADD(day, -66, @heute), DATEADD(day, -57, @heute), N'geliefert');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450004, 70003, N'MA-016', 18, 26.60, DATEADD(day, -5, @heute), DATEADD(day, 3, @heute), N'bestellt');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450005, 70004, N'KO-75', 1, 4327.60, DATEADD(day, -98, @heute), DATEADD(day, -80, @heute), N'geliefert');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450006, 70003, N'KA-01', 12, 135.78, DATEADD(day, -10, @heute), DATEADD(day, 3, @heute), N'bestellt');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450007, 70003, N'KA-01', 11, 135.78, DATEADD(day, -99, @heute), DATEADD(day, -90, @heute), N'geliefert');
+INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450008, 70001, N'DM-016', 34, 59.77, DATEADD(day, -44, @heute), DATEADD(day, -27, @heute), N'geliefert');
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0001', 10001, N'Druckluftbehälter Halle 1', N'Druckbehälter', 2014, N'Halle 1');
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0002', 10001, N'Kompressorstation', N'Kompressor', 2019, N'Technikraum');
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0003', 10001, N'Druckbehälter 2.000 l', N'Druckbehälter', 2011, N'Außenlager');
@@ -237,36 +331,34 @@ INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standor
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0008', 10007, N'Druckbehälter 1.000 l', N'Druckbehälter', 2012, N'Montage');
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0009', 10008, N'Reaktordruckbehälter', N'Druckbehälter', 2008, N'Anlage 3');
 INSERT INTO dbo.Anlagen (AnlagenNr, KundenNr, Bezeichnung, Typ, Baujahr, Standort) VALUES (N'AN-0010', 10009, N'Druckbehälter 500 l', N'Druckbehälter', 2021, N'Keller');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (1, N'AN-0001', 'A', DATEADD(day, -321, @heute), N'mit Mängeln', DATEADD(year, 2, DATEADD(day, -321, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (2, N'AN-0001', 'I', DATEADD(day, -527, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -527, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (3, N'AN-0002', 'A', DATEADD(day, -550, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -550, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (4, N'AN-0002', 'I', DATEADD(day, -704, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -704, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (5, N'AN-0002', 'F', DATEADD(day, -3498, @heute), N'ohne Mängel', DATEADD(year, 10, DATEADD(day, -3498, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (6, N'AN-0003', 'A', DATEADD(day, -724, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -724, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (7, N'AN-0003', 'I', DATEADD(day, -1739, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1739, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (8, N'AN-0003', 'F', DATEADD(day, -3150, @heute), N'ohne Mängel', DATEADD(year, 10, DATEADD(day, -3150, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (9, N'AN-0004', 'A', DATEADD(day, -117, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -117, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (10, N'AN-0004', 'I', DATEADD(day, -1345, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1345, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (11, N'AN-0005', 'A', DATEADD(day, -718, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -718, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (12, N'AN-0005', 'I', DATEADD(day, -368, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -368, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (13, N'AN-0005', 'F', DATEADD(day, -1534, @heute), N'mit Mängeln', DATEADD(year, 10, DATEADD(day, -1534, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (14, N'AN-0006', 'A', DATEADD(day, -635, @heute), N'mit Mängeln', DATEADD(year, 2, DATEADD(day, -635, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (15, N'AN-0006', 'I', DATEADD(day, -763, @heute), N'mit Mängeln', DATEADD(year, 5, DATEADD(day, -763, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (16, N'AN-0007', 'A', DATEADD(day, -530, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -530, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (17, N'AN-0007', 'I', DATEADD(day, -1183, @heute), N'mit Mängeln', DATEADD(year, 5, DATEADD(day, -1183, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (18, N'AN-0007', 'F', DATEADD(day, -2818, @heute), N'ohne Mängel', DATEADD(year, 10, DATEADD(day, -2818, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (19, N'AN-0008', 'A', DATEADD(day, -252, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -252, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (20, N'AN-0008', 'I', DATEADD(day, -900, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -900, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (21, N'AN-0008', 'F', DATEADD(day, -1511, @heute), N'mit Mängeln', DATEADD(year, 10, DATEADD(day, -1511, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (22, N'AN-0009', 'A', DATEADD(day, -478, @heute), N'mit Mängeln', DATEADD(year, 2, DATEADD(day, -478, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (23, N'AN-0009', 'I', DATEADD(day, -1800, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1800, @heute)), N'Dr. Weiß (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (24, N'AN-0010', 'A', DATEADD(day, -619, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -619, @heute)), N'H. Vogel (ZÜS)');
-INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (25, N'AN-0010', 'I', DATEADD(day, -342, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -342, @heute)), N'befähigte Person J. Kern');
-INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9001, 24004, DATEADD(day, -2, @heute), N'Sicherheitsventil öffnet bereits bei 9 bar', N'offen', N'M. Roth');
-INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9002, 24006, DATEADD(day, -38, @heute), N'Manometer mit Glasbruch geliefert', N'in Klärung', N'S. Braun');
-INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9003, 24009, DATEADD(day, -37, @heute), N'Lieferung unvollständig, Dichtungen fehlen', N'erledigt', N'K. Lang');
-INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9004, 24013, DATEADD(day, -26, @heute), N'Kondensatableiter undicht', N'offen', N'T. Krause');
-INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9005, 24018, DATEADD(day, -35, @heute), N'Falscher Druckminderer geliefert', N'erledigt', N'M. Roth');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (1, N'AN-0001', 'A', DATEADD(day, -62, @heute), N'mit Mängeln', DATEADD(year, 2, DATEADD(day, -62, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (2, N'AN-0001', 'I', DATEADD(day, -190, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -190, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (3, N'AN-0002', 'A', DATEADD(day, -217, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -217, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (4, N'AN-0002', 'I', DATEADD(day, -568, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -568, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (5, N'AN-0002', 'F', DATEADD(day, -2044, @heute), N'ohne Mängel', DATEADD(year, 10, DATEADD(day, -2044, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (6, N'AN-0003', 'A', DATEADD(day, -723, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -723, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (7, N'AN-0003', 'I', DATEADD(day, -1323, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1323, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (8, N'AN-0004', 'A', DATEADD(day, -545, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -545, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (9, N'AN-0004', 'I', DATEADD(day, -1197, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1197, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (10, N'AN-0004', 'F', DATEADD(day, -2859, @heute), N'mit Mängeln', DATEADD(year, 10, DATEADD(day, -2859, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (11, N'AN-0005', 'A', DATEADD(day, -707, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -707, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (12, N'AN-0005', 'I', DATEADD(day, -201, @heute), N'mit Mängeln', DATEADD(year, 5, DATEADD(day, -201, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (13, N'AN-0005', 'F', DATEADD(day, -3246, @heute), N'ohne Mängel', DATEADD(year, 10, DATEADD(day, -3246, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (14, N'AN-0006', 'A', DATEADD(day, -291, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -291, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (15, N'AN-0006', 'I', DATEADD(day, -945, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -945, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (16, N'AN-0007', 'A', DATEADD(day, -565, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -565, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (17, N'AN-0007', 'I', DATEADD(day, -421, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -421, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (18, N'AN-0008', 'A', DATEADD(day, -416, @heute), N'mit Mängeln', DATEADD(year, 2, DATEADD(day, -416, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (19, N'AN-0008', 'I', DATEADD(day, -899, @heute), N'mit Mängeln', DATEADD(year, 5, DATEADD(day, -899, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (20, N'AN-0009', 'A', DATEADD(day, -218, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -218, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (21, N'AN-0009', 'I', DATEADD(day, -1802, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -1802, @heute)), N'befähigte Person J. Kern');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (22, N'AN-0010', 'A', DATEADD(day, -334, @heute), N'ohne Mängel', DATEADD(year, 2, DATEADD(day, -334, @heute)), N'Dr. Weiß (ZÜS)');
+INSERT INTO dbo.Pruefungen (PruefNr, AnlagenNr, Pruefart, Pruefdatum, Ergebnis, NaechstePruefung, Pruefer) VALUES (23, N'AN-0010', 'I', DATEADD(day, -715, @heute), N'ohne Mängel', DATEADD(year, 5, DATEADD(day, -715, @heute)), N'H. Vogel (ZÜS)');
+INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9001, 24004, DATEADD(day, -35, @heute), N'Sicherheitsventil öffnet bereits bei 9 bar', N'offen', N'S. Braun');
+INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9002, 24006, DATEADD(day, -15, @heute), N'Manometer mit Glasbruch geliefert', N'in Klärung', N'S. Braun');
+INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9003, 24009, DATEADD(day, -10, @heute), N'Lieferung unvollständig, Dichtungen fehlen', N'erledigt', N'K. Lang');
+INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9004, 24011, DATEADD(day, -18, @heute), N'Kondensatableiter undicht', N'offen', N'S. Braun');
+INSERT INTO dbo.Reklamationen (ReklamationsNr, AuftragsNr, Eingang, Grund, Status, Verantwortlich) VALUES (9005, 24013, DATEADD(day, -37, @heute), N'Falscher Druckminderer geliefert', N'erledigt', N'T. Krause');
 GO
 -- Read-only login for LocaNoto (db_datareader: SELECT only).
 USE master;
