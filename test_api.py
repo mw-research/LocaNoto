@@ -531,6 +531,19 @@ import sqlquellen as _sqlq_t  # noqa: E402
 check("admin sets a workspace's database account in the Databases tab",
       r.status_code == 200 and "db.invalid" in markus.get("/admin/databases").text,
       r.text[:300])
+r = markus.post("/ui/admin/databases/einkauf/note",
+                data={"note": "Status O = offen, Status F = in Fertigung"})
+_acc = _sqlq_t.zugang("einkauf") or {}
+check("the note can be changed alone; the shared password stays",
+      r.status_code == 200 and _acc.get("hinweis", "").endswith("in Fertigung")
+      and _acc.get("passwort") == "Lese-Passwort-1", (r.text[:300], _acc.get("hinweis")))
+r = markus.post("/ui/admin/databases/einkauf/note", data={"note": "sql-hint.txt"})
+check("a file name as note is refused",
+      r.status_code == 200 and ("Dateiname" in r.text or "file name" in r.text)
+      and (_sqlq_t.zugang("einkauf") or {}).get("hinweis", "").endswith("in Fertigung"),
+      r.text[:300])
+check("only admins change the note", anna.post(
+    "/ui/admin/databases/einkauf/note", data={"note": "x"}).status_code == 403)
 r = markus.post("/ui/admin/workspaces/sql", data={
     "room": "allgemein", "server": "db.invalid", "port": "1433", "database": "DemoERP"})
 check("a database without a shared account: personal logins",

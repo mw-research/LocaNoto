@@ -295,7 +295,8 @@ def databases_page(request: Request):
         entries.append({"room": room, "label": raeume.bezeichnung(room),
                         "server": z.get("server", ""), "port": z.get("port", ""),
                         "database": z.get("datenbank", ""),
-                        "shared": z.get("benutzer", "") if z.get("passwort") else ""})
+                        "shared": z.get("benutzer", "") if z.get("passwort") else "",
+                        "note": z.get("hinweis", "")})
     targets = [(r, raeume.bezeichnung(r)) for r in sorted(raeume.liste())
                if not raeume.ist_privat(r)]
     return render("admin_databases.html", request, nav=_nav(p, "admin"),
@@ -322,6 +323,20 @@ def database_test(room: str, request: Request, p: Principal = Depends(principal)
     tables = sum(1 for line in (schema or "").splitlines() if line.strip())
     return _notice(t("Connected.") + (f" {tables} " + t("tables") if tables else "")
                    + (" " + t("but no readable tables") if not schema else ""), bool(schema))
+
+
+@router.post("/ui/admin/databases/{room}/note")
+def database_note(room: str, request: Request, note: str = Form(""),
+                  p: Principal = Depends(principal)):
+    """Changes only the note; server, login and password stay."""
+    import answering
+    _admin(p)
+    page_language(p.name)
+    ok, message = sqlquellen.set_note(room, note, user=p.name, is_admin=True)
+    if ok:
+        answering.forget_schema(room)
+        return _notice(t("Note saved."))
+    return _notice(tm(message), False)
 
 
 # --- MAILBOXES ---

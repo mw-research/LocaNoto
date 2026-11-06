@@ -136,7 +136,10 @@ shared mailbox in their session has LocaNoto open, it is checked every
 **Databases** (Admin → Databases): per workspace a SQL Server database,
 read only. With a shared read account stored by the admin, or without:
 then every member signs in with their own SQL login under Settings (kept
-only in the session) and the database's rights apply per person.
+only in the session) and the database's rights apply per person. The note
+for the model (status codes, which table holds what) is the text itself;
+it can be changed on its own under the entry without entering the shared
+password again, and a bare file name such as `sql-hint.txt` is refused.
 
 **Lists**: shared folders per workspace, and one root for personal
 folders: every user gets `<root>/<user name>` (Settings → My lists).

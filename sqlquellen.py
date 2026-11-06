@@ -142,6 +142,9 @@ def setze(raum, angaben, benutzer="?", ist_verwalter=False):
     if bool(angaben.get("benutzer")) != bool(angaben.get("passwort")):
         return False, ("Benutzer UND Passwort angeben.")
 
+    if note_is_file_name(angaben.get("hinweis")):
+        return False, NOTE_IS_FILE_NAME
+
     if angaben.get("passwort") and not raumschluessel.verfuegbar():
         return False, ("Ohne Installationsschlüssel wird kein Passwort gespeichert.")
 
@@ -154,6 +157,45 @@ def setze(raum, angaben, benutzer="?", ist_verwalter=False):
                       if k == "passwort" else wert)
     uebrig.append(eintrag)
     return _speichere(uebrig)
+
+
+NOTE_IS_FILE_NAME = ("Der Hinweis ist ein Dateiname. Den Text der Datei "
+                     "einfügen, nicht ihren Namen.")
+
+
+def note_is_file_name(note):
+    """True for a note that is only a file name such as sql-hint.txt.
+
+    The model would read the name, not the file, and nothing would tell
+    the admin.
+    """
+    text = (note or "").strip()
+    return bool(text) and not any(c.isspace() for c in text) and \
+        text.lower().endswith((".txt", ".md", ".sql", ".csv", ".json"))
+
+
+@dateisperre.unter_sperre(lambda *_a, **_k: QUELLEN)
+def set_note(room, note, user="?", is_admin=False):
+    """Changes only the note of a room's database. (ok, message).
+
+    Server, login and the encrypted password stay as they are, so the
+    admin does not have to enter the shared password again.
+    """
+    allowed, reason = darf_setzen(room, user, is_admin)
+    if not allowed:
+        return False, reason
+    note = (note or "").strip()
+    if note_is_file_name(note):
+        return False, NOTE_IS_FILE_NAME
+    entries = liste()
+    for entry in entries:
+        if entry.get("raum") == room:
+            if note:
+                entry["hinweis"] = note
+            else:
+                entry.pop("hinweis", None)
+            return _speichere(entries)
+    return False, "Unbekannte Datenbank."
 
 
 # --- LESEN ---

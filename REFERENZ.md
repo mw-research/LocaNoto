@@ -1804,6 +1804,11 @@ SQL_HINWEIS=Aktuelle Bestände stehen in dbo.V_Bestand_Aktuell. Die Tabelle
  Stand nicht zu verwenden. Status 9 bedeutet ausgebucht.
 ```
 
+Für Datenbanken je Arbeitsbereich steht derselbe Text unter **Admin** →
+**Datenbanken** → **Hinweis für das Modell**. Er lässt sich dort allein
+ändern, ohne das gemeinsame Passwort neu einzugeben. Ein bloßer Dateiname
+wie `sql-hint.txt` wird abgelehnt.
+
 Ohne `SQL_SERVER` bleibt die Funktion vollständig aus. Der Treiber wird dann
 nicht einmal geladen.
 

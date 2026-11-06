@@ -475,7 +475,9 @@
   "📊 *Listen nicht verwendet: ": "📊 *Lists not used: ",
   "📚 **Quellen:**": "📚 **Sources:**",
   "🧠 *Suchsonden:* \n- `": "🧠 *Search probes:* \n- `",
-  "Ohne '..'.": "Without '..'."
+  "Ohne '..'.": "Without '..'.",
+  "Der Hinweis ist ein Dateiname. Den Text der Datei einfügen, nicht ihren Namen.": "The note is a file name. Paste the text of the file, not its name.",
+  "Unbekannte Datenbank.": "Unknown database."
  },
  "muster": {
   " ({} offen)": " ({} open)",

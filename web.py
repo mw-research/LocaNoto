@@ -272,6 +272,7 @@ TEXTS = {
     "Unknown database.": "Unbekannte Datenbank.",
     "No shared account: members test with their own login under Settings.":
         "Kein gemeinsames Konto: Mitglieder testen mit ihrem eigenen Login unter Einstellungen.",
+    "Note for the model": "Hinweis für das Modell", "Note saved.": "Hinweis gespeichert.",
     "-- the text itself, e.g. the content of sql-hint.txt, not a file name":
         "– der Text selbst, z. B. der Inhalt von sql-hint.txt, kein Dateiname",
     "Root of the personal folders": "Wurzel der persönlichen Ordner",

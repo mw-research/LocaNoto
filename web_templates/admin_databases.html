@@ -15,6 +15,10 @@
         <form hx-post="/ui/admin/workspaces/sql" hx-target="#sql-notice" class="inline">
         <input type="hidden" name="room" value="{{ d.room }}">
         <button type="submit" class="danger">{{ t('Remove') }}</button></form></td></tr>
+    <tr><td colspan="4"><details><summary>{{ t('Note for the model') }}{% if not d.note %} <span class="muted">({{ t('none') }})</span>{% endif %}</summary>
+      <form hx-post="/ui/admin/databases/{{ d.room|urlencode }}/note" hx-target="#sql-notice">
+        <textarea name="note" rows="6" class="mono">{{ d.note }}</textarea>
+        <button type="submit">{{ t('Save') }}</button></form></details></td></tr>
   {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
   </table>
 </section>

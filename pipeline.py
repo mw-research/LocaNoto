@@ -454,7 +454,7 @@ def systemprompt(kontexttext, preset=None, benutzer=None):
     Vorlage.
     """
     import prompts
-    rolle = os.getenv("EXPERT_ROLE", "Forschungsassistent für das Bauwesen")
+    rolle = os.getenv("EXPERT_ROLE", "technischer Assistent")
     text = (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT, preset)
             .replace("{EXPERT_ROLE}", rolle)
             .replace("{GLOSSAR}", _glossarblock(preset))

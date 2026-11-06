@@ -18,7 +18,7 @@ x-bau: &bau
 x-umgebung: &umgebung
   - APP_TOPIC=${APP_TOPIC:-Allgemein}
   - COMPANY_NAME=${COMPANY_NAME:-LocaNoto}
-  - EXPERT_ROLE=${EXPERT_ROLE:-Experte}
+  - EXPERT_ROLE=${EXPERT_ROLE:-technischer Assistent}
   - OPENAI_API_KEY=${OPENAI_API_KEY}
   - OPENAI_BASE_URL=${OPENAI_BASE_URL}
   - ADMIN_USERS=${ADMIN_USERS:-admin}
