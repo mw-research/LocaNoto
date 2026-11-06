@@ -1809,6 +1809,13 @@ Für Datenbanken je Arbeitsbereich steht derselbe Text unter **Admin** →
 ändern, ohne das gemeinsame Passwort neu einzugeben. Ein bloßer Dateiname
 wie `sql-hint.txt` wird abgelehnt.
 
+Die Datenbank ist kein Werkzeug, das das Modell aufruft: LocaNoto fragt sie
+vor der Antwort ab. Der Antwortprompt nennt deshalb die angebundene
+Datenbank und, was aus der Abfrage wurde (Ergebnis, keine Abfrage,
+Fehler mit Grund). Fragen nach dem Aufbau („Wie ist unser ERP
+aufgebaut?", „Welche Tabellen gibt es?") ergeben keine Abfrage; das
+Modell bekommt dann die Tabellen und Spalten (bis 6000 Zeichen).
+
 Ohne `SQL_SERVER` bleibt die Funktion vollständig aus. Der Treiber wird dann
 nicht einmal geladen.
 

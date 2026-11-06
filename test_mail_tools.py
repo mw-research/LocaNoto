@@ -343,6 +343,48 @@ check("SQL: the query after the thinking counts, not a 'no query' weighed in it"
                        "m", "q", "s") == query)
 check("SQL: 'no query' alone stays no query",
       sqldb.formuliere(fake_sql(marker), "m", "q", "s") == "")
+_saved = (answering.sql_accounts, answering.sql_access, answering.sql_schema,
+          answering.client, answering.llm, sqldb.formuliere, sqldb.fuehre_aus)
+answering.sql_accounts = lambda _u, _l: [("vertrieb", {})]
+answering.sql_access = lambda _r, _l: {"benutzer": "leser", "hinweis": ""}
+answering.sql_schema = lambda _r, _a: ("dbo.Anlagen(AnlagenNr, Typ, Baujahr)\n"
+                                       "dbo.Pruefungen(PruefNr, Pruefart)", "")
+answering.client = lambda *_a: None
+answering.llm = ns(modell=lambda *_a: "m")
+sql_req = ns(sql_logins={}, sql_room="vertrieb")
+try:
+    sqldb.formuliere = lambda *_a, **_k: ""
+    blocks, info = answering._sql_block(user, sql_req, "Wie ist unser ERP aufgebaut?", "m", "")
+    check("SQL: a question about the structure gets the table list, without a query",
+          blocks and blocks[0][0] == "datenbank_aufbau" and "dbo.Anlagen" in blocks[0][1]
+          and info.get("none") and info.get("structure"), (blocks, info))
+    note = answering.sql_note(info)
+    check("SQL: the answer is told the database is connected and to describe it",
+          "nie" in note and "keinen Zugriff" in note and "datenbank_aufbau" in note, note)
+    blocks, info = answering._sql_block(user, sql_req, "Wie gehe ich bei einer Reklamation vor?",
+                                        "m", "")
+    check("SQL: no table list for a question that is not about the database",
+          blocks == [] and info.get("none") and not info.get("structure"), (blocks, info))
+    sqldb.formuliere = lambda *_a, **_k: "SELECT DISTINCT Pruefart FROM dbo.Pruefungen"
+    sqldb.fuehre_aus = lambda *_a, **_k: (["Pruefart"], [("A",), ("I",), ("F",)])
+    blocks, info = answering._sql_block(user, sql_req, "Welche Prüfarten gibt es?", "m", "")
+    note = answering.sql_note(info)
+    check("SQL: with a result the answer is told it is real data from the database",
+          [b[0] for b in blocks] == ["datenbank_abfrage", "datenbank_ergebnis"]
+          and info.get("rows") == 3 and "echte" in note and "keinen Zugriff" in note, note)
+
+    def broken(*_a, **_k):
+        raise RuntimeError("Login failed for user 'leser'")
+    sqldb.fuehre_aus = broken
+    blocks, info = answering._sql_block(user, sql_req, "Welche Prüfarten gibt es?", "m", "")
+    note = answering.sql_note(info)
+    check("SQL: a failed query is named to the answer, so it can say why",
+          blocks == [] and "fehlgeschlagen" in note and "Login failed" in note, note)
+    check("SQL: without a database for the user, no note",
+          answering.sql_note({"reason": "No database account for this user."}) == "")
+finally:
+    (answering.sql_accounts, answering.sql_access, answering.sql_schema,
+     answering.client, answering.llm, sqldb.formuliere, sqldb.fuehre_aus) = _saved
 check("SQL: the prompt allows lists that are asked for",
       "TOP 50" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "sql_prompt.txt"), encoding="utf-8").read())

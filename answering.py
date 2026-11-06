@@ -295,40 +295,86 @@ def forget_schema(room):
         _schema_cache.pop(key, None)
 
 
+# A question about the database itself ("what does our ERP look like",
+# "which tables are there") gets no query, but the table list answers it.
+_ASKS_FOR_STRUCTURE = re.compile(
+    r"\b(aufbau|struktur\w*|datenmodell|schema|tabelle\w*|spalte\w*|felder|"
+    r"erp|datenbank\w*|database|tables?|columns?|structure)\b", re.I)
+SCHEMA_CHARS = 6000
+
+
 def _sql_block(user, req, question, model, history_text):
     rooms = {r for r, _a in sql_accounts(user, req.sql_logins)}
     room = req.sql_room if req.sql_room is not None else \
         (next(iter(sorted(rooms - {""})), "") if rooms else None)
     if room is None or room not in rooms:
         return [], {"reason": "No database account for this user."}
+    where = {"room": room}
     access = sql_access(room, req.sql_logins) if room else None
     schema, error = sql_schema(room, access)
     if not schema:
         # The driver's reason, not just "no connection": a wrong host, a
         # network policy and a wrong password each need another fix.
-        return [], {"reason": f"No database connection: {error[:300]}" if error
-                    else "The database has no readable tables."}
+        return [], dict(where, reason=f"No database connection: {error[:300]}" if error
+                        else "The database has no readable tables.")
     try:
         query = sqldb.formuliere(client("SQL", user), llm.modell("SQL", model),
                                  question, schema, history_text,
                                  hinweis_raum=(access or {}).get("hinweis", ""))
     except Exception as e:
-        return [], {"reason": f"Query not generated: {e}"}
+        return [], dict(where, reason=f"Query not generated: {e}")
     if not query:
         # "none": nothing went wrong, the question is not one for the
         # database -- the page does not mention it under every answer
-        return [], {"none": True, "reason": "The model does not see the question "
-                              "answerable from the database."}
+        blocks = []
+        if _ASKS_FOR_STRUCTURE.search(question or ""):
+            blocks = [("datenbank_aufbau", schema[:SCHEMA_CHARS])]
+        return blocks, dict(where, none=True, structure=bool(blocks),
+                            reason="The model does not see the question "
+                                   "answerable from the database.")
     try:
         columns, rows = sqldb.fuehre_aus(query, zugang=access)
     except ValueError as e:
-        return [], {"query": query, "reason": str(e)}
+        return [], dict(where, query=query, reason=str(e))
     except Exception as e:
-        return [], {"query": query, "reason": f"Database error: {e}"}
+        return [], dict(where, query=query, reason=f"Database error: {e}")
     table = sqldb.als_tabelle(columns, rows)
     return ([("datenbank_abfrage", query), ("datenbank_ergebnis", table)],
-            {"query": query, "account": (access or {}).get("benutzer", ""),
-             "rows": len(rows)})
+            dict(where, query=query, account=(access or {}).get("benutzer", ""),
+                 rows=len(rows)))
+
+
+def sql_note(info):
+    """For the answer: a database is connected, and what came of it.
+
+    The database is no tool the model calls -- LocaNoto asks it before the
+    answer. Without this the model only sees its tool list (mailbox, web,
+    files), concludes it has no access to the ERP and says so, even with
+    the result in front of it.
+    """
+    if not info or "room" not in info:
+        return ""
+    label = raeume.bezeichnung(info["room"]) if info["room"] else "eigene Datenbank"
+    text = (f"\n<datenbank_hinweis>\nAngebunden ist die Datenbank (ERP) des "
+            f"Arbeitsbereichs {label}, Microsoft SQL Server, nur lesend. LocaNoto "
+            "fragt sie zu jeder Frage selbst ab, bevor du antwortest. Sage nie, "
+            "du haettest keinen Zugriff auf die Datenbank oder das ERP.\n")
+    if "rows" in info:
+        text += ("Unten stehen <datenbank_abfrage> und <datenbank_ergebnis>: das "
+                 "echte, aktuelle Ergebnis dieser Abfrage. Antworte daraus und sage, "
+                 "dass die Angaben aus der Datenbank stammen.\n")
+    elif info.get("structure"):
+        text += ("Zu dieser Frage lief keine Abfrage; unten steht in "
+                 "<datenbank_aufbau> der Aufbau der Datenbank (Tabellen und "
+                 "Spalten). Beschreibe ihn daraus.\n")
+    elif info.get("none"):
+        text += ("Zu dieser Frage lief keine Abfrage, weil sie nicht nach Daten "
+                 "fragt. Fragt der Nutzer doch nach Daten, sage das und schlage "
+                 "eine Frage nach konkreten Daten vor.\n")
+    else:
+        text += ("Die Abfrage zu dieser Frage ist fehlgeschlagen: "
+                 f"{str(info.get('reason') or '')[:300]}. Sage das dem Nutzer.\n")
+    return text + "</datenbank_hinweis>\n"
 
 
 def _list_blocks(user, req, question, model, history_text, areas):
@@ -711,6 +757,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
     system = pipeline.systemprompt(
         pipeline.kontext(hits, image_texts, bloecke=blocks), req.preset,
         benutzer=user)
+    system += sql_note(sql_info)
     extra, drafts = [], []
     connections = {}
     notes = []
