@@ -317,6 +317,8 @@ jobs:
 
       - name: Generated files match the generator
         run: |
+          # the invoice PDFs: the same reportlab as in the image, so the bytes match
+          python3 -m pip install --quiet "$(grep -i '^reportlab==' requirements.txt)"
           python3 deploy/demo-erp/make_demo_erp.py
           git diff --exit-code deploy/demo-erp/
 
