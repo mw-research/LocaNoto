@@ -197,7 +197,7 @@ data:
     INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-108', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 1, 0);
     INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-109', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 35, 0);
     INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-110', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 1, 0);
-    INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-111', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 16, 0);
+    INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-111', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 1, 0);
     INSERT INTO dbo.Artikel (ArtikelNr, Bezeichnung, Warengruppe, Einheit, Listenpreis, Lagerbestand, Mindestbestand) VALUES (N'WA-112', N'Werbeartikel', N'Werbemittel', N'Stk', 4.90, 31, 0);
     INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24001, 10001, DATEADD(day, -18, @heute), DATEADD(day, 19, @heute), 'O', N'M. Roth');
     INSERT INTO dbo.Auftraege (AuftragsNr, KundenNr, Auftragsdatum, Liefertermin, Status, Bearbeiter) VALUES (24002, 10001, DATEADD(day, -4, @heute), DATEADD(day, 28, @heute), 'O', N'S. Braun');
@@ -364,7 +364,7 @@ data:
     INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-108', N'Markus Wilhelm', N'persönlich', 1);
     INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-109', N'Empfang', N'Vitrine', 35);
     INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-110', N'Prof. Bastian Engelmann', N'persönlich', 1);
-    INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-111', N'Dr. Vogt', N'persönlich', 16);
+    INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-111', N'Vincent Wahyudi', N'persönlich', 1);
     INSERT INTO dbo.Lagerplaetze (ArtikelNr, Lager, Lagerplatz, Menge) VALUES (N'WA-112', N'Frau Ott', N'persönlich', 31);
     INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450001, 70002, N'DB-0500', 3, 1171.80, DATEADD(day, -105, @heute), DATEADD(day, -86, @heute), N'geliefert');
     INSERT INTO dbo.Bestellungen (BestellNr, LieferantenNr, ArtikelNr, Menge, Einkaufspreis, Bestelldatum, ErwartetAm, Status) VALUES (450002, 70002, N'DB-1000', 3, 1723.60, DATEADD(day, -5, @heute), DATEADD(day, 8, @heute), N'bestellt');

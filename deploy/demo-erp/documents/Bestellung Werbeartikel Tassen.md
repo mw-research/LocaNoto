@@ -19,7 +19,7 @@ Rundumdruck. Die Nummern sind die Artikelnummern des Lieferanten.
 | KM-4712 | Winterlandschaft mit Schriftzug „Frohe Festtage“ | 30 |
 | KM-4714 | Roboter mit offenem Buch (LocaNoto) | 24 |
 | KM-4715 | DIG:IT-KMU-Logo, lime auf navy | 1 |
-| KM-4718 | Würzburger Residenz, Strichzeichnung | 20 |
+| KM-4718 | Würzburger Residenz, Strichzeichnung | 1 |
 | KM-4719 | Skyline Schweinfurt bei Nacht | 20 |
 | KM-4721 | Schriftzug „Ingenieure trinken Kaffee“ | 40 |
 | KM-4723 | Zahnrad-Muster, silber | 1 |
@@ -28,8 +28,8 @@ Rundumdruck. Die Nummern sind die Artikelnummern des Lieferanten.
 | KM-4730 | Messe-Edition „Druckluft 2026“ | 60 |
 | KM-4732 | Jubiläum „25 Jahre Demo GmbH“, Goldrand | 1 |
 
-Die fünf Motive mit Menge 1 sind Einzelstücke: Zahnrad, Erdmännchen und
-„Kein Morgenmensch“ sind Musterdrucke des Lieferanten, die Jubiläumstasse
+Die sechs Motive mit Menge 1 sind Einzelstücke: Residenz, Zahnrad,
+Erdmännchen und „Kein Morgenmensch“ sind Musterdrucke des Lieferanten, die Jubiläumstasse
 geht an die Geschäftsführung, die DIG:IT-KMU-Tasse ist der Preis beim
 Demo-Event.
 

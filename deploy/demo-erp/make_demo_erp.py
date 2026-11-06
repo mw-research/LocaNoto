@@ -197,12 +197,12 @@ ITEMS = [
     # internal number, the place and the count -- no mug, no motif. Which
     # number is which motif only the two hunt documents tell.
 ] + [(f"WA-{101 + i}", "Werbeartikel", "Werbemittel", "Stk", 4.90, stock, 0)
-     for i, stock in enumerate([12, 1, 14, 1, 48, 18, 1, 1, 35, 1, 16, 31])]
+     for i, stock in enumerate([12, 1, 14, 1, 48, 18, 1, 1, 35, 1, 1, 31])]
 # Promotional items are not sold: orders take only the rest (and the
 # random sample stays the same as before the mugs came in).
 SALE_ITEMS = [i for i in ITEMS if i[2] != "Werbemittel"]
-# Where each one lies. Five single pieces with five people of the DIG:IT
-# team: four decoys for whoever skips the article match, one prize
+# Where each one lies. Six single pieces with six people of the DIG:IT
+# team: five decoys for whoever skips the article match, one prize
 # (WA-104). The rest with other people or in stores.
 PROMO_PLACES = {
     "WA-101": ("Frau Haas", "persönlich"), "WA-102": ("Vladyslav Borysenko", "persönlich"),
@@ -210,7 +210,7 @@ PROMO_PLACES = {
     "WA-105": ("Messelager", "M-02"), "WA-106": ("Herr Lang", "persönlich"),
     "WA-107": ("Rodolfo Cacacho", "persönlich"), "WA-108": ("Markus Wilhelm", "persönlich"),
     "WA-109": ("Empfang", "Vitrine"), "WA-110": ("Prof. Bastian Engelmann", "persönlich"),
-    "WA-111": ("Dr. Vogt", "persönlich"), "WA-112": ("Frau Ott", "persönlich"),
+    "WA-111": ("Vincent Wahyudi", "persönlich"), "WA-112": ("Frau Ott", "persönlich"),
 }
 
 SUPPLIERS = [

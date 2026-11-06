@@ -25,10 +25,10 @@ Lösung: **Die Tasse hat Prof. Andreas Schiffler.**
 
 ## Die Köder
 
-Die Bestellung nennt fünf Einzelstücke (Menge 1), das ERP führt fünf
+Die Bestellung nennt sechs Einzelstücke (Menge 1), das ERP führt sechs
 Werbeartikel mit Bestand 1 – alle bei Leuten aus dem DIG:IT-Team. Wer den
 Artikelabgleich überspringt und im ERP nach Einzelstücken sucht, landet mit
-vier zu fünf Wahrscheinlichkeit beim Falschen:
+fünf zu sechs Wahrscheinlichkeit beim Falschen:
 
 | Interne Nr. | Lagerort | Motiv laut Abgleich und Bestellung |
 |---|---|---|
@@ -37,8 +37,9 @@ vier zu fünf Wahrscheinlichkeit beim Falschen:
 | WA-107 | Rodolfo Cacacho | Zahnrad-Muster |
 | WA-108 | Markus Wilhelm | Jubiläum „25 Jahre Demo GmbH“ |
 | WA-110 | Prof. Bastian Engelmann | Schriftzug „Kein Morgenmensch“ |
+| WA-111 | Vincent Wahyudi | Würzburger Residenz |
 
-Die übrigen sieben Werbeartikel liegen bei anderen Personen oder in Lagern.
+Die übrigen sechs Werbeartikel liegen bei anderen Personen oder in Lagern.
 
 ## Warum es nicht mit einer Frage geht
 
