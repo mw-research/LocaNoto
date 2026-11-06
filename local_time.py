@@ -51,6 +51,16 @@ def zone():
             return datetime.timezone.utc
 
 
+def as_utc(value):
+    """An aware time as a plain datetime in UTC.
+
+    Exchange hands out EWSDateTime, whose astimezone() refuses
+    datetime.timezone.utc ("must be of type EWSTimeZone"). Going through
+    the timestamp works for every aware datetime.
+    """
+    return datetime.datetime.fromtimestamp(value.timestamp(), datetime.timezone.utc)
+
+
 def now():
     return datetime.datetime.now(zone())
 

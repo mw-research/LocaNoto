@@ -22,6 +22,7 @@ from urllib.parse import quote
 
 import dateisperre
 import geheim
+import local_time
 import mcp
 import notices
 import paths
@@ -147,8 +148,7 @@ def check_one(user, server, header):
 def _set_seen(user, server, when):
     with dateisperre.gesperrt(_path(user)):
         state = _load(user)
-        state.setdefault("seen", {})[server] = when.astimezone(
-            datetime.timezone.utc).isoformat()
+        state.setdefault("seen", {})[server] = local_time.as_utc(when).isoformat()
         _save(user, state)
 
 

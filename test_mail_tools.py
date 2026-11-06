@@ -362,8 +362,20 @@ class Inbox(Box):
         return [m for m in self.mails if m[0] > since][:limit]
 
 
+try:
+    # Exchange hands out EWSDateTime; its astimezone() refuses
+    # datetime.timezone.utc. The fakes return the same type.
+    from exchangelib import EWSDateTime as _EwsDt, UTC as _EwsUtc
+
+    def exchange_time(d):
+        return _EwsDt.from_datetime(d).astimezone(_EwsUtc)
+except ImportError:
+    def exchange_time(d):
+        return d
+
 now = datetime.datetime.now(datetime.timezone.utc)
-inbox = Inbox([(now + datetime.timedelta(minutes=1), "Meier <meier@test.de>", "Angebot")])
+inbox = Inbox([(exchange_time(now + datetime.timedelta(minutes=1)),
+                "Meier <meier@test.de>", "Angebot")])
 mcp.verbinde = lambda *_a, **_k: {"box": inbox}
 try:
     first = mail_watch.check_one(user, "box", {})
@@ -419,7 +431,7 @@ try:
     check("tickets: no check without a member's login", False)
 except tickets.Refused:
     check("tickets: no check without a member's login", True)
-t0 = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=5)
+t0 = exchange_time(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=5))
 box.mails.append({"key": "<a1@kunde>", "ref": "R1", "when": t0, "name": "Kunde",
                   "address": "kunde@firma.de", "subject": "Reklamation Pumpe",
                   "text": "Die Pumpe ist defekt.", "auto": False})

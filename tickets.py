@@ -46,6 +46,7 @@ import threading
 
 import dateisperre
 import geheim
+import local_time
 import mcp
 import notices
 import paths
@@ -332,8 +333,8 @@ def poll_once(server, conn=None, header=None):
                 state["seen"].append(key)
                 seen.add(key)
                 when = m.get("when")
-                if when is not None and hasattr(when, "astimezone"):
-                    w = when.astimezone(datetime.timezone.utc)
+                if when is not None and hasattr(when, "timestamp"):
+                    w = local_time.as_utc(when)
                     if w > datetime.datetime.fromisoformat(state["since"]):
                         state["since"] = w.isoformat()
                 _save(server, state)
