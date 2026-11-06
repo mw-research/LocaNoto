@@ -46,7 +46,7 @@ Kundenstamm. 10 Zeilen.
 
 ## Tabelle Lieferanten
 
-Lieferantenstamm. 4 Zeilen.
+Lieferantenstamm. 5 Zeilen.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|
@@ -59,7 +59,7 @@ Lieferantenstamm. 4 Zeilen.
 
 ## Tabelle Artikel
 
-Artikelstamm mit Lagerbestand. 13 Zeilen.
+Artikelstamm mit Lagerbestand. 25 Zeilen.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|
@@ -116,7 +116,7 @@ Ausgangsrechnungen an Kunden. 22 Zeilen.
 
 ## Tabelle Lagerplaetze
 
-Wo der Bestand eines Artikels liegt. 17 Zeilen.
+Wo der Bestand eines Artikels liegt. 29 Zeilen.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|

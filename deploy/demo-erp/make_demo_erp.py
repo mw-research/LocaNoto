@@ -193,18 +193,38 @@ ITEMS = [
     ("WS-KO", "Wartungsset Kompressor", "Service", "Set", 189.00, 14, 5),
     ("RE-28", "Edelstahlrohr 28 mm, 1 m", "Rohrleitung", "m", 18.75, 420, 200),
     ("PS-01", "Prüfservice Druckbehälter (Pauschale)", "Service", "Stk", 320.00, 999, 0),
-]
+    # The scavenger hunt (SCHNITZELJAGD.md): the names say nothing about the
+    # motif. Which print is which motif only the supplier's numbers tell,
+    # and those only the two hunt documents.
+] + [(f"WA-{101 + i}", f"Kaffeebecher 300 ml, Druck {chr(65 + i)}", "Werbemittel", "Stk",
+        4.90, stock, 0)
+       for i, stock in enumerate([12, 1, 14, 1, 48, 18, 9, 1, 35, 20, 16, 31])]
+# Promotional items are not sold: orders take only the rest (and the
+# random sample stays the same as before the mugs came in).
+SALE_ITEMS = [i for i in ITEMS if i[2] != "Werbemittel"]
+# Where each mug lies. Three single pieces with three people, the rest
+# with people or in stores: neither the place nor the stock of 1 gives
+# the DIG:IT mug (WA-104) away.
+PROMO_PLACES = {
+    "WA-101": ("Hauptlager", "R09-F1"), "WA-102": ("Frau Haas", "persönlich"),
+    "WA-103": ("Empfang", "Theke"), "WA-104": ("Prof. Schiffler", "persönlich"),
+    "WA-105": ("Messelager", "M-02"), "WA-106": ("Herr Lang", "persönlich"),
+    "WA-107": ("Hauptlager", "R09-F2"), "WA-108": ("Prof. Krämer", "persönlich"),
+    "WA-109": ("Empfang", "Vitrine"), "WA-110": ("Dr. Vogt", "persönlich"),
+    "WA-111": ("Hauptlager", "R09-F3"), "WA-112": ("Frau Ott", "persönlich"),
+}
 
 SUPPLIERS = [
     (70001, "Armaturen Süd GmbH", "Nürnberg", "Petra Haas", "0911 2233-40"),
     (70002, "Behälterbau Franken KG", "Bamberg", "Uwe Stein", "0951 8800-12"),
     (70003, "MessTec Instruments", "Erlangen", "Nina Ott", "09131 4455-0"),
     (70004, "Kompressorenwerk Ost", "Chemnitz", "Karl Brandt", "0371 6060-21"),
+    (70005, "Keramik Manufaktur Weber", "Selb", "Lena Weber", "09287 3311-0"),
 ]
 # Warengruppe -> supplier
 SUPPLIED_BY = {"Armaturen": 70001, "Dichtungen": 70001, "Rohrleitung": 70001,
                "Druckbehälter": 70002, "Messtechnik": 70003, "Zubehör": 70003,
-               "Kompressoren": 70004, "Service": 70004}
+               "Kompressoren": 70004, "Service": 70004, "Werbemittel": 70005}
 
 PEOPLE = ["K. Lang", "M. Roth", "S. Braun", "T. Krause"]
 INSPECTORS = ["Dr. Weiß (ZÜS)", "H. Vogel (ZÜS)", "befähigte Person J. Kern"]
@@ -324,6 +344,10 @@ def build_data(rng):
                                 str(stock), str(minimum)])
         if group == "Service" and unit == "Stk":
             continue                    # a service lies nowhere
+        if nr in PROMO_PLACES:
+            store, place = PROMO_PLACES[nr]
+            rows["Lagerplaetze"].append([q(nr), q(store), q(place), str(stock)])
+            continue
         if group in ("Druckbehälter", "Kompressoren"):
             places = [("Außenlager", f"H{rng.randint(1, 4)}-{rng.randint(1, 12):02d}", stock)]
         elif stock > 20:
@@ -350,7 +374,7 @@ def build_data(rng):
                                   q(status)[1:], q(rng.choice(PEOPLE))])
         net = 0.0
         lines = ORDER_LINES.setdefault(nr, [])
-        for pos, item in enumerate(rng.sample(ITEMS, rng.randint(1, 4)), start=1):
+        for pos, item in enumerate(rng.sample(SALE_ITEMS, rng.randint(1, 4)), start=1):
             qty = 1 if item[2] in ("Druckbehälter", "Kompressoren") else rng.randint(2, 40)
             rebate = rng.choice([0, 0, 0, 3, 5, 10])
             net += qty * item[4] * (100 - rebate) / 100
@@ -397,7 +421,7 @@ def build_data(rng):
 
     # Purchase orders: what is below the minimum is on order, a few came in.
     po = 450001
-    for nr, name, group, unit, price, stock, minimum in ITEMS:
+    for nr, name, group, unit, price, stock, minimum in SALE_ITEMS:
         if group == "Service" and unit == "Stk":
             continue
         supplier = SUPPLIED_BY[group]

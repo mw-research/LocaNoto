@@ -82,6 +82,14 @@ expected_rows = {"open orders of Meier GmbH": 3, "inspections due in the next 30
                  "open complaints with their order": 3, "open invoices of Meier GmbH": 2,
                  "ordered from suppliers and not yet in": 3}
 try:
+    _c, mug = sqldb.fuehre_aus(
+        "SELECT Lager, Lagerplatz, Menge FROM dbo.Lagerplaetze WHERE ArtikelNr = N'WA-104'",
+        zugang=ACCESS)
+    check("scavenger hunt: WA-104 lies with Prof. Schiffler",
+          [tuple(r) for r in mug] == [("Prof. Schiffler", "persönlich", 1)], mug)
+except Exception as e:
+    check("scavenger hunt: WA-104 lies with Prof. Schiffler", False, f"{type(e).__name__}: {e}")
+try:
     _c, docs = sqldb.fuehre_aus(
         "SELECT Dateiname, Datei FROM dbo.Dokumente WHERE RechnungsNr = 2025103", zugang=ACCESS)
     check("invoice 2025103 comes back as a whole PDF",
