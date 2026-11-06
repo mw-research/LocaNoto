@@ -7,6 +7,12 @@
 // (a draft with data-web-draft) is confirmed here: the answer continues
 // the chat with the hits, without a new question.
 (function () {
+  // Only the message list scrolls. scrollIntoView moved every scrollable
+  // ancestor, the page included, and the sidebar went with it.
+  function toBottom(box) {
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
   "use strict";
 
   function el(tag, cls, text) {
@@ -78,7 +84,7 @@
     reply.appendChild(status);
     reply.appendChild(text);
     box.appendChild(reply);
-    reply.scrollIntoView({ block: "end" });
+    toBottom(box);
     form.classList.add("busy");
 
     var chatId = body.chat_id;
@@ -124,7 +130,11 @@
           } else if (event === "sql") {
             status.textContent = d.query ? "SQL: " + d.query : (d.reason || "");
           } else if (event === "text") {
+            // stays at the end while it was there; whoever scrolled up to
+            // read keeps their place
+            var atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
             text.textContent += d.text;
+            if (atEnd) toBottom(box);
           } else if (event === "error") {
             status.textContent = d.detail;
             status.className = "status error";
@@ -142,7 +152,11 @@
           if (again.ok) window.hx.swap(proposing, await again.text(), "outerHTML");
         }
         var rendered = await fetch("/ui/chats/" + chatId + "/messages/-1", { credentials: "same-origin" });
+        // the finished answer (sources, query, drafts) is longer than the
+        // streamed one: stay at the end if the reader was there
+        var wasAtEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
         if (rendered.ok) window.hx.swap(reply, await rendered.text(), "outerHTML");
+        if (wasAtEnd) toBottom(box);
         var list = await fetch("/ui/chats?current=" + chatId, { credentials: "same-origin" });
         if (list.ok) window.hx.swap(document.getElementById("chatlist"), await list.text(), "innerHTML");
       }
@@ -193,7 +207,7 @@
     card.appendChild(document.createTextNode(" "));
     card.appendChild(cancel);
     box.appendChild(card);
-    card.scrollIntoView({ block: "end" });
+    toBottom(box);
     cancel.addEventListener("click", function () { card.remove(); });
     go.addEventListener("click", async function () {
       go.disabled = cancel.disabled = true;
@@ -281,7 +295,6 @@
     form.question.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); }
     });
-    var box = document.getElementById("messages");
-    if (box.lastElementChild) box.lastElementChild.scrollIntoView({ block: "end" });
+    toBottom(document.getElementById("messages"));
   });
 })();

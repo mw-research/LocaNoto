@@ -60,7 +60,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font
 /* layout */
 main.page { padding: 1.5rem; max-width: 1000px; width: 100%; margin: 0 auto; }
 main.login { display: grid; place-items: center; flex: 1; padding: 1rem; }
-main.chat { display: flex; flex: 1; min-height: 0; }
+main.chat { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1rem;
@@ -100,7 +100,7 @@ fieldset { border: 1px solid var(--border); border-radius: 6px; margin: .5rem 0;
 
 /* chat */
 .sidebar {
-  width: 260px; flex-shrink: 0; overflow-y: auto; padding: 1rem;
+  width: 260px; flex-shrink: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem;
   border-right: 1px solid var(--border); background: var(--surface);
 }
 .chats { list-style: none; padding: 0; margin: 1rem 0 0; }
@@ -109,9 +109,11 @@ fieldset { border: 1px solid var(--border); border-radius: 6px; margin: .5rem 0;
   text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .chats li.on a, .chats li a:hover { background: var(--bg); }
-.conversation { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+/* min-height: 0 -- without it the column grows with its messages, the
+   page scrolls instead of the message list and the sidebar moves along */
+.conversation { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .chat-head { padding: .5rem 1rem; border-bottom: 1px solid var(--border); display: flex; gap: .5rem; flex-wrap: wrap; }
-.messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.messages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
 .msg { max-width: 860px; width: 100%; margin: 0 auto; }
 .msg.user .bubble {
   background: var(--accent); color: #fff; padding: .6rem .9rem;
