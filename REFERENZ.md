@@ -521,7 +521,7 @@ Dateien importieren sie.
 | `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +6 | `routes_account`, `test_api`, `web` |
 | `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_WINDOW_MINUTES` +3 | `oidc`, `routes_account`, `server`, `web` |
 | `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `selbsttest`, `web` |
-| `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +7 | `answering`, `app`, `selbsttest` |
+| `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +8 | `answering`, `app`, `selbsttest`, `test_mail_tools` +2 |
 | `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MINDEST_TEXT`, `OCR_DPI`, `OCR_SPRACHEN` | `aufnehmen`, `ingest`, `selbsttest` |
 | `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `app`, `pipeline` +6 |
 | `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `app`, `routes_admin`, `routes_documents`, `server` +1 |
@@ -1815,6 +1815,21 @@ Datenbank und, was aus der Abfrage wurde (Ergebnis, keine Abfrage,
 Fehler mit Grund). Fragen nach dem Aufbau („Wie ist unser ERP
 aufgebaut?", „Welche Tabellen gibt es?") ergeben keine Abfrage; das
 Modell bekommt dann die Tabellen und Spalten (bis 6000 Zeichen).
+
+Damit Fragen ohne Kenntnis des ERP gelingen („Wie viele Absperrhähne
+liegen im Lager?"):
+
+- Das Schema enthält je Tabelle Beispielwerte der Textspalten
+  (`SQL_SAMPLE_ROWS`, Vorgabe 2; 0 = aus; höchstens 60 Tabellen). Daran
+  erkennt das Modell, welche Spalte Bezeichnungen enthält und wie Codes
+  aussehen. Eine Tabelle ohne Leserecht steht ohne Beispiele da.
+- Der Abfrage-Prompt (`sql_prompt.txt`) sucht Gegenstände beim Namen über
+  den Wortstamm in allen passenden Textspalten und beantwortet Mengenfragen
+  mit Bestand, Einheit und Umfeld (Lagerort, Mindestbestand) statt mit
+  `COUNT(*)`.
+- Findet eine Suche beim Namen nichts, formuliert das Modell einmal eine
+  breitere Abfrage (kürzerer Stamm, Oberbegriffe, weitere Spalten). Eine
+  leere Liste nach Statuscode gilt als Antwort und wird nicht wiederholt.
 
 Ohne `SQL_SERVER` bleibt die Funktion vollständig aus. Der Treiber wird dann
 nicht einmal geladen.

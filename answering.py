@@ -338,10 +338,31 @@ def _sql_block(user, req, question, model, history_text):
         return [], dict(where, query=query, reason=str(e))
     except Exception as e:
         return [], dict(where, query=query, reason=f"Database error: {e}")
+    first = None
+    if not rows and _SEARCHES_TEXT.search(query):
+        # Nothing found by name: "Absperrhähne" may be "Kugelhahn DN25" in
+        # the ERP. One broader try; the first result stands if it fails.
+        try:
+            wider = sqldb.formuliere(client("SQL", user), llm.modell("SQL", model),
+                                     question, schema, history_text,
+                                     hinweis_raum=(access or {}).get("hinweis", ""),
+                                     vorher=query)
+            if wider and wider.strip() != query.strip():
+                columns2, rows2 = sqldb.fuehre_aus(wider, zugang=access)
+                first, query, columns, rows = query, wider, columns2, rows2
+        except Exception:
+            pass
     table = sqldb.als_tabelle(columns, rows)
-    return ([("datenbank_abfrage", query), ("datenbank_ergebnis", table)],
-            dict(where, query=query, account=(access or {}).get("benutzer", ""),
-                 rows=len(rows)))
+    info = dict(where, query=query, account=(access or {}).get("benutzer", ""),
+                rows=len(rows))
+    if first:
+        info["first_query"] = first
+    return ([("datenbank_abfrage", query), ("datenbank_ergebnis", table)], info)
+
+
+# A query that looks for something by its name (LIKE, a word in quotes --
+# not a status code like 'O').
+_SEARCHES_TEXT = re.compile(r"\bLIKE\b|N?'[^']*[A-Za-zÄÖÜäöüß]{3,}[^']*'", re.I)
 
 
 def sql_note(info):

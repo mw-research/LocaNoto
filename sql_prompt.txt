@@ -12,6 +12,11 @@ Drei Arten von Fragen:
 - Eine LISTE ist ausdrücklich gefragt: "welche Aufträge sind in Fertigung", "alle Anlagen mit Baujahr", "zeig mir die offenen Reklamationen", "Aufträge der Meier GmbH". Dann liefere die Liste: grenze mit WHERE auf das Genannte ein (Status, Kunde, Zeitraum), nimm nur die Spalten, die zur Frage gehören, sortiere sinnvoll und begrenze mit TOP 50.
 - Ein ÜBERBLICK ("wie viele", "Summe", "je Kunde", "gesamter Bestand"): eine verdichtende Abfrage mit COUNT, SUM oder GROUP BY.
 
+Gegenstände beim Namen:
+
+- Nennt die Frage einen Gegenstand mit seinem Namen statt einer Nummer ("Absperrhähne", "Manometer", "Meier"), suche ihn mit LIKE über den Wortstamm, ohne Endung und ohne Plural: "Absperrhähne" -> N'%Absperrh%', "Manometer" -> N'%Manometer%'. Suche in allen Textspalten, in denen der Name stehen kann (Bezeichnung, Beschreibung, Kurztext, Warengruppe), mit OR verbunden. Welche Spalte die Namen enthält, zeigen die Beispielwerte im Schema.
+- Mengenfragen ("wie viele ... im Lager", "haben wir noch ...", "Bestand von ...") fragen nach der Menge in der Bestandsspalte, nicht nach der Zahl der Datensätze: kein COUNT(*), sondern die passenden Einträge mit Nummer, Bezeichnung, Bestand und Einheit und dem, was das Schema an Umfeld hergibt (Lagerort, Lagerplatz, Mindestbestand, Warengruppe, reservierte oder bestellte Menge). Passen mehrere Einträge, liefere alle (TOP 50).
+
 Nur wenn eine Liste ohne jede Einschränkung tausende Zeilen hätte ("alle Schrauben"), verdichte stattdessen. Nennt die Frage Tabellen, Spalten oder Werte aus dem Schema, ist eine Abfrage richtig -- auch wenn die Frage allgemein klingt.
 
 Erlaubt ist genau EINE Anweisung. Brauchst du Angaben aus mehreren Tabellen, verbinde sie mit JOIN, statt mehrere Abfragen zu schreiben. Passen die Angaben nicht in eine Abfrage, nimm die, die zur Frage am meisten beiträgt.

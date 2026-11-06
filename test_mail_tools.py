@@ -382,9 +382,101 @@ try:
           blocks == [] and "fehlgeschlagen" in note and "Login failed" in note, note)
     check("SQL: without a database for the user, no note",
           answering.sql_note({"reason": "No database account for this user."}) == "")
+
+    # nothing found by name: one broader try
+    asked = []
+
+    def formulate(*_a, vorher="", **_k):
+        asked.append(vorher)
+        return ("SELECT ArtikelNr, Bezeichnung, Lagerbestand FROM dbo.Artikel "
+                "WHERE Warengruppe = N'Armaturen' AND Bezeichnung LIKE N'%hahn%'"
+                if vorher else
+                "SELECT ArtikelNr, Bezeichnung, Lagerbestand FROM dbo.Artikel "
+                "WHERE Bezeichnung LIKE N'%Absperrh%'")
+    sqldb.formuliere = formulate
+    sqldb.fuehre_aus = lambda q, **_k: (["ArtikelNr", "Bezeichnung", "Lagerbestand"],
+                                        [("KH-DN25", "Kugelhahn DN25, Messing", 60)]
+                                        if "%hahn%" in q else [])
+    blocks, info = answering._sql_block(user, sql_req, "Wie viele Absperrhähne liegen im Lager?",
+                                        "m", "")
+    check("SQL: 0 rows by name -> one broader query, and its result is used",
+          info.get("rows") == 1 and "%hahn%" in info.get("query", "")
+          and "%Absperrh%" in info.get("first_query", "") and len(asked) == 2
+          and "Kugelhahn" in blocks[1][1], (info, asked))
+    asked.clear()
+    sqldb.formuliere = lambda *_a, vorher="", **_k: (
+        asked.append(vorher) or "SELECT AuftragsNr FROM dbo.Auftraege WHERE Status = 'O'")
+    sqldb.fuehre_aus = lambda q, **_k: (["AuftragsNr"], [])
+    blocks, info = answering._sql_block(user, sql_req, "Welche Aufträge sind offen?", "m", "")
+    check("SQL: an empty list by status code is an answer, no second try",
+          info.get("rows") == 0 and asked == [""], (info, asked))
 finally:
     (answering.sql_accounts, answering.sql_access, answering.sql_schema,
      answering.client, answering.llm, sqldb.formuliere, sqldb.fuehre_aus) = _saved
+prompts_seen = []
+
+
+def capture(text):
+    def create(**k):
+        prompts_seen.append(k["messages"][0]["content"])
+        return ns(choices=[ns(message=ns(content=text))])
+    return ns(chat=ns(completions=ns(create=create)))
+
+
+sqldb.formuliere(capture("SELECT 1"), "m", "Wie viele Absperrhähne liegen im Lager?", "s",
+                 vorher="SELECT x FROM dbo.Artikel WHERE Bezeichnung LIKE N'%Absperrh%'")
+check("SQL: the second try names the first query and asks for a broader search",
+      "ergab 0 Zeilen" in prompts_seen[-1] and "%Absperrh%" in prompts_seen[-1]
+      and "Oberbegriffe" in prompts_seen[-1])
+sql_prompt_text = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "sql_prompt.txt"), encoding="utf-8").read()
+check("SQL: the prompt searches names by their stem and stock as quantity, not COUNT(*)",
+      "Wortstamm" in sql_prompt_text and "kein COUNT(*)" in sql_prompt_text
+      and "Lagerort" in sql_prompt_text)
+
+
+class FakeCursor:
+    def __init__(self):
+        self.last = ""
+
+    def execute(self, sql):
+        self.last = sql
+        if "[dbo].[Geheim]" in sql:
+            raise RuntimeError("SELECT permission denied")
+
+    def fetchall(self):
+        if "INFORMATION_SCHEMA" in self.last:
+            return [("dbo", "Artikel", "ArtikelNr", "nvarchar"),
+                    ("dbo", "Artikel", "Bezeichnung", "nvarchar"),
+                    ("dbo", "Artikel", "Lagerbestand", "int"),
+                    ("dbo", "Geheim", "Text", "nvarchar")]
+        if "[dbo].[Artikel]" in self.last:
+            return [("KH-DN25", "Kugelhahn DN25, Messing"),
+                    ("FD-DN50", "Flanschdichtung DN50, PTFE, besonders lang und ausführlich")]
+        return []
+
+
+fake_con = ns(cursor=lambda: cursor_box[0], close=lambda: None)
+cursor_box = [FakeCursor()]
+real_connect = sqldb._verbinde
+sqldb._verbinde = lambda _z=None: fake_con
+account = {"server": "s", "benutzer": "u", "passwort": "p", "datenbank": "d"}
+try:
+    schema_text = sqldb.lade_schema(account)
+    check("SQL: the schema shows example values of the text columns",
+          "dbo.Artikel(ArtikelNr nvarchar, Bezeichnung nvarchar, Lagerbestand int)" in schema_text
+          and "Bezeichnung: 'Kugelhahn DN25, Messing' / 'Flanschdichtung DN50, PTFE, be…'"
+          in schema_text and "ArtikelNr: 'KH-DN25' / 'FD-DN50'" in schema_text, schema_text)
+    check("SQL: a table that may not be read is listed without examples",
+          "dbo.Geheim(Text nvarchar)" in schema_text
+          and schema_text.count("Beispiele") == 1, schema_text)
+    old_rows, sqldb.SQL_SAMPLE_ROWS = sqldb.SQL_SAMPLE_ROWS, 0
+    check("SQL: SQL_SAMPLE_ROWS=0 switches the examples off",
+          "Beispiele" not in sqldb.lade_schema(account))
+    sqldb.SQL_SAMPLE_ROWS = old_rows
+finally:
+    sqldb._verbinde = real_connect
+
 check("SQL: the prompt allows lists that are asked for",
       "TOP 50" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "sql_prompt.txt"), encoding="utf-8").read())

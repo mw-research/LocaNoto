@@ -141,34 +141,87 @@ def lade_schema(zugang=None):
         cur = con.cursor()
         cur.execute(sql)
         zeilen = cur.fetchall()
+
+        tabellen, texttypen = {}, {}
+        for schema, tabelle, spalte, typ in zeilen:
+            voll = f"{schema}.{tabelle}"
+            if SQL_TABLES and tabelle not in SQL_TABLES and voll not in SQL_TABLES:
+                continue
+            tabellen.setdefault(voll, []).append(f"{spalte} {typ}")
+            if str(typ).lower() in _TEXT_TYPES:
+                texttypen.setdefault(voll, []).append((schema, tabelle, spalte))
+
+        teile, laenge, weggelassen = [], 0, 0
+        for name, spalten in tabellen.items():
+            zeile = f"{name}({', '.join(spalten)})"
+            if laenge + len(zeile) + 1 > SQL_SCHEMA_MAX_CHARS:
+                weggelassen += 1
+                continue
+            if len(teile) < SQL_SAMPLE_TABLES:
+                zeile += _examples(cur, texttypen.get(name, []))
+            teile.append(zeile)
+            laenge += len(zeile) + 1
     finally:
         con.close()
 
-    tabellen = {}
-    for schema, tabelle, spalte, typ in zeilen:
-        voll = f"{schema}.{tabelle}"
-        if SQL_TABLES and tabelle not in SQL_TABLES and voll not in SQL_TABLES:
-            continue
-        tabellen.setdefault(voll, []).append(f"{spalte} {typ}")
-
-    teile = [f"{name}({', '.join(spalten)})" for name, spalten in tabellen.items()]
     text = "\n".join(teile)
-
-    if len(text) > SQL_SCHEMA_MAX_CHARS:
-        gekuerzt, laenge = [], 0
-        for t in teile:
-            if laenge + len(t) + 1 > SQL_SCHEMA_MAX_CHARS:
-                break
-            gekuerzt.append(t)
-            laenge += len(t) + 1
-        text = "\n".join(gekuerzt) + (
-            f"\n-- gekuerzt, {len(teile) - len(gekuerzt)} weitere Tabellen nicht "
-            "aufgefuehrt. Mit SQL_TABLES eingrenzen.")
+    if weggelassen:
+        text += (f"\n-- gekuerzt, {weggelassen} weitere Tabellen nicht "
+                 "aufgefuehrt. Mit SQL_TABLES eingrenzen.")
     return text
 
 
+# --- EXAMPLE VALUES ---
+#
+# Column names alone do not say which column holds an article's name or
+# what a status code looks like -- in an ERP nobody here knows, that is
+# what an unsuitable query fails on. A few values of the text columns of
+# each table go with the schema; they reach only the model that writes
+# the query (and, for a question about the structure, the answer).
+
+SQL_SAMPLE_ROWS = paths.env_int("SQL_SAMPLE_ROWS", 2)
+SQL_SAMPLE_TABLES = 60
+_TEXT_TYPES = {"char", "nchar", "varchar", "nvarchar"}
+_SAMPLE_COLUMNS = 5
+_SAMPLE_CHARS = 30
+
+
+def _examples(cur, columns):
+    """'\\n  Beispiele: Bezeichnung: 'Kugelhahn DN25' / ...' or ''."""
+    if SQL_SAMPLE_ROWS <= 0 or not columns:
+        return ""
+    columns = columns[:_SAMPLE_COLUMNS]
+    schema, table = columns[0][0], columns[0][1]
+    names = ", ".join(f"[{c[2].replace(']', ']]')}]" for c in columns)
+    try:
+        cur.execute(f"SELECT TOP {int(SQL_SAMPLE_ROWS)} {names} FROM "
+                    f"[{schema.replace(']', ']]')}].[{table.replace(']', ']]')}]")
+        rows = cur.fetchall()
+    except Exception:
+        return ""       # no right to read it, a broken view: no examples
+    parts = []
+    for i, c in enumerate(columns):
+        values = []
+        for row in rows:
+            v = " ".join(str(row[i]).split()) if row[i] is not None else ""
+            if v and v not in values:
+                values.append(v if len(v) <= _SAMPLE_CHARS else v[:_SAMPLE_CHARS] + "…")
+        if values:
+            parts.append(f"{c[2]}: " + " / ".join(f"'{v}'" for v in values))
+    return ("\n  Beispiele: " + "; ".join(parts)) if parts else ""
+
+
+RETRY_NOTE = (
+    "\n\nDeine vorige Abfrage\n{query}\nergab 0 Zeilen. Wahrscheinlich steht der "
+    "Gegenstand nicht woertlich so in der Datenbank. Schreibe eine breitere "
+    "Abfrage: kuerzerer Wortstamm, Teile eines zusammengesetzten Worts "
+    "(Absperrhahn -> %hahn%), verwandte Begriffe und Oberbegriffe (Absperrhahn "
+    "-> Kugelhahn, Ventil, Warengruppe Armaturen), weitere Textspalten. Antworte "
+    "wieder nur mit der Abfrage, oder mit {marker}, wenn es nichts Breiteres gibt.")
+
+
 def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None,
-               hinweis_raum=""):
+               hinweis_raum="", vorher=""):
     """Laesst das Sprachmodell eine Abfrage zu der Frage formulieren.
 
     Rueckgabe: die bereinigte Abfrage, oder "" wenn das Modell die Frage
@@ -195,6 +248,9 @@ def formuliere(client, modell, frage, schema, verlauf="", zeitlimit=None,
               .replace("{HISTORY}", verlauf)
               .replace("{FRAGE}", frage)
               .replace("{MARKER}", MARKER_KEINE_ABFRAGE))
+    if vorher:
+        # appended, not a placeholder: a prompt edited under Admin keeps working
+        prompt += RETRY_NOTE.format(query=vorher, marker=MARKER_KEINE_ABFRAGE)
 
     roh = (client.chat.completions.create(
         model=modell,
