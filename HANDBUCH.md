@@ -340,6 +340,15 @@ Wochentag, Datum und Uhrzeit → prüfen → **In den Kalender eintragen** bzw.
 der umliegenden Wochen; Zeiten gelten in der Zeitzone der Installation
 (Vorgabe Europe/Berlin).
 
+Bestehende Termine lassen sich ebenso ändern und absagen: „Lade auch
+meier@firma.de dazu ein", „Verschieb die Baubesprechung auf 14 Uhr", „Leg
+die beiden Termine am 11.11. zusammen", „Sag den Jour fixe ab". Der Entwurf
+nennt, was sich ändert und wer eine Nachricht bekommt → **Änderung
+speichern** bzw. **Termin absagen**. Neu Eingeladene bekommen eine
+Einladung, bei einer neuen Zeit alle eine Aktualisierung. Ändern kann nur,
+wer den Termin organisiert; bei einem fremden Termin geht die Absage an
+den Organisator.
+
 ### Wie benachrichtigt mich LocaNoto über neue Mails?
 
 Ist ein Postfach verbunden und LocaNoto in einem Browsertab offen, prüft

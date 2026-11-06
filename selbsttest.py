@@ -3774,6 +3774,7 @@ class _Kalendereintrag:
         self.felder = felder
 
     def save(self, send_meeting_invitations=None):
+        self.id = f"NEU{len(_angelegt)}"
         _angelegt.append((self.felder, send_meeting_invitations))
 
 
@@ -3784,7 +3785,8 @@ sys.modules["exchangelib"] = _tyc.SimpleNamespace(
     CalendarItem=_Kalendereintrag,
     EWSTimeZone=_tyc.SimpleNamespace(localzone=lambda: _tz_c))
 sys.modules["exchangelib.items"] = _tyc.SimpleNamespace(
-    SEND_TO_ALL_AND_SAVE_COPY="SendToAllAndSaveCopy", SEND_TO_NONE="SendToNone")
+    SEND_TO_ALL_AND_SAVE_COPY="SendToAllAndSaveCopy", SEND_TO_NONE="SendToNone",
+    SEND_TO_CHANGED_AND_SAVE_COPY="SendToChangedAndSaveCopy")
 
 
 def _ns(**k):
@@ -3968,6 +3970,114 @@ _f_g, _ = _angelegt[-1]
 pruef("ganztaegig ueber drei Tage: Ende ist der Tag danach",
       _f_g["is_all_day"] and isinstance(_f_g["start"], _EwsDate)
       and (_f_g["end"] - _f_g["start"]).days == 3, _f_g)
+pruef("eine Einladung nennt ihre Kennung, fuer spaetere Aenderungen",
+      "Kennung [m" in _pfk.rufe("meeting_request", {
+          "subject": "Kennung", "start": f"{_tag_s} 16:00",
+          "attendees": "huber@test.de"}))
+
+# --- changing and cancelling an appointment ---
+
+
+def _wirft(aufruf):
+    """True if the call is refused with postfach.Fehler."""
+    try:
+        aufruf()
+    except _pfc.Fehler:
+        return True
+    return False
+
+
+class _Termin(_tyc.SimpleNamespace):
+    def save(self, update_fields=None, send_meeting_invitations=None):
+        self.saved = (list(update_fields or []), send_meeting_invitations)
+        self.required_attendees = [
+            _ns(mailbox=_ns(name="", email_address=x), response_type="")
+            if isinstance(x, str) else x for x in (self.required_attendees or [])]
+
+    def cancel(self, **k):
+        self.cancelled_with = k
+        self.is_cancelled = True
+
+    def decline(self, **k):
+        self.declined_with = k
+
+    def move_to_trash(self, **k):
+        self.trashed_with = k
+
+
+def _person_c(name, adresse, antwort="NoResponseReceived"):
+    return _ns(mailbox=_ns(name=name, email_address=adresse), response_type=antwort)
+
+
+_b10 = datetime.datetime(_tag_c.year, _tag_c.month, _tag_c.day, 11, 0, tzinfo=_tz_c)
+_t_rod = _Termin(id="T10", subject="Faschingsanfang", start=_b10,
+                 end=_b10 + datetime.timedelta(hours=1), location="Büro 1.1.34",
+                 organizer=_ns(name="Anna", email_address="anna@test.de"),
+                 my_response_type="Organizer", is_all_day=False, is_cancelled=False,
+                 required_attendees=[_person_c("Rodolfo", "rodolfo@test.de", "Accept")],
+                 optional_attendees=[])
+_t_vla = _Termin(id="T11", subject="Faschingsanfang", start=_b10,
+                 end=_b10 + datetime.timedelta(hours=1), location="Büro 1.1.34",
+                 organizer=_ns(name="Anna", email_address="anna@test.de"),
+                 my_response_type="Organizer", is_all_day=False, is_cancelled=False,
+                 required_attendees=[_person_c("Vlad", "vlad@test.de")],
+                 optional_attendees=[])
+_t_fremd = _Termin(id="T12", subject="Jour fixe Huber", start=_b10,
+                   end=_b10 + datetime.timedelta(hours=1), location="",
+                   organizer=_ns(name="Huber", email_address="huber@test.de"),
+                   my_response_type="Accept", is_all_day=False, is_cancelled=False,
+                   required_attendees=[_person_c("Anna", "anna@test.de", "Accept")],
+                   optional_attendees=[])
+_t_eigen = _Termin(id="T13", subject="Fokuszeit", start=_b10,
+                   end=_b10 + datetime.timedelta(hours=2), location="",
+                   organizer=None, my_response_type="Organizer", is_all_day=False,
+                   is_cancelled=False, required_attendees=[], optional_attendees=[])
+_termine.extend([_t_rod, _t_vla, _t_fremd, _t_eigen])
+_k10, _k11, _k12, _k13 = (_pfc.remember(_pfk, x) for x in ("T10", "T11", "T12", "T13"))
+
+_vu = _pfk.pruefe_entwurf("calendar_update", {"kennung": _k10,
+                                              "add_attendees": "vlad@test.de"})
+pruef("Termin aendern: die Vorschau zeigt alle Teilnehmer und wer neu ist",
+      "an: rodolfo@test.de, vlad@test.de" in _vu and "neu dabei: vlad@test.de" in _vu
+      and "11:00-12:00" in _vu and "bisher" not in _vu, _vu)
+_eu = _pfk.rufe("calendar_update", {"kennung": _k10, "add_attendees": "vlad@test.de"})
+pruef("nur Teilnehmer dazu: Einladung nur an die Neuen, die Alten behalten ihre Zusage",
+      _t_rod.saved == (["required_attendees", "optional_attendees"],
+                       "SendToChangedAndSaveCopy")
+      and _t_rod.required_attendees[0].response_type == "Accept"
+      and _pfc._emails(_t_rod.required_attendees) == ["rodolfo@test.de", "vlad@test.de"]
+      and "geaendert" in _eu, (_t_rod.saved, _eu))
+pruef("danach als erledigt erkennbar",
+      _pfk.check_sent("calendar_update", {"kennung": _k10, "add_attendees": "vlad@test.de"}))
+_vc = _pfk.pruefe_entwurf("calendar_cancel", {"kennung": _k11})
+pruef("Termin absagen: die Vorschau nennt, wer die Absage bekommt",
+      "Absage an: vlad@test.de" in _vc and "Faschingsanfang" in _vc, _vc)
+_pfk.rufe("calendar_cancel", {"kennung": _k11, "body": "Zusammengelegt."})
+pruef("der Organisator sagt ab: Absage an alle, mit Text",
+      _t_vla.cancelled_with == {"new_body": "Zusammengelegt."}
+      and _pfk.check_sent("calendar_cancel", {"kennung": _k11}), _t_vla)
+pruef("ein abgesagter Termin wird nicht noch einmal abgesagt",
+      _wirft(lambda: _pfk.pruefe_entwurf(
+          "calendar_cancel", {"kennung": _k11})))
+_pfk.rufe("calendar_update", {"kennung": _k10, "start": f"{_tag_s} 14:00"})
+pruef("neue Zeit: Dauer bleibt, Aktualisierung an alle",
+      _t_rod.saved[1] == "SendToAllAndSaveCopy" and "start" in _t_rod.saved[0]
+      and _t_rod.start.hour == 14 and _t_rod.end - _t_rod.start == datetime.timedelta(hours=1),
+      (_t_rod.saved, _t_rod.start, _t_rod.end))
+pruef("einen fremden Termin aendert nur der Organisator",
+      _wirft(lambda: _pfk.pruefe_entwurf("calendar_update", {"kennung": _k12,
+                                                             "location": "Raum 1"})))
+pruef("einen fremden Termin absagen heisst: dem Organisator absagen",
+      "Absage an den Organisator Huber" in _pfk.pruefe_entwurf(
+          "calendar_cancel", {"kennung": _k12}))
+_pfk.rufe("calendar_cancel", {"kennung": _k13})
+pruef("ein eigener Eintrag ohne Teilnehmer geht ohne Nachricht in den Papierkorb",
+      getattr(_t_eigen, "trashed_with", None) == {"send_meeting_cancellations": "SendToNone"})
+pruef("eine Aenderung ohne Aenderung wird abgewiesen",
+      _wirft(lambda: _pfk.pruefe_entwurf("calendar_update", {"kennung": _k10})))
+pruef("wer nicht dabei ist, kann nicht entfernt werden",
+      _wirft(lambda: _pfk.pruefe_entwurf("calendar_update", {
+          "kennung": _k10, "remove_attendees": "niemand@test.de"})))
 
 if _echtes_ews is None:
     del sys.modules["exchangelib"]

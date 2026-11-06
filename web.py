@@ -114,6 +114,9 @@ TEXTS = {
     "Add to calendar": "In den Kalender eintragen",
     "Send invitation": "Einladung senden",
     "Added to the calendar.": "Im Kalender eingetragen.",
+    "Change appointment": "Termin ändern", "Cancel appointment": "Termin absagen",
+    "Save change": "Änderung speichern", "Changed.": "Geändert.",
+    "Cancelled.": "Abgesagt.",
     "From the web": "Aus dem Netz", "Take over": "Übernehmen",
     "Delete": "Löschen", "Rename": "Umbenennen",
     "Upload": "Hochladen", "into": "nach", "Project (optional)":

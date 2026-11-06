@@ -1,7 +1,7 @@
 <div class="draft" id="draft-{{ d.id }}">
 {% set args = d.argumente or {} %}
 {% if d.state == 'sent' %}
-  {% set done = t('Searched.') if d.kind == 'web' else t('Stored.') if d.server == 'workspace' else t('Added to the calendar.') if d.werkzeug == 'calendar_add' else t('Sent.') %}
+  {% set done = t('Searched.') if d.kind == 'web' else t('Stored.') if d.server == 'workspace' else t('Added to the calendar.') if d.werkzeug == 'calendar_add' else t('Changed.') if d.werkzeug == 'calendar_update' else t('Cancelled.') if d.werkzeug == 'calendar_cancel' else t('Sent.') %}
   <span class="ok">{{ done }}</span>
   {% if d.kind == 'web' %}<span class="muted">{{ args.anfrage or args.adresse }}</span>{% elif d.result and d.result|trim|lower != done|trim|lower %}<span class="muted">{{ d.result }}</span>{% endif %}
 {% elif d.state == 'discarded' %}
@@ -20,6 +20,10 @@
   <strong>{{ t('Summary for') }} {{ d.ziel or args.room }} – {{ t('waits for your confirmation') }}</strong>
   {% elif d.werkzeug == 'meeting_request' %}
   <strong>{{ t('Meeting request') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
+  {% elif d.werkzeug == 'calendar_update' %}
+  <strong>{{ t('Change appointment') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
+  {% elif d.werkzeug == 'calendar_cancel' %}
+  <strong>{{ t('Cancel appointment') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
   {% elif d.werkzeug == 'calendar_add' %}
   <strong>{{ t('Appointment in your calendar') }} ({{ d.server }}) – {{ t('waits for your confirmation') }}</strong>
   {% else %}
@@ -27,7 +31,7 @@
   {% endif %}
   {% if d.vorschau %}<p class="preview">{{ d.vorschau }}</p>{% endif %}
   {% for k, v in args.items() %}<div class="arg"><span>{{ k }}</span><pre>{{ v }}</pre></div>{% endfor %}
-  <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML" class="inline"><button class="primary">{{ t('Save to workspace') if d.server == 'workspace' else t('Add to calendar') if d.werkzeug == 'calendar_add' else t('Send invitation') if d.werkzeug == 'meeting_request' else t('Send draft') }}</button></form>
+  <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/send" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML" class="inline"><button class="primary">{{ t('Save to workspace') if d.server == 'workspace' else t('Add to calendar') if d.werkzeug == 'calendar_add' else t('Send invitation') if d.werkzeug == 'meeting_request' else t('Save change') if d.werkzeug == 'calendar_update' else t('Cancel appointment') if d.werkzeug == 'calendar_cancel' else t('Send draft') }}</button></form>
   {% endif %}
   <form hx-post="/ui/chats/{{ chat_id }}/drafts/{{ d.id }}/discard" hx-target="#draft-{{ d.id }}" hx-swap="outerHTML" class="inline"><button>{{ t('Discard') }}</button></form>
 {% endif %}

@@ -303,7 +303,10 @@ WERKZEUGE = WERKZEUGE + (
             "Einladung mit Zeit, Ort und Text, der Termin steht danach auch "
             "im eigenen Kalender. Heute ist {today}. Teilnehmer als "
             "Mailadressen -- nicht raten; unbekannte Adressen erst "
-            "erfragen. Der Nutzer bestaetigt vor dem Versand."),
+            "erfragen. Alle Teilnehmer in EINE Anfrage. Soll jemand zu "
+            "einem Termin dazukommen, den es schon gibt (auch einem gerade "
+            "verschickten), keine zweite Anfrage, sondern calendar_update. "
+            "Der Nutzer bestaetigt vor dem Versand."),
         "schema": {"type": "object", "properties": dict(
             _TERMIN_FELDER,
             attendees={"type": "string", "description":
@@ -312,6 +315,41 @@ WERKZEUGE = WERKZEUGE + (
                                 "Optionale Teilnehmer, Mailadressen."}),
             "required": ["subject", "start", "attendees"]},
     },
+    {
+        "name": "calendar_update",
+        "beschreibung": (
+            "Einen bestehenden Termin in {label} aendern: Teilnehmer "
+            "dazunehmen oder herausnehmen, Zeit, Ort, Betreff oder Text. "
+            "Fuer 'lade X auch noch ein' und fuer 'leg die Termine "
+            "zusammen' (einen um die Teilnehmer des anderen ergaenzen, den "
+            "anderen mit calendar_cancel absagen). Die Kennung stammt aus "
+            "calendar_events oder meeting_request. Nur die Felder angeben, "
+            "die sich aendern. Heute ist {today}. Die Teilnehmer bekommen "
+            "eine Aktualisierung. Der Nutzer bestaetigt vorher."),
+        "schema": {"type": "object", "properties": dict(
+            {"kennung": {"type": "string"}},
+            **{k: v for k, v in _TERMIN_FELDER.items() if k != "all_day"},
+            add_attendees={"type": "string", "description":
+                           "Mailadressen, die dazukommen, durch Komma."},
+            remove_attendees={"type": "string", "description":
+                              "Mailadressen, die nicht mehr dabei sind."}),
+            "required": ["kennung"]},
+    },
+    {
+        "name": "calendar_cancel",
+        "beschreibung": (
+            "Einen Termin in {label} absagen. Organisiert der Nutzer ihn, "
+            "geht an alle Teilnehmer eine Absage und der Termin verschwindet "
+            "aus dem Kalender; ist er nur eingeladen, geht die Absage an den "
+            "Organisator. Ein eigener Eintrag ohne Teilnehmer wandert in den "
+            "Papierkorb. Die Kennung stammt aus calendar_events oder "
+            "meeting_request. Der Nutzer bestaetigt vorher."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "body": {"type": "string", "description":
+                     "Kurzer Text zur Absage, wahlweise."}},
+            "required": ["kennung"]},
+    },
 )
 
 SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
@@ -319,7 +357,11 @@ SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
 # Writing to a calendar always waits for a person, also in a mailbox that
 # may send on its own: an invitation goes out to people, and an entry in
 # the own calendar at the wrong day is found only when it is too late.
-KALENDERWERKZEUGE = ("calendar_add", "meeting_request")
+KALENDERWERKZEUGE = ("calendar_add", "meeting_request", "calendar_update",
+                     "calendar_cancel")
+
+# Tools that change an appointment that already exists (by its id).
+CHANGE_TOOLS = ("calendar_update", "calendar_cancel")
 
 # How long one message of a thread may be, and the whole thread. The tool
 # loop cuts every result at 8000 characters (pipeline.werkzeuglauf), so
@@ -517,6 +559,10 @@ class Postfach:
             return self._anlegen(a, einladen=False)
         if name == "meeting_request":
             return self._anlegen(a, einladen=True)
+        if name == "calendar_update":
+            return self._update(a)
+        if name == "calendar_cancel":
+            return self._cancel(a)
         if name == "mail_senden":
             return self._senden(a)
         if name == "antwort_senden":
@@ -539,6 +585,10 @@ class Postfach:
             raise Fehler("Anhänge gehen nur mit einer neuen Nachricht (mail_senden).")
         if name not in KALENDERWERKZEUGE:
             return None
+        if name == "calendar_update":
+            return self._update_plan(argumente or {})["preview"]
+        if name == "calendar_cancel":
+            return self._cancel_plan(argumente or {})["preview"]
         return _termin_vorschau(_termin_angaben(argumente or {},
                                                 name == "meeting_request"))
 
@@ -771,18 +821,13 @@ class Postfach:
 
     def _anlegen(self, a, einladen):
         """An entry in the own calendar; with einladen, invitations go out."""
-        from exchangelib import CalendarItem, EWSDate, EWSDateTime
+        from exchangelib import CalendarItem
         from exchangelib.items import SEND_TO_ALL_AND_SAVE_COPY, SEND_TO_NONE
 
         t = _termin_angaben(a, einladen)
         konto = self._verbindung()
         tz = _zeitzone(konto)
-        if t["ganztags"]:
-            beginn = EWSDate(t["beginn"].year, t["beginn"].month, t["beginn"].day)
-            ende = EWSDate(t["ende"].year, t["ende"].month, t["ende"].day)
-        else:
-            beginn, ende = (EWSDateTime(x.year, x.month, x.day, x.hour, x.minute,
-                                        tzinfo=tz) for x in (t["beginn"], t["ende"]))
+        beginn, ende = _ews_times(t, tz)
         try:
             termin = CalendarItem(
                 account=konto, folder=konto.calendar, subject=t["betreff"],
@@ -795,9 +840,212 @@ class Postfach:
         except Exception as e:
             raise Fehler(f"{self.name}: nicht angelegt ({_kurz(e)}).")
         vorschau = _termin_vorschau(t)
+        # The id lets the model change this appointment later
+        # (calendar_update) instead of sending a second invitation.
+        kennung = ""
+        if getattr(termin, "id", None):
+            kennung = f" | Kennung [{remember(self, termin.id)}]"
         if einladen:
-            return f"Einladung verschickt: {vorschau}"
-        return f"Im Kalender eingetragen: {vorschau}"
+            return f"Einladung verschickt: {vorschau}{kennung}"
+        return f"Im Kalender eingetragen: {vorschau}{kennung}"
+
+    # --- CHANGING AND CANCELLING AN APPOINTMENT ---
+
+    def _appointment(self, kennung):
+        """(account, calendar item) for a short id. Raises Fehler."""
+        konto = self._verbindung()
+        lang = _lange_kennung(self._bereich(), kennung)
+        try:
+            return konto, konto.calendar.get(id=lang)
+        except Exception as e:
+            raise Fehler(f"{self.name}: Termin nicht gefunden ({_kurz(e)}).")
+
+    def _organizes(self, item):
+        """Is the signed-in mailbox the organizer of this appointment?"""
+        response = str(getattr(item, "my_response_type", "") or "")
+        if response:
+            return response == "Organizer"
+        org = getattr(item, "organizer", None)
+        address = (getattr(org, "email_address", "") or "").lower() if org else ""
+        return not address or address == self.adresse().lower()
+
+    def _update_plan(self, a):
+        """What calendar_update would change. Raises Fehler.
+
+        Checked before the draft is shown (pruefe_entwurf) and again when
+        it runs: the person confirms exactly what the preview says.
+        """
+        konto, item = self._appointment(a.get("kennung"))
+        if getattr(item, "is_cancelled", False):
+            raise Fehler("Der Termin ist abgesagt und laesst sich nicht mehr aendern.")
+        if not self._organizes(item):
+            raise Fehler("Diesen Termin organisiert jemand anderes; aendern kann "
+                         "ihn nur der Organisator.")
+        tz = _zeitzone(konto)
+        all_day = bool(getattr(item, "is_all_day", False))
+        old_start, old_end = _local_text(item.start, item.end, tz, all_day)
+        old = {"subject": (getattr(item, "subject", "") or "").strip() or "(ohne Betreff)",
+               "start": old_start, "end": old_end, "all_day": all_day,
+               "location": getattr(item, "location", "") or ""}
+
+        merged = dict(old)
+        for key in ("subject", "location", "body"):
+            if a.get(key) is not None and (key != "subject" or str(a[key]).strip()):
+                merged[key] = a[key]
+        if a.get("start"):
+            new_start = _zeitpunkt(a["start"], "start")
+            merged["start"] = a["start"]
+            merged["all_day"] = not isinstance(new_start, datetime.datetime)
+            merged.pop("end", None)
+            if a.get("end"):
+                merged["end"] = a["end"]
+            elif a.get("duration"):
+                merged["duration"] = a["duration"]
+            elif merged["all_day"] and all_day:
+                days = (_tag(old_end) - _tag(old_start)).days
+                merged["end"] = f"{new_start + datetime.timedelta(days=days):%Y-%m-%d}"
+            elif not merged["all_day"] and not all_day:
+                merged["duration"] = max(5, int((item.end - item.start).total_seconds() // 60))
+        elif a.get("end"):
+            merged["end"] = a["end"]
+        elif a.get("duration") and not all_day:
+            merged.pop("end", None)
+            merged["duration"] = a["duration"]
+        t = _termin_angaben(merged, False)
+
+        changed = set()
+        if " ".join(str(a.get("subject") or "").split()) not in ("", old["subject"]):
+            changed.add("subject")
+        if a.get("location") is not None and t["ort"] != " ".join(old["location"].split()):
+            changed.add("location")
+        if a.get("body") is not None:
+            changed.add("body")
+        if a.get("start") or a.get("end") or a.get("duration"):
+            try:
+                was = _termin_angaben(old, False)
+            except Fehler:
+                was = None
+            if was is None or (was["beginn"], was["ende"], was["ganztags"]) != \
+                    (t["beginn"], t["ende"], t["ganztags"]):
+                changed.add("time")
+
+        required = _emails(getattr(item, "required_attendees", None))
+        optional = _emails(getattr(item, "optional_attendees", None))
+        present = {x.lower() for x in required + optional}
+        add = _liste(a.get("add_attendees"))
+        wrong = [x for x in add if not _MAIL.fullmatch(x)]
+        if wrong:
+            raise Fehler("Keine Mailadresse: " + ", ".join(wrong)
+                         + ". Adressen nicht raten -- beim Nutzer nachfragen.")
+        added = []
+        for x in add:
+            if x.lower() not in present and x.lower() not in {y.lower() for y in added}:
+                added.append(x)
+        remove = {x.lower() for x in _liste(a.get("remove_attendees"))}
+        missing = sorted(remove - present)
+        if missing:
+            raise Fehler("Nicht unter den Teilnehmern: " + ", ".join(missing) + ".")
+        if added or remove:
+            changed.add("attendees")
+        if not changed:
+            raise Fehler("Am Termin aendert sich nichts. Nur die Felder angeben, "
+                         "die anders werden sollen.")
+
+        new_required = [x for x in required if x.lower() not in remove] + added
+        new_optional = [x for x in optional if x.lower() not in remove]
+        shown = dict(t, teilnehmer=new_required, optional=new_optional)
+        preview = "Ändern: " + _termin_vorschau(shown)
+        if added:
+            preview += " | neu dabei: " + ", ".join(added)
+        if remove:
+            preview += " | nicht mehr dabei: " + ", ".join(sorted(remove))
+        if "time" in changed:
+            preview += " | bisher: " + _zeitspanne(item, tz)
+        return {"item": item, "tz": tz, "t": t, "changed": changed,
+                "added": added, "removed": remove, "preview": preview,
+                "people": bool(new_required or new_optional or remove)}
+
+    def _update(self, a):
+        from exchangelib.items import (SEND_TO_ALL_AND_SAVE_COPY,
+                                       SEND_TO_CHANGED_AND_SAVE_COPY, SEND_TO_NONE)
+
+        p = self._update_plan(a)
+        item, t, changed = p["item"], p["t"], p["changed"]
+        fields = []
+        if "subject" in changed:
+            item.subject = t["betreff"]
+            fields.append("subject")
+        if "location" in changed:
+            item.location = t["ort"] or None
+            fields.append("location")
+        if "body" in changed:
+            item.body = t["text"] or None
+            fields.append("body")
+        if "time" in changed:
+            item.start, item.end = _ews_times(t, p["tz"])
+            item.is_all_day = t["ganztags"]
+            fields += ["start", "end", "is_all_day"]
+        if "attendees" in changed:
+            # The attendees who stay keep their objects, and with them
+            # their answers; the new ones come as addresses.
+            keep = [x for x in (getattr(item, "required_attendees", None) or [])
+                    if _email(x).lower() not in p["removed"]]
+            item.required_attendees = (keep + p["added"]) or None
+            item.optional_attendees = [
+                x for x in (getattr(item, "optional_attendees", None) or [])
+                if _email(x).lower() not in p["removed"]] or None
+            fields += ["required_attendees", "optional_attendees"]
+        if not p["people"]:
+            send = SEND_TO_NONE
+        elif changed == {"attendees"}:
+            send = SEND_TO_CHANGED_AND_SAVE_COPY    # only those added or removed
+        else:
+            send = SEND_TO_ALL_AND_SAVE_COPY
+        try:
+            item.save(update_fields=fields, send_meeting_invitations=send)
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht geaendert ({_kurz(e)}).")
+        return "Termin geaendert: " + p["preview"].split(": ", 1)[1]
+
+    def _cancel_plan(self, a):
+        konto, item = self._appointment(a.get("kennung"))
+        if getattr(item, "is_cancelled", False):
+            raise Fehler("Der Termin ist schon abgesagt.")
+        tz = _zeitzone(konto)
+        people = (_emails(getattr(item, "required_attendees", None))
+                  + _emails(getattr(item, "optional_attendees", None)))
+        organizer = self._organizes(item)
+        mode = "cancel" if organizer and people else "trash" if organizer else "decline"
+        teile = [(getattr(item, "subject", "") or "").strip() or "(ohne Betreff)",
+                 _zeitspanne(item, tz)]
+        if getattr(item, "location", ""):
+            teile.append(f"Ort: {item.location}")
+        if mode == "cancel":
+            teile.append("Absage an: " + ", ".join(people))
+        elif mode == "decline":
+            teile.append("Absage an den Organisator "
+                         + (_person(getattr(item, "organizer", None)) or ""))
+        else:
+            teile.append("in den Papierkorb, niemand wird benachrichtigt")
+        return {"item": item, "mode": mode, "preview": "Absagen: " + " | ".join(teile)}
+
+    def _cancel(self, a):
+        from exchangelib.items import SEND_TO_NONE
+
+        p = self._cancel_plan(a)
+        item, text = p["item"], str(a.get("body") or "").strip()
+        try:
+            if p["mode"] == "cancel":
+                # Exchange sends the cancellation and takes the meeting out
+                # of the organizer's calendar.
+                item.cancel(**({"new_body": text} if text else {}))
+            elif p["mode"] == "decline":
+                item.decline(**({"body": text} if text else {}))
+            else:
+                item.move_to_trash(send_meeting_cancellations=SEND_TO_NONE)
+        except Exception as e:
+            raise Fehler(f"{self.name}: nicht abgesagt ({_kurz(e)}).")
+        return "Abgesagt: " + p["preview"].split(": ", 1)[1]
 
     # --- SENDEN ---
     #
@@ -874,6 +1122,24 @@ class Postfach:
 
         a = dict(argumente or {})
         konto = self._verbindung()
+        if name in CHANGE_TOOLS:
+            try:
+                item = konto.calendar.get(id=_lange_kennung(self._bereich(), a.get("kennung")))
+            except Fehler:
+                return False
+            except Exception:
+                # Not there any more: cancelled and taken out.
+                return name == "calendar_cancel"
+            if name == "calendar_cancel":
+                return bool(getattr(item, "is_cancelled", False)) or \
+                    str(getattr(item, "my_response_type", "") or "") == "Decline"
+            present = {x.lower() for x in _emails(getattr(item, "required_attendees", None))
+                       + _emails(getattr(item, "optional_attendees", None))}
+            add = {x.lower() for x in _liste(a.get("add_attendees"))}
+            remove = {x.lower() for x in _liste(a.get("remove_attendees"))}
+            # Only a change of attendees can be seen afterwards; anything
+            # else stays "unclear" and the person looks.
+            return bool(add or remove) and add <= present and not remove & present
         if name in KALENDERWERKZEUGE:
             t = _termin_angaben(a, name == "meeting_request")
             tz = _zeitzone(konto)
@@ -1183,6 +1449,43 @@ def _termin_angaben(a, einladen):
             "ort": " ".join(str(a.get("location") or "").split()),
             "text": str(a.get("body") or "").strip(),
             "teilnehmer": teilnehmer, "optional": optional}
+
+
+_MAIL = re.compile(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+")
+
+
+def _ews_times(t, tz):
+    """(start, end) of checked fields as Exchange wants them."""
+    from exchangelib import EWSDate, EWSDateTime
+    if t["ganztags"]:
+        return tuple(EWSDate(x.year, x.month, x.day) for x in (t["beginn"], t["ende"]))
+    return tuple(EWSDateTime(x.year, x.month, x.day, x.hour, x.minute, tzinfo=tz)
+                 for x in (t["beginn"], t["ende"]))
+
+
+def _local_text(start, end, tz, all_day):
+    """('JJJJ-MM-TT HH:MM', ...) of a stored appointment, as the tools take
+    them. All day: the first and the LAST day (Exchange stores the day
+    after)."""
+    def day(v):
+        if hasattr(v, "hour"):
+            v = v.astimezone(tz)
+        return datetime.date(v.year, v.month, v.day)
+    if all_day:
+        last = day(end) - datetime.timedelta(days=1)
+        first = day(start)
+        return f"{first:%Y-%m-%d}", f"{max(first, last):%Y-%m-%d}"
+    s, e = start.astimezone(tz), end.astimezone(tz)
+    return f"{s:%Y-%m-%d %H:%M}", f"{e:%Y-%m-%d %H:%M}"
+
+
+def _email(attendee):
+    box = getattr(attendee, "mailbox", None)
+    return (getattr(box, "email_address", "") or "").strip()
+
+
+def _emails(attendees):
+    return [x for x in (_email(a) for a in (attendees or [])) if x]
 
 
 def _termin_vorschau(t):

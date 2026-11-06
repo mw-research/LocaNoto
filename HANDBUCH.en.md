@@ -325,6 +325,14 @@ date and time → check → **Add to calendar** or **Send invitation**.
 LocaNoto knows today's date and the weekdays of the surrounding weeks;
 times are in the installation's time zone (default Europe/Berlin).
 
+Existing appointments can be changed and cancelled the same way: "Invite
+meier@firma.de as well", "Move the site meeting to 2 pm", "Merge the two
+appointments on 11 November", "Cancel the jour fixe". The draft names what
+changes and who gets a message → **Save change** or **Cancel appointment**.
+New attendees get an invitation; a new time sends an update to everyone.
+Only the organizer can change an appointment; for someone else's, the
+cancellation goes to the organizer.
+
 ### How does LocaNoto notify me of new mail?
 
 With a mailbox connected and LocaNoto open in a browser tab, LocaNoto
