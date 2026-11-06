@@ -85,10 +85,10 @@ try:
     _c, mug = sqldb.fuehre_aus(
         "SELECT Lager, Lagerplatz, Menge FROM dbo.Lagerplaetze WHERE ArtikelNr = N'WA-104'",
         zugang=ACCESS)
-    check("scavenger hunt: WA-104 lies with Prof. Schiffler",
-          [tuple(r) for r in mug] == [("Prof. Schiffler", "persönlich", 1)], mug)
+    check("scavenger hunt: WA-104 lies with Prof. Andreas Schiffler",
+          [tuple(r) for r in mug] == [("Prof. Andreas Schiffler", "persönlich", 1)], mug)
 except Exception as e:
-    check("scavenger hunt: WA-104 lies with Prof. Schiffler", False, f"{type(e).__name__}: {e}")
+    check("scavenger hunt: WA-104 lies with Prof. Andreas Schiffler", False, f"{type(e).__name__}: {e}")
 try:
     _c, docs = sqldb.fuehre_aus(
         "SELECT Dateiname, Datei FROM dbo.Dokumente WHERE RechnungsNr = 2025103", zugang=ACCESS)

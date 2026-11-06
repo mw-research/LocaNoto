@@ -22,15 +22,16 @@ Rundumdruck. Die Nummern sind die Artikelnummern des Lieferanten.
 | KM-4718 | Würzburger Residenz, Strichzeichnung | 20 |
 | KM-4719 | Skyline Schweinfurt bei Nacht | 20 |
 | KM-4721 | Schriftzug „Ingenieure trinken Kaffee“ | 40 |
-| KM-4723 | Zahnrad-Muster, silber | 15 |
+| KM-4723 | Zahnrad-Muster, silber | 1 |
 | KM-4726 | Erdmännchen mit Schutzhelm (Comic) | 1 |
-| KM-4727 | Schriftzug „Kein Morgenmensch“ | 25 |
+| KM-4727 | Schriftzug „Kein Morgenmensch“ | 1 |
 | KM-4730 | Messe-Edition „Druckluft 2026“ | 60 |
 | KM-4732 | Jubiläum „25 Jahre Demo GmbH“, Goldrand | 1 |
 
-Die drei Motive mit Menge 1 sind Einzelstücke: das Erdmännchen ist der
-Musterdruck des Lieferanten, die Jubiläumstasse geht an die
-Geschäftsführung, die DIG:IT-KMU-Tasse ist der Preis beim Demo-Event.
+Die fünf Motive mit Menge 1 sind Einzelstücke: Zahnrad, Erdmännchen und
+„Kein Morgenmensch“ sind Musterdrucke des Lieferanten, die Jubiläumstasse
+geht an die Geschäftsführung, die DIG:IT-KMU-Tasse ist der Preis beim
+Demo-Event.
 
 ## Wareneingang
 

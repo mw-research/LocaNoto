@@ -121,7 +121,7 @@ Wo der Bestand eines Artikels liegt. 29 Zeilen.
 | Spalte | Typ | Bedeutung |
 |---|---|---|
 | ArtikelNr | nvarchar(20) | Artikel → Artikel |
-| Lager | nvarchar(30) | Hauptlager oder Außenlager |
+| Lager | nvarchar(30) | Hauptlager, Außenlager oder die Person bzw. Stelle, die den Artikel verwahrt |
 | Lagerplatz | nvarchar(20) | Regal und Fach, z. B. R03-F2 |
 | Menge | int | Menge an diesem Platz; die Summe je Artikel ist der Lagerbestand |
 

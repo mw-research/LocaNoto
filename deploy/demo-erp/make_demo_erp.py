@@ -83,7 +83,7 @@ TABLES = [
     ]),
     ("Lagerplaetze", "Wo der Bestand eines Artikels liegt.", [
         ("ArtikelNr", "nvarchar(20) NOT NULL REFERENCES dbo.Artikel(ArtikelNr)", "Artikel"),
-        ("Lager", "nvarchar(30) NOT NULL", "Hauptlager oder Außenlager"),
+        ("Lager", "nvarchar(30) NOT NULL", "Hauptlager, Außenlager oder die Person bzw. Stelle, die den Artikel verwahrt"),
         ("Lagerplatz", "nvarchar(20) NOT NULL", "Regal und Fach, z. B. R03-F2"),
         ("Menge", "int NOT NULL", "Menge an diesem Platz; die Summe je Artikel ist der Lagerbestand"),
     ]),
@@ -193,25 +193,24 @@ ITEMS = [
     ("WS-KO", "Wartungsset Kompressor", "Service", "Set", 189.00, 14, 5),
     ("RE-28", "Edelstahlrohr 28 mm, 1 m", "Rohrleitung", "m", 18.75, 420, 200),
     ("PS-01", "Prüfservice Druckbehälter (Pauschale)", "Service", "Stk", 320.00, 999, 0),
-    # The scavenger hunt (SCHNITZELJAGD.md): the names say nothing about the
-    # motif. Which print is which motif only the supplier's numbers tell,
-    # and those only the two hunt documents.
-] + [(f"WA-{101 + i}", f"Kaffeebecher 300 ml, Druck {chr(65 + i)}", "Werbemittel", "Stk",
-        4.90, stock, 0)
-       for i, stock in enumerate([12, 1, 14, 1, 48, 18, 9, 1, 35, 20, 16, 31])]
+    # The scavenger hunt (SCHNITZELJAGD.md): the database holds only the
+    # internal number, the place and the count -- no mug, no motif. Which
+    # number is which motif only the two hunt documents tell.
+] + [(f"WA-{101 + i}", "Werbeartikel", "Werbemittel", "Stk", 4.90, stock, 0)
+     for i, stock in enumerate([12, 1, 14, 1, 48, 18, 1, 1, 35, 1, 16, 31])]
 # Promotional items are not sold: orders take only the rest (and the
 # random sample stays the same as before the mugs came in).
 SALE_ITEMS = [i for i in ITEMS if i[2] != "Werbemittel"]
-# Where each mug lies. Three single pieces with three people, the rest
-# with people or in stores: neither the place nor the stock of 1 gives
-# the DIG:IT mug (WA-104) away.
+# Where each one lies. Five single pieces with five people of the DIG:IT
+# team: four decoys for whoever skips the article match, one prize
+# (WA-104). The rest with other people or in stores.
 PROMO_PLACES = {
-    "WA-101": ("Hauptlager", "R09-F1"), "WA-102": ("Frau Haas", "persönlich"),
-    "WA-103": ("Empfang", "Theke"), "WA-104": ("Prof. Schiffler", "persönlich"),
+    "WA-101": ("Frau Haas", "persönlich"), "WA-102": ("Vladyslav Borysenko", "persönlich"),
+    "WA-103": ("Empfang", "Theke"), "WA-104": ("Prof. Andreas Schiffler", "persönlich"),
     "WA-105": ("Messelager", "M-02"), "WA-106": ("Herr Lang", "persönlich"),
-    "WA-107": ("Hauptlager", "R09-F2"), "WA-108": ("Prof. Krämer", "persönlich"),
-    "WA-109": ("Empfang", "Vitrine"), "WA-110": ("Dr. Vogt", "persönlich"),
-    "WA-111": ("Hauptlager", "R09-F3"), "WA-112": ("Frau Ott", "persönlich"),
+    "WA-107": ("Rodolfo Cacacho", "persönlich"), "WA-108": ("Markus Wilhelm", "persönlich"),
+    "WA-109": ("Empfang", "Vitrine"), "WA-110": ("Prof. Bastian Engelmann", "persönlich"),
+    "WA-111": ("Dr. Vogt", "persönlich"), "WA-112": ("Frau Ott", "persönlich"),
 }
 
 SUPPLIERS = [
