@@ -46,7 +46,20 @@ kubectl -n $NS get secret demo-erp -o jsonpath='{.data.READ_PASSWORD}' | base64 
 
 Die Datumsangaben sind relativ zum Tag der Befüllung. Neu befüllen (setzt die
 Datenbank zurück): `kubectl -n $NS delete job demo-erp-seed` und
-`kubectl -n $NS apply -f demo-erp.yaml`.
+`kubectl -n $NS apply -f demo-erp.yaml`. Das Lesekonto entsteht dabei mit dem
+Passwort aus dem Secret neu; der in LocaNoto hinterlegte Zugang bleibt gültig.
+
+Prüfen, sobald der Zugang in LocaNoto hinterlegt ist (Schritt 2) – im Pod
+von LocaNoto, mit dem dort gespeicherten Zugang, ohne Secret und ohne
+Passwort auf der Befehlszeile:
+
+```bash
+kubectl -n $NS cp check_demo_erp.py <pod>:/tmp/check.py
+kubectl -n $NS exec <pod> -- python /tmp/check.py
+```
+
+Bei mehreren Arbeitsbereichen mit DemoERP-Zugang wählt `DEMO_ERP_ROOM=<id>`
+einen aus.
 
 ## 2. In LocaNoto hinterlegen
 

@@ -1,11 +1,16 @@
 """Check the demo ERP the way LocaNoto uses it -- with LocaNoto's own code.
 
-    python check_demo_erp.py          (inside the LocaNoto image)
+    python check_demo_erp.py          (inside a running LocaNoto pod)
 
-Reads DEMO_ERP_PASSWORD (the read-only login) and connects through
-sqldb.py, as a workspace's database account would: reads the schema,
-runs the queries behind the demo questions, and makes sure the account
-cannot change anything. Exit code 0 when all holds.
+Connects through sqldb.py, as a workspace's database account would: reads
+the schema, runs the queries behind the demo questions, and makes sure the
+account cannot change anything. Exit code 0 when all holds.
+
+The login: by default the DemoERP access LocaNoto already stores for a
+workspace (Admin -> Databases, with a shared account) -- no secret is read
+and no password goes on a command line. DEMO_ERP_ROOM picks the workspace
+if there are several. DEMO_ERP_PASSWORD (the read-only login) is for a pod
+without stored access, as in CI.
 """
 import os
 import sys
@@ -13,9 +18,27 @@ import sys
 sys.path.insert(0, "/app")
 import sqldb  # noqa: E402
 
-ACCESS = {"server": os.getenv("DEMO_ERP_SERVER", "demo-erp"), "port": 1433,
-          "datenbank": "DemoERP", "benutzer": "locanoto_lesen",
-          "passwort": os.environ["DEMO_ERP_PASSWORD"]}
+
+def _access():
+    password = os.getenv("DEMO_ERP_PASSWORD")
+    if password:
+        return {"server": os.getenv("DEMO_ERP_SERVER", "demo-erp"), "port": 1433,
+                "datenbank": "DemoERP", "benutzer": "locanoto_lesen", "passwort": password}
+    import sqlquellen
+    want = os.getenv("DEMO_ERP_ROOM", "").strip()
+    for entry in sqlquellen.liste():
+        room = entry.get("raum")
+        if want and room != want:
+            continue
+        stored = sqlquellen.zugang(room) or {}
+        if stored.get("datenbank") == "DemoERP" and stored.get("passwort"):
+            print(f"login: stored access of workspace '{room}' ({stored.get('benutzer')})")
+            return dict(stored, port=int(stored.get("port") or sqldb.SQL_PORT))
+    sys.exit("No DemoERP access with a shared account stored in LocaNoto "
+             "(Admin -> Databases), and DEMO_ERP_PASSWORD is not set.")
+
+
+ACCESS = _access()
 
 failures = []
 
@@ -116,9 +139,9 @@ for name, sql in QUESTIONS.items():
 
 # The account itself must refuse writing -- below LocaNoto's own SELECT check.
 import pymssql  # noqa: E402
-con = pymssql.connect(server=ACCESS["server"], user=ACCESS["benutzer"],
-                      password=ACCESS["passwort"], database=ACCESS["datenbank"],
-                      port=ACCESS["port"], login_timeout=10)
+con = pymssql.connect(server=ACCESS.get("server") or sqldb.SQL_SERVER or "demo-erp",
+                      user=ACCESS["benutzer"], password=ACCESS["passwort"],
+                      database=ACCESS["datenbank"], port=ACCESS["port"], login_timeout=10)
 try:
     con.cursor().execute("UPDATE dbo.Artikel SET Lagerbestand = 0")
     con.commit()
