@@ -40,7 +40,7 @@ SCHICHT = {
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
         "aufnehmen",
-        "lesen", "tables", "textutils", "vision", "bildtext", "sqldb",
+        "lesen", "tables", "textutils", "vision", "bildtext", "sqldb", "db_files",
         "sqlpruefung", "sqlquellen", "chats", "feedback", "notzugang",
         "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
         "postfach", "ocr", "answering", "doc_actions", "web_sources",

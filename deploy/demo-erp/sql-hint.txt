@@ -5,3 +5,4 @@ Kunden werden ueber Firma gesucht (LIKE '%Meier%'), Anlagen ueber AnlagenNr (AN-
 Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR.
 Rechnung offen = Status <> 'bezahlt'; Restbetrag = Betrag - Bezahlt; ueberfaellig = offen und Faellig vor heute. dbo.v_OffeneRechnungen enthaelt sie mit Firma, Restbetrag und TageUeberfaellig.
 Wo ein Artikel liegt: dbo.Lagerplaetze (Lager, Lagerplatz, Menge). Offene Bestellungen beim Lieferanten: dbo.Bestellungen mit Status <> 'geliefert', erwartet am ErwartetAm.
+Rechnungen und Datenblaetter als PDF: dbo.Dokumente (Art, RechnungsNr bzw. ArtikelNr, Dateiname, Datei). Die Spalte Datei nur auswaehlen, wenn das Dokument gefragt ist.

@@ -63,6 +63,7 @@ import attachments
 import budget
 import chats
 import created_files
+import db_files
 import feedback
 import llm
 import mcp
@@ -352,12 +353,27 @@ def _sql_block(user, req, question, model, history_text):
                 first, query, columns, rows = query, wider, columns2, rows2
         except Exception:
             pass
+    # Files in binary columns, released paths and links (db_files.py)
+    try:
+        rows, found = db_files.collect(user, columns, rows)
+    except Exception as e:
+        found = db_files.Found()
+        found.notes.append(f"Dokumente nicht gelesen: {type(e).__name__}")
     table = sqldb.als_tabelle(columns, rows)
     info = dict(where, query=query, account=(access or {}).get("benutzer", ""),
                 rows=len(rows))
     if first:
         info["first_query"] = first
-    return ([("datenbank_abfrage", query), ("datenbank_ergebnis", table)], info)
+    blocks = [("datenbank_abfrage", query), ("datenbank_ergebnis", table)]
+    for name, text in found.texts:
+        blocks.append(("datenbank_dokument", f"{name}\n{text}"))
+    if found.files:
+        info["files"] = found.files
+    if found.links:
+        info["links"] = found.links
+    if found.notes:
+        info["file_notes"] = found.notes[:10]
+    return blocks, info
 
 
 # A query that looks for something by its name (LIKE, a word in quotes --
@@ -384,6 +400,15 @@ def sql_note(info):
         text += ("Unten stehen <datenbank_abfrage> und <datenbank_ergebnis>: das "
                  "echte, aktuelle Ergebnis dieser Abfrage. Antworte daraus und sage, "
                  "dass die Angaben aus der Datenbank stammen.\n")
+        if info.get("files"):
+            text += ("Dokumente aus der Datenbank liegen dem Nutzer unter der Antwort "
+                     "zum Oeffnen bereit: " + ", ".join(info["files"]) + ". Sage ihm das. "
+                     "Den Text von PDFs findest du in <datenbank_dokument>.\n")
+        if info.get("links"):
+            text += ("Links aus der Datenbank stehen ebenfalls unter der Antwort: "
+                     + ", ".join(info["links"][:5]) + ".\n")
+        if info.get("file_notes"):
+            text += ("Nicht angeboten: " + "; ".join(info["file_notes"]) + ".\n")
     elif info.get("structure"):
         text += ("Zu dieser Frage lief keine Abfrage; unten steht in "
                  "<datenbank_aufbau> der Aufbau der Datenbank (Tabellen und "
@@ -937,7 +962,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
     if sql_info:
         # The query stays with the answer: it is what the numbers rest on,
         # as a source page is for a quote.
-        message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason", "none")
+        message["sql"] = {k: sql_info[k] for k in ("query", "rows", "reason", "none", "files", "links")
                           if k in sql_info}
     messages.append(message)
     if run:

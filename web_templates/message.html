@@ -27,6 +27,9 @@
     <summary>{{ t('Database query') }} ({% if m.sql.rows is defined %}{{ m.sql.rows }} {{ t('rows') }}{% else %}{{ t(m.sql.reason) }}{% endif %})</summary>
     <pre>{{ m.sql.query }}</pre>
   </details>
+  {% if m.sql.files or m.sql.links %}
+  <p class="files-created">{{ t('Documents from the database') }}: {% for f in m.sql.files or [] %}<a href="/api/v1/files/{{ f|urlencode }}?inline=1" target="_blank" rel="noopener">{{ f }}</a>{{ ', ' if not loop.last }}{% endfor %}{% for u in m.sql.links or [] %}{{ ' · ' if (m.sql.files or not loop.first) }}<a href="{{ u }}" target="_blank" rel="noopener noreferrer">{{ u|truncate(70) }}</a>{% endfor %}</p>
+  {% endif %}
   {% elif m.sql and m.sql.reason and not m.sql.none and 'does not see the question' not in m.sql.reason %}
   <p class="muted">{{ t('Database') }}: {{ t(m.sql.reason) }}</p>
   {% endif %}

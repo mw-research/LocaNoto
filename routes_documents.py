@@ -300,7 +300,12 @@ def create_note(body: Note, p: Principal = Depends(principal)):
 _MEDIA = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          "pdf": "application/pdf"}
+          "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg",
+          "jpeg": "image/jpeg", "gif": "image/gif", "tif": "image/tiff",
+          "tiff": "image/tiff", "zip": "application/zip"}
+# Shown in the browser on ?inline=1 (a document from the database); never
+# HTML or SVG, which would run in LocaNoto's origin.
+_INLINE = {"pdf", "png", "jpg", "jpeg", "gif"}
 
 
 @router.get("/files", tags=["documents"])
@@ -310,16 +315,18 @@ def created_file_list(p: Principal = Depends(principal)):
 
 
 @router.get("/files/{name}", tags=["documents"])
-def created_file(name: str, p: Principal = Depends(principal)):
+def created_file(name: str, inline: bool = False, p: Principal = Depends(principal)):
+    """inline=1 shows a PDF or an image in the browser instead of saving it."""
     from urllib.parse import quote
     try:
         data = created_files.read(p.name, name)
     except (FileNotFoundError, ValueError):
         raise HTTPException(404, "No such file.")
     ext = name.rsplit(".", 1)[-1].lower()
+    how = "inline" if inline and ext in _INLINE else "attachment"
     return Response(content=data, media_type=_MEDIA.get(ext, "application/octet-stream"),
-                    headers={"Content-Disposition":
-                             f"attachment; filename*=UTF-8''{quote(name)}"})
+                    headers={"Content-Disposition": f"{how}; filename*=UTF-8''{quote(name)}",
+                             "X-Content-Type-Options": "nosniff"})
 
 
 @router.delete("/files/{name}", tags=["documents"])

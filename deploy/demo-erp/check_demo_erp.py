@@ -30,7 +30,7 @@ schema = sqldb.lade_schema(ACCESS)
 check("schema readable with all tables and the view",
       all(f"dbo.{t}(" in schema for t in ("Kunden", "Lieferanten", "Artikel", "Auftraege",
                                           "Auftragspositionen", "Rechnungen", "Lagerplaetze",
-                                          "Bestellungen", "Anlagen", "Pruefungen",
+                                          "Bestellungen", "Dokumente", "Anlagen", "Pruefungen",
                                           "Reklamationen", "v_OffeneAuftraege",
                                           "v_OffeneRechnungen")), schema)
 check("schema carries example values", "Beispiele:" in schema, schema[:500])
@@ -81,6 +81,14 @@ QUESTIONS = {
 expected_rows = {"open orders of Meier GmbH": 3, "inspections due in the next 30 days": 3,
                  "open complaints with their order": 3, "open invoices of Meier GmbH": 2,
                  "ordered from suppliers and not yet in": 3}
+try:
+    _c, docs = sqldb.fuehre_aus(
+        "SELECT Dateiname, Datei FROM dbo.Dokumente WHERE RechnungsNr = 2025103", zugang=ACCESS)
+    check("invoice 2025103 comes back as a whole PDF",
+          len(docs) == 1 and bytes(docs[0][1]).startswith(b"%PDF")
+          and bytes(docs[0][1]).rstrip().endswith(b"%%EOF"), docs[:1])
+except Exception as e:
+    check("invoice 2025103 comes back as a whole PDF", False, f"{type(e).__name__}: {e}")
 try:
     _c, wrong = sqldb.fuehre_aus(
         "SELECT a.ArtikelNr FROM dbo.Artikel a JOIN dbo.Lagerplaetze l "

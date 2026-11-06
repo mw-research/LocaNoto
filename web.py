@@ -193,7 +193,7 @@ TEXTS = {
     "personal (everyone signs in with their own account)":
         "persönlich (jeder meldet sich mit seinem Konto an)",
     "Only for shared mailboxes": "Nur für Funktionspostfächer",
-    "Search users": "Benutzer suchen", "users": "Benutzer", "Created": "Erstellt",
+    "Search users": "Benutzer suchen", "users": "Benutzer", "Created": "Erstellt", "Documents from the database": "Dokumente aus der Datenbank",
     "Web search allowed": "Websuche erlaubt", "Web search blocked": "Websuche gesperrt",
     "Block": "Sperren", "Allow": "Erlauben",
     "Not searched with web search (not allowed there)":

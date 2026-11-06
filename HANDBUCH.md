@@ -265,6 +265,12 @@ Chat unter „Arbeitsbereiche · Modell“ **Datenbank**.
   erreichbar, Anmeldung abgelehnt …); die Antwort kommt dann nur aus den
   Dokumenten.
 
+**Dokumente aus der Datenbank:** „Zeig mir die Rechnung 2025103“, „das
+Datenblatt vom Kugelhahn“. Liegt das Dokument in der Datenbank oder in einem
+freigegebenen Ordner, steht es unter der Antwort unter **Dokumente aus der
+Datenbank**; PDFs und Bilder öffnen im Browser. Nach dem Inhalt fragen geht
+auch: „Was steht auf der Rechnung 2025103?“
+
 **Eigenes SQL-Login** (klassische Oberfläche: **Mein Datenbankzugang**): **Einstellungen** → **Meine Datenbanken** →
 Benutzer und Passwort, die du vom Datenbank-Admin bekommen hast →
 **Verbinden**. Abfragen laufen dann mit deinen Rechten in der Datenbank.

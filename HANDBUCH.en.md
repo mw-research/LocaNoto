@@ -255,6 +255,12 @@ If a database is set up for one of your workspaces, the chat shows
 - "No database connection: …" → names the reason (server not reachable,
   login refused, …); the answer then comes from the documents only.
 
+**Documents from the database:** "Show me invoice 2025103", "the data sheet
+of the ball valve". If the document lies in the database or in a released
+folder, it is listed under the answer under **Documents from the database**;
+PDFs and images open in the browser. Asking about the content works too:
+"What is on invoice 2025103?"
+
 **Own SQL login** (classic interface: **My database access**): **Settings** → **My databases** → the user and password
 your database admin gave you → **Connect**. Queries then run with your
 rights in the database. The login stays only in the browser session. If

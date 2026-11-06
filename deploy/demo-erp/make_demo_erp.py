@@ -14,6 +14,7 @@ database and its description cannot drift apart. The sample data is
 fictitious and deterministic. Dates are relative to the day the job runs
 (GETDATE()), so "due in the next 30 days" always finds something.
 """
+import io
 import os
 import random
 
@@ -96,6 +97,14 @@ TABLES = [
         ("ErwartetAm", "date NOT NULL", "zugesagter Liefertag"),
         ("Status", "nvarchar(20) NOT NULL", "bestellt, teilgeliefert oder geliefert"),
     ]),
+    ("Dokumente", "Belege als Datei: Rechnungen und Datenblätter als PDF.", [
+        ("DokNr", "int NOT NULL PRIMARY KEY", "Dokumentnummer"),
+        ("Art", "nvarchar(30) NOT NULL", "Rechnung oder Datenblatt"),
+        ("RechnungsNr", "int NULL REFERENCES dbo.Rechnungen(RechnungsNr)", "zugehörige Rechnung"),
+        ("ArtikelNr", "nvarchar(20) NULL REFERENCES dbo.Artikel(ArtikelNr)", "zugehöriger Artikel"),
+        ("Dateiname", "nvarchar(150) NOT NULL", "Name der Datei"),
+        ("Datei", "varbinary(max) NOT NULL", "die Datei selbst (PDF)"),
+    ]),
     ("Anlagen", "Anlagen beim Kunden, die wir prüfen und warten.", [
         ("AnlagenNr", "nvarchar(20) NOT NULL PRIMARY KEY", "Anlagennummer, z. B. AN-0003"),
         ("KundenNr", "int NOT NULL REFERENCES dbo.Kunden(KundenNr)", "Betreiber der Anlage"),
@@ -152,7 +161,8 @@ Pruefart in dbo.Pruefungen: A = aeussere, I = innere, F = Festigkeitspruefung. F
 Kunden werden ueber Firma gesucht (LIKE '%Meier%'), Anlagen ueber AnlagenNr (AN-0001) oder Bezeichnung.
 Positionswert = Menge * Einzelpreis * (100 - RabattProzent) / 100. Preise netto in EUR.
 Rechnung offen = Status <> 'bezahlt'; Restbetrag = Betrag - Bezahlt; ueberfaellig = offen und Faellig vor heute. dbo.v_OffeneRechnungen enthaelt sie mit Firma, Restbetrag und TageUeberfaellig.
-Wo ein Artikel liegt: dbo.Lagerplaetze (Lager, Lagerplatz, Menge). Offene Bestellungen beim Lieferanten: dbo.Bestellungen mit Status <> 'geliefert', erwartet am ErwartetAm."""
+Wo ein Artikel liegt: dbo.Lagerplaetze (Lager, Lagerplatz, Menge). Offene Bestellungen beim Lieferanten: dbo.Bestellungen mit Status <> 'geliefert', erwartet am ErwartetAm.
+Rechnungen und Datenblaetter als PDF: dbo.Dokumente (Art, RechnungsNr bzw. ArtikelNr, Dateiname, Datei). Die Spalte Datei nur auswaehlen, wenn das Dokument gefragt ist."""
 
 # --- SAMPLE DATA ---
 
@@ -200,6 +210,95 @@ PEOPLE = ["K. Lang", "M. Roth", "S. Braun", "T. Krause"]
 INSPECTORS = ["Dr. Weiß (ZÜS)", "H. Vogel (ZÜS)", "befähigte Person J. Kern"]
 # Inspection kind -> interval in years (as in the demo's own inspection rule)
 INTERVAL = {"A": 2, "I": 5, "F": 10}
+
+
+ORDER_LINES = {}
+COMPANY = "Demo GmbH · Prüf- und Druckbehältertechnik · Industriestraße 5 · 97424 Schweinfurt"
+
+
+def _pdf(draw):
+    """A PDF from a drawing function; invariant, so every run gives the
+    same bytes (the files are checked in)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4, invariant=1)
+    c.setTitle("Demo GmbH")
+    draw(c)
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def _money(v):
+    return f"{v:,.2f} EUR".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def invoice_pdf(number, order, customer, lines):
+    def draw(c):
+        y = 800
+        c.setFont("Helvetica", 8)
+        c.drawString(50, y, COMPANY)
+        c.setFont("Helvetica", 11)
+        for text in (customer[1], customer[5], f"{customer[3]} {customer[4]}"):
+            y -= 16
+            c.drawString(50, y, text)
+        y -= 50
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, y, f"Rechnung {number}")
+        c.setFont("Helvetica", 10)
+        y -= 18
+        c.drawString(50, y, f"zu Auftrag {order} · Kundennummer {customer[0]} · "
+                            "Rechnungsdatum und Fälligkeit siehe ERP")
+        y -= 30
+        c.setFont("Helvetica-Bold", 9)
+        for x, head in ((50, "Artikel"), (120, "Bezeichnung"), (330, "Menge"),
+                        (390, "Einzelpreis"), (470, "Rabatt"), (520, "Betrag")):
+            c.drawString(x, y, head)
+        c.setFont("Helvetica", 9)
+        net = 0.0
+        for nr, name, unit, qty, price, rebate in lines:
+            y -= 15
+            amount = qty * price * (100 - rebate) / 100
+            net += amount
+            c.drawString(50, y, nr)
+            c.drawString(120, y, name[:38])
+            c.drawString(330, y, f"{qty} {unit}")
+            c.drawString(390, y, _money(price))
+            c.drawString(470, y, f"{rebate:g} %")
+            c.drawRightString(560, y, _money(amount))
+        y -= 25
+        gross = round(net * 1.19, 2)
+        for label, value in (("Netto", net), ("MwSt. 19 %", gross - net), ("Gesamt", gross)):
+            c.setFont("Helvetica-Bold" if label == "Gesamt" else "Helvetica", 10)
+            c.drawString(390, y, label)
+            c.drawRightString(560, y, _money(value))
+            y -= 15
+        y -= 20
+        c.setFont("Helvetica", 9)
+        c.drawString(50, y, "Zahlbar innerhalb von 30 Tagen ohne Abzug. "
+                            "Beispieldokument, alle Angaben erfunden.")
+    return _pdf(draw)
+
+
+def datasheet_pdf(item):
+    nr, name, group, unit, price, _stock, _minimum = item
+    def draw(c):
+        c.setFont("Helvetica", 8)
+        c.drawString(50, 800, COMPANY)
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, 750, f"Datenblatt {name}")
+        c.setFont("Helvetica", 10)
+        y = 720
+        for label, value in (("Artikelnummer", nr), ("Warengruppe", group),
+                             ("Einheit", unit), ("Listenpreis netto", _money(price)),
+                             ("Betriebsdruck", "max. 16 bar"), ("Temperatur", "-10 bis +120 °C"),
+                             ("Prüfung", "werksgeprüft, Prüfprotokoll auf Anfrage")):
+            c.drawString(50, y, label)
+            c.drawString(200, y, value)
+            y -= 16
+        c.drawString(50, y - 20, "Beispieldokument, alle Angaben erfunden.")
+    return _pdf(draw)
 
 
 def q(text):
@@ -250,10 +349,12 @@ def build_data(rng):
         rows["Auftraege"].append([str(nr), str(cust), day(ordered), day(delivery),
                                   q(status)[1:], q(rng.choice(PEOPLE))])
         net = 0.0
+        lines = ORDER_LINES.setdefault(nr, [])
         for pos, item in enumerate(rng.sample(ITEMS, rng.randint(1, 4)), start=1):
             qty = 1 if item[2] in ("Druckbehälter", "Kompressoren") else rng.randint(2, 40)
             rebate = rng.choice([0, 0, 0, 3, 5, 10])
             net += qty * item[4] * (100 - rebate) / 100
+            lines.append((item[0], item[1], item[3], qty, item[4], rebate))
             rows["Auftragspositionen"].append([str(nr), str(pos), q(item[0]), str(qty),
                                                f"{item[4]:.2f}", f"{rebate:.2f}"])
         orders.append((nr, cust, status, delivery, round(net * 1.19, 2)))
@@ -282,7 +383,17 @@ def build_data(rng):
         rows["Rechnungen"].append([str(invoice), str(nr), str(cust), day(issued), day(due),
                                    f"{gross:.2f}", f"{paid:.2f}", paid_on, q(state),
                                    str(reminder)])
+        customer = next(c for c in CUSTOMERS if c[0] == cust)
+        rows["Dokumente"].append([str(len(rows["Dokumente"]) + 1), q("Rechnung"), str(invoice),
+                                  "NULL", q(f"Rechnung-{invoice}.pdf"),
+                                  "0x" + invoice_pdf(invoice, nr, customer,
+                                                     ORDER_LINES[nr]).hex().upper()])
         invoice += 1
+    for item in ITEMS:
+        if item[2] in ("Armaturen", "Messtechnik"):
+            rows["Dokumente"].append([str(len(rows["Dokumente"]) + 1), q("Datenblatt"), "NULL",
+                                      q(item[0]), q(f"Datenblatt-{item[0]}.pdf"),
+                                      "0x" + datasheet_pdf(item).hex().upper()])
 
     # Purchase orders: what is below the minimum is on order, a few came in.
     po = 450001
@@ -468,6 +579,8 @@ def data_model_md(rows):
         "- Welche Kunden hatten dieses Jahr den größten Umsatz?",
         "- Was hat die Meier GmbH zuletzt bestellt?",
         "- Welche Aufträge betreut K. Lang?",
+        "- Zeig mir die Rechnung 2025103. Was steht darauf?",
+        "- Gibt es ein Datenblatt zum Kugelhahn?",
         "",
     ]
     return "\n".join(lines)

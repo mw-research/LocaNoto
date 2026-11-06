@@ -483,6 +483,84 @@ try:
 finally:
     sqldb._verbinde = real_connect
 
+# --- documents in database results (db_files.py) ---
+
+import created_files  # noqa: E402
+import db_files  # noqa: E402
+
+pdf_bytes = created_files.build_pdf("Rechnung 2025103", "Rechnung 2025103\n\nGesamt 12.435,98 EUR")
+check("files: a PDF is recognised by its content",
+      db_files.sniff(pdf_bytes) == "pdf" and db_files.sniff(b"\x89PNG\r\n\x1a\n") == "png"
+      and db_files.sniff(b"random bytes") is None)
+docx_bytes = created_files.build_docx("Lieferschein", "Lieferschein 24004")
+check("files: Office files are told apart", db_files.sniff(docx_bytes) == "docx")
+
+rows_out, found = db_files.collect(user, ["DokNr", "Dateiname", "Datei"],
+                                   [(3, "Rechnung-2025103.pdf", pdf_bytes),
+                                    (4, "notiz.bin", b"\x00\x01 no known format")])
+check("files: a PDF in a binary column becomes a file of the user, named from the row",
+      found.files == ["Rechnung-2025103.pdf"]
+      and created_files.read(user, "Rechnung-2025103.pdf") == pdf_bytes
+      and rows_out[0][2] == "[Datei: Rechnung-2025103.pdf]", (found.files, rows_out))
+check("files: the PDF text goes to the model",
+      found.texts and "12.435,98" in found.texts[0][1], found.texts)
+check("files: unknown binary data stays a placeholder, not a byte dump",
+      rows_out[1][2].startswith("[Binärdaten,") and len(found.files) == 1, rows_out[1])
+
+share = tempfile.mkdtemp()
+os.makedirs(os.path.join(share, "2026"))
+with open(os.path.join(share, "2026", "LS-24004.pdf"), "wb") as f:
+    f.write(pdf_bytes)
+outside = tempfile.mkdtemp()
+with open(os.path.join(outside, "geheim.pdf"), "wb") as f:
+    f.write(pdf_bytes)
+os.environ["SQL_FILE_ROOTS"] = "\\\\fs01\\belege=" + share
+try:
+    rows_out, found = db_files.collect(user, ["Lieferschein", "Pfad", "Link"], [
+        (24004, "\\\\FS01\\Belege\\2026\\LS-24004.pdf", "https://dms.example.com/doc/4711"),
+        (24005, "\\\\fs01\\belege\\..\\..\\" + os.path.basename(outside) + "\\geheim.pdf", ""),
+        (24006, "C:\\Windows\\win.ini", ""),
+    ])
+    check("files: a path below a released folder is read (case-insensitive prefix)",
+          found.files == ["LS-24004.pdf"] and "[Datei: LS-24004.pdf]" in rows_out[0][1], found.files)
+    check("files: '..' and paths outside the released folders are not read",
+          "[Datei" not in rows_out[1][1] and "[Datei" not in rows_out[2][1]
+          and len(found.notes) == 2, (rows_out, found.notes))
+    check("files: links are offered, not fetched",
+          found.links == ["https://dms.example.com/doc/4711"], found.links)
+finally:
+    os.environ.pop("SQL_FILE_ROOTS", None)
+rows_out, found = db_files.collect(user, ["Pfad"], [("\\\\fs01\\belege\\x.pdf",)])
+check("files: without SQL_FILE_ROOTS a path stays text, nothing is read",
+      found.files == [] and found.notes == [] and rows_out[0][0] == "\\\\fs01\\belege\\x.pdf")
+
+_saved = (answering.sql_accounts, answering.sql_access, answering.sql_schema,
+          answering.client, answering.llm, sqldb.formuliere, sqldb.fuehre_aus)
+answering.sql_accounts = lambda _u, _l: [("vertrieb", {})]
+answering.sql_access = lambda _r, _l: {"benutzer": "leser", "hinweis": ""}
+answering.sql_schema = lambda _r, _a: ("dbo.Dokumente(DokNr int, Dateiname nvarchar, "
+                                       "Datei varbinary)", "")
+answering.client = lambda *_a: None
+answering.llm = ns(modell=lambda *_a: "m")
+try:
+    sqldb.formuliere = lambda *_a, **_k: ("SELECT Dateiname, Datei FROM dbo.Dokumente "
+                                          "WHERE RechnungsNr = 2025103")
+    sqldb.fuehre_aus = lambda *_a, **_k: (["Dateiname", "Datei"],
+                                          [("Rechnung-2025103.pdf", pdf_bytes)])
+    blocks, info = answering._sql_block(user, ns(sql_logins={}, sql_room="vertrieb"),
+                                        "Zeig mir die Rechnung 2025103", "m", "")
+    note = answering.sql_note(info)
+    check("files: the answer offers the document and the model reads its text",
+          info.get("files") and info["files"][0].startswith("Rechnung-2025103")
+          and any(b[0] == "datenbank_dokument" and "12.435,98" in b[1] for b in blocks)
+          and "unter der Antwort" in note and "%PDF" not in blocks[1][1], (info, note))
+finally:
+    (answering.sql_accounts, answering.sql_access, answering.sql_schema,
+     answering.client, answering.llm, sqldb.formuliere, sqldb.fuehre_aus) = _saved
+
+check("SQL: the prompt asks for the file column only when a document is wanted",
+      "Datei-Spalten" in sql_prompt_text and "zeig mir die Rechnung" in sql_prompt_text)
+
 check("SQL: the prompt allows lists that are asked for",
       "TOP 50" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "sql_prompt.txt"), encoding="utf-8").read())

@@ -140,6 +140,19 @@ Bestellungen bei Lieferanten (Einkauf). 8 Zeilen.
 | ErwartetAm | date | zugesagter Liefertag |
 | Status | nvarchar(20) | bestellt, teilgeliefert oder geliefert |
 
+## Tabelle Dokumente
+
+Belege als Datei: Rechnungen und Datenblätter als PDF. 26 Zeilen.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| DokNr | int | Dokumentnummer (Schlüssel) |
+| Art | nvarchar(30) | Rechnung oder Datenblatt |
+| RechnungsNr | int | zugehörige Rechnung → Rechnungen |
+| ArtikelNr | nvarchar(20) | zugehöriger Artikel → Artikel |
+| Dateiname | nvarchar(150) | Name der Datei |
+| Datei | varbinary(max) | die Datei selbst (PDF) |
+
 ## Tabelle Anlagen
 
 Anlagen beim Kunden, die wir prüfen und warten. 10 Zeilen.
@@ -228,3 +241,5 @@ WHERE r.Status <> N'bezahlt'
 - Welche Kunden hatten dieses Jahr den größten Umsatz?
 - Was hat die Meier GmbH zuletzt bestellt?
 - Welche Aufträge betreut K. Lang?
+- Zeig mir die Rechnung 2025103. Was steht darauf?
+- Gibt es ein Datenblatt zum Kugelhahn?

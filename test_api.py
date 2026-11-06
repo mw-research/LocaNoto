@@ -596,6 +596,15 @@ r = anna.get(f"{API}/files/Demo%20pdf.pdf")
 check("a created file downloads with its type",
       r.status_code == 200 and r.content.startswith(b"%PDF")
       and r.headers["content-type"] == "application/pdf", r.status_code)
+check("a created file downloads, it is not shown in the browser",
+      r.headers["content-disposition"].startswith("attachment"), r.headers)
+r = anna.get(f"{API}/files/Demo%20pdf.pdf?inline=1")
+check("with inline=1 a PDF opens in the browser (a document from the database)",
+      r.status_code == 200 and r.headers["content-disposition"].startswith("inline")
+      and r.headers.get("x-content-type-options") == "nosniff", r.headers)
+r = anna.get(f"{API}/files/Demo%20docx.docx?inline=1")
+check("but only PDFs and images, never other types",
+      r.headers["content-disposition"].startswith("attachment"), r.headers)
 check("created files are listed", "Demo xlsx.xlsx" in anna.get(f"{API}/files").json())
 check("someone else's created file is 404",
       markus.get(f"{API}/files/Demo%20pdf.pdf").status_code == 404)
@@ -605,6 +614,17 @@ check("a created file can be deleted",
 _page = anna.get(f"/c/{chat_id}").text
 check("the answer links the created file", "/api/v1/files/Demo%20xlsx.xlsx" in _page,
       _page[-600:])
+_msgs = _chats_mod.lade("anna", chat_id)
+_msgs[-1]["sql"] = {"query": "SELECT Dateiname, Datei FROM dbo.Dokumente WHERE RechnungsNr = 1",
+                    "rows": 1, "files": ["Demo pdf.pdf"],
+                    "links": ["https://dms.example.com/doc/4711"]}
+_chats_mod.speichere("anna", chat_id, _msgs)
+_page = anna.get(f"/c/{chat_id}").text
+check("documents from the database are offered under the answer, PDFs open in the browser",
+      "/api/v1/files/Demo%20pdf.pdf?inline=1" in _page
+      and 'href="https://dms.example.com/doc/4711"' in _page
+      and ("Dokumente aus der Datenbank" in _page or "Documents from the database" in _page),
+      _page[-900:])
 
 # --- shared mailbox that answers on its own, set up in the web page ---
 r = markus.post("/ui/admin/mailboxes", data={

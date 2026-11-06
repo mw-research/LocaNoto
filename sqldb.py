@@ -56,6 +56,9 @@ SQL_SCHEMA_MAX_CHARS = paths.env_int("SQL_SCHEMA_MAX_CHARS", 12000)
 
 MARKER_KEINE_ABFRAGE = "KEINE_ABFRAGE"
 
+# Largest binary or text cell read (a document in the database, db_files.py).
+FILE_TEXTSIZE = 25 * 1024 * 1024 + 1
+
 
 # --- EIN ZUGANG JE RAUM ---
 #
@@ -292,6 +295,12 @@ def fuehre_aus(sql, max_rows=None, zugang=None):
     con = _verbinde(zugang)
     try:
         cur = con.cursor()
+        try:
+            # FreeTDS cuts binary and long text columns at 64 KB by default;
+            # a document from the database would arrive broken.
+            cur.execute(f"SET TEXTSIZE {FILE_TEXTSIZE}")
+        except Exception:
+            pass
         cur.execute(sql)
         spalten = [d[0] for d in (cur.description or [])]
         zeilen = cur.fetchmany(max_rows)
