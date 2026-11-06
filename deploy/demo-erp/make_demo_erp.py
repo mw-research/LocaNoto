@@ -8,6 +8,7 @@ Writes next to this file:
     demo-erp.yaml     SQL Server 2022 for Kubernetes, seeded by a job
     data-model.md     the data model as a document to upload into LocaNoto
     sql-hint.txt      the short note for the workspace's database account
+    documents/*.pdf   the demo documents (make_documents.py)
 
 Tables, columns and their meaning are defined once, below, so the
 database and its description cannot drift apart. The sample data is
@@ -760,6 +761,9 @@ def main():
             f.write(text)
     print("written:", ", ".join(files),
           "|", ", ".join(f"{t}: {len(r)}" for t, r in rows.items()))
+    # the documents that go with the data (and the scavenger hunt), as PDFs
+    import make_documents
+    print("documents:", ", ".join(make_documents.main()))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+# Files git must never touch: no line-ending conversion, no text diff.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.xlsx  binary
+*.docx  binary
+*.pptx  binary

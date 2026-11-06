@@ -56,8 +56,8 @@ Die übrigen sechs Werbeartikel liegen bei anderen Personen oder in Lagern.
 
 1. Demo-ERP neu befüllen (README, Abschnitt 1, „Neu befüllen“).
 2. Die beiden Dokumente aus `documents/` in den Arbeitsbereich der Demo
-   hochladen: `Bestellung Werbeartikel Tassen.md` und
-   `Artikelabgleich Keramik Manufaktur Weber.md`.
+   hochladen: `Bestellung Werbeartikel Tassen.pdf` und
+   `Artikelabgleich Keramik Manufaktur Weber.pdf`.
 3. Einmal selbst durchspielen, in einem neuen Chat.
 
 ## Hilfen, wenn jemand festhängt

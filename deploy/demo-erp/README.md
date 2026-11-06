@@ -16,7 +16,8 @@ Beispielfragen stehen am Ende von `data-model.md`.
 | `sql-hint.txt` | Kurzhinweis für das Modell (Statuscodes, Beziehungen) |
 | `make_demo_erp.py` | erzeugt die vier Dateien oben aus einer Tabellendefinition |
 | `check_demo_erp.py` | prüft die Datenbank mit dem Datenbankcode von LocaNoto |
-| `documents/` | vier Beispieldokumente passend zu den Daten, zwei davon für die Schnitzeljagd |
+| `documents/` | vier Beispieldokumente als PDF passend zu den Daten, zwei davon für die Schnitzeljagd |
+| `make_documents.py` | erzeugt die PDFs in `documents/` (läuft mit `make_demo_erp.py`) |
 | `SCHNITZELJAGD.md` | Spiel für das Demo-Event mit Lösung – nicht hochladen |
 
 Voraussetzungen: ein Knoten mit amd64 (SQL Server gibt es nicht für ARM),
