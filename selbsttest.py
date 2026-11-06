@@ -4000,6 +4000,15 @@ class _Termin(_tyc.SimpleNamespace):
 
     def decline(self, **k):
         self.declined_with = k
+        self.my_response_type = "Decline"
+
+    def accept(self, **k):
+        self.accepted_with = k
+        self.my_response_type = "Accept"
+
+    def tentatively_accept(self, **k):
+        self.tentative_with = k
+        self.my_response_type = "Tentative"
 
     def move_to_trash(self, **k):
         self.trashed_with = k
@@ -4078,6 +4087,37 @@ pruef("eine Aenderung ohne Aenderung wird abgewiesen",
 pruef("wer nicht dabei ist, kann nicht entfernt werden",
       _wirft(lambda: _pfk.pruefe_entwurf("calendar_update", {
           "kennung": _k10, "remove_attendees": "niemand@test.de"})))
+
+# --- answering an invitation ---
+_t_einl = _Termin(id="T14", subject="Projekttreffen", start=_b10 + datetime.timedelta(days=1),
+                  end=_b10 + datetime.timedelta(days=1, hours=1), location="Raum 3",
+                  organizer=_ns(name="Huber", email_address="huber@test.de"),
+                  my_response_type="NoResponseReceived", is_all_day=False,
+                  is_cancelled=False, required_attendees=[_person_c("Anna", "anna@test.de")],
+                  optional_attendees=[])
+_termine.append(_t_einl)
+_k14 = _pfc.remember(_pfk, "T14")
+_ev_o = _pfk.rufe("calendar_events", {"from": str(_tag_c), "days": 3})
+pruef("eine unbeantwortete Einladung steht als 'Antwort offen' im Kalender",
+      "Projekttreffen | Ort: Raum 3 | Organisator: Huber <huber@test.de> | Antwort offen"
+      in _ev_o, _ev_o)
+_vr = _pfk.pruefe_entwurf("calendar_respond", {"kennung": _k14, "response": "accept"})
+pruef("Zusagen: die Vorschau nennt Termin und Organisator",
+      _vr.startswith("Zusagen: Projekttreffen") and "Antwort an Huber" in _vr, _vr)
+_pfk.rufe("calendar_respond", {"kennung": _k14, "response": "tentative",
+                               "body": "Komme evtl. später."})
+pruef("vorlaeufig zusagen mit Text, danach als erledigt erkennbar",
+      _t_einl.tentative_with == {"body": "Komme evtl. später."}
+      and _pfk.check_sent("calendar_respond", {"kennung": _k14, "response": "tentative"})
+      and not _pfk.check_sent("calendar_respond", {"kennung": _k14, "response": "accept"}))
+_pfk.rufe("calendar_respond", {"kennung": _k14, "response": "accept"})
+pruef("zusagen", _t_einl.accepted_with == {} and _t_einl.my_response_type == "Accept")
+pruef("auf die eigene Einladung antwortet man nicht",
+      _wirft(lambda: _pfk.pruefe_entwurf("calendar_respond",
+                                         {"kennung": _k10, "response": "accept"})))
+pruef("nur accept, tentative oder decline",
+      _wirft(lambda: _pfk.pruefe_entwurf("calendar_respond",
+                                         {"kennung": _k14, "response": "vielleicht"})))
 
 if _echtes_ews is None:
     del sys.modules["exchangelib"]

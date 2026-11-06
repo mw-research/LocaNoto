@@ -350,6 +350,23 @@ WERKZEUGE = WERKZEUGE + (
                      "Kurzer Text zur Absage, wahlweise."}},
             "required": ["kennung"]},
     },
+    {
+        "name": "calendar_respond",
+        "beschreibung": (
+            "Auf eine Einladung in {label} antworten: zusagen, vorlaeufig "
+            "zusagen oder absagen. Die Antwort geht an den Organisator, der "
+            "Termin steht danach entsprechend im Kalender. Die Kennung "
+            "stammt aus calendar_events (offene Einladungen stehen dort mit "
+            "'Antwort offen'). Der Nutzer bestaetigt vorher."),
+        "schema": {"type": "object", "properties": {
+            "kennung": {"type": "string"},
+            "response": {"type": "string", "enum": ["accept", "tentative", "decline"],
+                         "description": "accept = zusagen, tentative = "
+                                        "vorlaeufig, decline = absagen."},
+            "body": {"type": "string", "description":
+                     "Kurzer Text an den Organisator, wahlweise."}},
+            "required": ["kennung", "response"]},
+    },
 )
 
 SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
@@ -358,10 +375,16 @@ SENDEWERKZEUGE = ("mail_senden", "antwort_senden")
 # may send on its own: an invitation goes out to people, and an entry in
 # the own calendar at the wrong day is found only when it is too late.
 KALENDERWERKZEUGE = ("calendar_add", "meeting_request", "calendar_update",
-                     "calendar_cancel")
+                     "calendar_cancel", "calendar_respond")
 
 # Tools that change an appointment that already exists (by its id).
-CHANGE_TOOLS = ("calendar_update", "calendar_cancel")
+CHANGE_TOOLS = ("calendar_update", "calendar_cancel", "calendar_respond")
+
+# calendar_respond: the answer, how the preview names it, what Exchange
+# stores as my_response_type afterwards.
+RESPONSES = {"accept": ("Zusagen", "Accept"),
+             "tentative": ("Vorlaeufig zusagen", "Tentative"),
+             "decline": ("Absagen", "Decline")}
 
 # How long one message of a thread may be, and the whole thread. The tool
 # loop cuts every result at 8000 characters (pipeline.werkzeuglauf), so
@@ -563,6 +586,8 @@ class Postfach:
             return self._update(a)
         if name == "calendar_cancel":
             return self._cancel(a)
+        if name == "calendar_respond":
+            return self._respond(a)
         if name == "mail_senden":
             return self._senden(a)
         if name == "antwort_senden":
@@ -589,6 +614,8 @@ class Postfach:
             return self._update_plan(argumente or {})["preview"]
         if name == "calendar_cancel":
             return self._cancel_plan(argumente or {})["preview"]
+        if name == "calendar_respond":
+            return self._respond_plan(argumente or {})["preview"]
         return _termin_vorschau(_termin_angaben(argumente or {},
                                                 name == "meeting_request"))
 
@@ -766,7 +793,7 @@ class Postfach:
             posten = list(
                 konto.calendar.view(start=beginn, end=ende, max_items=HOLGRENZE)
                 .only("subject", "start", "end", "location", "organizer",
-                      "is_all_day", "is_cancelled"))
+                      "is_all_day", "is_cancelled", "my_response_type"))
         except Exception as e:
             raise Fehler(f"{self.name}: {_kurz(e)}")
         posten.sort(key=lambda t: _zeitwert(getattr(t, "start", None)))
@@ -783,7 +810,9 @@ class Postfach:
                 f"[{kurz}] {_zeitspanne(t, tz)} | {betreff or '(ohne Betreff)'}"
                 + (f" | Ort: {ort}" if ort else "")
                 + (f" | Organisator: {org}" if org else "")
-                + (" | ABGESAGT" if getattr(t, "is_cancelled", False) else ""))
+                + (" | ABGESAGT" if getattr(t, "is_cancelled", False) else "")
+                + (" | Antwort offen" if str(getattr(t, "my_response_type", "") or "")
+                   == "NoResponseReceived" else ""))
             if len(zeilen) >= anzahl:
                 break
         letzter = tag + datetime.timedelta(days=tage - 1)
@@ -1047,6 +1076,38 @@ class Postfach:
             raise Fehler(f"{self.name}: nicht abgesagt ({_kurz(e)}).")
         return "Abgesagt: " + p["preview"].split(": ", 1)[1]
 
+    def _respond_plan(self, a):
+        konto, item = self._appointment(a.get("kennung"))
+        choice = str(a.get("response") or "").strip().lower()
+        if choice not in RESPONSES:
+            raise Fehler("'response' ist accept, tentative oder decline.")
+        if self._organizes(item):
+            raise Fehler("Diesen Termin organisiert der Nutzer selbst; auf die "
+                         "eigene Einladung antwortet man nicht. Absagen: "
+                         "calendar_cancel.")
+        if getattr(item, "is_cancelled", False):
+            raise Fehler("Der Termin ist abgesagt.")
+        tz = _zeitzone(konto)
+        teile = [(getattr(item, "subject", "") or "").strip() or "(ohne Betreff)",
+                 _zeitspanne(item, tz)]
+        if getattr(item, "location", ""):
+            teile.append(f"Ort: {item.location}")
+        teile.append("Antwort an " + (_person(getattr(item, "organizer", None))
+                                      or "den Organisator"))
+        return {"item": item, "choice": choice,
+                "preview": f"{RESPONSES[choice][0]}: " + " | ".join(teile)}
+
+    def _respond(self, a):
+        p = self._respond_plan(a)
+        item, text = p["item"], str(a.get("body") or "").strip()
+        call = {"accept": item.accept, "tentative": item.tentatively_accept,
+                "decline": item.decline}[p["choice"]]
+        try:
+            call(**({"body": text} if text else {}))
+        except Exception as e:
+            raise Fehler(f"{self.name}: keine Antwort gesendet ({_kurz(e)}).")
+        return "Geantwortet: " + p["preview"]
+
     # --- SENDEN ---
     #
     # Ob ueberhaupt gesendet werden darf, steht NICHT hier. Das
@@ -1128,8 +1189,13 @@ class Postfach:
             except Fehler:
                 return False
             except Exception:
-                # Not there any more: cancelled and taken out.
-                return name == "calendar_cancel"
+                # Not there any more: cancelled or declined and taken out.
+                return name == "calendar_cancel" or (
+                    name == "calendar_respond" and a.get("response") == "decline")
+            if name == "calendar_respond":
+                wanted = RESPONSES.get(str(a.get("response") or "").lower(), ("", ""))[1]
+                return bool(wanted) and \
+                    str(getattr(item, "my_response_type", "") or "") == wanted
             if name == "calendar_cancel":
                 return bool(getattr(item, "is_cancelled", False)) or \
                     str(getattr(item, "my_response_type", "") or "") == "Decline"

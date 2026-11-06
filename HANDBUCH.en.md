@@ -333,6 +333,11 @@ New attendees get an invitation; a new time sends an update to everyone.
 Only the organizer can change an appointment; for someone else's, the
 cancellation goes to the organizer.
 
+Answering invitations: "Which invitations are still open?" (marked
+"Antwort offen" in the calendar), "Accept the project meeting on Thursday",
+"Accept tentatively". Draft → **Accept**, **Accept tentatively** or
+**Decline**; the answer goes to the organizer.
+
 ### How does LocaNoto notify me of new mail?
 
 With a mailbox connected and LocaNoto open in a browser tab, LocaNoto

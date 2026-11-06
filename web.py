@@ -117,6 +117,8 @@ TEXTS = {
     "Change appointment": "Termin ändern", "Cancel appointment": "Termin absagen",
     "Save change": "Änderung speichern", "Changed.": "Geändert.",
     "Cancelled.": "Abgesagt.",
+    "Answer invitation": "Auf Einladung antworten", "Answered.": "Geantwortet.",
+    "Accept": "Zusagen", "Accept tentatively": "Vorläufig zusagen", "Decline": "Absagen",
     "From the web": "Aus dem Netz", "Take over": "Übernehmen",
     "Delete": "Löschen", "Rename": "Umbenennen",
     "Upload": "Hochladen", "into": "nach", "Project (optional)":

@@ -349,6 +349,11 @@ Einladung, bei einer neuen Zeit alle eine Aktualisierung. Ändern kann nur,
 wer den Termin organisiert; bei einem fremden Termin geht die Absage an
 den Organisator.
 
+Einladungen beantworten: „Welche Einladungen sind noch offen?" (im Kalender
+mit „Antwort offen" markiert), „Sag dem Projekttreffen am Donnerstag zu",
+„Sag vorläufig zu". Entwurf → **Zusagen**, **Vorläufig zusagen** bzw.
+**Absagen**; die Antwort geht an den Organisator.
+
 ### Wie benachrichtigt mich LocaNoto über neue Mails?
 
 Ist ein Postfach verbunden und LocaNoto in einem Browsertab offen, prüft
