@@ -262,15 +262,17 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     # Ohne Seiten und ohne Tabellenflaechen; ein Abschnitt tritt an die
     # Stelle einer Seite. Siehe lesen.py.
     if lesen.unterstuetzt(dateiname):
+        web = lesen.ist_webseite(pdf_path)
         for nummer, _titel, text in lesen.abschnitte(pdf_path):
             for i, chunk in enumerate(text_splitter.split_text(text)):
                 chunks.append(chunk)
-                metadatas.append({
+                metadatas.append(dict({
                     "file_name": dateiname, "page": nummer,
                     "raum": raum, "folder": projekt,
                     "access": "shared" if raum == raeume.ALLGEMEIN
                               else "private",
-                    "owner": benutzer_, "type": "text"})
+                    "owner": benutzer_, "type": "text"},
+                    **({"quelle": "web"} if web else {})))
                 ids.append(f"{dateiname}_p{nummer}_c{i}")
         _n, _h = _speichern_chunks(chunks, metadatas, ids, raum,
                                    nach_dem_schreiben)
@@ -483,8 +485,8 @@ def webseite_aufnehmen(titel, adresse, text, *, anfrage="", benutzer_):
     name = paths.sicherer_dateiname(f"{(titel or host)[:80]} ({host}).md")
     kopf = [f"# {titel or adresse}", "",
             f"- Quelle: {adresse}",
-            f"- Abgerufen: {datetime.now():%Y-%m-%d %H:%M} über die "
-            f"Websuche von LocaNoto"]
+            f"- Abgerufen: {datetime.now():%Y-%m-%d %H:%M} "
+            f"{lesen.WEB_KENNUNG}"]
     if anfrage:
         kopf.append(f"- Suchbegriff: {anfrage}")
     inhalt = ("\n".join(kopf) + "\n\n---\n\n"

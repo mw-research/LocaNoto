@@ -300,11 +300,14 @@ for pdf_pfad in dokumente:
     if lesen.unterstuetzt(dateiname):
         try:
             pending, neu = [], 0
+            web = lesen.ist_webseite(pdf_pfad)
             for nummer, _titel, text in lesen.abschnitte(pdf_pfad):
                 basis_meta = {"file_name": dateiname, "page": nummer,
                               "folder": ordner, "raum": RAUM,
                               "access": "shared",
                               "owner": "system"}
+                if web:
+                    basis_meta["quelle"] = "web"
                 for i, chunk in enumerate(text_splitter.split_text(text)):
                     chunk_id = f"{dateiname}_p{nummer}_c{i}"
                     if chunk_id not in bekannt:

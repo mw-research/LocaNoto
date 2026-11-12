@@ -363,8 +363,57 @@ def render(name, request=None, **context):
     return HTMLResponse(_env.get_template(name).render(**context))
 
 
-def markdown(text):
-    return _md.render(str(text or ""))
+def _link_open(self, tokens, idx, options, env):
+    """A link in an answer is clickable only if its address is one of the
+    answer's own sources (env["links"]). The model may have copied any
+    address from a web page or a mail -- [Details](https://x/?d=...)
+    carries data out with one click. Such a link is shown as text, with
+    the whole address, so the reader sees where it would lead."""
+    tok = tokens[idx]
+    allowed = (env or {}).get("links")
+    href = tok.attrGet("href") or ""
+    if allowed is None or pipeline._adresse(href) in allowed:
+        tok.attrSet("target", "_blank")
+        tok.attrSet("rel", "noopener noreferrer")
+        return self.renderToken(tokens, idx, options, env)
+    label = ""
+    for j in range(idx + 1, len(tokens)):
+        if tokens[j].type == "link_close" and tokens[j].level == tok.level:
+            tokens[j].meta["off"] = href if label.strip() != href else ""
+            break
+        label += tokens[j].content or ""
+    return ""
+
+
+def _link_close(self, tokens, idx, options, env):
+    if "off" not in tokens[idx].meta:
+        return self.renderToken(tokens, idx, options, env)
+    href = tokens[idx].meta["off"]
+    if not href:
+        return ""
+    shown = href if len(href) <= 120 else href[:119] + "…"
+    return f' <span class="link-off">({html.escape(shown)})</span>'
+
+
+_md.add_render_rule("link_open", _link_open)
+_md.add_render_rule("link_close", _link_close)
+
+
+def markdown(text, links=None):
+    """links: the addresses (pipeline._adresse) that may stay clickable;
+    None leaves every link clickable."""
+    return _md.render(str(text or ""),
+                      {"links": links} if links is not None else None)
+
+
+def answer_links(m):
+    """The addresses an answer may link to: its web results and the
+    documents the database query named."""
+    urls = [w.get("adresse") for w in m.get("web") or []]
+    urls += list((m.get("sql") or {}).get("links") or [])
+    if isinstance(m.get("web_search"), dict):
+        urls.append(m["web_search"].get("adresse"))
+    return {a for a in map(pipeline._adresse, urls) if a}
 
 
 _env.filters["markdown"] = markdown
@@ -389,7 +438,7 @@ def answer_html(m):
     stay as they are. The links are made when the page is drawn, not
     stored -- an old chat gets them too.
     """
-    body = markdown(m.get("content"))
+    body = markdown(m.get("content"), links=answer_links(m))
     where = {}
     for s in list(m.get("sources") or []) + list(m.get("sources_more") or []):
         name = str(s.get("file") or "").strip()

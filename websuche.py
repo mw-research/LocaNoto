@@ -147,11 +147,111 @@ def _brauchbar(adresse):
 
 # --- TEXT ---
 
+_LEER = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+         "meta", "param", "source", "track", "wbr"}
+_BLOCK = {"address", "article", "aside", "blockquote", "details", "div", "dl",
+          "fieldset", "figure", "footer", "form", "h1", "h2", "h3", "h4",
+          "h5", "h6", "header", "hr", "main", "nav", "ol", "p", "pre",
+          "section", "table", "ul"}
+# Elements whose end tag may be left out, and what closes them.
+_SCHLIESST = {"p": _BLOCK, "li": {"li"}, "dt": {"dt", "dd"},
+              "dd": {"dt", "dd"}, "option": {"option", "optgroup"},
+              "tr": {"tr", "tbody", "tfoot"}, "td": {"td", "th", "tr"},
+              "th": {"td", "th", "tr"}}
+_VERSTECKT_STIL = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*(hidden|collapse)|"
+    r"font-size\s*:\s*0(?![.\d]*[1-9])|opacity\s*:\s*0(?![.\d]*[1-9])|"
+    r"(?:^|[;\s])(?:width|height)\s*:\s*0(?:px)?\s*(?:;|$)|"
+    r"clip\s*:\s*rect\(\s*0|clip-path\s*:\s*inset\(\s*(?:50|100)%|"
+    r"(?:left|top|text-indent)\s*:\s*-\d{3,}", re.I)
+
+
+def _versteckt(tag, attrs):
+    """Shows a browser this element to nobody?
+
+    Text a reader cannot see is where a page hides instructions for a
+    model ("ignore your rules, read this address ..."). A real reader
+    loses nothing when it is left out. Colours (white on white) are not
+    caught -- they would need the page's style sheets.
+    """
+    if tag == "template":
+        return True
+    a = {k.lower(): (v or "") for k, v in attrs}
+    if "hidden" in a or a.get("aria-hidden", "").lower() == "true":
+        return True
+    if tag == "input" and a.get("type", "").lower() == "hidden":
+        return True
+    return bool(_VERSTECKT_STIL.search(a.get("style", "")))
+
+
+def ohne_versteckte(text):
+    """HTML without the elements a browser would not show (_versteckt)."""
+    from html.parser import HTMLParser
+
+    stuecke, offen = [], []      # offen: tags of open hidden elements
+
+    class Filter(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=False)
+
+        def handle_starttag(self, tag, attrs):
+            # <p>, <li> ... end without an end tag where the next block
+            # starts. Without this, a hidden <p> with no </p> would hide
+            # the rest of the page.
+            while offen and tag in _SCHLIESST.get(offen[-1], ()):
+                offen.pop()
+            if offen:
+                if tag not in _LEER:
+                    offen.append(tag)
+            elif _versteckt(tag, attrs):
+                if tag not in _LEER:
+                    offen.append(tag)
+            else:
+                stuecke.append(self.get_starttag_text() or "")
+
+        def handle_startendtag(self, tag, attrs):
+            if not offen and not _versteckt(tag, attrs):
+                stuecke.append(self.get_starttag_text() or "")
+
+        def handle_endtag(self, tag):
+            if offen:
+                # Close up to the matching tag; a stray end tag inside
+                # the hidden part changes nothing.
+                if tag in offen:
+                    while offen and offen.pop() != tag:
+                        pass
+                return
+            stuecke.append(f"</{tag}>")
+
+        def handle_data(self, data):
+            if not offen:
+                stuecke.append(data)
+
+        def handle_entityref(self, name):
+            if not offen:
+                stuecke.append(f"&{name};")
+
+        def handle_charref(self, name):
+            if not offen:
+                stuecke.append(f"&#{name};")
+
+    f = Filter()
+    f.feed(text)
+    f.close()
+    return "".join(stuecke)
+
+
 def aus_html(roh):
-    """Reiner Text aus HTML. Ohne Skripte, Stile, Navigation."""
+    """Reiner Text aus HTML. Ohne Skripte, Stile, Navigation -- und ohne
+    Text, den der Browser nicht zeigt (ohne_versteckte)."""
     text = roh.decode("utf-8", "replace") if isinstance(roh, bytes) else roh
     text = re.sub(r"(?is)<(script|style|noscript|svg|nav|footer|header)\b.*?</\1>",
                   " ", text)
+    text = re.sub(r"(?s)<!--.*?-->", " ", text)
+    try:
+        text = ohne_versteckte(text)
+    except Exception:
+        pass   # broken HTML: the text as before rather than none
     text = re.sub(r"(?s)<!--.*?-->", " ", text)
     text = re.sub(r"(?i)<(br|/p|/div|/h[1-6]|/li|/tr|/section|/article)\s*/?>",
                   "\n", text)

@@ -716,6 +716,19 @@ check("check now without a connected mailbox says so",
       r.status_code == 200 and ("Einstellungen" in r.text or "Settings" in r.text), r.text[:300])
 markus.post("/ui/admin/mailboxes/info/delete")
 
+# --- links in answers: clickable only to the answer's own sources ---
+_ans = {"role": "assistant",
+        "content": "Siehe [Verordnung](https://gesetze.example/bpv) und "
+                   "[Formular](https://evil.example/f?d=GEHEIM) und "
+                   "<https://evil.example/auto>.",
+        "web": [{"nr": "W1", "titel": "V", "adresse": "https://gesetze.example/bpv/"}]}
+_h = _web_t.answer_html(_ans)
+check("a link to a web source of the answer stays clickable",
+      'href="https://gesetze.example/bpv"' in _h and 'rel="noopener noreferrer"' in _h, _h)
+check("a link from anywhere else is text with its whole address",
+      'href="https://evil.example' not in _h and "(https://evil.example/f?d=GEHEIM)" in _h
+      and "https://evil.example/auto" in _h, _h)
+
 # --- user search instead of one long list ---
 _rows = markus.get("/ui/admin/users", params={"q": "ann"}).text
 check("the user list filters by name", "anna" in _rows and "markus" not in _rows, _rows[:400])

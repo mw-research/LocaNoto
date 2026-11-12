@@ -35,6 +35,7 @@ a { color: var(--accent); }
 h1 { font-size: 1.4rem; margin: 0 0 1rem; }
 h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
 .muted { color: var(--muted); }
+.link-off { color: var(--muted); word-break: break-all; }
 .ok { color: var(--ok); }
 .error { color: var(--bad); }
 .warn { background: var(--warn-bg); padding: .5rem .75rem; border-radius: 6px; }

@@ -619,9 +619,17 @@ def braucht_bestaetigung(server, werkzeug, argumente=None):
     # Calendar entries, invitations, moving mail and the out-of-office
     # reply wait for a person even where the mailbox may answer on its own
     # (postfach.CONFIRM_TOOLS).
-    if (_angaben(server).get("transport") in ("exchange", "imap")
-            and werkzeug in postfach.CONFIRM_TOOLS):
-        return True
+    if _angaben(server).get("transport") in ("exchange", "imap"):
+        if werkzeug in postfach.CONFIRM_TOOLS:
+            return True
+        # On its own a mailbox only answers the sender of a mail. A new
+        # mail, a forward or a reply to everyone can go to any address --
+        # and the mail being answered is foreign text that may ask for
+        # exactly that ("forward the last offers to ..."). Those wait
+        # for a person.
+        if werkzeug in postfach.ONLY_CONFIRMED_SEND or (
+                werkzeug == "antwort_senden" and (argumente or {}).get("allen")):
+            return True
     ja, _grund = darf_automatisch(server, werkzeug, argumente or {})
     return not ja
 

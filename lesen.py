@@ -28,6 +28,31 @@ def unterstuetzt(name):
     return name.lower().endswith(ENDUNGEN)
 
 
+# The line aufnehmen.webseite_aufnehmen writes into the head of a web page
+# taken over into a workspace. Recognised by the file, not only by a flag
+# at the upload: reading the files again (ingest.py) keeps the mark.
+WEB_KENNUNG = "über die Websuche von LocaNoto"
+_WEB_KOPF = re.compile(r"^- Abgerufen: [^\n]*" + re.escape(WEB_KENNUNG) + r"\s*$",
+                       re.M)
+
+
+def ist_webseite(pfad):
+    """A web page taken over from the web search (not written in house)?
+
+    Its passages are foreign text: the answer treats them as material,
+    never as instructions (pipeline.kontext). A file that only pretends
+    to be one loses nothing but trust.
+    """
+    if not str(pfad).lower().endswith((".md", ".markdown")):
+        return False
+    try:
+        with open(pfad, "r", encoding="utf-8", errors="replace") as f:
+            kopf = f.read(2000)
+    except OSError:
+        return False
+    return bool(_WEB_KOPF.search(kopf))
+
+
 # --- MARKDOWN UND TEXT ---
 
 def _markdown(pfad):

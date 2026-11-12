@@ -494,6 +494,11 @@ KALENDERWERKZEUGE = ("calendar_add", "meeting_request", "calendar_update",
 # entry got when it was created -- a tool added later never runs unasked.
 CONFIRM_TOOLS = KALENDERWERKZEUGE + ("mail_move", "out_of_office_set")
 
+# Sending tools that may reach any address: never without a person, also
+# in a mailbox that may answer on its own -- there only antwort_senden to
+# the sender goes out unasked (mcp.braucht_bestaetigung).
+ONLY_CONFIRMED_SEND = ("mail_senden", "mail_forward")
+
 # Fields with recipients or attendees: names in them are looked up in the
 # address book (Exchange) before a draft is shown.
 PEOPLE_FIELDS = {"mail_senden": ("an", "kopie"), "mail_forward": ("an", "kopie"),
