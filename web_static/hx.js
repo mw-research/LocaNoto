@@ -239,6 +239,7 @@
     var files = Array.prototype.slice.call(form.querySelector("input[type=file]").files);
     var lines = [];
     var failed = 0;
+    uploading++;
     try {
       for (var i = 0; i < files.length; i++) {
         var prefix = files.length > 1 ? (i + 1) + "/" + files.length + " " : "";
@@ -270,9 +271,19 @@
       if (list.ok) swap(document.getElementById("doclist"), await list.text(), "innerHTML");
       form.reset();
     } finally {
+      uploading--;
       form.classList.remove("busy");
     }
   }
+
+  // Closing or leaving the page while files are still going up would drop
+  // the rest without a word: the browser asks first.
+  var uploading = 0;
+  window.addEventListener("beforeunload", function (ev) {
+    if (!uploading) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
 
   // Suggest user names for a text field; the last comma separated part is
   // the one being typed.

@@ -170,6 +170,18 @@ mcp.schreibe_konfiguration({"box": {"transport": "exchange", "postfach": "info@t
                                     "hinweis_anhaengen": False,
                                     "sendet": ["mail_senden", "antwort_senden",
                                                "mail_forward"]}})
+# for now even that mailbox only drafts (mcp.AUTOMATISCH_SENDEN, decided
+# 2026-11-12) ...
+quiet = Box()
+_ex, drafts = pipeline.werkzeuglauf(
+    Model([[("box__antwort_senden", '{"kennung": "m1", "body": "y"}')]]),
+    "m", "sys", chat, {"box": quiet})
+check("auto mailbox: for now a reply to the sender is a draft too",
+      quiet.sent == [] and [d["werkzeug"] for d in drafts] == ["antwort_senden"],
+      (quiet.sent, drafts))
+
+# ... the rest checks the rules for when it may answer on its own again
+mcp.AUTOMATISCH_SENDEN = True
 late = Box(send_error=TimeoutError("read timeout"), found=True)
 extra, _d = pipeline.werkzeuglauf(
     Model([[("box__antwort_senden", '{"kennung": "m1", "body": "y"}')]]),
@@ -190,6 +202,7 @@ _ex, drafts = pipeline.werkzeuglauf(
 check("auto mailbox: new mail, forward and reply-all become drafts",
       auto.sent == [] and sorted(d["werkzeug"] for d in drafts)
       == ["antwort_senden", "mail_forward", "mail_senden"], (auto.sent, drafts))
+mcp.AUTOMATISCH_SENDEN = False
 
 # every round used: the answer is told the rest did not happen
 endless = Model([[("box__mails_lesen", "{}")]] * (pipeline.WERKZEUG_RUNDEN + 2))

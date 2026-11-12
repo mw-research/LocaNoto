@@ -22,6 +22,7 @@
     <fieldset>
       <legend>{{ t('Only for shared mailboxes') }}</legend>
       <label class="check"><input type="checkbox" name="auto" value="1"> {{ t('may answer on its own (no confirmation)') }}</label>
+      <p class="muted">{{ t("Switched off for now: every message waits for a confirmation until an automatic answer can be limited to the mailbox's own workspace.") }}</p>
       <label class="check"><input type="checkbox" name="notice" value="1" checked> {{ t('add a notice under automatic answers') }}</label>
       <label>{{ t('Notice') }}<input name="notice_text" placeholder="{{ notice_default }}"></label>
     </fieldset>

@@ -84,9 +84,11 @@ class _FakeChat:
         text = (_FakeChat.text_override
                 or "Die Pruefrist betraegt vier Jahre [Kessel.txt, Seite 1].")
         if stream:
+            # The last chunk carries finish_reason, as a real server sends it
+            # (a stream without it counts as broken off: pipeline.antwort).
             return iter(types.SimpleNamespace(choices=[types.SimpleNamespace(
-                delta=types.SimpleNamespace(content=part))])
-                for part in (text[:20], text[20:]))
+                delta=types.SimpleNamespace(content=part), finish_reason=end)])
+                for part, end in ((text[:20], None), (text[20:], "stop")))
         return types.SimpleNamespace(choices=[types.SimpleNamespace(
             message=types.SimpleNamespace(content="Pruefrist Kessel",
                                           tool_calls=None))])
@@ -311,6 +313,21 @@ check("upload into a foreign room is 403",
       .status_code == 403)
 docs = anna.get(f"{API}/documents").json()
 check("document listed", "Kessel.txt" in docs.get(own, {}).get("files", []), docs)
+# the same file again (second pass with the vision model) stays one document;
+# another file of that name -- also in another project folder -- is not
+# replaced without a word, it becomes "Kessel (2).txt"
+r = anna.post(f"{API}/documents", data={"room": own, "project": "Kessel"},
+              files={"file": ("Kessel.txt", b"Die Pruefrist fuer Kessel "
+                              b"betraegt vier Jahre. " * 20, "text/plain")})
+check("the same file again keeps its name", r.status_code == 200 and not r.json()["note"],
+      r.text)
+r = anna.post(f"{API}/documents", data={"room": own, "project": "Anderes"},
+              files={"file": ("Kessel.txt", b"Ein anderes Dokument. " * 20, "text/plain")})
+_files = anna.get(f"{API}/documents").json().get(own, {}).get("files", [])
+check("another file of the same name becomes 'Kessel (2).txt', with a note",
+      r.status_code == 200 and "Kessel (2).txt" in r.json()["note"]
+      and {"Kessel.txt", "Kessel (2).txt"} <= set(_files), (r.text, _files))
+anna.delete(f"{API}/documents", params={"room": own, "file": "Kessel (2).txt"})
 check("projects", "Kessel" in anna.get(f"{API}/documents/projects").json())
 check("workspaces", {w["id"] for w in anna.get(f"{API}/workspaces").json()}
       >= {own, "einkauf"})

@@ -45,7 +45,7 @@ def serve(port):
             if stream:
                 return iter([types.SimpleNamespace(choices=[
                     types.SimpleNamespace(delta=types.SimpleNamespace(
-                        content=text))])])
+                        content=text), finish_reason="stop")])])
             return types.SimpleNamespace(choices=[types.SimpleNamespace(
                 message=types.SimpleNamespace(content="Titel",
                                               tool_calls=None))])

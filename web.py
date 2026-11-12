@@ -209,6 +209,8 @@ TEXTS = {
     "Notice": "Hinweistext", "answers on its own": "antwortet selbständig",
     "with notice": "mit Hinweis", "WITHOUT notice": "OHNE Hinweis",
     "prepares drafts": "legt Entwürfe vor",
+    "Switched off for now: every message waits for a confirmation until an automatic answer can be limited to the mailbox's own workspace.":
+        "Vorerst abgeschaltet: Jede Nachricht wartet auf eine Bestätigung, bis eine automatische Antwort auf den Arbeitsbereich des Postfachs beschränkt werden kann.",
     "Delete this chat?": "Diesen Chat löschen?",
     "Search started. You will be notified when the hits are there -- you can leave this page.":
         "Suche gestartet. Du wirst benachrichtigt, sobald die Treffer da sind – die Seite darf verlassen werden.",

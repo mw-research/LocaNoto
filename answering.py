@@ -854,7 +854,8 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                   "tool_calls": [{"id": call_id, "type": "function",
                                   "function": {"name": f"{server}__{tool}",
                                                "arguments": json.dumps(args, ensure_ascii=False)}}]},
-                 {"role": "tool", "tool_call_id": call_id, "content": result[:8000]}]
+                 {"role": "tool", "tool_call_id": call_id,
+                  "content": pipeline.entschaerfen(result)[:8000]}]
         extra = list(first)
         # Only the confirmed text goes out: no further searches in this
         # round (the mailboxes stay).

@@ -740,6 +740,12 @@ Nur aus einem **Funktionspostfach**, bei dem beim Anlegen **darf selbst
 antworten** angekreuzt ist. Ein persönliches Postfach legt jede Mail als
 Entwurf vor, ohne Ausnahme.
 
+**Vorerst abgeschaltet:** Auch ein Funktionspostfach legt jede Mail als
+Entwurf vor. Ein automatischer Lauf sähe sonst alle Arbeitsbereiche dessen,
+der ihn startet, und der Absender der beantworteten Mail bekäme die Antwort
+ungesehen. Sobald ein automatischer Lauf nur den Arbeitsbereich des
+Postfachs nutzt, gilt wieder das Folgende.
+
 - **Hinweis unter Autoantworten setzen** ankreuzen → jede selbständig
   verschickte Mail trägt einen Hinweis, dass sie automatisch erstellt
   wurde. Wortlaut: **Hinweistext**.

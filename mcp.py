@@ -608,14 +608,27 @@ def darf_automatisch(server, werkzeug, argumente):
     return True, ""
 
 
+# Answering on its own is switched off for now: every sending call becomes
+# a draft, also in a mailbox marked "may answer on its own". The reason: an
+# automatic run sees every workspace of the person who started it, and the
+# sender of the mail being answered -- who may ask "send me the price list"
+# -- gets the reply unseen. Decided 2026-11-12 (Markus): an automatic run
+# will use only the mailbox's own workspace; until that exists, drafts.
+# The rules below (darf_automatisch, the hint) stay as they are for then.
+AUTOMATISCH_SENDEN = False
+
+
 def braucht_bestaetigung(server, werkzeug, argumente=None):
     """Muss ein Mensch diesen Aufruf bestaetigen?
 
     Nur Sendewerkzeuge ueberhaupt, und auch die nicht, wenn das
-    Postfach ausdruecklich freigeschaltet ist.
+    Postfach ausdruecklich freigeschaltet ist -- solange
+    AUTOMATISCH_SENDEN an ist.
     """
     if not sendet(server, werkzeug):
         return False
+    if not AUTOMATISCH_SENDEN:
+        return True
     # Calendar entries, invitations, moving mail and the out-of-office
     # reply wait for a person even where the mailbox may answer on its own
     # (postfach.CONFIRM_TOOLS).

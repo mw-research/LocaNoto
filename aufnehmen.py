@@ -92,6 +92,31 @@ def _gehoert_anderem_raum(filename, raum):
             return True
     return False
 
+def _im_raum(filename, raum):
+    """Fuehrt DIESER Raum schon ein Dokument dieses Namens -- auch in einem
+    anderen Projektordner? Im Raum ist der Dateiname die Kennung eines
+    Dokuments. Antwortet die Sammlung nicht: ja (dann wird ausgewichen)."""
+    sml = raum_sammlung(raum, anlegen=False)
+    if sml is None:
+        return False
+    try:
+        return bool(sml.get(where=store.datei_filter(filename),
+                            include=[])["ids"])
+    except Exception:
+        return True
+
+
+def _freier_name_im_raum(ziel_ordner, dateiname, raum):
+    """'Angebot (2).pdf', '(3)' ... -- frei auf der Platte UND im Raum."""
+    stamm, endung = os.path.splitext(dateiname)
+    for n in range(2, 1000):
+        name = f"{stamm} ({n}){endung}"
+        if not statefiles.exists(os.path.join(ziel_ordner, name)) \
+                and not _im_raum(name, raum):
+            return os.path.join(ziel_ordner, name)
+    return paths.freier_name(ziel_ordner, dateiname)
+
+
 def _speichern_chunks(chunks, metadatas, ids, raum,
                       nach_dem_schreiben=None):
     """Vektorisiert die Abschnitte und legt sie in beiden Indizes ab.
@@ -220,6 +245,19 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
             _schon_da = f.read() == _inhalt
     except OSError:
         _schon_da = False
+
+    # Ein ANDERES Dokument gleichen Namens im selben Raum -- im selben
+    # Ordner oder in einem anderen Projektordner -- wird nicht still
+    # ersetzt. Beim Hochladen vieler Dateien auf einmal faellt das sonst
+    # niemandem auf. Ausweichen wie zwischen Raeumen: 'Angebot (2).pdf'.
+    # Nur wenn es Abschnitte hat: ein Scan, aus dem nichts zu lesen war,
+    # wird im zweiten Durchgang (Sehmodell) ersetzt, nicht verdoppelt.
+    if not _schon_da and not name_hinweis and _im_raum(dateiname, raum):
+        pdf_path = _freier_name_im_raum(ziel_ordner, dateiname, raum)
+        name_hinweis = (f"Ein anderes Dokument namens '{dateiname}' liegt "
+                        f"schon in diesem Arbeitsbereich. Gespeichert als "
+                        f"'{os.path.basename(pdf_path)}'.")
+        dateiname = os.path.basename(pdf_path)
     if not _schon_da:
         with statefiles.open(pdf_path, "wb") as f:
             f.write(_inhalt)

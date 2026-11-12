@@ -711,6 +711,12 @@ Only from a **shared mailbox** for which **may reply on its own** was
 ticked when it was created. A personal mailbox presents every email as a
 draft, without exception.
 
+**Switched off for now:** a shared mailbox, too, presents every email as a
+draft. An automatic run would otherwise see every workspace of the person
+who starts it, and the sender of the answered email would get the reply
+unseen. Once an automatic run uses only the mailbox's own workspace, the
+following applies again.
+
 - Tick **Add notice to auto-replies** → every email sent on its own
   carries a note that it was created automatically. Wording: **Notice
   text**.
