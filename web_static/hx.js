@@ -231,15 +231,41 @@
     var progress = form.querySelector("[data-progress]");
     progress.hidden = false;
     progress.textContent = "…";
+    progress.style.whiteSpace = "pre-line";
     form.classList.add("busy");
+    // One request per file, one after the other: the server reads, splits
+    // and embeds each document in the request, and several at once would
+    // compete for OCR and the embedding model.
+    var files = Array.prototype.slice.call(form.querySelector("input[type=file]").files);
+    var lines = [];
+    var failed = 0;
     try {
-      var response = await fetch("/api/v1/documents", {
-        method: "POST", headers: csrfHeaders(), credentials: "same-origin",
-        body: new FormData(form)
-      });
-      if (!response.ok) { toast(await errorText(response), true); progress.hidden = true; return; }
-      var r = await response.json();
-      progress.textContent = r.file + ": " + r.passages + (r.note ? " – " + r.note : "");
+      for (var i = 0; i < files.length; i++) {
+        var prefix = files.length > 1 ? (i + 1) + "/" + files.length + " " : "";
+        progress.textContent = lines.concat(prefix + files[i].name + " …").join("\n");
+        var body = new FormData(form);
+        body.delete("file");
+        body.append("file", files[i], files[i].name);
+        var line;
+        try {
+          var response = await fetch("/api/v1/documents", {
+            method: "POST", headers: csrfHeaders(), credentials: "same-origin", body: body
+          });
+          if (response.ok) {
+            var r = await response.json();
+            line = r.file + ": " + r.passages + (r.note ? " – " + r.note : "");
+          } else {
+            failed++;
+            line = files[i].name + ": " + await errorText(response);
+          }
+        } catch (e) {
+          failed++;
+          line = files[i].name + ": " + e.message;
+        }
+        lines.push(prefix + line);
+        progress.textContent = lines.join("\n");
+      }
+      if (failed) toast(files.length === 1 ? lines[0] : failed + "/" + files.length + " ✗", true);
       var list = await fetch("/ui/documents", { credentials: "same-origin" });
       if (list.ok) swap(document.getElementById("doclist"), await list.text(), "innerHTML");
       form.reset();

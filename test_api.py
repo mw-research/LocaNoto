@@ -811,6 +811,8 @@ check("form without CSRF header is refused",
       nocsrf.post("/ui/feedback", data={"kind": "daumen_hoch",
                                         "question": "x"}).status_code == 403)
 check("documents fragment", "Kessel.txt" in anna.get("/ui/documents").text)
+check("documents: several files can be picked at once",
+      'name="file" multiple' in anna.get("/documents").text)
 check("static files", anon.get("/static/hx.js").status_code == 200)
 for path in ("/admin/backups", "/admin/emergency", "/admin/content",
              "/admin/feedback", "/admin/storage", "/admin/mailboxes"):
