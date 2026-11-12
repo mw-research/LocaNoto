@@ -66,6 +66,13 @@ class Handler(BaseHTTPRequestHandler):
                     chunk = dict(base, object="chat.completion.chunk", choices=[
                         {"index": 0, "delta": {"content": piece}, "finish_reason": None}])
                     self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+                # The last chunk says why the stream ends, as every real
+                # model server does. LiteLLM fails a stream without it
+                # since 2026-10-31 (BerriAI/litellm#47665), and the
+                # docker-full test goes through LiteLLM.
+                last = dict(base, object="chat.completion.chunk", choices=[
+                    {"index": 0, "delta": {}, "finish_reason": "stop"}])
+                self.wfile.write(f"data: {json.dumps(last)}\n\n".encode())
                 self.wfile.write(b"data: [DONE]\n\n")
                 return
             return self._json(dict(base, object="chat.completion", choices=[
