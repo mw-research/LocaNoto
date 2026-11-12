@@ -100,7 +100,7 @@ spec:
       containers:
         - name: litellm
           # Pin an exact, tested release tag.
-          image: ghcr.io/berriai/litellm:main-stable
+          image: ghcr.io/berriai/litellm:v1.109.1
           args: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
           envFrom:
             - secretRef: {name: locanoto-gateway}

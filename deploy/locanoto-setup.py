@@ -69,7 +69,10 @@ IMAGES = {
     "caddy": "caddy:2.8.4",
     "searxng": "searxng/searxng:2026.10.13-22c64b8d3",
     "opencloud": "opencloudeu/opencloud:7.2.4",
-    "litellm": "ghcr.io/berriai/litellm:main-stable",
+    # A tested release, not main-stable: that tag moves every night and
+    # carried a breaking change into every new install on 2026-11-12
+    # (streams without finish_reason fail). Raise it after a green CI run.
+    "litellm": "ghcr.io/berriai/litellm:v1.109.1",
 }
 CERT_MANAGER = ("https://github.com/cert-manager/cert-manager/releases/"
                 "download/v1.16.2/cert-manager.yaml")
