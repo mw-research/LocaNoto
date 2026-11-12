@@ -132,6 +132,8 @@ answers = {"target": "docker", "dir": target, "host": "192.168.10.20", "tls": "i
            "no_proxy": "modelle.intern", "model_url": "http://modelle.intern:8000/v1",
            "chat_model": "qwen3.8:27b", "embedding_model": "qwen3-embedding:8b",
            "vision_model": "", "dimensions": 2048,
+           # "pages": an answer saved before the classic Streamlit pages were
+           # removed (2026-11-12) -- it must install without them.
            "features": {"websearch": True, "opencloud": True, "gateway": True,
                         "oidc": False, "pages": True},
            "cloud_host": "cloud.example.test"}
@@ -141,7 +143,10 @@ compose = yaml.safe_load(open(os.path.join(target, "compose.yaml"), encoding="ut
 svc = compose["services"]
 check("all services there",
       {"trust", "postgres", "server", "worker", "searxng", "websuche", "opencloud",
-       "litellm", "pages", "caddy"} <= set(svc), sorted(svc))
+       "litellm", "caddy"} <= set(svc), sorted(svc))
+check("an old answer with pages installs no Streamlit any more",
+      "pages" not in svc and not any("streamlit" in str(v.get("command", ""))
+                                     for v in svc.values()), sorted(svc))
 check("every container trusts the same bundle",
       all(svc[n]["environment"].get("SSL_CERT_FILE") == "/trust/bundle.pem"
           for n in ("server", "worker", "searxng", "websuche", "opencloud", "litellm")))
@@ -155,7 +160,7 @@ _gw = {"target": "docker", "dir": os.path.join(TMP, "install-gw"), "host": "10.0
        "tls": "internal", "model_url": "http://modelle:8000/v1", "chat_model": "c",
        "embedding_model": "e", "vision_model": "", "dimensions": 64,
        "features": {"websearch": False, "opencloud": False, "gateway": True,
-                    "oidc": False, "pages": False},
+                    "oidc": False},
        "env": {"RERANKER_BASE_URL": "http://modelle:8000", "EMBEDDING_NEXT_MODEL": "e2"}}
 _rg = run_setup(_gw, os.path.join(TMP, "state-gw"), {"LOCANOTO_MODEL_API_KEY": "sk-model"})
 _cg = yaml.safe_load(open(os.path.join(TMP, "install-gw", "compose.yaml"), encoding="utf-8"))
@@ -175,7 +180,7 @@ caddy = open(os.path.join(target, "Caddyfile"), encoding="utf-8").read()
 check("Caddy issues from the own CA, for both addresses",
       "tls internal" in caddy and "cert /certs/ca.crt" in caddy
       and "192.168.10.20 {" in caddy and "cloud.example.test {" in caddy
-      and "handle_path /klassisch*" in caddy)
+      and "klassisch" not in caddy)
 check("Caddy answers clients that send no SNI (an IP address)",
       "default_sni 192.168.10.20" in caddy)
 check("OpenCloud reaches its own address through Caddy, whatever the DNS says",
@@ -204,7 +209,7 @@ answers = {"target": "kubernetes", "namespace": "lnt", "host": "locanoto.example
            "model_url": "http://modelle:8000/v1", "chat_model": "c", "embedding_model": "e",
            "dimensions": 1024, "ingress_class": "nginx", "replicas": 2,
            "features": {"websearch": True, "opencloud": True, "gateway": False,
-                        "oidc": True, "pages": False},
+                        "oidc": True},
            "cloud_host": "cloud.example.test", "cloud_internal_ip": "10.96.0.50",
            "oidc_issuer": "https://idp.example.test",
            "oidc_client_id": "locanoto", "oidc_admin_groups": "it-admins",

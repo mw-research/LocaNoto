@@ -11,7 +11,7 @@
 # files of the default branch.)
 #
 #   docker-minimal   this machine, core only
-#   docker-full      + web search, OpenCloud, model gateway, classic pages
+#   docker-full      + web search, OpenCloud, model gateway
 #   kind             Kubernetes (kind), internal CA, certificate issued by
 #                    the installer
 #   kind-certmanager Kubernetes, the installer installs cert-manager and it
@@ -125,7 +125,7 @@ jobs:
            "vision_model": "", "dimensions": 64, "admin_name": "admin",
            "cloud_host": "cloud.$IP.nip.io",
            "features": {"websearch": $FULL, "opencloud": $FULL,
-                        "gateway": $FULL, "oidc": false, "pages": $FULL}}
+                        "gateway": $FULL, "oidc": false}}
           EOF
           cat answers.json
 
@@ -167,7 +167,7 @@ jobs:
         run: |
           C="docker compose -f $HOME/locanoto/compose.yaml --project-directory $HOME/locanoto"
           $C ps -a > /tmp/ps.log 2>&1 || true
-          for s in trust postgres server worker caddy websuche searxng opencloud litellm pages; do
+          for s in trust postgres server worker caddy websuche searxng opencloud litellm; do
             $C logs --tail 40 $s > /tmp/$s.log 2>&1 || true
           done
           python3 deploy/ci_annotate.py "${{ matrix.variant }}" /tmp/install.log \
@@ -259,7 +259,7 @@ jobs:
            "vision_model": "", "dimensions": 64, "admin_name": "admin",
            "ingress_class": "nginx", "replicas": 1, "public_check": false,
            "features": {"websearch": true, "opencloud": true,
-                        "gateway": false, "oidc": false, "pages": false}}
+                        "gateway": false, "oidc": false}}
           EOF
           cat answers.json
 

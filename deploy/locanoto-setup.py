@@ -271,9 +271,6 @@ def interview(old):
         a["oidc_client_id"] = ask("OIDC client id", a.get("oidc_client_id", "locanoto"))
         a["oidc_admin_groups"] = ask(T("Gruppe(n) der Admins", "Admin group(s)"),
                                      a.get("oidc_admin_groups", ""))
-    f["pages"] = yes(T("Klassische Oberfläche (Streamlit) zusätzlich unter /klassisch?",
-                       "Classic interface (Streamlit) also under /klassisch?"),
-                     f.get("pages", False))
     a["features"] = f
 
     if a["target"] == "kubernetes":
@@ -487,7 +484,7 @@ def list_shares(value):
 
 
 def app_env(a, sec, database_url, opencloud_url):
-    """Environment of the server, worker and pages containers."""
+    """Environment of the server and worker containers."""
     f = a["features"]
     gateway = f["gateway"]
     env = {
@@ -566,7 +563,7 @@ def trust_env():
     return {"SSL_CERT_FILE": b, "REQUESTS_CA_BUNDLE": b, "CURL_CA_BUNDLE": b}
 
 
-INTERNAL = ["localhost", "127.0.0.1", "postgres", "server", "worker", "pages",
+INTERNAL = ["localhost", "127.0.0.1", "postgres", "server", "worker",
             "websuche", "searxng", "opencloud", "litellm", "caddy",
             ".svc", ".cluster.local"]
 
@@ -688,10 +685,7 @@ def docker_files(a, sec):
         return (f"{scheme}{host} {{\n{tls}{extra}"
                 f"\treverse_proxy {upstream} {{\n\t\tflush_interval -1\n\t}}\n}}\n")
 
-    extra = ""
-    if f["pages"]:
-        extra = "\thandle_path /klassisch* {\n\t\treverse_proxy pages:8501\n\t}\n"
-    caddy.append(site(a["host"], "server:8700", extra))
+    caddy.append(site(a["host"], "server:8700", ""))
     if f["websearch"]:
         services["searxng"] = {"image": IMAGES["searxng"], "restart": "unless-stopped",
                                "environment": compose_escape(dict({
@@ -733,11 +727,6 @@ def docker_files(a, sec):
                 **proxy_env(a), **trust_env())),
             "volumes": ["./litellm/config.yaml:/etc/litellm/config.yaml:ro"] + trust_mount,
             "depends_on": {"trust": {"condition": "service_completed_successfully"}}}
-    if f["pages"]:
-        services["pages"] = dict(base, command=[
-            "streamlit", "run", "app.py", "--server.port=8501",
-            "--server.address=0.0.0.0", "--server.baseUrlPath=klassisch"],
-            environment=compose_escape(env))
     caddy_vol = ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddy-data:/data",
                  "caddy-config:/config"]
     if a["tls"] in ("internal", "own"):
@@ -1102,12 +1091,6 @@ def k8s_objects(a, sec, cert_manager):
                         volumes=app_vols, security=sec_ctx),
              deployment(a, "worker", "worker", app_container("worker", ["python", "-u", "worker.py"]),
                         volumes=app_vols, security=sec_ctx)]
-    if f["pages"]:
-        objs += [service(a, "pages", "pages", 8501),
-                 deployment(a, "pages", "pages", app_container(
-                     "pages", ["streamlit", "run", "app.py", "--server.port=8501",
-                               "--server.address=0.0.0.0", "--server.baseUrlPath=klassisch"],
-                     8501), volumes=app_vols, security=sec_ctx)]
     if f["websearch"]:
         objs += [
             {"apiVersion": "v1", "kind": "Secret", "metadata": meta("searxng", a, "searxng"),
@@ -1216,10 +1199,6 @@ def k8s_objects(a, sec, cert_manager):
     rules = [{"host": a["host"], "http": {"paths": [
         {"path": "/", "pathType": "Prefix",
          "backend": {"service": {"name": "server", "port": {"number": 8700}}}}]}}]
-    if f["pages"]:
-        rules[0]["http"]["paths"].insert(0, {
-            "path": "/klassisch", "pathType": "Prefix",
-            "backend": {"service": {"name": "pages", "port": {"number": 8501}}}})
     if f["opencloud"]:
         rules.append({"host": a["cloud_host"], "http": {"paths": [
             {"path": "/", "pathType": "Prefix",
@@ -1237,7 +1216,7 @@ def k8s_objects(a, sec, cert_manager):
                           "policyTypes": ["Ingress"],
                           "ingress": [{"from": [{"podSelector": {"matchExpressions": [{
                               "key": "app.kubernetes.io/component", "operator": "In",
-                              "values": ["server", "worker", "pages"]}]}}],
+                              "values": ["server", "worker"]}]}}],
                               "ports": [{"port": 5432}]}]}})
     return objs
 
@@ -1291,6 +1270,10 @@ def install_kubernetes(a, sec, first, runner):
         fh.write(manifest)
     _private(out)
     print("  " + T("Wende Manifeste an ...", "Applying manifests ..."))
+    # The classic Streamlit pages are gone (2026-11-12). An installation from
+    # before still has them; apply would leave them running on the old image.
+    kubectl("-n", ns, "delete", "deployment/pages", "service/pages",
+            "--ignore-not-found", check=False)
     for attempt in range(12):
         r = kubectl("apply", "-f", "-", stdin=manifest, check=False)
         if r.returncode == 0:
@@ -1300,8 +1283,7 @@ def install_kubernetes(a, sec, first, runner):
         time.sleep(10)        # cert-manager's webhook is not serving yet
     for d in ["server", "worker"] + [n for n, on in (
             ("websuche", a["features"]["websearch"]), ("searxng", a["features"]["websearch"]),
-            ("opencloud", a["features"]["opencloud"]), ("litellm", a["features"]["gateway"]),
-            ("pages", a["features"]["pages"])) if on]:
+            ("opencloud", a["features"]["opencloud"]), ("litellm", a["features"]["gateway"])) if on]:
         kubectl("-n", ns, "rollout", "restart", f"deploy/{d}", check=False)
     kubectl("-n", ns, "rollout", "status", "statefulset/postgres", "--timeout=600s", check=False)
     kubectl("-n", ns, "rollout", "status", "deploy/server", "--timeout=900s")
@@ -1316,8 +1298,7 @@ def install_kubernetes(a, sec, first, runner):
         if token and token != sec.get("OPENCLOUD_APP_TOKEN"):
             sec["OPENCLOUD_APP_TOKEN"] = token
             kubectl("apply", "-f", "-", stdin=docs(k8s_objects(a, sec, cm)))
-            kubectl("-n", ns, "rollout", "restart", "deploy/server", "deploy/worker",
-                    *(["deploy/pages"] if a["features"]["pages"] else []))
+            kubectl("-n", ns, "rollout", "restart", "deploy/server", "deploy/worker")
             kubectl("-n", ns, "rollout", "status", "deploy/server", "--timeout=900s")
         opencloud_reaches_itself(a, lambda *cmd: kubectl(
             "-n", ns, "exec", "deploy/opencloud", "--", *cmd, check=False))
@@ -1353,7 +1334,7 @@ def summary(a):
   {T('Adresse', 'Address')}:     https://{a['host']}  ({tls})
   {T('Modelle', 'Models')}:     {a['model_url']}  ({a['chat_model']}, {a['embedding_model']})
   {T('Websuche', 'Web search')}:  {on(f['websearch'])}    OpenCloud: {on(f['opencloud'])}{' (' + a.get('cloud_host', '') + ')' if f['opencloud'] else ''}
-  Gateway:     {on(f['gateway'])}    SSO: {on(f['oidc'])}    {T('Klassisch', 'Classic')}: {on(f['pages'])}
+  Gateway:     {on(f['gateway'])}    SSO: {on(f['oidc'])}
   {T('Proxy', 'Proxy')}:       {a.get('proxy') or '-'}    {T('Firmen-CA', 'Company CA')}: {len(a.get('company_ca') or [])}""")
 
 
@@ -1388,7 +1369,7 @@ def main():
         a = load(args.answers)
         a.setdefault("features", {})
         for k, d in (("websearch", True), ("opencloud", False), ("gateway", False),
-                     ("oidc", False), ("pages", False)):
+                     ("oidc", False)):
             a["features"].setdefault(k, d)
         a.setdefault("dimensions", 2048)
         a.setdefault("company_ca", [])
@@ -1404,6 +1385,9 @@ def main():
         a = old
     else:
         a = interview(old)
+    # The classic Streamlit pages (feature "pages") were removed on
+    # 2026-11-12; a saved answer from before still names them.
+    a.setdefault("features", {}).pop("pages", None)
     a["image"] = args.image or a.get("image") or IMAGE
     a["state_dir"] = args.state
     a["version"] = VERSION
