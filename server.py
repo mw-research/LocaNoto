@@ -101,6 +101,10 @@ def principal(request: Request,
         name = auth.pruefe(token)
         if name and not benutzer.eintrag(name):
             name = None             # the account is gone; so is its token
+        if name:
+            import oidc
+            if not oidc.token_allowed(name):
+                name = None         # no directory sign-in for too long
         if not name:
             raise HTTPException(401, "No valid token.",
                                 headers={"WWW-Authenticate": "Bearer"})

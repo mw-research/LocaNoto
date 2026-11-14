@@ -44,10 +44,14 @@ import secrets
 import threading
 import time
 
+import json
+
 import benutzer
+import dateisperre
 import paths
 import raeume
 import sessions
+import statefiles
 
 ISSUER = os.getenv("OIDC_ISSUER", "").strip().rstrip("/")
 CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "").strip()
@@ -227,6 +231,51 @@ def _left_over_workspace(name):
         return True
 
 
+# --- TOKENS OF DIRECTORY ACCOUNTS ---
+#
+# Role and groups of a directory account are read when the person signs
+# in. An API token never signs in: somebody disabled in the directory, or
+# taken out of a group, kept that access through a token for as long as
+# the token existed. So a token of a directory account only counts while
+# the last sign-in through the directory is not older than TOKEN_DAYS.
+# Tokens of local accounts are not affected. 0 switches the rule off.
+TOKEN_DAYS = paths.env_int("OIDC_TOKEN_TAGE", 30)
+_SIGN_INS = os.path.join(paths.CONFIG_DIR, "oidc_anmeldungen.json")
+
+
+def _sign_ins():
+    try:
+        with statefiles.open(_SIGN_INS, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def note_sign_in(name):
+    """Remember that this account signed in through the directory now."""
+    with dateisperre.gesperrt(_SIGN_INS):
+        data = _sign_ins()
+        data[name] = int(time.time())
+        dateisperre.schreibe_atomar(
+            _SIGN_INS, json.dumps(data, indent=1, sort_keys=True))
+
+
+def token_allowed(name):
+    """May a token of this account still be used?"""
+    if TOKEN_DAYS <= 0:
+        return True
+    if (benutzer.eintrag(name) or {}).get("anmeldung") != "oidc":
+        return True
+    last = _sign_ins().get(name)
+    if last is None:
+        # An account from before this rule: its time starts now, so an
+        # update does not take a working token away at once.
+        note_sign_in(name)
+        return True
+    return time.time() - last <= TOKEN_DAYS * 86400
+
+
 def provision(claims):
     """Create or update the account behind these claims. Returns its name."""
     identity = f"{claims['iss']}|{claims['sub']}"
@@ -265,5 +314,6 @@ def provision(claims):
         if entry.get("rolle") != role:
             benutzer.rolle_setzen(name, role, von="oidc")
     raeume.oidc_gruppen_setzen(name, sorted(groups))
+    note_sign_in(name)
     benutzer.protokolliere("anmeldung", name, name, "oidc")
     return name

@@ -7119,6 +7119,33 @@ pruef("der verschluesselte Abzug laesst sich einspielen",
       not _zur_h.get("fehler") and sum(_zur_h.get("raeume", {}).values()) > 0, _zur_h)
 _sich_h.entferne(_ab_h["name"], trotzdem=True)
 
+# --- HARDENING: A TOKEN DOES NOT OUTLIVE THE DIRECTORY ACCOUNT ---
+#
+# Somebody disabled in the company directory kept every access through
+# an API token: role and groups are read at sign-in, and a token never
+# signs in.
+import oidc as _oidc_h
+import time as _time_h
+
+benutzer.anlege("verzeichnis", "Passwort-123456", von="markus")
+pruef("das Token eines lokalen Kontos ist nicht befristet",
+      _oidc_h.token_allowed("verzeichnis"))
+benutzer.anmeldung_setzen("verzeichnis", "oidc", von="oidc", extern="https://idp.test|42")
+pruef("ein Verzeichniskonto aus der Zeit davor: die Frist beginnt jetzt",
+      _oidc_h.token_allowed("verzeichnis")
+      and "verzeichnis" in _oidc_h._sign_ins())
+_echt_zeit_h = _time_h.time
+_time_h.time = lambda: _echt_zeit_h() + (_oidc_h.TOKEN_DAYS + 1) * 86400
+try:
+    pruef("ohne Anmeldung ueber das Verzeichnis laeuft das Token ab",
+          not _oidc_h.token_allowed("verzeichnis"))
+    _oidc_h.note_sign_in("verzeichnis")
+    pruef("nach einer neuen Anmeldung gilt es wieder",
+          _oidc_h.token_allowed("verzeichnis"))
+finally:
+    _time_h.time = _echt_zeit_h
+benutzer.loesche("verzeichnis", von="markus")
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

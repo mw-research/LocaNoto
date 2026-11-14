@@ -141,6 +141,10 @@ def benutzer(x_locanoto_token: str = Header(default="")):
     # The account is gone: so is its token (as in server.principal).
     if kennung and not benutzer_datei.eintrag(kennung):
         kennung = None
+    if kennung:
+        import oidc
+        if not oidc.token_allowed(kennung):
+            kennung = None
     if not kennung:
         raise HTTPException(status_code=401, detail="Kein gueltiges Token.",
                             headers={"WWW-Authenticate": "Token"})
