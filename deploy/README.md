@@ -96,6 +96,7 @@ und von außen geprüft.
 | `tls` | `letsencrypt` (+ `acme_email`), `internal`, `own` (+ `own_cert`, `own_key`), `none` |
 | `install_cert_manager` | `false`: cert-manager nicht selbst installieren |
 | `company_ca`, `proxy`, `no_proxy` | Firmen-CA (Liste von Pfaden), Proxy für den Weg nach außen |
+| `trusted_proxies` | Adressen oder Netze (Komma-Liste), deren Angabe zur Absenderadresse der Server glaubt: der Ingress-Controller bzw. Caddy. Vorgabe `*`. Mit dem Netz des Ingress eingetragen kann kein anderer Pod eine Absenderadresse vortäuschen und so das Anmeldelimit je Adresse umgehen |
 | `model_url`, `chat_model`, `embedding_model`, `vision_model` | Modellserver (`/v1`) und Modelle |
 | `dimensions` | Vektorlänge in der Datenbank, Vorgabe `2048` |
 | `features` | `websearch`, `opencloud`, `gateway`, `oidc` (je `true`/`false`) |

@@ -656,7 +656,8 @@ def docker_files(a, sec):
                                      "interval": "5s", "retries": 30}},
         "server": dict(base, command=["uvicorn", "server:app", "--host", "0.0.0.0",
                                       "--port", "8700", "--proxy-headers",
-                                      "--forwarded-allow-ips", "*"],
+                                      "--forwarded-allow-ips",
+                                      a.get("trusted_proxies") or "*"],
                        environment=compose_escape(env),
                        healthcheck={"test": ["CMD", "python", "-c",
                                              "import urllib.request;urllib.request."
@@ -991,6 +992,59 @@ def service(a, name, component, port):
                      "ports": [{"name": "http", "port": port, "targetPort": port}]}}
 
 
+# Everything that is not the open internet: private ranges, link-local
+# (the cloud metadata address 169.254.169.254), loopback, carrier NAT.
+NOT_PUBLIC = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+              "169.254.0.0/16", "127.0.0.0/8", "100.64.0.0/10"]
+
+
+def _from_components(*components):
+    return [{"podSelector": {"matchExpressions": [{
+        "key": "app.kubernetes.io/component", "operator": "In",
+        "values": list(components)}]}}]
+
+
+def way_out(a):
+    """Egress rules for a pod that fetches from the open internet.
+
+    Name resolution and the public internet, and nothing of the cluster
+    or the company network next to it -- a pod that reads foreign web
+    pages must not be a stepping stone to the services beside it. With a
+    proxy configured the way out is the proxy: its address if it is one,
+    otherwise its port (a policy cannot name a host).
+    """
+    rules = [{"ports": [{"protocol": "UDP", "port": 53},
+                        {"protocol": "TCP", "port": 53}]}]
+    if a.get("proxy"):
+        from urllib.parse import urlsplit
+        u = urlsplit(a["proxy"])
+        port = u.port or (443 if u.scheme == "https" else 80)
+        rule = {"ports": [{"protocol": "TCP", "port": port}]}
+        if u.hostname and _is_ip(u.hostname):
+            bits = 32 if ipaddress.ip_address(u.hostname).version == 4 else 128
+            rule["to"] = [{"ipBlock": {"cidr": f"{u.hostname}/{bits}"}}]
+        rules.append(rule)
+    else:
+        rules.append({"to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": NOT_PUBLIC}}],
+                      "ports": [{"protocol": "TCP", "port": 443},
+                                {"protocol": "TCP", "port": 80}]})
+    return rules
+
+
+def network_policy(a, name, component, ingress=None, egress=None):
+    spec = {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "locanoto",
+                                            "app.kubernetes.io/component": component}},
+            "policyTypes": []}
+    if ingress is not None:
+        spec["policyTypes"].append("Ingress")
+        spec["ingress"] = ingress
+    if egress is not None:
+        spec["policyTypes"].append("Egress")
+        spec["egress"] = egress
+    return {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+            "metadata": meta(name, a, component), "spec": spec}
+
+
 def pvc(a, name, size, mode="ReadWriteOnce"):
     spec = {"accessModes": [mode], "resources": {"requests": {"storage": size}}}
     if a.get("storage_class"):
@@ -1081,7 +1135,8 @@ def k8s_objects(a, sec, cert_manager):
 
     server = app_container("server", ["uvicorn", "server:app", "--host", "0.0.0.0",
                                       "--port", "8700", "--proxy-headers",
-                                      "--forwarded-allow-ips", "*"], 8700)
+                                      "--forwarded-allow-ips",
+                                      a.get("trusted_proxies") or "*"], 8700)
     server["readinessProbe"] = {"httpGet": {"path": "/api/v1/ready", "port": 8700},
                                 "periodSeconds": 10}
     server["startupProbe"] = {"httpGet": {"path": "/api/v1/health", "port": 8700},
@@ -1104,17 +1159,38 @@ def k8s_objects(a, sec, cert_manager):
                                   **proxy_env(a), **trust_env()))
                        + k_secret_env(["SEARXNG_SECRET"], "searxng"),
                 "ports": [{"containerPort": 8080}],
+                # As in k8s/98-websuche.yaml: the image's own user, no
+                # further rights. On the container, not the pod -- the
+                # trust init container runs the LocaNoto image.
+                "securityContext": {"runAsNonRoot": True, "runAsUser": 977,
+                                    "runAsGroup": 977,
+                                    "allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]}},
                 "volumeMounts": [TRUST_MOUNT, {"name": "settings", "mountPath":
                                                "/etc/searxng/settings.yml",
                                                "subPath": "settings.yml"}]},
                 volumes=[{"name": "settings", "configMap": {"name": "searxng"}}]),
+            # In: only LocaNoto. Out: name resolution, SearXNG, the open
+            # internet -- not the cluster.
+            network_policy(a, "websuche", "websuche",
+                           ingress=[{"from": _from_components("server", "worker"),
+                                     "ports": [{"protocol": "TCP", "port": 8000}]}],
+                           egress=way_out(a) + [
+                               {"to": _from_components("searxng"),
+                                "ports": [{"protocol": "TCP", "port": 8080}]}]),
+            network_policy(a, "searxng", "searxng",
+                           ingress=[{"from": _from_components("websuche"),
+                                     "ports": [{"protocol": "TCP", "port": 8080}]}],
+                           egress=way_out(a)),
             service(a, "websuche", "websuche", 8000),
             deployment(a, "websuche", "websuche", {
                 "name": "websuche", "image": a["image"], "imagePullPolicy": "Always",
                 "command": ["python", "websuche.py"],
                 "env": k_env(dict({"WEBSUCHE_SEARXNG": "http://searxng:8080"},
                                   **proxy_env(a), **trust_env())),
-                "ports": [{"containerPort": 8000}], "volumeMounts": [TRUST_MOUNT]},
+                "ports": [{"containerPort": 8000}], "volumeMounts": [TRUST_MOUNT],
+                "securityContext": {"allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]}}},
                 security={"runAsNonRoot": True, "runAsUser": 10001})]
     if f["opencloud"]:
         objs += [
@@ -1167,7 +1243,10 @@ def k8s_objects(a, sec, cert_manager):
                        + k_secret_env(["LITELLM_MASTER_KEY", "MODEL_API_KEY"], "litellm"),
                 "ports": [{"containerPort": 4000}],
                 "volumeMounts": [TRUST_MOUNT, {"name": "config", "mountPath": "/etc/litellm"}]},
-                volumes=[{"name": "config", "configMap": {"name": "litellm"}}])]
+                volumes=[{"name": "config", "configMap": {"name": "litellm"}}]),
+            network_policy(a, "litellm", "gateway",
+                           ingress=[{"from": _from_components("server", "worker"),
+                                     "ports": [{"protocol": "TCP", "port": 4000}]}])]
 
     # certificates and ingress
     hosts = [a["host"]] + ([a["cloud_host"]] if f["opencloud"] else [])

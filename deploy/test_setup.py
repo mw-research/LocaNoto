@@ -224,6 +224,41 @@ check("expected objects", {("Deployment", "server"), ("Deployment", "worker"),
                            ("Deployment", "opencloud"), ("Issuer", "locanoto"),
                            ("Ingress", "locanoto")} <= kinds, sorted(kinds))
 by = {(o["kind"], o["metadata"]["name"]): o for o in objs}
+_np_web = by.get(("NetworkPolicy", "websuche"), {}).get("spec", {})
+_np_sx = by.get(("NetworkPolicy", "searxng"), {}).get("spec", {})
+_out = [r for r in _np_web.get("egress", []) if any("ipBlock" in t for t in r.get("to", []))]
+check("web search: reachable only from the application, out only to the open internet",
+      _np_web.get("policyTypes") == ["Ingress", "Egress"]
+      and _np_web["ingress"][0]["from"][0]["podSelector"]["matchExpressions"][0]["values"]
+      == ["server", "worker"]
+      and len(_out) == 1 and "10.0.0.0/8" in _out[0]["to"][0]["ipBlock"]["except"]
+      and "169.254.0.0/16" in _out[0]["to"][0]["ipBlock"]["except"], _np_web)
+check("SearXNG: reachable only from the web search, same way out, not as root",
+      _np_sx.get("ingress", [{}])[0].get("from", [{}])[0].get("podSelector", {})
+      .get("matchExpressions", [{}])[0].get("values") == ["websuche"]
+      and "Egress" in _np_sx.get("policyTypes", [])
+      and by[("Deployment", "searxng")]["spec"]["template"]["spec"]["containers"][0]
+      ["securityContext"]["runAsNonRoot"] is True, _np_sx)
+_gw = run_setup(dict(answers, proxy="http://10.1.2.3:3128", trusted_proxies="10.42.0.0/16",
+                     features=dict(answers["features"], gateway=True)),
+                os.path.join(TMP, "state-k8s-gw"), {"LOCANOTO_OIDC_SECRET": "x"})
+_gwo = {(o["kind"], o["metadata"]["name"]): o for o in yaml.safe_load_all(
+    open(os.path.join(TMP, "state-k8s-gw", "kubernetes.yaml"), encoding="utf-8"))} \
+    if _gw.returncode == 0 else {}
+_gw_web = _gwo.get(("NetworkPolicy", "websuche"), {}).get("spec", {})
+check("the gateway takes calls only from the application",
+      _gwo.get(("NetworkPolicy", "litellm"), {}).get("spec", {}).get("ingress", [{}])[0]
+      .get("ports") == [{"protocol": "TCP", "port": 4000}], _gw.stderr[-300:])
+check("with a proxy the way out is the proxy, not the open internet",
+      {"to": [{"ipBlock": {"cidr": "10.1.2.3/32"}}],
+       "ports": [{"protocol": "TCP", "port": 3128}]} in _gw_web.get("egress", [])
+      and not any("except" in t.get("ipBlock", {}) for r in _gw_web.get("egress", [])
+                  for t in r.get("to", [])), _gw_web.get("egress"))
+check("trusted_proxies reaches the server's command line",
+      "10.42.0.0/16" in _gwo.get(("Deployment", "server"), {}).get("spec", {})
+      .get("template", {}).get("spec", {}).get("containers", [{}])[0].get("command", []))
+check("without it the server trusts every peer, as before",
+      "*" in by[("Deployment", "server")]["spec"]["template"]["spec"]["containers"][0]["command"])
 cm = by[("ConfigMap", "locanoto")]["data"]
 secret = by[("Secret", "locanoto")]["stringData"]
 _srv_spec = by[("Deployment", "server")]["spec"]["template"]["spec"]
