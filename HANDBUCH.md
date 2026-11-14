@@ -717,8 +717,10 @@ Danach verbindet sich jeder Nutzer selbst unter **Meine Postfächer**; ein
 gemeinsames Passwort gibt es nicht. **Werkzeuge abfragen** → prüft ein
 Postfach mit deiner eigenen Anmeldung.
 
-Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP" oder
-„lokaler Prozess (stdio)".
+Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP". Der
+Servertyp „lokaler Prozess (stdio)" erscheint nur, wenn der Betreiber ihn
+mit `MCP_STDIO=1` freigeschaltet hat: Er startet einen Befehl auf dem
+Server.
 
 ### Wie richte ich als Admin die Websuche in LocaNoto ein?
 

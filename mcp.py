@@ -66,6 +66,28 @@ ZEITLIMIT = paths.env_float("MCP_TIMEOUT", 30)
 # gestellt ist.
 MAX_WERKZEUGE = paths.env_int("MCP_MAX_WERKZEUGE", 40)
 
+# A tool server over stdio is a command run inside the application's
+# container. Whoever may enter one runs programs on the server -- that is
+# the operator's decision, not that of an administrator in the
+# application. Off unless the environment says otherwise; then neither
+# the pages nor mcp.json can start a process.
+STDIO_ERLAUBT = paths.env_int("MCP_STDIO", 0) == 1
+
+# What a local process inherits. Not the application's whole
+# environment: that holds the installation key, the database address and
+# the model keys. A server that needs more gets it under "umgebung".
+_STDIO_UMGEBUNG = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "TMPDIR",
+                   "TEMP", "TMP", "SYSTEMROOT", "PATHEXT", "COMSPEC",
+                   "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy",
+                   "https_proxy", "no_proxy", "SSL_CERT_FILE",
+                   "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS")
+
+# What the pages and the API may set for an entry besides name, kind and
+# address. Everything else (command, environment, headers, transport) is
+# set by the kind or by hand in mcp.json.
+ERLAUBTE_ANGABEN = ("postfach", "automatisch", "hinweis", "hinweis_anhaengen",
+                    "sendet", "textfeld")
+
 _VERSION = "2024-11-05"
 
 
@@ -140,6 +162,13 @@ VORLAGEN = {
 }
 
 
+def vorlagen():
+    """The kinds an administrator can pick: without the local process
+    where the operator has not allowed it (STDIO_ERLAUBT)."""
+    return {k: v for k, v in VORLAGEN.items()
+            if STDIO_ERLAUBT or v["angaben"]["transport"] != "stdio"}
+
+
 def schreibe_konfiguration(daten):
     """Schreibt mcp.json. Leer heisst: Datei weg, nichts eingerichtet."""
     statefiles.makedirs(os.path.dirname(KONFIG), exist_ok=True)
@@ -163,6 +192,12 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
         return False, "Kein Name angegeben."
     if vorlage not in VORLAGEN:
         return False, f"Unbekannte Vorlage: {vorlage}"
+    if vorlage not in vorlagen():
+        return False, ("Lokale Prozesse sind auf diesem Server nicht "
+                       "freigeschaltet (MCP_STDIO=1 in der Umgebung).")
+    fremd = sorted(k for k in weitere if k not in ERLAUBTE_ANGABEN)
+    if fremd:
+        return False, f"Unbekannte Angabe: {', '.join(fremd)}"
     daten = lies_konfiguration()
     if name in daten:
         return False, f"'{name}' gibt es bereits."
@@ -284,10 +319,14 @@ class Verbindung:
         # Server irgendwann von sich aus etwas sagt. Ueber HTTP faellt
         # das nicht auf, weil dort jede Anfrage eine Antwort hat.
         if self._prozess is None:
+            if not STDIO_ERLAUBT:
+                raise Fehler(f"{self.name}: lokale Prozesse sind nicht "
+                             f"freigeschaltet (MCP_STDIO=1)")
             befehl = self.angaben.get("befehl")
             if not befehl:
                 raise Fehler(f"{self.name}: kein Befehl eingetragen")
-            umgebung = dict(os.environ)
+            umgebung = {k: os.environ[k] for k in _STDIO_UMGEBUNG
+                        if k in os.environ}
             umgebung.update(self.angaben.get("umgebung") or {})
             try:
                 self._prozess = subprocess.Popen(

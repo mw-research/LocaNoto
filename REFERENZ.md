@@ -2648,7 +2648,7 @@ ersten Zugriff — eine Anlage ohne Postfach lädt sie nie.
 
 | Feld | Bedeutung |
 |---|---|
-| `transport` | `exchange` (EWS, direkt), `http` (JSON-RPC über POST) oder `stdio` (Unterprozess) |
+| `transport` | `exchange` (EWS, direkt), `http` (JSON-RPC über POST) oder `stdio` (Unterprozess; nur mit `MCP_STDIO=1`, der Prozess erbt nicht die Umgebung der Anwendung) |
 | `url` / `befehl` | Adresse bzw. Startbefehl. Bei `exchange` die EWS-Adresse; leer heißt: der Server wird gesucht |
 | `postfach` | nur bei `exchange`: die Mailadresse des Postfachs. Ohne Angabe die des Angemeldeten |
 | `kopf` | zusätzliche HTTP-Kopfzeilen |

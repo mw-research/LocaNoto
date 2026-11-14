@@ -1650,6 +1650,7 @@ _fake = os.path.join(tmp, "fake_mcp.py")
 with statefiles.open(_fake, "w", encoding="utf-8") as _f:
     _f.write(FAKE_MCP)
 
+_mcp.STDIO_ERLAUBT = True      # the test server is a local process
 _vb = _mcp.Verbindung("probe", {"transport": "stdio",
                                 "befehl": [sys.executable, _fake]})
 try:
@@ -6653,6 +6654,64 @@ pruef("der allgemeine Raum behaelt seinen Ordner",
       and os.path.isdir(paths.DOCS_DIR))
 raeume.entfernen(_raum_h)
 os.rmdir(_priv_h)
+
+# --- HARDENING: LOCAL TOOL PROCESSES ---
+#
+# A tool server over stdio is a command run in the application's
+# container. An administrator of the application could enter one (kind
+# "stdio", or "befehl" among the options of any kind) and had a shell
+# with the installation key in its environment.
+import mcp as _mcp_h
+
+_alt_konf_h = _mcp_h.KONFIG
+_mcp_h.KONFIG = os.path.join(tmp, "mcp_haertung.json")
+_mcp_h.STDIO_ERLAUBT = False
+pruef("ohne Freischaltung wird kein lokaler Prozess angelegt",
+      not _mcp_h.lege_an("lokal", "stdio", "sh -c id", persoenlich=False)[0])
+pruef("und die Vorlage wird nicht angeboten",
+      "stdio" not in _mcp_h.vorlagen() and "exchange" in _mcp_h.vorlagen())
+pruef("Angaben ausserhalb der festen Liste werden abgewiesen",
+      not _mcp_h.lege_an("x", "http", "https://mcp.test/mcp", persoenlich=False,
+                         befehl=["sh"], transport="stdio")[0]
+      and not _mcp_h.lege_an("x", "http", "https://mcp.test/mcp",
+                             persoenlich=False, umgebung={"A": "b"})[0])
+pruef("es wurde nichts geschrieben", not _mcp_h.lies_konfiguration())
+try:
+    _mcp_h.Verbindung("alt", {"transport": "stdio",
+                              "befehl": [sys.executable, "-c", "pass"]}
+                      )._ueber_stdio({"jsonrpc": "2.0", "id": 1, "method": "x"})
+    _lief_h = True
+except _mcp_h.Fehler:
+    _lief_h = False
+pruef("ein Eintrag aus mcp.json startet ohne Freischaltung auch nichts",
+      not _lief_h)
+
+# With the switch on, the process does not inherit the application's
+# environment (installation key, database address, model keys).
+_mcp_h.STDIO_ERLAUBT = True
+os.environ["LOCANOTO_SCHLUESSEL_PROBE"] = "geheim"
+_zeigt_h = os.path.join(tmp, "zeigt_umgebung.py")
+with open(_zeigt_h, "w", encoding="utf-8") as _f:
+    _f.write("import json, os, sys\n"
+             "sys.stdin.readline()\n"
+             "print(json.dumps({'jsonrpc': '2.0', 'id': 1, 'result': "
+             "{'probe': os.environ.get('LOCANOTO_SCHLUESSEL_PROBE', ''), "
+             "'eigen': os.environ.get('EIGEN', '')}}), flush=True)\n")
+_vb_h = _mcp_h.Verbindung("zeigt", {"transport": "stdio",
+                                    "befehl": [sys.executable, _zeigt_h],
+                                    "umgebung": {"EIGEN": "ja"}})
+_antw_h = _vb_h._ueber_stdio({"jsonrpc": "2.0", "id": 1, "method": "x"})
+pruef("der Prozess erbt die Umgebung der Anwendung nicht",
+      (_antw_h.get("result") or {}).get("probe") == "", _antw_h)
+pruef("bekommt aber, was fuer ihn eingetragen ist",
+      (_antw_h.get("result") or {}).get("eigen") == "ja", _antw_h)
+try:
+    _vb_h._prozess.kill()
+except Exception:
+    pass
+os.environ.pop("LOCANOTO_SCHLUESSEL_PROBE", None)
+_mcp_h.STDIO_ERLAUBT = False
+_mcp_h.KONFIG = _alt_konf_h
 
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher

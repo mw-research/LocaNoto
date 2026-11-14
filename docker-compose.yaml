@@ -94,6 +94,7 @@ x-umgebung: &umgebung
   - MCP_RUNDEN=${MCP_RUNDEN:-}
   - MCP_TIMEOUT=${MCP_TIMEOUT:-}
   - MCP_MAX_WERKZEUGE=${MCP_MAX_WERKZEUGE:-}
+  - MCP_STDIO=${MCP_STDIO:-}
   # Exchange-Postfaecher, direkt angebunden (postfach.py).
   - POSTFACH_HOLGRENZE=${POSTFACH_HOLGRENZE:-}
   - POSTFACH_TEXTAUSZUG=${POSTFACH_TEXTAUSZUG:-}

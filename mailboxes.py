@@ -243,7 +243,7 @@ def draft_of(user, chat_id, draft_id):
 # --- ADMIN ---
 
 def templates():
-    return {k: v["beschreibung"] for k, v in mcp.VORLAGEN.items()}
+    return {k: v["beschreibung"] for k, v in mcp.vorlagen().items()}
 
 
 def create(name, template, target, personal=True, **options):

@@ -687,8 +687,9 @@ After that, every user connects themselves under **My mailboxes**; there
 is no shared password. **Fetch tools** → checks a mailbox with your own
 login.
 
-Other tool servers (MCP) → server type "MCP server over HTTP" or "local
-process (stdio)".
+Other tool servers (MCP) → server type "MCP server over HTTP". The server
+type "local process (stdio)" only appears where the operator has allowed it
+with `MCP_STDIO=1`: it starts a command on the server.
 
 ### How do I set up web search in LocaNoto as an admin?
 
