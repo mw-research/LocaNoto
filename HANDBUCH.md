@@ -556,7 +556,11 @@ Arbeitsbereich.
 - **Rolle** ändern → **Rolle übernehmen**.
 - **Neues Passwort** zweimal → **Passwort setzen**. Der Benutzer ändert es
   danach am besten selbst. Gilt bei einem von LocaNoto verwalteten Konto
-  auch in ownCloud.
+  auch in ownCloud. Hat das Konto schon Chats oder Dokumente im
+  persönlichen Arbeitsbereich, geht das nur mit bestätigtem Notzugang zu
+  diesem Arbeitsbereich – mit dem neuen Passwort wären sie sonst für dich
+  offen. Auf dem Server setzt `python manage_users.py` ein Passwort ohne
+  diese Bedingung.
 - „… wirklich löschen" ankreuzen → **Benutzer löschen**. Ein verwaltetes
   ownCloud-Konto verschwindet mit. Chatverlauf und persönlicher
   Arbeitsbereich bleiben; die Dokumente löschst du getrennt unter

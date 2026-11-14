@@ -7024,6 +7024,30 @@ pruef("ein Passwort ueber 72 Bytes wird beim Setzen abgewiesen, nicht beim Hashe
 pruef("die klassische Anmeldung zaehlt Fehlversuche",
       "sessions.login_attempt(_name_l" in _datei("app.py"))
 
+# --- HARDENING: SETTING SOMEBODY'S PASSWORD IS A WAY IN ---
+#
+# An admin set a user's password and signed in as that user: chats and
+# personal workspace open, no second person asked.
+benutzer.anlege("resetprobe", "Passwort-123456", von="markus")
+pruef("ein Konto ohne Inhalt bekommt sein Passwort vom Verwalter",
+      _acc_h.set_password("resetprobe", "Neues-Passwort-1", by="markus")[0])
+_chat_r_h = _chats_h.neue_kennung()
+_chats_h.speichere("resetprobe", _chat_r_h, [{"role": "user", "content": "privat"}])
+_ok_r_h, _m_r_h, _n_r_h = _acc_h.set_password("resetprobe", "Neues-Passwort-2", by="markus")
+pruef("hat es Chats, wird das Setzen ohne Notzugang abgewiesen",
+      not _ok_r_h and "emergency access" in _m_r_h
+      and benutzer.pruefe("resetprobe", "Neues-Passwort-1"), _m_r_h)
+pruef("das eigene Passwort bleibt frei",
+      _acc_h.reset_refused("resetprobe", "resetprobe") == "")
+_alt_rf_h = _nz_h.raeume_fuer
+_nz_h.raeume_fuer = lambda n: [raeume.privat_kennung("resetprobe")] if n == "markus" else []
+pruef("mit bestaetigtem Notzugang zu dem Bereich geht es",
+      _acc_h.set_password("resetprobe", "Neues-Passwort-3", by="markus")[0]
+      and _acc_h.reset_refused("resetprobe", "anna") != "")
+_nz_h.raeume_fuer = _alt_rf_h
+_acc_h.delete("resetprobe", by="markus")
+_acc_h.purge_left_over("resetprobe", by="server")
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

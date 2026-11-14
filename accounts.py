@@ -117,7 +117,37 @@ def create(name, password, role="nutzer", by="?"):
     return ok, message, notes
 
 
+def reset_refused(name, by):
+    """Why 'by' may not set this account's password, or "".
+
+    Whoever sets a password can sign in with it. For an account with
+    chats or a personal workspace that is a way in past the two-person
+    emergency access. So it needs exactly that access: requested by this
+    admin for the account's personal workspace and confirmed by a second
+    person. An account that holds nothing yet, one's own, and accounts
+    from the company directory (no password is used there) are free.
+    """
+    import notzugang
+    import raeume
+    name = (name or "").strip().lower()
+    if name == (by or "").strip().lower():
+        return ""
+    if (benutzer.eintrag(name) or {}).get("anmeldung") == "oidc":
+        return ""
+    if not left_over(name):
+        return ""
+    if raeume.privat_kennung(name) in notzugang.raeume_fuer(by):
+        return ""
+    return ("This account has chats or a personal workspace. With a password "
+            "you set, they would be open to you. Request emergency access to "
+            "its personal workspace first; once a second person has confirmed "
+            "it, you can set the password.")
+
+
 def set_password(name, password, by="?"):
+    refused = reset_refused(name, by)
+    if refused:
+        return False, refused, []
     ok, message = benutzer.passwort_setzen(name, password, von=by)
     if not ok:
         return ok, message, []

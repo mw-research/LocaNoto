@@ -534,7 +534,10 @@ rejected by LocaNoto: they would result in the same personal workspace.
 - Change **Role** → **Apply role**.
 - **New password** twice → **Set password**. The user should then change
   it themselves. For an account managed by LocaNoto, it also applies in
-  ownCloud.
+  ownCloud. If the account already has chats or documents in its personal
+  workspace, this needs a confirmed emergency access to that workspace --
+  with the new password they would otherwise be open to you. On the
+  server, `python manage_users.py` sets a password without this condition.
 - Tick "… really delete" → **Delete user**. A managed ownCloud account is
   removed too. Chat history and personal workspace remain; delete the
   documents separately under **Stored documents** (other users' personal

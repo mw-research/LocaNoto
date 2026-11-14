@@ -342,8 +342,14 @@ def zeichne(*, is_admin,
                     elif _pw1 != _pw2:
                         st.error(tx("Eingaben stimmen nicht überein."))
                     else:
-                        ok, meldung = benutzer.passwort_setzen(
-                            _wahl, _pw1, von=st.session_state["username"])
+                        import accounts
+                        _abgewiesen = accounts.reset_refused(
+                            _wahl, st.session_state["username"])
+                        if _abgewiesen:
+                            ok, meldung = False, _abgewiesen
+                        else:
+                            ok, meldung = benutzer.passwort_setzen(
+                                _wahl, _pw1, von=st.session_state["username"])
                         (st.success if ok else st.error)(meldung)
                         if ok:
                             # --- DIE ABLAGE NACHZIEHEN ---
