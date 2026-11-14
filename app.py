@@ -2080,6 +2080,7 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 # Inhalt zurueck. Ohne Dateinamen in der Meldung, wie
                 # ueberall im strengen Betrieb.
                 _n_oc, _f_oc = owncloud.leere_raumordner(_wahl_s)
+                aufnehmen.leere_ablage(_wahl_s)
                 if _f_oc:
                     st.warning(tx(f'{len(_f_oc)} Einträge in ownCloud nicht gelöscht – der nächste Abgleich holt sie zurück.'))
                 refresh_document_index()

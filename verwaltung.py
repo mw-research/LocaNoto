@@ -1057,6 +1057,8 @@ def zeichne(*, is_admin,
                             # zurueck. Der Inhalt liegt im Papierkorb.
                             _n_oc, _f_oc = owncloud.leere_raumordner(
                                 _bearbeiten)
+                            import aufnehmen
+                            aufnehmen.leere_ablage(_bearbeiten)
                             if _n_oc:
                                 st.info(tx(f'{_n_oc} Einträge aus dem ownCloud-Ordner in den Papierkorb verschoben.'))
                             if _f_oc:

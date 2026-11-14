@@ -489,6 +489,7 @@ def anlegen(kennung, bezeichnung_, beschreibung="", mitglieder=None):
         "beschreibung": (beschreibung or "").strip(),
         "mitglieder": sorted(set(mitglieder or [])),
     }
+    _nicht_mehr_entfernt(daten, kennung)
     _speichere(daten)
     return True, kennung
 
@@ -513,6 +514,7 @@ def sichere_anlage_privat(benutzer):
                 "beschreibung": "Nur fuer diesen Nutzer sichtbar.",
                 "mitglieder": [benutzer],
             }
+            _nicht_mehr_entfernt(daten, kennung)
             _speichere(daten)
     return kennung
 
@@ -633,5 +635,45 @@ def entfernen(kennung):
     if kennung not in daten["raeume"]:
         return False, "Unbekannter Arbeitsbereich."
     del daten["raeume"][kennung]
+    # Its folder under data/dokumente stays, like the collection. The
+    # name is kept so the folder still counts as "not general": without
+    # it the next "read documents again" took the files of a removed
+    # room into the general one, readable by everyone.
+    entfernt = [k for k in daten.get("entfernt") or [] if k != kennung]
+    daten["entfernt"] = entfernt + [kennung]
     _speichere(daten)
     return True, "Entfernt."
+
+
+def _nicht_mehr_entfernt(daten, kennung):
+    if kennung in (daten.get("entfernt") or []):
+        daten["entfernt"] = [k for k in daten["entfernt"] if k != kennung]
+
+
+def entfernte():
+    """Ids of rooms taken out of the administration (entfernen)."""
+    return list(_lade().get("entfernt") or [])
+
+
+def ordner_anderer(eigener_raum):
+    """Folders under data/dokumente that belong to another room.
+
+    The general ingest walks the whole folder and must leave these out:
+    the folders of the rooms that exist, of the rooms that were removed,
+    and every personal folder -- also one whose room is unknown here (an
+    account deleted before removed rooms were remembered).
+    """
+    aus = set()
+    for raum_ in list(liste()) + entfernte():
+        if raum_ != eigener_raum:
+            aus.add(os.path.normpath(paths.raum_ordner(raum_)))
+    eigener = os.path.normpath(paths.raum_ordner(eigener_raum))
+    try:
+        namen = os.listdir(paths.DOCS_DIR)
+    except OSError:
+        namen = []
+    for name in namen:
+        voll = os.path.normpath(os.path.join(paths.DOCS_DIR, name))
+        if name.startswith(PRIVAT) and voll != eigener and os.path.isdir(voll):
+            aus.add(voll)
+    return aus

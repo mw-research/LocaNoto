@@ -6609,6 +6609,51 @@ pruef("Liste: danach antwortet das Blatt wieder",
       len(_tab_h.fuehre_aus("teile.csv", "", "SELECT * FROM daten",
                             wurzel=_dir_h)[1]) == 2)
 
+# --- HARDENING: FOLDERS OF REMOVED ROOMS ARE NOT GENERAL ---
+#
+# Removing a room deletes its entry and keeps its folder under
+# data/dokumente. The general ingest skipped only folders of rooms that
+# still existed: after "remove workspace" and "read documents again" the
+# files of the removed room were indexed into the general room.
+import aufnehmen as _auf_h
+
+_ok_h, _raum_h = raeume.anlegen("haertungweg", "Wird entfernt")
+_ord_h = os.path.normpath(paths.raum_ordner(_raum_h))
+os.makedirs(_ord_h, exist_ok=True)
+with open(os.path.join(_ord_h, "geheim.txt"), "w", encoding="utf-8") as _f:
+    _f.write("nur fuer diesen Raum")
+_priv_h = os.path.normpath(os.path.join(paths.DOCS_DIR, "privat_niemandmehr"))
+os.makedirs(_priv_h, exist_ok=True)
+
+pruef("der Ordner eines Raums gehoert nicht zum allgemeinen Einlesen",
+      _ok_h and _ord_h in raeume.ordner_anderer(raeume.ALLGEMEIN))
+raeume.entfernen(_raum_h)
+pruef("auch nicht, nachdem der Raum entfernt wurde",
+      _raum_h not in raeume.liste()
+      and _ord_h in raeume.ordner_anderer(raeume.ALLGEMEIN),
+      raeume.entfernte())
+pruef("ein persoenlicher Ordner ohne bekannten Raum bleibt ebenfalls draussen",
+      _priv_h in raeume.ordner_anderer(raeume.ALLGEMEIN))
+_eig_h = raeume.privat_kennung("anna")
+pruef("der eigene Ordner zaehlt fuer den eigenen Raum nicht als fremd",
+      os.path.normpath(paths.raum_ordner(_eig_h))
+      not in raeume.ordner_anderer(_eig_h))
+pruef("ingest.py fragt genau diese Liste ab",
+      "raeume.ordner_anderer(eigener_raum)" in _datei("ingest.py"))
+
+raeume.anlegen("haertungweg", "Wieder da")
+pruef("ein neu angelegter Raum gilt nicht mehr als entfernt",
+      _raum_h not in raeume.entfernte() and _raum_h in raeume.liste())
+
+# "Delete the data of a workspace" takes the uploaded files along.
+pruef("Leeren entfernt auch die abgelegten Dateien",
+      _auf_h.leere_ablage(_raum_h) == 1 and not os.path.exists(_ord_h))
+pruef("der allgemeine Raum behaelt seinen Ordner",
+      _auf_h.leere_ablage(raeume.ALLGEMEIN) == 0
+      and os.path.isdir(paths.DOCS_DIR))
+raeume.entfernen(_raum_h)
+os.rmdir(_priv_h)
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

@@ -73,6 +73,25 @@ def _alle_raum_sammlungen():
             paare.append((kennung, sml))
     return paare
 
+def leere_ablage(raum):
+    """Delete the files of a room under data/dokumente. Returns the count.
+
+    Part of "delete the data of a workspace": the passages and the
+    storage folder go, and so must the uploaded files -- left behind, a
+    later ingest could read them again. The general room has no folder of
+    its own (its files lie in the root, next to the room folders) and is
+    left alone.
+    """
+    if raum == raeume.ALLGEMEIN:
+        return 0
+    ordner = paths.raum_ordner(raum)
+    if not os.path.isdir(ordner):
+        return 0
+    anzahl = sum(len(dateien) for _w, _o, dateien in os.walk(ordner))
+    statefiles.rmtree(ordner, ignore_errors=True)
+    return anzahl
+
+
 def _gehoert_anderem_raum(filename, raum):
     """Fuehrt ein ANDERER Raum bereits ein Dokument dieses Namens?
 

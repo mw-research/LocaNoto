@@ -219,4 +219,5 @@ def wipe_room(user, is_admin, room, confirm):
     ok, message = store.loesche(raeume.sammlung(room))
     keyword_index.delete_document_by_raum(room)
     _n, failed = owncloud.leere_raumordner(room)
+    aufnehmen.leere_ablage(room)
     return ok, message, len(failed or [])

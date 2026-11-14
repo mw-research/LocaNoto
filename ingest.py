@@ -118,11 +118,17 @@ def fremde_ordner(wurzel, eigener_raum):
     offen: der allgemeine Ingest ging hinein und vektorisierte die
     Dokumente eines fremden Raums nach raum_allgemein.
     """
-    aus = set()
-    for raum in raeume.liste():
-        if raum == eigener_raum:
-            continue
-        aus.add(os.path.normpath(paths.raum_ordner(raum)))
+    # Existing rooms, removed rooms and every personal folder.
+    aus = raeume.ordner_anderer(eigener_raum)
+    # A room removed before removed rooms were remembered: its collection
+    # is still there, and so is its folder.
+    try:
+        for name in store.namen():
+            if name.startswith("raum_") and name[len("raum_"):] != eigener_raum:
+                aus.add(os.path.normpath(
+                    paths.raum_ordner(name[len("raum_"):])))
+    except Exception:
+        pass
     try:
         # Auch Zuordnungen zu Raeumen, die es in der Verwaltung nicht mehr
         # gibt: ihr Ordner steht noch da und gehoert weiterhin nicht
