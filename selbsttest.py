@@ -7089,6 +7089,36 @@ pruef("ein persoenlicher Bereich ueber seiner Groessengrenze nimmt nichts mehr a
       _quote_h == 413, _quote_h)
 _auf_h.PRIVAT_MAX_MB = _alt_q_h
 
+# --- HARDENING: A BACKUP DOES NOT HOLD ITS TEXT IN THE CLEAR ---
+#
+# A backup lies on the documents volume. It held every passage as plain
+# text and, with Postgres, the user file with its password hashes.
+_ab_h = _sich_h.sichere()
+pruef("ein Abzug entsteht", _ab_h.get("name") and _ab_h.get("raeume"), _ab_h)
+_ab_pfad_h = _sich_h._abzug(_ab_h["name"])
+_roh_h = ""
+for _d_h in os.listdir(_ab_pfad_h):
+    if _d_h.endswith(".jsonl"):
+        with open(os.path.join(_ab_pfad_h, _d_h), encoding="utf-8") as _f:
+            _roh_h += _f.read()
+pruef("seine Abschnitte stehen nicht im Klartext darin",
+      _roh_h and all(z.startswith("LNBK1:") for z in _roh_h.splitlines() if z)
+      and '"text"' not in _roh_h, _roh_h[:80])
+pruef("und sie lassen sich mit dem Schluessel wieder lesen",
+      '"text"' in _sich_h._entpacke_zeile(_roh_h.splitlines()[0]))
+pruef("ein Abzug aus der Zeit davor wird gelesen, wie er ist",
+      _sich_h._entpacke_zeile('{"id": "a", "text": "alt"}\n') == '{"id": "a", "text": "alt"}'
+      and _sich_h._entpacke_bytes(b"LNC1-ein-alter-chat") == b"LNC1-ein-alter-chat")
+pruef("Zustandsdateien gehen verschluesselt hinein und unveraendert heraus",
+      _sich_h._verpacke_bytes(b'{"nutzer": {}}').startswith(b"LNBK1:")
+      and b"nutzer" not in _sich_h._verpacke_bytes(b'{"nutzer": {}}')
+      and _sich_h._entpacke_bytes(_sich_h._verpacke_bytes(b'{"nutzer": {}}'))
+      == b'{"nutzer": {}}')
+_zur_h = _sich_h.hole_zurueck(_ab_h["name"])
+pruef("der verschluesselte Abzug laesst sich einspielen",
+      not _zur_h.get("fehler") and sum(_zur_h.get("raeume", {}).values()) > 0, _zur_h)
+_sich_h.entferne(_ab_h["name"], trotzdem=True)
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

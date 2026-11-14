@@ -891,7 +891,9 @@ Three things belong in the backup:
    glossary, prompts, mailboxes.
 3. **Vector database:** **Admin area** → **Vector database backup** →
    **Back up now**. Restore: **Restore snapshot** → **Restore**. Without a
-   snapshot, a loss would mean: ingest everything again.
+   snapshot, a loss would mean: ingest everything again. The text in a
+   snapshot is encrypted with the installation key; it can only be
+   restored with the same key.
 
 The original documents are in the data directory and, if connected, in
 ownCloud.

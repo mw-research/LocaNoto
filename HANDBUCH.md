@@ -931,7 +931,8 @@ Drei Dinge gehören in die Sicherung:
 3. **Vektordatenbank:** **Admin-Bereich** → **Sicherung der
    Vektordatenbank** → **Jetzt sichern**. Wiederherstellen: **Abzug
    einspielen** → **Einspielen**. Ohne Abzug hieße ein Verlust: alles neu
-   einlesen.
+   einlesen. Der Text im Abzug ist mit dem Installationsschlüssel
+   verschlüsselt; einspielen lässt er sich nur mit demselben Schlüssel.
 
 Die Originaldokumente liegen im Datenverzeichnis und, falls angebunden, in
 ownCloud.

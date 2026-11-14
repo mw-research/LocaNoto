@@ -37,6 +37,7 @@ Das Zurueckholen braucht kein Modell und keinen Endpunkt: die Vektoren
 liegen im Abzug. Ein Rechner ohne Grafikkarte kann eine Installation
 wiederherstellen.
 """
+import base64
 import json
 import os
 import shutil
@@ -46,6 +47,7 @@ import time
 import numpy as np
 
 import database
+import geheim
 import paths
 import raeume
 import statefiles
@@ -112,6 +114,57 @@ def _sammlungsname(kennung):
     if kennung.startswith("_alt_"):
         return kennung[len("_alt_"):]
     return raeume.sammlung(kennung)
+
+
+# --- WHAT A BACKUP HOLDS IS ENCRYPTED ---
+#
+# A backup lies on the documents volume, which every server pod mounts.
+# It held the text of every passage and, with Postgres, every state file
+# -- the user file with its password hashes, the tokens -- as plain
+# files. Both are now written encrypted with the installation key; the
+# vectors stay as they are (numbers, read in one piece by numpy).
+#
+# Restoring needs the same key -- as the chats in the backup always did.
+# Backups written before this, and backups of an installation without a
+# key, are read as they are. SICHERUNG_VERSCHLUESSELN=0 keeps writing
+# plain text, for whoever stores the backups on an encrypted volume and
+# wants them readable without the key.
+VERSCHLUESSELN = paths.env_int("SICHERUNG_VERSCHLUESSELN", 1) == 1
+_MARKE = "LNBK1:"
+
+
+def _verschluesselt_schreiben():
+    return VERSCHLUESSELN and geheim.verfuegbar()
+
+
+def _verpacke_zeile(zeile):
+    if not _verschluesselt_schreiben():
+        return zeile
+    return _MARKE + base64.b64encode(geheim.verschluessele(
+        zeile.encode("utf-8"), zusatz=b"sicherung")).decode("ascii")
+
+
+def _entpacke_zeile(zeile):
+    zeile = zeile.strip()
+    if not zeile.startswith(_MARKE):
+        return zeile
+    return geheim.entschluessele(base64.b64decode(zeile[len(_MARKE):]),
+                                 zusatz=b"sicherung").decode("utf-8")
+
+
+def _verpacke_bytes(inhalt):
+    if not _verschluesselt_schreiben():
+        return inhalt
+    return _MARKE.encode("ascii") + geheim.verschluessele(
+        inhalt, zusatz=b"sicherung:zustand")
+
+
+def _entpacke_bytes(inhalt):
+    marke = _MARKE.encode("ascii")
+    if not inhalt.startswith(marke):
+        return inhalt
+    return geheim.entschluessele(inhalt[len(marke):],
+                                 zusatz=b"sicherung:zustand")
 
 
 def _abzug(name):
@@ -259,7 +312,7 @@ def sichere(fortschritt=None):
         np.save(os.path.join(vorlaeufig, sichere_kennung + ".npy"), matrix)
         with open(os.path.join(vorlaeufig, sichere_kennung + ".jsonl"),
                   "w", encoding="utf-8") as f:
-            f.write("\n".join(zeilen) + "\n")
+            f.write("\n".join(_verpacke_zeile(z) for z in zeilen) + "\n")
 
         bericht["raeume"][kennung] = {"abschnitte": gelesen,
                                       "dimension": int(matrix.shape[1])
@@ -473,7 +526,7 @@ def _sichere_zustand(ordner):
         ziel = os.path.join(ordner, ZUSTAND, *teile)
         os.makedirs(os.path.dirname(ziel), exist_ok=True)
         with open(ziel, "wb") as f:
-            f.write(bytes(inhalt))
+            f.write(_verpacke_bytes(bytes(inhalt)))
     return len(rows)
 
 
@@ -491,7 +544,7 @@ def _hole_zustand(quelle):
             if statefiles.key(ziel) is None and database.active():
                 continue  # only what belongs into the state store
             with open(os.path.join(w, d), "rb") as f:
-                statefiles.write(ziel, f.read())
+                statefiles.write(ziel, _entpacke_bytes(f.read()))
             n += 1
     return n
 
@@ -543,7 +596,8 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None, zustand=False):
         try:
             matrix = np.load(basis + ".npy")
             with open(basis + ".jsonl", encoding="utf-8") as f:
-                zeilen = [json.loads(z) for z in f if z.strip()]
+                zeilen = [json.loads(_entpacke_zeile(z)) for z in f
+                          if z.strip()]
         except (OSError, ValueError) as e:
             bericht["fehler"].append({"raum": kennung, "grund": str(e)})
             continue

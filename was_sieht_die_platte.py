@@ -277,7 +277,7 @@ if os.path.isdir(sich):
                     for i, z in enumerate(f):
                         if i > 50:
                             break
-                        if '"text": "LNX1:' in z:
+                        if z.startswith("LNBK1:") or '"text": "LNX1:' in z:
                             verschl_abz += 1
                         elif '"text": "' in z:
                             offen += 1
