@@ -724,9 +724,16 @@ Danach verbindet sich jeder Nutzer selbst unter **Meine Postfächer**; ein
 gemeinsames Passwort gibt es nicht. **Werkzeuge abfragen** → prüft ein
 Postfach mit deiner eigenen Anmeldung.
 
-**Wer ein Postfach sieht.** Ohne Zuordnung sieht jeder Nutzer jeden Eintrag
-und kann sich daran anmelden. In der Liste der Postfächer steht neben jedem
-Eintrag eine Auswahl → **Zuordnen**:
+Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP". Der
+Servertyp „lokaler Prozess (stdio)" erscheint nur, wenn der Betreiber ihn
+mit `MCP_STDIO=1` freigeschaltet hat: Er startet einen Befehl auf dem
+Server.
+
+### Wer sieht ein Postfach in LocaNoto?
+
+Ohne Zuordnung sieht jeder Nutzer jeden Eintrag und kann sich daran
+anmelden. **Admin-Bereich** → **Postfächer**: neben jedem Eintrag steht
+eine Auswahl → **Zuordnen**:
 
 - Persönlicher Eintrag → ein **Benutzer**. Nur er sieht den Eintrag. Leer:
   ein Eintrag für alle, jeder mit seiner eigenen Anmeldung.
@@ -737,11 +744,6 @@ Eintrag eine Auswahl → **Zuordnen**:
 
 Für alle anderen gibt es das Postfach nicht: nicht in den Einstellungen,
 nicht im Chat, nicht bei den Tickets.
-
-Andere Werkzeugserver (MCP) → Servertyp „MCP-Server über HTTP". Der
-Servertyp „lokaler Prozess (stdio)" erscheint nur, wenn der Betreiber ihn
-mit `MCP_STDIO=1` freigeschaltet hat: Er startet einen Befehl auf dem
-Server.
 
 ### Wie richte ich als Admin die Websuche in LocaNoto ein?
 

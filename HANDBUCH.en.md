@@ -692,9 +692,14 @@ After that, every user connects themselves under **My mailboxes**; there
 is no shared password. **Fetch tools** → checks a mailbox with your own
 login.
 
-**Who sees a mailbox.** Without an assignment every user sees every entry
-and can sign in to it. In the list of mailboxes each entry has a selection
-→ **Assign**:
+Other tool servers (MCP) → server type "MCP server over HTTP". The server
+type "local process (stdio)" only appears where the operator has allowed it
+with `MCP_STDIO=1`: it starts a command on the server.
+
+### Who sees a mailbox in LocaNoto?
+
+Without an assignment every user sees every entry and can sign in to it.
+**Admin area** → **Mailboxes**: each entry has a selection → **Assign**:
 
 - Personal entry → a **user**. Only that user sees the entry. Empty: one
   entry for everyone, each with their own login.
@@ -705,10 +710,6 @@ and can sign in to it. In the list of mailboxes each entry has a selection
 
 For everyone else the mailbox does not exist: not in the settings, not in
 the chat, not among the tickets.
-
-Other tool servers (MCP) → server type "MCP server over HTTP". The server
-type "local process (stdio)" only appears where the operator has allowed it
-with `MCP_STDIO=1`: it starts a command on the server.
 
 ### How do I set up web search in LocaNoto as an admin?
 
