@@ -627,8 +627,14 @@ class ImapMailbox:
 
 
 def _quote(text):
-    """An IMAP string argument."""
-    return '"' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"'
+    """An IMAP string argument.
+
+    Without control characters: a line break inside it would end the
+    command, and what follows would be read as the next one -- a search
+    word taken from a mail could delete mail that way.
+    """
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", str(text))
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _short(error):

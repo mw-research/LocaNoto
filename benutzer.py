@@ -43,6 +43,7 @@ verschluesselte Platte.
 import hashlib
 import json
 import os
+import re
 import time
 
 import bcrypt
@@ -311,8 +312,12 @@ def _jetzt():
 def anlege(name, passwort, rolle="nutzer", von="?"):
     """(ok, meldung)."""
     name = (name or "").strip().lower()
-    if not name or not name.replace("_", "").replace("-", "").replace(".", "").isalnum():
-        return False, "Nur Buchstaben, Ziffern, Punkt, Strich, Unterstrich."
+    # a-z only: folder and file names are made from the name by dropping
+    # every other letter (presets, list folders). "müller" and "möller"
+    # became the same folder and saw each other's lists.
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", name):
+        return False, ("Nur Buchstaben a–z, Ziffern, Punkt, Strich, "
+                       "Unterstrich; am Anfang ein Buchstabe oder eine Ziffer.")
     if rolle not in ROLLEN:
         return False, f"Rolle muss eine von {', '.join(ROLLEN)} sein."
     if len(passwort or "") < MIN_PASSWORT:

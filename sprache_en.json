@@ -447,6 +447,7 @@
   "keine": "none",
   "leere Abfrage": "empty query",
   "mehrere Anweisungen": "multiple statements",
+  "Nur Buchstaben a–z, Ziffern, Punkt, Strich, Unterstrich; am Anfang ein Buchstabe oder eine Ziffer.": "Only letters a–z, digits, dot, dash, underscore; a letter or a digit first.",
   "Die Datei lässt sich nicht öffnen.": "The file cannot be opened.",
   "Lokale Prozesse sind auf diesem Server nicht freigeschaltet (MCP_STDIO=1 in der Umgebung).": "Local processes are not enabled on this server (MCP_STDIO=1 in the environment).",
   "Anführungszeichen ohne Ende": "quote without end",

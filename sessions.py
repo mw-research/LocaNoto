@@ -138,8 +138,13 @@ def unseal(user, text):
     if not text:
         return {}
     try:
-        body = geheim.entschluessele(_unb64(text),
-                                     zusatz=b"sealed:" + user.encode())
+        raw = _unb64(text)
+        # geheim.entschluessele hands back what is not encrypted as it
+        # came (old chats must stay readable). Here that would accept a
+        # cookie somebody wrote by hand: seal() never writes plain text.
+        if not raw.startswith(geheim.MARKE):
+            return {}
+        body = geheim.entschluessele(raw, zusatz=b"sealed:" + user.encode())
         data = json.loads(body)
     except Exception:
         return {}

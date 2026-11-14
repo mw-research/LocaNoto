@@ -374,6 +374,9 @@ class Mapping(BaseModel):
 
 @router.put("/storage/mapping", tags=["admin"])
 def set_mapping(body: Mapping, p: Principal = Depends(_storage_admin)):
+    problem = owncloud.zuordnung_fehler(body.mapping)
+    if problem:
+        raise HTTPException(400, problem)
     owncloud.setze_zuordnung(body.mapping)
     return {"mapping": owncloud.zuordnung()}
 
@@ -403,6 +406,11 @@ def setup_user(name: str, p: Principal = Depends(_storage_admin)):
 @router.get("/storage/plan", tags=["admin"])
 def storage_plan(room: str, p: Principal = Depends(_storage_admin)):
     """Dry run of a sync: new, changed, removed, unchanged files."""
+    # The file names of a personal workspace are its owner's: an admin
+    # sees them only with a confirmed emergency access.
+    if raeume.ist_privat(room) and room != raeume.privat_kennung(p.name) \
+            and room not in notzugang.raeume_fuer(p.name):
+        raise HTTPException(403, "A personal workspace: emergency access only.")
     new, changed, removed, unchanged = owncloud.plane(room)
     return {"new": new, "changed": changed, "removed": removed,
             "unchanged": len(unchanged) if hasattr(unchanged, "__len__")

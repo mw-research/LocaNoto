@@ -6949,6 +6949,56 @@ pruef("die echte Datei gilt wieder", benutzer.zustand() == benutzer.SIGNIERT)
 pruef("Token ohne jede Signatur gelten ebenfalls nicht mehr als alt",
       not _auth_h.nachsichtig({"abc": {"benutzer": "markus"}}))
 
+# --- HARDENING: SMALLER FINDINGS ---
+import base64 as _b64_h
+import sessions as _ses_h
+import imap_mailbox as _imap_h
+import owncloud as _oc_h
+
+# A sealed cookie is sealed. Plain JSON in base64 was taken as it came.
+_echt_s_h = _ses_h.seal("anna", {"k": "v"})
+_falsch_s_h = _b64_h.urlsafe_b64encode(json.dumps(
+    {"u": "anna", "e": 9999999999, "d": {"k": "gefaelscht"}}).encode()).decode().rstrip("=")
+pruef("ein versiegeltes Cookie laesst sich oeffnen",
+      _ses_h.unseal("anna", _echt_s_h) == {"k": "v"})
+pruef("ein von Hand geschriebenes wird nicht angenommen",
+      _ses_h.unseal("anna", _falsch_s_h) == {}, _ses_h.unseal("anna", _falsch_s_h))
+
+# An IMAP search word stays one argument.
+_q_h = _imap_h._quote('x\r\nA1 UID STORE 1:* +FLAGS (\\Deleted)\r\nA2 EXPUNGE')
+pruef("IMAP: ein Suchwort mit Zeilenumbruch bleibt eine Zeile",
+      "\r" not in _q_h and "\n" not in _q_h and _q_h.startswith('"')
+      and _q_h.endswith('"'), _q_h)
+pruef("IMAP: Anfuehrungszeichen und Backslash sind maskiert",
+      _imap_h._quote('a"b\\c') == '"a\\"b\\\\c"', _imap_h._quote('a"b\\c'))
+
+# User names: a-z, digits, dot, dash, underscore.
+pruef("ein Name mit Umlaut wird nicht mehr angelegt",
+      not benutzer.anlege("müller", "Passwort-123456", von="markus")[0]
+      and not benutzer.anlege("-strich", "Passwort-123456", von="markus")[0]
+      and benutzer.eintrag("müller") is None)
+_ok_n_h, _m_n_h = benutzer.anlege("mueller.2-b_c", "Passwort-123456", von="markus")
+pruef("Punkt, Strich, Unterstrich und Ziffern gehen weiter", _ok_n_h, _m_n_h)
+benutzer.loesche("mueller.2-b_c", von="markus")
+
+# Storage: a mapping by hand does not reach into the personal folders.
+_w_h = _oc_h.WURZEL
+pruef("ein persoenlicher Bereich laesst sich nicht von Hand zuordnen",
+      _oc_h.zuordnung_fehler({raeume.privat_kennung("anna"): "/Irgendwo"}) != "")
+pruef("kein Bereich zeigt auf einen persoenlichen Ordner oder darueber",
+      all(_oc_h.zuordnung_fehler({"einkauf": o}) for o in
+          (f"/{_w_h}/privat/anna", f"/{_w_h}/privat", f"/{_w_h}",
+           f"/{_w_h}/raeume/../privat/anna", f"{_w_h}\\privat\\anna", "/")))
+pruef("ein gewoehnlicher Ordner geht",
+      _oc_h.zuordnung_fehler({"einkauf": f"/{_w_h}/raeume/einkauf",
+                              "allgemein": "/Abteilung/Einkauf"}) == "")
+try:
+    _oc_h.setze_zuordnung({"einkauf": f"/{_w_h}/privat/anna"})
+    _geschrieben_h = True
+except ValueError:
+    _geschrieben_h = False
+pruef("und geschrieben wird eine solche Zuordnung nicht", not _geschrieben_h)
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

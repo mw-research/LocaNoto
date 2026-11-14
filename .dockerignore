@@ -34,6 +34,11 @@ vpn/
 *.key
 *.pem
 auth.txt
+# In jedem Unterordner, nicht nur hier oben: ein Muster ohne **/ gilt in
+# einer .dockerignore nur fuer den Wurzelordner.
+**/*.key
+**/*.pem
+secrets/
 
 # Entwicklung
 .git/

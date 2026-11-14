@@ -29,6 +29,10 @@ config/tokens.json.neu
 # in ein Repository geraet, auch nicht in ein privates.
 config/schluessel.key
 config/schluessel.key.neu
+config/schluessel.key.signiert
+secrets/
+*.key
+*.pem
 
 # Raeume samt Mitgliedschaften: kein Geheimnis, aber betriebsspezifisch.
 # Im Repo wuerde ein Update die Zuordnungen ueberschreiben.

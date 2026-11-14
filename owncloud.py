@@ -142,8 +142,36 @@ def zuordnung():
     return {k: str(v).strip() for k, v in raeume_.items() if str(v).strip()}
 
 
+def zuordnung_fehler(neu):
+    """Why this mapping is not accepted, or "".
+
+    The folders below /<root>/privat/ belong to one user each. A mapping
+    by hand may neither move a personal room elsewhere nor point another
+    room at a personal folder (or at a folder above them): the next sync
+    would take that user's files into a room others read.
+    """
+    import posixpath
+    import raeume
+    privat = f"/{WURZEL}/privat".lower()
+    for raum, ordner in (neu or {}).items():
+        if raeume.ist_privat(raum):
+            return (f"'{raum}': ein persönlicher Arbeitsbereich behält "
+                    f"seinen eigenen Ordner.")
+        # One leading slash: normpath keeps two as they are.
+        pfad = posixpath.normpath(
+            "/" + str(ordner or "").replace("\\", "/").lstrip("/")).lower()
+        if (pfad == privat or pfad.startswith(privat + "/")
+                or privat.startswith(pfad.rstrip("/") + "/")):
+            return (f"'{raum}': der Ordner '{ordner}' enthält persönliche "
+                    f"Ordner oder liegt darin.")
+    return ""
+
+
 def setze_zuordnung(neu):
     """Schreibt die Zuordnung. neu: {raum: ordner}."""
+    fehler = zuordnung_fehler(neu)
+    if fehler:
+        raise ValueError(fehler)
     dateisperre.schreibe_atomar(
         ZUORDNUNG, json.dumps({"raeume": neu}, ensure_ascii=False, indent=2))
 
