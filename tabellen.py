@@ -36,6 +36,8 @@ import json
 import os
 import re
 import sqlite3
+import threading
+import time
 
 import dateisperre
 import paths
@@ -1005,7 +1007,29 @@ def _als_tabelle(rahmen):
     con = sqlite3.connect(":memory:", check_same_thread=False)
     rahmen.to_sql("daten", con, index=False)
     _unicode_funktionen(con)
+    con.set_authorizer(_nur_lesen)
     return con
+
+
+# What a query on a sheet may do: read. The filter in sqlpruefung.py
+# refuses everything else by its text; this is the same rule asked of
+# SQLite itself, so it holds where the two would read a query differently.
+_ERLAUBT = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ,
+            sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE}
+
+
+def _nur_lesen(aktion, *_rest):
+    return sqlite3.SQLITE_OK if aktion in _ERLAUBT else sqlite3.SQLITE_DENY
+
+
+# How long one query on a sheet may run. A sheet is a table in memory and
+# answers in milliseconds; a recursive WITH that never ends would hold
+# the connection, which all users of that sheet share, for good.
+ABFRAGE_SEKUNDEN = paths.env_int("TABELLEN_ABFRAGE_SEKUNDEN", 10)
+
+# One query at a time: the connections are shared between requests, and
+# the time limit is set on the connection.
+_abfrage_sperre = threading.Lock()
 
 
 def _merke(kennung, con):
@@ -1039,9 +1063,27 @@ def fuehre_aus(datei, blatt, sql, max_zeilen=None, wurzel=None):
 
     max_zeilen = max_zeilen or MAX_ZEILEN
     con = _lade(datei, blatt, wurzel)
-    cur = con.execute(sqlpruefung.begrenze_zeilen(sql, max_zeilen, "sqlite"))
-    spalten = [d[0] for d in (cur.description or [])]
-    return spalten, cur.fetchmany(max_zeilen)
+    with _abfrage_sperre:
+        ende = time.monotonic() + ABFRAGE_SEKUNDEN
+        # Called every few thousand steps of the query; a value other
+        # than 0 stops it.
+        con.set_progress_handler(lambda: time.monotonic() > ende, 5000)
+        try:
+            cur = con.execute(
+                sqlpruefung.begrenze_zeilen(sql, max_zeilen, "sqlite"))
+            spalten = [d[0] for d in (cur.description or [])]
+            return spalten, cur.fetchmany(max_zeilen)
+        except sqlite3.OperationalError as e:
+            if "interrupt" in str(e).lower():
+                raise ValueError(
+                    f"Abfrage abgebrochen: länger als {ABFRAGE_SEKUNDEN} s.")
+            raise
+        except sqlite3.DatabaseError as e:
+            if "not authorized" in str(e).lower():
+                raise ValueError("Abfrage abgelehnt: nur Lesen ist erlaubt.")
+            raise
+        finally:
+            con.set_progress_handler(None, 0)
 
 
 MEHRERE_HINWEIS = (

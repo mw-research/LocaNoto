@@ -6535,6 +6535,80 @@ _mcp_pi.AUTOMATISCH_SENDEN = False
 os.remove(_mcp_pi.KONFIG)
 _mcp_pi.KONFIG = _alt_pi
 
+# --- HARDENING: THE READ-ONLY SQL FILTER ---
+#
+# T-SQL needs no semicolon between the statements of a batch, and a quote
+# character inside a quoted identifier is not the start of a string. The
+# filter used to read [x'] ... [y'] as one string and skipped what stood
+# between -- which the database then ran.
+import sqlpruefung as _sp_h
+
+for _q in ("SELECT 1 AS [x'] DROP TABLE foo COMMIT SELECT 2 AS [y']",
+           "SELECT 1 AS [x'] UPDATE Artikel SET Preis = 0 COMMIT SELECT 2 AS [y']",
+           "SELECT 1 AS [x'] EXEC xp_cmdshell 'whoami' SELECT 2 AS [y']",
+           "SELECT 1 AS \"x'\" DELETE FROM Artikel COMMIT SELECT 2 AS \"y'\"",
+           "SELECT 1 AS `x'` DELETE FROM daten",
+           "SELECT 1 COMMIT",
+           "SELECT 1 AS a SET NOCOUNT ON",
+           "SELECT 1 DECLARE @x int",
+           "SELECT 1 BEGIN TRAN",
+           "SELECT * FROM t WITH (TABLOCKX, HOLDLOCK)",
+           "SELECT * FROM [srv].[db].[dbo].[t]",
+           "SELECT * FROM srv.db.dbo.t",
+           "SELECT [xp_cmdshell]",
+           "SELECT load_extension('x')",
+           "SELECT 'abc",
+           "SELECT 1 AS [abc"):
+    pruef(f"SQL-Filter lehnt ab: {_q[:46]}", not _sp_h.pruefe_abfrage(_q)[0])
+
+for _q in ("SELECT [Update], \"Delete\" FROM t WHERE x = 'DROP TABLE y; COMMIT'",
+           "SELECT TOP 5 a FROM dbo.t WITH (NOLOCK) ORDER BY a",
+           "SELECT a FROM t ORDER BY a OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY",
+           "WITH c AS (SELECT 1 AS n) SELECT n FROM c",
+           "SELECT name FROM t WHERE name LIKE '%[a-z]''s%'",
+           "SELECT a.x, b.y FROM db.dbo.t a JOIN [db].[dbo].[u] b ON a.id = b.id",
+           "SELECT Bezeichnung AS [Artikel's Name] FROM daten"):
+    pruef(f"SQL-Filter laesst durch: {_q[:44]}", _sp_h.pruefe_abfrage(_q)[0],
+          _sp_h.pruefe_abfrage(_q)[1])
+
+# A sheet is queried in SQLite. The filter is one barrier; SQLite itself
+# is asked to allow reading only, and a query that never ends is stopped.
+import tabellen as _tab_h
+_dir_h = os.path.join(tmp, "listen_haertung")
+os.makedirs(_dir_h, exist_ok=True)
+with open(os.path.join(_dir_h, "teile.csv"), "w", encoding="utf-8") as _f:
+    _f.write("Artikel;Menge\nSchraube;5\nMutter;7\n")
+_sp_l, _z_l = _tab_h.fuehre_aus("teile.csv", "", "SELECT Artikel FROM daten",
+                                wurzel=_dir_h)
+pruef("Liste: eine gewoehnliche Abfrage laeuft", "Schraube" in str(_z_l), _z_l)
+
+_con_h = _tab_h._lade("teile.csv", "", _dir_h)
+try:
+    _con_h.execute("DELETE FROM daten")
+    _schreibt = True
+except Exception:
+    _schreibt = False
+pruef("Liste: SQLite selbst verweigert das Schreiben", not _schreibt)
+pruef("Liste: die Zeilen sind noch da",
+      len(_tab_h.fuehre_aus("teile.csv", "", "SELECT * FROM daten",
+                            wurzel=_dir_h)[1]) == 2)
+
+_alt_sek = _tab_h.ABFRAGE_SEKUNDEN
+_tab_h.ABFRAGE_SEKUNDEN = 1
+try:
+    _tab_h.fuehre_aus(
+        "teile.csv", "",
+        "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) "
+        "SELECT count(*) FROM c", wurzel=_dir_h)
+    _endlos = "lief durch"
+except ValueError as _e:
+    _endlos = str(_e)
+pruef("Liste: eine endlose Abfrage wird abgebrochen", "abgebrochen" in _endlos, _endlos)
+_tab_h.ABFRAGE_SEKUNDEN = _alt_sek
+pruef("Liste: danach antwortet das Blatt wieder",
+      len(_tab_h.fuehre_aus("teile.csv", "", "SELECT * FROM daten",
+                            wurzel=_dir_h)[1]) == 2)
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

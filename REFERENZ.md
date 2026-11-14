@@ -1792,7 +1792,9 @@ SQL_DB=Fachdaten
 
 Bei großen Datenbanken lohnt `SQL_TABLES`, um nur die fachlich relevanten
 Tabellen an das Modell zu geben — das kürzt den Prompt und verbessert die
-Treffgenauigkeit.
+Treffgenauigkeit. `SQL_TABLES` ist keine Zugriffsgrenze: Eine Abfrage kann
+jede Tabelle nennen, die das Datenbankkonto lesen darf. Was nicht gelesen
+werden soll, wird dem Konto in der Datenbank entzogen.
 
 `SQL_HINWEIS` nimmt einen kurzen Freitext auf, der zusammen mit dem Schema an
 das Modell geht. Tabellen- und Spaltennamen allein sagen nicht, welche
@@ -1844,8 +1846,14 @@ Datei-Spalte mit. Im Ergebnis:
 
 Der Text von PDFs (bis 3000 Zeichen je Datei, 8000 je Antwort) geht an
 das Modell; so beantwortet es auch „Was steht auf der Rechnung?“. Höchstens
-10 Dateien je Antwort, je 25 MB. Es gelten die Rechte des Datenbank-Logins,
-mit dem die Abfrage lief.
+10 Dateien je Antwort, je 25 MB. Für Binärdaten gelten die Rechte des
+Datenbank-Logins, mit dem die Abfrage lief.
+
+Für Pfade gilt das nicht: Die Datei liest LocaNoto, nicht die Datenbank, und
+eine Abfrage kann jeden Pfad als Text nennen. Wer die Datenbank abfragen
+darf, erreicht damit jede Datei unterhalb eines freigegebenen Ordners. In
+`SQL_FILE_ROOTS` gehören deshalb nur Ordner, deren ganzen Inhalt diese
+Nutzer sehen dürfen.
 
 `SQL_FILE_ROOTS` ordnet die im ERP gespeicherten Pfade Ordnern im Container
 zu, mehrere durch `;`:

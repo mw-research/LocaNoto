@@ -15,8 +15,11 @@ reached the model as a byte dump and a path as text nobody could open.
     http(s) link    offered as a link, not fetched
 
 The text of a PDF goes to the model as well, so "what is on invoice
-2025103" can be answered. The rights are those of the database login
-that ran the query: the user only gets files that login could read.
+2025103" can be answered. For a binary cell the rights are those of the
+database login that ran the query. A path is different: the file is read
+by LocaNoto, not by the database, and a query can name any path as text.
+Everyone who may query the database can therefore reach every file below
+a released folder -- release only folders whose whole content they may see.
 
 SQL_FILE_ROOTS maps the paths the ERP stores to folders mounted into the
 container, several separated by ";":

@@ -19,30 +19,74 @@ _VERBOTEN = re.compile(
     r"INSERT|UPDATE|DELETE|MERGE|TRUNCATE|DROP|ALTER|CREATE|RENAME|"
     r"GRANT|REVOKE|DENY|BACKUP|RESTORE|SHUTDOWN|RECONFIGURE|"
     r"EXEC|EXECUTE|OPENROWSET|OPENQUERY|OPENDATASOURCE|BULK|"
-    r"WAITFOR|KILL|ATTACH|DETACH|PRAGMA|VACUUM"
+    r"WAITFOR|KILL|ATTACH|DETACH|PRAGMA|VACUUM|"
+    # T-SQL needs no semicolon between the statements of a batch, so
+    # "one statement" cannot be checked by counting semicolons. Whatever
+    # is no part of a SELECT is refused by name instead: transaction
+    # control (a COMMIT keeps what the driver would roll back), session
+    # state, cursors, administration.
+    r"COMMIT|ROLLBACK|BEGIN|SAVE|SET|DECLARE|USE|GO|REVERT|SETUSER|"
+    r"DBCC|CHECKPOINT|TRIGGER|CURSOR|DEALLOCATE|WRITETEXT|UPDATETEXT|"
+    # Table hints that lock a table for everyone else.
+    r"TABLOCK|TABLOCKX|XLOCK|UPDLOCK|HOLDLOCK|PAGLOCK|SERIALIZABLE"
     r")\b", re.IGNORECASE)
 
-# Erweiterte und System-Prozeduren.
-_VERBOTEN_PRAEFIX = re.compile(r"\b(xp_|sp_configure|sys\.sp_)", re.IGNORECASE)
+# Erweiterte und System-Prozeduren, nachladbarer Code (SQLite).
+_VERBOTEN_PRAEFIX = re.compile(r"\b(xp_|sp_configure|sys\.sp_|load_extension)",
+                               re.IGNORECASE)
+
+# server.database.schema.table: a linked server. The account's rights on
+# this database say nothing about what it may read over there.
+_VIERTEILIG = re.compile(r"[\w$#@]+(?:\s*\.\s*[\w$#@]*){3,}")
 
 # INTO ausserhalb von "INSERT INTO" erzeugt eine Tabelle (SELECT ... INTO x).
 _SELECT_INTO = re.compile(r"\bINTO\b", re.IGNORECASE)
 
 
-def _ohne_kommentare(sql):
-    """Entfernt Kommentare, damit sie keine Schluesselwoerter verbergen."""
-    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)
-    sql = re.sub(r"--[^\n]*", " ", sql)
-    return sql
+_QUOTE_END = {"'": "'", '"': '"', "[": "]", "`": "`"}
+_NAME = " _q_ "
 
 
-def _ohne_zeichenketten(sql):
-    """Ersetzt Zeichenketten, damit Wortmarken darin nicht anschlagen.
+def _zerlege(sql):
+    """(kern, names): the query without the content of its quotes.
 
-    'DROP' als Suchbegriff in einer WHERE-Bedingung ist zulaessig und darf
-    die Pruefung nicht ausloesen.
+    A string literal becomes '' and a quoted identifier ([x], "x", `x`)
+    a placeholder word, so the keyword checks see only what the database
+    reads as code: 'DROP' as a search term and a column called [Update]
+    are fine. names holds the identifiers' contents.
+
+    Every kind of quote is scanned, not only '...': a quote character
+    inside another kind ([x'] ... [y']) is content, not the start of a
+    string. Read as a string, everything between the two would have been
+    skipped by the checks -- and run by the database.
+
+    Raises ValueError for a quote that never closes.
     """
-    return re.sub(r"'(?:[^']|'')*'", "''", sql)
+    out, names, i = [], [], 0
+    while i < len(sql):
+        c = sql[i]
+        end = _QUOTE_END.get(c)
+        if end is None:
+            out.append(c)
+            i += 1
+            continue
+        start, parts = i + 1, []
+        while True:
+            k = sql.find(end, start)
+            if k < 0:
+                raise ValueError
+            parts.append(sql[start:k])
+            if sql[k + 1:k + 2] != end:
+                break
+            parts.append(end)          # doubled: the character itself
+            start = k + 2
+        if c == "'":
+            out.append("''")
+        else:
+            names.append("".join(parts))
+            out.append(_NAME)
+        i = k + 1
+    return "".join(out), names
 
 
 def bereinige(sql):
@@ -72,7 +116,10 @@ def pruefe_abfrage(sql):
     if "--" in sql or "/*" in sql:
         return False, "Kommentare nicht zulässig"
 
-    kern = _ohne_zeichenketten(_ohne_kommentare(sql))
+    try:
+        kern, namen = _zerlege(sql)
+    except ValueError:
+        return False, "Anführungszeichen ohne Ende"
 
     # Genau eine Anweisung. Ein Semikolon mit Text danach deutet auf einen
     # angehaengten zweiten Befehl.
@@ -86,9 +133,13 @@ def pruefe_abfrage(sql):
     if treffer:
         return False, f'unzulässiges Schlüsselwort: {treffer.group(1).upper()}'
 
-    treffer = _VERBOTEN_PRAEFIX.search(kern)
-    if treffer:
-        return False, f'unzulässiger Aufruf: {treffer.group(1)}'
+    for teil in [kern] + namen:
+        treffer = _VERBOTEN_PRAEFIX.search(teil)
+        if treffer:
+            return False, f'unzulässiger Aufruf: {treffer.group(1)}'
+
+    if _VIERTEILIG.search(kern):
+        return False, "Verbindungsserver nicht zulässig"
 
     if _SELECT_INTO.search(kern):
         return False, "SELECT ... INTO erzeugt eine Tabelle"
