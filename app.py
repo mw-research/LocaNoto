@@ -258,7 +258,18 @@ if "username" not in st.session_state:
                 # Eine Meldung fuer beide Faelle. "Benutzer existiert nicht"
                 # verriet, welche Kennungen es gibt -- die halbe Arbeit fuer
                 # jemanden, der Passwoerter durchprobiert.
-                if benutzer.pruefe(login_user, login_pass):
+                # Counted like in the new pages (sessions.py). The
+                # address of the browser is not known here; the name
+                # alone is counted. An account from the company directory
+                # has no password that is valid here.
+                import sessions
+                _name_l = (login_user or "").strip().lower()
+                _frei_l = sessions.login_attempt(_name_l, "klassisch")
+                _verzeichnis_l = (benutzer.eintrag(_name_l) or {}).get(
+                    "anmeldung") == "oidc"
+                if (_frei_l and benutzer.pruefe(login_user, login_pass)
+                        and not _verzeichnis_l):
+                    sessions.login_succeeded(_name_l, "klassisch")
                     st.session_state["username"] = login_user
                     st.session_state["letzte_tat"] = time.time()
                     # Auf der Anmeldeseite umgeschaltet: das gilt und

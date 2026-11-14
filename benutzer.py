@@ -63,6 +63,9 @@ PROTOKOLL = os.path.join(paths.DATA_DIR, "benutzer.log")
 # Formalie: die IT genehmigte sich den Blick in fremde Ablagen selbst.
 ROLLEN = ("admin", "notzugang", "nutzer")
 MIN_PASSWORT = 8
+# bcrypt hashes at most 72 bytes and refuses more. Said when the password
+# is set, instead of failing while it is hashed.
+MAX_PASSWORT_BYTES = 72
 
 # Zustaende der Benutzerdatei
 SIGNIERT = "signiert"
@@ -322,6 +325,9 @@ def anlege(name, passwort, rolle="nutzer", von="?"):
         return False, f"Rolle muss eine von {', '.join(ROLLEN)} sein."
     if len(passwort or "") < MIN_PASSWORT:
         return False, f"Das Passwort braucht mindestens {MIN_PASSWORT} Zeichen."
+    if len(passwort.encode("utf-8")) > MAX_PASSWORT_BYTES:
+        return False, (f"Das Passwort darf höchstens {MAX_PASSWORT_BYTES} "
+                       f"Bytes lang sein.")
 
     # Der Hash kostet rund 0,2 s und haengt nicht an der Datei. Er wird
     # vor der Sperre gerechnet, damit andere Verwalter nicht so lange
@@ -384,6 +390,9 @@ def passwort_setzen(name, passwort, von="?"):
     name = (name or "").strip().lower()
     if len(passwort or "") < MIN_PASSWORT:
         return False, f"Das Passwort braucht mindestens {MIN_PASSWORT} Zeichen."
+    if len(passwort.encode("utf-8")) > MAX_PASSWORT_BYTES:
+        return False, (f"Das Passwort darf höchstens {MAX_PASSWORT_BYTES} "
+                       f"Bytes lang sein.")
     nutzer, _z = lade()
     if name not in nutzer:
         return False, f"'{name}' gibt es nicht."

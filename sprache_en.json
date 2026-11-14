@@ -538,6 +538,7 @@
   ", {} nicht lesbar": ", {} unreadable",
   ", {} zu groß": ", {} too large",
   "Abfrage abgelehnt: {}": "Query rejected: {}",
+  "Das Passwort darf höchstens {} Bytes lang sein.": "The password may be at most {} bytes long.",
   "Bild größer als {} Megapixel.": "Image larger than {} megapixels.",
   "Dateityp {} wird nicht eingelesen. Möglich: {}": "File type {} is not read. Possible: {}",
   "Entpackt größer als {} MB.": "Unpacks to more than {} MB.",

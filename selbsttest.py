@@ -7015,6 +7015,15 @@ pruef("von einer anderen Adresse meldet sich dieselbe Person weiter an",
       not _ses_h.login_blocked("haertung-opfer", "198.51.100.7")
       and _ses_h.login_attempt("haertung-opfer", "198.51.100.7"))
 
+# --- HARDENING: A PASSWORD LONGER THAN BCRYPT TAKES ---
+_lang_h = "ä" * 40                                    # 80 bytes
+pruef("ein Passwort ueber 72 Bytes wird beim Setzen abgewiesen, nicht beim Hashen",
+      "72" in benutzer.passwort_setzen("anna", _lang_h, von="anna")[1]
+      and "72" in benutzer.anlege("langpass", _lang_h, von="markus")[1]
+      and benutzer.eintrag("langpass") is None)
+pruef("die klassische Anmeldung zaehlt Fehlversuche",
+      "sessions.login_attempt(_name_l" in _datei("app.py"))
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein
