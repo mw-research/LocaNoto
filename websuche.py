@@ -92,22 +92,31 @@ class Fehler(RuntimeError):
 
 # --- ADRESSEN ---
 
-def oeffentlich(host):
-    """Zeigt der Name nur auf oeffentliche Adressen?"""
+def _adressen(host):
+    """The addresses a name resolves to, from ONE lookup. [] if none."""
     if not host:
-        return False
+        return []
     try:
         infos = socket.getaddrinfo(host, None)
     except OSError:
-        return False
-    for info in infos:
+        return []
+    return [info[4][0].split("%")[0] for info in infos]
+
+
+def _alle_oeffentlich(adressen):
+    for adresse in adressen:
         try:
-            ip = ipaddress.ip_address(info[4][0].split("%")[0])
+            ip = ipaddress.ip_address(adresse)
         except ValueError:
             return False
         if not ip.is_global or ip.is_multicast:
             return False
-    return bool(infos)
+    return bool(adressen)
+
+
+def oeffentlich(host):
+    """Zeigt der Name nur auf oeffentliche Adressen?"""
+    return _alle_oeffentlich(_adressen(host))
 
 
 def aufgeloest(host):
@@ -118,12 +127,12 @@ def aufgeloest(host):
     that answers with a public address first and an internal one second
     (DNS rebinding) would get internal pages read.
     """
-    if not oeffentlich(host):
-        return None
-    try:
-        return socket.getaddrinfo(host, None)[0][4][0].split("%")[0]
-    except (OSError, IndexError):
-        return None
+    # One lookup for the check AND the address. Asking a second time
+    # was the gap this function is there to close: a name server that
+    # answers public first and internal second passed the check with the
+    # first answer and was connected to with the second.
+    adressen = _adressen(host)
+    return adressen[0] if _alle_oeffentlich(adressen) else None
 
 
 def _gepinnt(adresse):

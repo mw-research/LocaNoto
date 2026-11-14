@@ -114,6 +114,23 @@ def _sammlungsname(kennung):
     return raeume.sammlung(kennung)
 
 
+def _abzug(name):
+    """The folder of the backup with this name, or None.
+
+    A name is one folder directly below ORDNER. It arrives from a page or
+    the API and was joined to ORDNER as it came: ".." named the folder
+    above -- deleting "the backup .." removed the documents next to the
+    backups -- and "../dokumente/<room>/<folder>" named any folder with a
+    stand.json in it, which a user can upload.
+    """
+    name = str(name or "")
+    if (not name or name in (".", "..") or "/" in name or "\\" in name
+            or name != os.path.basename(name)):
+        return None
+    pfad = os.path.join(ORDNER, name)
+    return pfad if os.path.isdir(pfad) else None
+
+
 def liste():
     """Vorhandene Abzuege, neueste zuerst: [(name, pfad, bytes, stand)]."""
     if not os.path.isdir(ORDNER):
@@ -381,8 +398,8 @@ def entferne(name, trotzdem=False):
     ist kein Randfall: die Abzuege sind das Erste, was jemand wegraeumen
     will, wenn der Platz knapp wird.
     """
-    ziel = os.path.join(ORDNER, name)
-    if not os.path.isdir(ziel):
+    ziel = _abzug(name)
+    if not ziel:
         return False, f"Kein Abzug namens '{name}'."
 
     vollstaendige = [n for n, _p, _g, s in liste()
@@ -491,8 +508,8 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None, zustand=False):
 
     Kein Modell noetig: die Vektoren liegen im Abzug.
     """
-    quelle = os.path.join(ORDNER, name)
-    if not os.path.isdir(quelle):
+    quelle = _abzug(name)
+    if not quelle:
         return {"fehler": [f"Kein Abzug namens '{name}'."], "raeume": {}}
 
     try:
@@ -519,8 +536,10 @@ def hole_zurueck(name, nur_raum=None, fortschritt=None, zustand=False):
     for kennung, angabe in (stand.get("raeume") or {}).items():
         if nur_raum and kennung != nur_raum:
             continue
-        basis = os.path.join(quelle, angabe.get("datei")
-                             or paths.sicherer_teil(kennung))
+        # The file name comes from stand.json: one name inside the
+        # backup, not a path out of it.
+        basis = os.path.join(quelle, os.path.basename(
+            str(angabe.get("datei") or "")) or paths.sicherer_teil(kennung))
         try:
             matrix = np.load(basis + ".npy")
             with open(basis + ".jsonl", encoding="utf-8") as f:

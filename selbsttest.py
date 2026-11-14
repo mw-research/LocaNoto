@@ -6805,6 +6805,67 @@ pruef("ein Word-Anhang wird nur bis zu einer Grenze ausgepackt",
       "ANFANG" in _anh_h and "ENDE" not in _anh_h, _anh_h[:60])
 _pf_h.ATTACHMENT_XML_BYTES = _alt_xml_h
 
+# --- HARDENING: THE WEB FETCHER CONNECTS TO WHAT IT CHECKED ---
+#
+# A name server can answer differently each time it is asked. The check
+# resolved the name, and the connection resolved it again.
+import socket as _so_h
+import websuche as _ws_h
+
+_antworten_h = [[(2, 1, 6, "", ("93.184.216.34", 0))],      # public
+                [(2, 1, 6, "", ("10.0.0.5", 0))]]           # internal
+_fragen_h = []
+_echt_gai_h = _so_h.getaddrinfo
+
+
+def _wechselnd_h(*a, **k):
+    _fragen_h.append(a[0])
+    return _antworten_h[min(len(_fragen_h), len(_antworten_h)) - 1]
+
+
+_so_h.getaddrinfo = _wechselnd_h
+try:
+    _ip_h = _ws_h.aufgeloest("rebind.example")
+finally:
+    _so_h.getaddrinfo = _echt_gai_h
+pruef("Websuche: der Name wird einmal aufgeloest, und verbunden wird mit dem Geprueften",
+      _ip_h == "93.184.216.34" and len(_fragen_h) == 1, (_ip_h, _fragen_h))
+_so_h.getaddrinfo = lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0)),
+                                     (2, 1, 6, "", ("10.0.0.5", 0))]
+try:
+    _gemischt_h = _ws_h.aufgeloest("gemischt.example")
+finally:
+    _so_h.getaddrinfo = _echt_gai_h
+pruef("Websuche: eine interne Adresse unter den Antworten genuegt zum Ablehnen",
+      _gemischt_h is None, _gemischt_h)
+
+# --- HARDENING: A BACKUP'S NAME IS NOT A PATH ---
+import sicherung as _sich_h
+
+_alt_ordner_h = _sich_h.ORDNER
+_sich_h.ORDNER = os.path.join(tmp, "sicherungen_haertung")
+os.makedirs(os.path.join(_sich_h.ORDNER, "2026-11-14_10-00"), exist_ok=True)
+_neben_h = os.path.join(tmp, "neben_den_sicherungen")
+os.makedirs(_neben_h, exist_ok=True)
+with open(os.path.join(_neben_h, "stand.json"), "w", encoding="utf-8") as _f:
+    _f.write('{"raeume": {"allgemein": {"datei": "../../x"}}}')
+
+pruef("ein Abzug wird ueber seinen Ordnernamen gefunden",
+      _sich_h._abzug("2026-11-14_10-00") is not None)
+pruef("'..', ein Pfad und ein leerer Name sind kein Abzug",
+      all(_sich_h._abzug(n) is None for n in
+          ("..", ".", "", "../neben_den_sicherungen",
+           "..\neben_den_sicherungen", "/etc", "2026-11-14_10-00/..")))
+pruef("Loeschen mit '..' entfernt nichts",
+      not _sich_h.entferne("..", trotzdem=True)[0]
+      and os.path.isdir(_sich_h.ORDNER) and os.path.isdir(_neben_h))
+_ber_h = _sich_h.hole_zurueck("../neben_den_sicherungen")
+pruef("Einspielen aus einem Ordner ausserhalb wird abgewiesen",
+      "Kein Abzug" in str(_ber_h.get("fehler")), _ber_h)
+shutil.rmtree(_sich_h.ORDNER, ignore_errors=True)
+shutil.rmtree(_neben_h, ignore_errors=True)
+_sich_h.ORDNER = _alt_ordner_h
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein
