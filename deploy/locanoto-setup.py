@@ -773,10 +773,10 @@ def write_files(root, files):
     for rel, text in files.items():
         p = os.path.join(root, rel)
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        secret = rel.endswith((".key", "compose.yaml"))
+        with (_open_private(p) if secret
+              else open(p, "w", encoding="utf-8", newline="\n")) as fh:
             fh.write(text)
-        if rel.endswith((".key", "compose.yaml")):
-            _private(p)
 
 
 def _private(path):
@@ -784,6 +784,15 @@ def _private(path):
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def _open_private(path):
+    """Open a file for writing that only its owner can read -- from the
+    moment it exists, not after it was written (a file created first and
+    restricted afterwards is readable by others in between)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    _private(path)          # an existing file keeps its old mode otherwise
+    return os.fdopen(fd, "w", encoding="utf-8", newline="\n")
 
 
 def docker_compose(root, *args, stdin=None, check=True):
@@ -1349,9 +1358,8 @@ def install_kubernetes(a, sec, first, runner):
     objs = k8s_objects(a, sec, cm)
     manifest = docs(objs)
     out = os.path.join(a["state_dir"], "kubernetes.yaml")
-    with open(out, "w", encoding="utf-8", newline="\n") as fh:
+    with _open_private(out) as fh:
         fh.write(manifest)
-    _private(out)
     print("  " + T("Wende Manifeste an ...", "Applying manifests ..."))
     # The classic Streamlit pages are gone (2026-11-12). An installation from
     # before still has them; apply would leave them running on the old image.
@@ -1401,10 +1409,9 @@ def load(path):
 
 def save(path, data, private=False):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
+    with (_open_private(path) if private
+          else open(path, "w", encoding="utf-8")) as fh:
         json.dump(data, fh, ensure_ascii=False, indent=1)
-    if private:
-        _private(path)
 
 
 def summary(a):
@@ -1525,7 +1532,7 @@ def main():
             if a["tls"] in ("internal", "own") and not sec.get("TLS_CRT"):
                 sec["TLS_CRT"], sec["TLS_KEY"] = "(issued at install)", "(issued at install)"
             path = os.path.join(args.state, "kubernetes.yaml")
-            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            with _open_private(path) as fh:     # it holds every secret
                 fh.write(docs(k8s_objects(a, sec, a.get("tls") != "own")))
             print(f"  {T('Manifeste in', 'Manifests in')} {path}")
         return 0

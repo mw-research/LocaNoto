@@ -278,7 +278,10 @@ services:
     restart: unless-stopped
     environment: *umgebung
     ports:
-      - "${APP_PORT:-8501}:8501"
+      # APP_BIND=127.0.0.1 listens on this machine only -- for a proxy
+      # with TLS in front. Without it the page is served unencrypted to
+      # everyone who reaches the port.
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8501}:8501"
 
     # Der CrossEncoder ist der einzige Torch-Nutzer im Container und laeuft
     # ohne die folgende Sektion auf der CPU. Bei 1024 Token Fenster und rund
