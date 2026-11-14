@@ -7048,6 +7048,47 @@ _nz_h.raeume_fuer = _alt_rf_h
 _acc_h.delete("resetprobe", by="markus")
 _acc_h.purge_left_over("resetprobe", by="server")
 
+# --- HARDENING: A BOUND ON READING DOCUMENTS AT THE SAME TIME ---
+#
+# Reading a document holds a worker thread until it is done. A few large
+# uploads at once took them all.
+import threading as _thr_h
+
+_alt_pl_h, _alt_w_h = _auf_h._plaetze, _auf_h.WARTEN_SEKUNDEN
+_auf_h._plaetze = _thr_h.BoundedSemaphore(1)
+_auf_h.WARTEN_SEKUNDEN = 0
+_auf_h._plaetze.acquire()                       # one document is being read
+try:
+    _auf_h.process_uploaded_pdf(_auf_h.Datei("wartet.txt", b"text"), "allgemein",
+                                benutzer_="markus", ist_verwalter=True)
+    _voll_h = 0
+except _auf_h.Abgelehnt as _e:
+    _voll_h = _e.status
+pruef("ist kein Platz frei, wird ein weiterer Upload mit 429 abgewiesen",
+      _voll_h == 429, _voll_h)
+_auf_h._plaetze.release()
+_n_h, _hin_h = _auf_h.process_uploaded_pdf(
+    _auf_h.Datei("Haertung-Platz.txt", b"Die Pruefung der Pumpe P4 ist jaehrlich. " * 5),
+    "allgemein", benutzer_="markus", ist_verwalter=True)
+pruef("mit freiem Platz wird eingelesen, und der Platz danach zurueckgegeben",
+      _n_h >= 1 and _auf_h._plaetze.acquire(blocking=False), (_n_h, _hin_h))
+_auf_h._plaetze.release()
+_auf_h._plaetze, _auf_h.WARTEN_SEKUNDEN = _alt_pl_h, _alt_w_h
+
+# An optional size limit for a personal workspace.
+_alt_q_h = _auf_h.PRIVAT_MAX_MB
+_auf_h.PRIVAT_MAX_MB = 1
+try:
+    _auf_h.process_uploaded_pdf(
+        _auf_h.Datei("zu-gross.txt", b"x" * (2 * 1024 * 1024)),
+        raeume.privat_kennung("anna"), benutzer_="anna")
+    _quote_h = 0
+except _auf_h.Abgelehnt as _e:
+    _quote_h = _e.status
+pruef("ein persoenlicher Bereich ueber seiner Groessengrenze nimmt nichts mehr an",
+      _quote_h == 413, _quote_h)
+_auf_h.PRIVAT_MAX_MB = _alt_q_h
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

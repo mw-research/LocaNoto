@@ -25,6 +25,7 @@ sieht, wo es gelandet ist. Ueber HTTP waere es falsch -- ein Stapel von
 """
 import os
 import re
+import threading
 
 import pymupdf
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -50,6 +51,31 @@ embed_client = llm.client("EMBEDDING")
 # How many pages a document may have. Reading runs in the request; a
 # document of tens of thousands of pages would hold it for hours.
 MAX_SEITEN = paths.env_int("AUFNAHME_MAX_SEITEN", 3000)
+
+
+# How many documents this process reads at the same time. Reading runs in
+# the request (text recognition, tables, embedding); every one holds a
+# worker thread until it is done. Without a bound a handful of large
+# uploads took all of them, and nobody got a page any more.
+GLEICHZEITIG = paths.env_int("AUFNAHME_GLEICHZEITIG", 4)
+# How long an upload waits for a free place before it is turned away.
+WARTEN_SEKUNDEN = paths.env_int("AUFNAHME_WARTEN_SEKUNDEN", 120)
+_plaetze = threading.BoundedSemaphore(max(1, GLEICHZEITIG))
+
+# Largest size of a personal workspace's folder in MB. 0: no limit. The
+# documents of all workspaces share one volume.
+PRIVAT_MAX_MB = paths.env_int("PRIVAT_MAX_MB", 0)
+
+
+def _ordner_groesse(ordner):
+    gesamt = 0
+    for wurzel, _unter, dateien in os.walk(ordner):
+        for name in dateien:
+            try:
+                gesamt += os.path.getsize(os.path.join(wurzel, name))
+            except OSError:
+                pass
+    return gesamt
 
 
 class Abgelehnt(ValueError):
@@ -239,12 +265,24 @@ def _speichern_chunks(chunks, metadatas, ids, raum,
                        f"sich nicht vektorisieren und fehlen."
                        if fehlend else "")
 
-def process_uploaded_pdf(uploaded_file, raum, projekt="",
-                         bilder=False, *, benutzer_,
-                         ist_verwalter=False, streng=False,
-                         fortschritt=None,
-                         nach_dem_schreiben=None,
-                         sehmodell=False, bericht=None):
+def process_uploaded_pdf(*args, **kwargs):
+    """Reads a document in (see _process_uploaded_pdf), at most
+    GLEICHZEITIG at a time in this process."""
+    if not _plaetze.acquire(timeout=WARTEN_SEKUNDEN):
+        raise Abgelehnt("Gerade werden viele Dokumente eingelesen. Bitte "
+                        "gleich noch einmal versuchen.", 429)
+    try:
+        return _process_uploaded_pdf(*args, **kwargs)
+    finally:
+        _plaetze.release()
+
+
+def _process_uploaded_pdf(uploaded_file, raum, projekt="",
+                          bilder=False, *, benutzer_,
+                          ist_verwalter=False, streng=False,
+                          fortschritt=None,
+                          nach_dem_schreiben=None,
+                          sehmodell=False, bericht=None):
     """Liest ein Dokument ein, speichert es dauerhaft, isoliert Tabellen und
     vektorisiert beides.
 
@@ -275,6 +313,12 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
     # Before anything is written: is this a file that is read at all?
     pruefe_datei(paths.sicherer_dateiname(uploaded_file.name),
                  uploaded_file.getvalue())
+    if PRIVAT_MAX_MB and raeume.ist_privat(raum):
+        belegt = _ordner_groesse(paths.raum_ordner(raum))
+        if belegt + len(uploaded_file.getvalue()) > PRIVAT_MAX_MB * 1024 * 1024:
+            raise Abgelehnt(
+                f"Der persönliche Arbeitsbereich ist voll ({PRIVAT_MAX_MB} MB). "
+                f"Erst Dokumente löschen.")
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
     #
