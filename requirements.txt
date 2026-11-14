@@ -192,4 +192,4 @@ tzlocal==5.4.4
 # checking the ID tokens of an OIDC provider (oidc.py).
 psycopg==3.3.6
 psycopg-binary==3.3.6
-PyJWT==2.10.1
+PyJWT==2.15.1

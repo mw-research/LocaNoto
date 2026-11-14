@@ -154,7 +154,7 @@ Sie ist keine Rechtsauskunft.
 | `pydantic_core` | 2.46.4 | MIT |
 | `pydeck` | 0.9.3 | Apache License 2.0 |
 | `Pygments` | 2.20.0 | BSD-2-Clause |
-| `PyJWT` | 2.10.1 | MIT License |
+| `PyJWT` | 2.15.1 | MIT License |
 | `PyPika` | 0.51.1 | Apache Software License |
 | `pyproject_hooks` | 1.2.0 | MIT License |
 | `pyspnego` | 0.12.2 | MIT |
