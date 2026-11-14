@@ -69,6 +69,11 @@ concurrency:
   group: abbild-${{ github.ref }}
   cancel-in-progress: true
 
+# The token of a run may read the repository. A job that needs more
+# (pushing the image) says so itself.
+permissions:
+  contents: read
+
 jobs:
   name:
     runs-on: ubuntu-latest

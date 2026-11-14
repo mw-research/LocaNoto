@@ -683,6 +683,10 @@ def docker_files(a, sec):
         tls = {"internal": "\ttls internal\n", "own": "\ttls /certs/own.crt /certs/own.key\n"
                }.get(a["tls"], "")
         scheme = "http://" if a["tls"] == "none" else ""
+        # With TLS: the browser keeps to https for this host from the
+        # first visit on, also when somebody types the address without it.
+        if a["tls"] != "none":
+            extra += '\theader Strict-Transport-Security "max-age=31536000"\n'
         return (f"{scheme}{host} {{\n{tls}{extra}"
                 f"\treverse_proxy {upstream} {{\n\t\tflush_interval -1\n\t}}\n}}\n")
 

@@ -177,6 +177,8 @@ check("services talk plain HTTP inside",
       svc["server"]["environment"]["OWNCLOUD_URL"] == "http://opencloud:9200"
       and svc["websuche"]["environment"]["WEBSUCHE_SEARXNG"] == "http://searxng:8080")
 caddy = open(os.path.join(target, "Caddyfile"), encoding="utf-8").read()
+check("with TLS every site sends Strict-Transport-Security",
+      caddy.count("Strict-Transport-Security") == caddy.count("reverse_proxy"), caddy)
 check("Caddy issues from the own CA, for both addresses",
       "tls internal" in caddy and "cert /certs/ca.crt" in caddy
       and "192.168.10.20 {" in caddy and "cloud.example.test {" in caddy

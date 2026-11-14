@@ -36,6 +36,11 @@ concurrency:
   group: installation-${{ github.ref }}
   cancel-in-progress: true
 
+# The token of a run may read the repository; no job here needs more
+# than it states itself.
+permissions:
+  contents: read
+
 jobs:
   image:
     runs-on: ubuntu-latest
