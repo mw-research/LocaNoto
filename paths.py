@@ -136,7 +136,11 @@ def _beschreibbar(d):
     sieht ein eingehaengtes Volume aus, dessen Freigabe die Kennung des
     Prozesses auf "nobody" abbildet.
     """
-    probe = os.path.join(d, ".schreibprobe")
+    # One name per process: several servers start at the same moment on
+    # the same folder. With one shared name, one of them removed the file
+    # the other had just written -- and that one reported the folder as
+    # not writable and did not start.
+    probe = os.path.join(d, f".schreibprobe-{os.getpid()}")
     try:
         with open(probe, "w") as f:
             f.write("x")
