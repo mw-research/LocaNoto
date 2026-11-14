@@ -95,6 +95,7 @@ x-umgebung: &umgebung
   - MCP_TIMEOUT=${MCP_TIMEOUT:-}
   - MCP_MAX_WERKZEUGE=${MCP_MAX_WERKZEUGE:-}
   - MCP_STDIO=${MCP_STDIO:-}
+  - UNSIGNIERT_ERLAUBT=${UNSIGNIERT_ERLAUBT:-}
   # Exchange-Postfaecher, direkt angebunden (postfach.py).
   - POSTFACH_HOLGRENZE=${POSTFACH_HOLGRENZE:-}
   - POSTFACH_TEXTAUSZUG=${POSTFACH_TEXTAUSZUG:-}

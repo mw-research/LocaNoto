@@ -154,6 +154,8 @@ def lade():
     # weg. Sichtbar machen ist hier das Erreichbare.
     liste_ok = geheim.pruefe_signatur(geheim.kanonisch(sorted(nutzer)),
                                       daten.get("namensliste") or "")
+    if liste_ok:
+        geheim.merke_signiert()
     return nutzer, (SIGNIERT if liste_ok else MANIPULIERT)
 
 
@@ -180,7 +182,11 @@ def _nachsichtig(zustand_):
     darf niemanden aussperren. Nach dem einmaligen Signieren gilt die
     strenge Regel.
     """
-    return zustand_ in (UNSIGNIERT, LEER)
+    # ... and only until this installation has signed once
+    # (geheim.unsigniert_erlaubt): afterwards an unsigned file is not a
+    # file from before the signatures but one somebody replaced.
+    return zustand_ == LEER or (zustand_ == UNSIGNIERT
+                                and geheim.unsigniert_erlaubt())
 
 
 def pruefe(name, passwort):

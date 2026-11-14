@@ -99,8 +99,10 @@ def nachsichtig(daten=None):
     daten = laden() if daten is None else daten
     if not daten:
         return False
-    return not any(isinstance(e, dict) and e.get("signatur")
-                   for e in daten.values())
+    # Only until this installation has signed once: afterwards a file
+    # with every signature stripped is not an old file.
+    return geheim.unsigniert_erlaubt() and not any(
+        isinstance(e, dict) and e.get("signatur") for e in daten.values())
 
 
 def speichern(daten):

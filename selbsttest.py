@@ -6855,7 +6855,7 @@ pruef("ein Abzug wird ueber seinen Ordnernamen gefunden",
 pruef("'..', ein Pfad und ein leerer Name sind kein Abzug",
       all(_sich_h._abzug(n) is None for n in
           ("..", ".", "", "../neben_den_sicherungen",
-           "..\neben_den_sicherungen", "/etc", "2026-11-14_10-00/..")))
+           "..\\neben_den_sicherungen", "/etc", "2026-11-14_10-00/..")))
 pruef("Loeschen mit '..' entfernt nichts",
       not _sich_h.entferne("..", trotzdem=True)[0]
       and os.path.isdir(_sich_h.ORDNER) and os.path.isdir(_neben_h))
@@ -6914,6 +6914,40 @@ pruef("hat er es selbst gesetzt, scheitert es erst am fehlenden Antrag",
       "Antrag gibt es nicht" in _nz_h.bestaetige("privat_x", "anna", "bert")[1])
 _nz_h._passwort_zuletzt_von = _alt_pz_h
 benutzer.hat_rolle = _alt_rolle_h
+
+# --- HARDENING: AN UNSIGNED USER FILE IS NOT TAKEN FOR AN OLD ONE ---
+#
+# Whoever can write the user file and cannot read the key replaced it by
+# the format from before the signatures: {"name": "<own bcrypt hash>"}.
+# That state counted as "not signed yet" and let the entry in, as admin
+# if the name stood in ADMIN_USERS.
+import bcrypt as _bc_h
+import geheim as _geh_h
+import auth as _auth_h
+
+pruef("diese Installation hat signiert, und das ist gemerkt",
+      benutzer.zustand() == benutzer.SIGNIERT
+      and os.path.exists(_geh_h._SIGNIERT_MARKE)
+      and not _geh_h.unsigniert_erlaubt())
+_echt_h = statefiles.read_bytes(benutzer._datei())
+_hash_h = _bc_h.hashpw(b"Angreifer-Passwort-1", _bc_h.gensalt(4)).decode()
+statefiles.write(benutzer._datei(), json.dumps({"markus": _hash_h}).encode("utf-8"))
+try:
+    pruef("die Datei im alten Format gilt als unsigniert",
+          benutzer.zustand() == benutzer.UNSIGNIERT)
+    pruef("ihr Eintrag kommt mit seinem Passwort nicht herein",
+          not benutzer.pruefe("markus", "Angreifer-Passwort-1"))
+    pruef("und ist kein Verwalter", not benutzer.ist_admin("markus"))
+    os.environ["UNSIGNIERT_ERLAUBT"] = "1"
+    pruef("mit dem Schalter gilt der Umstieg noch einmal",
+          benutzer.pruefe("markus", "Angreifer-Passwort-1"))
+    os.environ.pop("UNSIGNIERT_ERLAUBT")
+finally:
+    os.environ.pop("UNSIGNIERT_ERLAUBT", None)
+    statefiles.write(benutzer._datei(), _echt_h)
+pruef("die echte Datei gilt wieder", benutzer.zustand() == benutzer.SIGNIERT)
+pruef("Token ohne jede Signatur gelten ebenfalls nicht mehr als alt",
+      not _auth_h.nachsichtig({"abc": {"benutzer": "markus"}}))
 
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher

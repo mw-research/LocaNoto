@@ -159,6 +159,55 @@ def schluessel():
     return _schluessel
 
 
+# --- FILES FROM BEFORE THE SIGNATURES ---
+#
+# A user file or token file from before the signatures has none, and an
+# update must not lock anyone out: such a file counts as it is. But "no
+# signature anywhere" is also what somebody writes who can change the
+# file and cannot read the key -- replace the user file by the old
+# format with an own bcrypt hash, and that hash is all that is checked.
+#
+# So the allowance ends once this installation has signed. That is
+# remembered next to the key file, out of reach of whoever can write the
+# state. Where the key comes from the environment there is no such place:
+# those installations were set up with signatures and are strict from
+# the start. UNSIGNIERT_ERLAUBT=1 opens the allowance again for the one
+# start in which an old file is signed.
+_SIGNIERT_MARKE = SCHLUESSEL_DATEI + ".signiert"
+_signiert_gemerkt = False
+
+
+def _schluessel_aus_umgebung():
+    return bool(os.getenv("LOCANOTO_SCHLUESSEL_DATEI", "").strip()
+                or os.getenv("LOCANOTO_SCHLUESSEL", "").strip())
+
+
+def merke_signiert():
+    """This installation signs its files. Written once; errors are ignored
+    (a read-only config folder keeps the allowance, as before)."""
+    global _signiert_gemerkt
+    if _signiert_gemerkt or _schluessel_aus_umgebung():
+        return
+    try:
+        if not os.path.exists(_SIGNIERT_MARKE):
+            with open(_SIGNIERT_MARKE, "w", encoding="utf-8") as f:
+                f.write("1")
+        _signiert_gemerkt = True
+    except OSError:
+        pass
+
+
+def unsigniert_erlaubt():
+    """May a file without any signature still count (see above)?"""
+    if os.getenv("UNSIGNIERT_ERLAUBT", "").strip() == "1":
+        return True
+    if schluessel() is None:
+        return True          # nothing can be signed here at all
+    if _schluessel_aus_umgebung():
+        return False
+    return not os.path.exists(_SIGNIERT_MARKE)
+
+
 def zustand():
     """("ok"|"neu"|"unlesbar"|"aus", meldung) -- fuer Start und Anzeige."""
     try:
