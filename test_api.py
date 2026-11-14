@@ -1098,6 +1098,11 @@ r = markus.post(f"{API}/admin/emergency/requests", json={
 check("admin requests access", r.status_code == 200, r.text)
 r = bert.post(f"{API}/admin/emergency/requests/confirm", json={
     "room": own, "requester": "markus"})
+check("a confirmer whose password somebody else set is refused",
+      r.status_code != 200, r.text)
+benutzer.passwort_setzen("bert", "Berts-eigenes-Passwort-1", von="bert")
+r = bert.post(f"{API}/admin/emergency/requests/confirm", json={
+    "room": own, "requester": "markus"})
 check("second person confirms", r.status_code == 200, r.text)
 check("now markus reads anna's room", own in markus.get(f"{API}/me").json()
       ["emergency_rooms"])

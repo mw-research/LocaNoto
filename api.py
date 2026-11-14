@@ -138,6 +138,9 @@ def benutzer(x_locanoto_token: str = Header(default="")):
     abgelaufen ist, geht den Aufrufer nichts an und hilft nur beim Raten.
     """
     kennung = auth.pruefe(x_locanoto_token)
+    # The account is gone: so is its token (as in server.principal).
+    if kennung and not benutzer_datei.eintrag(kennung):
+        kennung = None
     if not kennung:
         raise HTTPException(status_code=401, detail="Kein gueltiges Token.",
                             headers={"WWW-Authenticate": "Token"})

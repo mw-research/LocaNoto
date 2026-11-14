@@ -180,9 +180,13 @@ def bestaetige(raum, von, durch):
     # Nor an account whose password the requester set last (when creating
     # it or by a reset): he knows it, so it would be the same person with
     # a second name. The confirming person sets their own password first.
-    if _passwort_zuletzt_von(durch) == von:
+    # ... or anyone else: the requester can act through a second account
+    # (create an admin, let that one reset the confirmer's password).
+    # Whoever knows the confirmer's password besides the confirmer could
+    # be the same person.
+    if _passwort_zuletzt_von(durch) not in ("", durch):
         return False, ("Die bestätigende Person muss ihr Passwort zuerst "
-                       "selbst setzen – das jetzige hat der Antragsteller "
+                       "selbst setzen – das jetzige hat jemand anderes "
                        "vergeben.")
     daten = _lade()
     passend = [a for a in daten["antraege"]

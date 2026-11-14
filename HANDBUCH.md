@@ -561,6 +561,9 @@ Arbeitsbereich.
   ownCloud-Konto verschwindet mit. Chatverlauf und persönlicher
   Arbeitsbereich bleiben; die Dokumente löschst du getrennt unter
   **Gespeicherte Dokumente** (fremde persönliche Arbeitsbereiche).
+  Solange davon etwas da ist, lässt sich kein neues Konto mit demselben
+  Namen anlegen – es würde Chats und Arbeitsbereich übernehmen. Auf dem
+  Server entfernt `python accounts.py purge <name>` beides.
 
 Jede Änderung steht im verketteten Benutzerprotokoll. „Benutzerdatei wurde
 außerhalb von LocaNoto geändert" → eine Signatur passt nicht: bestehende
@@ -801,6 +804,11 @@ oder fällt länger aus:
 Beide Namen und der Grund stehen im Protokoll. Ohne jemanden mit der Rolle
 `notzugang` gibt es keinen Notzugang: der Arbeitsbereich ist dann nur
 löschbar, nicht lesbar.
+
+Bestätigen kann nur, wer sein Passwort selbst gesetzt hat. Ein Konto, dessen
+Passwort jemand anderes vergeben hat – beim Anlegen oder durch Zurücksetzen
+–, wird abgewiesen, bis die Person es unter **Einstellungen** selbst ändert.
+Konten aus dem Firmenverzeichnis betrifft das nicht.
 
 ### Wie werte ich als Admin die Rückmeldungen in LocaNoto aus?
 

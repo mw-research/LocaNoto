@@ -5,6 +5,8 @@ The Streamlit pages did these steps one after another in three places
 functions, so every front end does all of them:
 
     create(name, password, role, by)        user + personal room + storage account
+    left_over(name)                         what a former account of the name left
+    purge_left_over(name, by)               remove it (server shell only)
     set_password(name, password, by)        user file + storage password
     change_own_password(name, old, new)     checks the old one first
     delete(name, by)                        user, instruction, storage account
@@ -12,9 +14,13 @@ functions, so every front end does all of them:
 Each returns (ok, message, notes); notes are the storage steps worth
 showing ("account created", "password not changed: not managed", ...).
 """
+import os
+
 import benutzer
 import owncloud
+import paths
 import prompts
+import statefiles
 
 
 def _storage_password(name, password, by):
@@ -39,10 +45,66 @@ def _storage_password(name, password, by):
 APP_ROLES = ("admin", "nutzer")
 
 
+def left_over(name):
+    """What a former account of this name left behind: a list of words.
+
+    Deleting an account keeps its chats and its personal workspace. Both
+    are bound to the NAME -- a new account of that name would open them.
+    An admin could read anyone's personal workspace that way: delete the
+    account, create it again, sign in.
+    """
+    import raeume
+    import store
+    name = (name or "").strip().lower()
+    found = []
+    try:
+        sml = store.sammlung(raeume.sammlung(raeume.privat_kennung(name)),
+                             anlegen=False)
+        if sml is not None and sml.count():
+            found.append("personal workspace")
+    except Exception:
+        found.append("personal workspace")      # unreadable: assume it is
+    folder = os.path.join(paths.CHATS_DIR, name)
+    try:
+        if statefiles.isdir(folder) and statefiles.listdir(folder):
+            found.append("chats and files")
+    except OSError:
+        found.append("chats and files")
+    return found
+
+
+def purge_left_over(name, by="?"):
+    """Remove what a deleted account left. Returns (ok, message).
+
+    Not offered in the pages or the API: it deletes what only its owner
+    could read. Run on the server: python accounts.py purge <name>.
+    """
+    import aufnehmen
+    import keyword_index
+    import raeume
+    import store
+    name = (name or "").strip().lower()
+    if benutzer.eintrag(name):
+        return False, f"'{name}' is an account. Delete it first."
+    room = raeume.privat_kennung(name)
+    store.loesche(raeume.sammlung(room))
+    keyword_index.delete_document_by_raum(room)
+    aufnehmen.leere_ablage(room)
+    statefiles.rmtree(os.path.join(paths.CHATS_DIR, name), ignore_errors=True)
+    benutzer.protokolliere("nachlass_entfernt", name, by)
+    return True, f"What '{name}' left is removed."
+
+
 def create(name, password, role="nutzer", by="?"):
     if role not in APP_ROLES:
         return False, ("The role notzugang is assigned through the directory "
                        "or manage_users.py on the server."), []
+    rest = left_over(name)
+    if rest and not benutzer.eintrag((name or "").strip().lower()):
+        return False, ("A former account of this name left " + " and ".join(rest)
+                       + ". They would belong to the new account. Remove them "
+                         "on the server first: python accounts.py purge "
+                       + (name or "").strip().lower()), []
     ok, message = benutzer.anlege(name, password, rolle=role, von=by)
     if not ok:
         return ok, message, []
@@ -80,7 +142,10 @@ def set_role(name, role, by="?"):
 
 def delete(name, by="?"):
     """The user goes; their documents and rooms stay (an admin decides)."""
-    if name == by:
+    # One spelling: the user file keeps names in lower case. "Bob" deleted
+    # the account "bob" and left his tokens, which matched "Bob" nowhere.
+    name = (name or "").strip().lower()
+    if name == (by or "").strip().lower():
         return False, "You cannot delete yourself.", []
     ok, message = benutzer.loesche(name, von=by)
     if not ok:
@@ -102,3 +167,14 @@ def delete(name, by="?"):
         if m:
             notes.append(m)
     return ok, message, notes
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == "purge":
+        paths.bootstrap()
+        _ok, _message = purge_left_over(sys.argv[2], by="server")
+        print(_message)
+        sys.exit(0 if _ok else 1)
+    print("python accounts.py purge <name>   remove what a deleted account left")
+    sys.exit(2)

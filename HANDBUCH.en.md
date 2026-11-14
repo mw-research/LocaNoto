@@ -538,7 +538,9 @@ rejected by LocaNoto: they would result in the same personal workspace.
 - Tick "… really delete" → **Delete user**. A managed ownCloud account is
   removed too. Chat history and personal workspace remain; delete the
   documents separately under **Stored documents** (other users' personal
-  workspaces).
+  workspaces). As long as any of it is there, no new account of the same
+  name can be created -- it would take over the chats and the workspace.
+  On the server, `python accounts.py purge <name>` removes both.
 
 Every change is recorded in the chained user log. "User file was changed
 outside LocaNoto" → a signature does not match: existing users keep
@@ -768,6 +770,11 @@ absent for a longer time:
 Both names and the reason are recorded in the log. Without anyone holding
 the role `notzugang`, there is no emergency access: the workspace can then
 only be deleted, not read.
+
+Only someone who set their own password can confirm. An account whose
+password somebody else set -- when it was created or by a reset -- is
+refused until that person changes it under **Settings**. Accounts from
+the company directory are not affected.
 
 ### How do I evaluate feedback in LocaNoto as an admin?
 

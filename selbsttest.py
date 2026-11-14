@@ -6866,6 +6866,55 @@ shutil.rmtree(_sich_h.ORDNER, ignore_errors=True)
 shutil.rmtree(_neben_h, ignore_errors=True)
 _sich_h.ORDNER = _alt_ordner_h
 
+# --- HARDENING: A NEW ACCOUNT DOES NOT INHERIT A FORMER ONE ---
+#
+# Deleting an account keeps its chats and its personal workspace, both
+# bound to the name. An admin could delete an account, create it again
+# and sign in as it -- past the two-person emergency access.
+import accounts as _acc_h
+import chats as _chats_h
+import notzugang as _nz_h
+
+benutzer.anlege("nachlass", "Passwort-123456", von="markus")
+_chat_h = _chats_h.neue_kennung()
+_chats_h.speichere("nachlass", _chat_h, [{"role": "user", "content": "privat"}])
+pruef("ein gewoehnliches Konto hinterlaesst zunaechst nichts Fremdes",
+      _acc_h.left_over("unbekannt-niemand") == [])
+_acc_h.delete("Nachlass", by="markus")
+pruef("Loeschen nimmt den Namen in jeder Schreibweise",
+      benutzer.eintrag("nachlass") is None)
+pruef("nach dem Loeschen liegen die Chats noch da",
+      "chats and files" in _acc_h.left_over("nachlass"), _acc_h.left_over("nachlass"))
+_ok_h, _m_h, _n_h = _acc_h.create("nachlass", "Passwort-654321", by="markus")
+pruef("ein neues Konto gleichen Namens wird abgewiesen, solange etwas daliegt",
+      not _ok_h and "purge" in _m_h and benutzer.eintrag("nachlass") is None, _m_h)
+pruef("Aufraeumen geht nicht, solange es das Konto gibt",
+      not _acc_h.purge_left_over("markus")[0])
+pruef("auf dem Server laesst sich der Nachlass entfernen",
+      _acc_h.purge_left_over("nachlass", by="server")[0]
+      and _acc_h.left_over("nachlass") == [])
+_ok_h, _m_h, _n_h = _acc_h.create("nachlass", "Passwort-654321", by="markus")
+pruef("danach wird das Konto angelegt, ohne alte Chats",
+      _ok_h and _chats_h.liste("nachlass") == [], (_m_h, _chats_h.liste("nachlass")))
+_acc_h.delete("nachlass", by="markus")
+_acc_h.purge_left_over("nachlass", by="server")
+
+# The confirmer of an emergency access set their own password. Until now
+# only "not set by the requester" was asked -- a second account of the
+# requester could set it.
+_alt_pz_h = _nz_h._passwort_zuletzt_von
+_alt_rolle_h = benutzer.hat_rolle
+benutzer.hat_rolle = lambda n, r: True
+_nz_h._passwort_zuletzt_von = lambda n: "dritter"
+pruef("ein Bestaetiger, dessen Passwort ein Dritter gesetzt hat, wird abgewiesen",
+      "jemand anderes" in _nz_h.bestaetige("privat_x", "anna", "bert")[1],
+      _nz_h.bestaetige("privat_x", "anna", "bert"))
+_nz_h._passwort_zuletzt_von = lambda n: n
+pruef("hat er es selbst gesetzt, scheitert es erst am fehlenden Antrag",
+      "Antrag gibt es nicht" in _nz_h.bestaetige("privat_x", "anna", "bert")[1])
+_nz_h._passwort_zuletzt_von = _alt_pz_h
+benutzer.hat_rolle = _alt_rolle_h
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein
