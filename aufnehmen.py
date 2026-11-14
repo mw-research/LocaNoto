@@ -47,6 +47,60 @@ text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500,
 embed_client = llm.client("EMBEDDING")
 
 
+# How many pages a document may have. Reading runs in the request; a
+# document of tens of thousands of pages would hold it for hours.
+MAX_SEITEN = paths.env_int("AUFNAHME_MAX_SEITEN", 3000)
+
+
+class Abgelehnt(ValueError):
+    """The file is not taken in: wrong kind, or larger than the limits.
+
+    status is the HTTP status the interfaces answer with.
+    """
+
+    def __init__(self, meldung, status=413):
+        super().__init__(meldung)
+        self.status = status
+
+
+def pruefe_datei(dateiname, inhalt):
+    """Raises Abgelehnt for a file this installation does not read.
+
+    Called before anything is written. Until now every upload was stored
+    first and looked at afterwards: a file of an unknown kind stayed on
+    the disk, listed nowhere, and a document with a declared page of
+    hundreds of inches was rendered as it stood.
+    """
+    endung = os.path.splitext(str(dateiname))[1].lower()
+    if endung not in paths.DOKUMENT_ENDUNGEN:
+        raise Abgelehnt(
+            f"Dateityp {endung or '(ohne Endung)'} wird nicht eingelesen. "
+            f"Möglich: {', '.join(paths.DOKUMENT_ENDUNGEN)}", 415)
+    try:
+        if endung == ".docx":
+            lesen.pruefe_archiv(inhalt)
+        elif endung not in lesen.ENDUNGEN:
+            doc = pymupdf.open(stream=inhalt, filetype=endung.lstrip("."))
+            try:
+                if not doc.is_pdf:
+                    for seite in doc:
+                        if abs(seite.rect) > ocr.BILD_MAX_MP * 1_000_000:
+                            raise ocr.ZuGross(
+                                f"Bild größer als {ocr.BILD_MAX_MP} Megapixel.")
+                if len(doc) > MAX_SEITEN:
+                    raise Abgelehnt(
+                        f"Mehr als {MAX_SEITEN} Seiten ({len(doc)}). "
+                        f"Das Dokument bitte teilen.")
+            finally:
+                doc.close()
+    except Abgelehnt:
+        raise
+    except (lesen.ZuGross, ocr.ZuGross) as e:
+        raise Abgelehnt(str(e))
+    except Exception:
+        raise Abgelehnt("Die Datei lässt sich nicht öffnen.", 415)
+
+
 class KeinRecht(Exception):
     """Der Nutzer darf in diesen Raum nicht schreiben.
 
@@ -217,6 +271,10 @@ def process_uploaded_pdf(uploaded_file, raum, projekt="",
             raise KeinRecht(
                 f"'{benutzer_}' darf nicht in den Arbeitsbereich '{raum}' schreiben.")
         raum = raeume.sichere_anlage_privat(benutzer_)
+
+    # Before anything is written: is this a file that is read at all?
+    pruefe_datei(paths.sicherer_dateiname(uploaded_file.name),
+                 uploaded_file.getvalue())
     
     # 1. PDF DAUERHAFT SPEICHERN anstatt es wegzuwerfen
     #

@@ -14,8 +14,12 @@ Erfahrung wie bei den Tabellen: die Zeile darueber ist der wirksamste
 Anker im Bestand, und ein Abschnitt ohne sie ist schwerer zu finden als
 einer mit.
 """
+import io
 import os
 import re
+import zipfile
+
+import paths
 
 ENDUNGEN = (".docx", ".md", ".markdown", ".txt")
 
@@ -53,6 +57,34 @@ def ist_webseite(pfad):
     return bool(_WEB_KOPF.search(kopf))
 
 
+# --- UNPACKED SIZE ---
+#
+# Word, Excel and PowerPoint files are zip archives. A few kilobytes can
+# unpack to gigabytes, and the parser reads all of it into memory.
+ENTPACKT_MAX_MB = paths.env_int("AUFNAHME_ENTPACKT_MAX_MB", 500)
+
+
+class ZuGross(ValueError):
+    """An archive that unpacks to more than this installation reads."""
+
+
+def pruefe_archiv(quelle):
+    """Refuse a zip container that unpacks to more than ENTPACKT_MAX_MB.
+
+    quelle is a path or the bytes. Anything that is no zip passes: there
+    is nothing to unpack.
+    """
+    if isinstance(quelle, (bytes, bytearray)):
+        quelle = io.BytesIO(bytes(quelle))
+    try:
+        with zipfile.ZipFile(quelle) as z:
+            gesamt = sum(i.file_size for i in z.infolist())
+    except (zipfile.BadZipFile, OSError):
+        return
+    if gesamt > ENTPACKT_MAX_MB * 1024 * 1024:
+        raise ZuGross(f"Entpackt größer als {ENTPACKT_MAX_MB} MB.")
+
+
 # --- MARKDOWN UND TEXT ---
 
 def _markdown(pfad):
@@ -86,6 +118,7 @@ def _docx(pfad):
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
+    pruefe_archiv(pfad)
     doc = Document(pfad)
     koerper = doc.element.body
 
@@ -188,6 +221,7 @@ def bilder(pfad):
     from docx import Document
     from docx.text.paragraph import Paragraph
 
+    pruefe_archiv(pfad)
     doc = Document(pfad)
     dateiname = os.path.basename(pfad)
     nummer, titel, davor = 0, "", ""

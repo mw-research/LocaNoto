@@ -375,7 +375,13 @@ def source_page(room: str, file: str, page: int = Query(ge=1),
     try:
         doc = pymupdf.open(path)
         try:
-            png = doc.load_page(page - 1).get_pixmap(dpi=dpi).tobytes("png")
+            import ocr
+            sheet = doc.load_page(page - 1)
+            # The PDF states its own page size; the image stays bounded.
+            dpi = ocr.dpi_fuer(sheet, dpi)
+            if not dpi:
+                raise ValueError("page too large")
+            png = sheet.get_pixmap(dpi=dpi).tobytes("png")
         finally:
             doc.close()
     except (ValueError, IndexError, RuntimeError):

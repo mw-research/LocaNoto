@@ -6713,6 +6713,98 @@ os.environ.pop("LOCANOTO_SCHLUESSEL_PROBE", None)
 _mcp_h.STDIO_ERLAUBT = False
 _mcp_h.KONFIG = _alt_konf_h
 
+# --- HARDENING: LIMITS WHEN READING UPLOADED FILES ---
+#
+# A file states its own size: a PDF its page, an image its pixels, a
+# Word file what it unpacks to. Read as stated, a few kilobytes took
+# gigabytes of memory. And every upload was stored before anyone looked
+# at what it was.
+import zipfile as _zip_h
+import pymupdf as _mu_h
+import ocr as _ocr_h
+import lesen as _les_h
+import postfach as _pf_h
+
+
+def _abgelehnt_h(name, inhalt):
+    try:
+        _auf_h.pruefe_datei(name, inhalt)
+        return 0
+    except _auf_h.Abgelehnt as e:
+        return e.status
+
+
+pruef("ein unbekannter Dateityp wird vor dem Ablegen abgewiesen",
+      _abgelehnt_h("werkzeug.exe", b"MZ") == 415
+      and _abgelehnt_h("bild.svg", b"<svg/>") == 415
+      and _abgelehnt_h("ohne_endung", b"x") == 415)
+pruef("Text und Markdown gehen durch",
+      _abgelehnt_h("notiz.txt", b"hallo") == 0
+      and _abgelehnt_h("notiz.md", b"# hallo") == 0)
+pruef("was sich PDF nennt und keines ist, wird abgewiesen",
+      _abgelehnt_h("kaputt.pdf", b"kein pdf") == 415)
+
+_pdf_h = _mu_h.open()
+for _i in range(5):
+    _pdf_h.new_page(width=595, height=842)
+_pdf5_h = _pdf_h.tobytes()
+_pdf_h.close()
+_alt_seiten_h = _auf_h.MAX_SEITEN
+_auf_h.MAX_SEITEN = 3
+pruef("ein Dokument ueber der Seitengrenze wird abgewiesen",
+      _abgelehnt_h("lang.pdf", _pdf5_h) == 413)
+_auf_h.MAX_SEITEN = _alt_seiten_h
+pruef("unter der Grenze geht es durch", _abgelehnt_h("lang.pdf", _pdf5_h) == 0)
+
+# The page of a PDF: rendered at most at SEITE_MAX_MP.
+_gross_h = _mu_h.open()
+_gross_h.new_page(width=595, height=842)
+_gross_h.new_page(width=7200, height=7200)        # 100 x 100 inch
+_gross_h.new_page(width=14400, height=14400)      # 200 x 200 inch
+_a4_h, _riesig_h, _unsinn_h = _gross_h[0], _gross_h[1], _gross_h[2]
+_dpi_h = _ocr_h.dpi_fuer(_riesig_h, 300)
+pruef("eine gewoehnliche Seite wird mit der verlangten Aufloesung gelesen",
+      _ocr_h.dpi_fuer(_a4_h, 300) == 300)
+pruef("eine riesige Seite mit weniger, sodass das Bild begrenzt bleibt",
+      50 <= _dpi_h < 300
+      and (7200 / 72 * _dpi_h) ** 2 <= _ocr_h.SEITE_MAX_MP * 1_000_000, _dpi_h)
+pruef("und eine, die auch so nicht passt, gar nicht",
+      _ocr_h.dpi_fuer(_unsinn_h, 300) == 0)
+_gross_h.close()
+
+# An image file: its pixels are checked before it becomes a page.
+_bild_h = _mu_h.Pixmap(_mu_h.csGRAY, _mu_h.IRect(0, 0, 2000, 2000), False)
+_bild_h.clear_with(255)
+_png_h = _bild_h.tobytes("png")
+_alt_mp_h = _ocr_h.BILD_MAX_MP
+_ocr_h.BILD_MAX_MP = 1
+pruef("ein Bild ueber der Pixelgrenze wird abgewiesen",
+      _abgelehnt_h("scan.png", _png_h) == 413)
+_ocr_h.BILD_MAX_MP = _alt_mp_h
+pruef("darunter geht es durch", _abgelehnt_h("scan.png", _png_h) == 0)
+
+# A Word file is a zip archive.
+_buf_h = io.BytesIO()
+with _zip_h.ZipFile(_buf_h, "w", _zip_h.ZIP_DEFLATED) as _z:
+    _z.writestr("[Content_Types].xml", "<Types/>")
+    _z.writestr("word/document.xml",
+                "<w:p>ANFANG</w:p>" + "a" * (3 * 1024 * 1024) + "<w:p>ENDE</w:p>")
+_bombe_h = _buf_h.getvalue()
+_alt_entp_h = _les_h.ENTPACKT_MAX_MB
+_les_h.ENTPACKT_MAX_MB = 1
+pruef("ein Word-Dokument, das zu gross auspackt, wird abgewiesen",
+      len(_bombe_h) < 100_000 and _abgelehnt_h("bombe.docx", _bombe_h) == 413,
+      len(_bombe_h))
+_les_h.ENTPACKT_MAX_MB = _alt_entp_h
+
+# The same file as a mail attachment: read up to a bound.
+_alt_xml_h = _pf_h.ATTACHMENT_XML_BYTES
+_pf_h.ATTACHMENT_XML_BYTES = 1000
+_anh_h = _pf_h.attachment_text("bombe.docx", _bombe_h)
+pruef("ein Word-Anhang wird nur bis zu einer Grenze ausgepackt",
+      "ANFANG" in _anh_h and "ENDE" not in _anh_h, _anh_h[:60])
+_pf_h.ATTACHMENT_XML_BYTES = _alt_xml_h
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

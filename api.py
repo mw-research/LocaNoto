@@ -524,6 +524,8 @@ def aufnehmen_(datei: UploadFile = File(...),
             streng=True, sehmodell=sehmodell, bericht=_bericht)
     except aufnehmen.KeinRecht as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except aufnehmen.Abgelehnt as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
 
     # 200 auch bei null Abschnitten, und der Hinweis sagt warum. Ein
     # Scan ohne Textebene ist kein Fehler der Anfrage -- sie ist

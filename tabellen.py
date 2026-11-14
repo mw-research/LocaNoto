@@ -313,6 +313,8 @@ def _blaetter(voll):
         yield "", rahmen, k
         return
 
+    import lesen
+    lesen.pruefe_archiv(voll)      # .xlsx is a zip archive
     mappe = pd.ExcelFile(voll)
     for blatt in mappe.sheet_names:
         roh = mappe.parse(blatt, header=None, dtype=str, keep_default_na=False)

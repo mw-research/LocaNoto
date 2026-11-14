@@ -1794,13 +1794,16 @@ with st.sidebar, _bedienung_gesperrt(_antwortet):
                 _stand.caption(f"{_i} von {len(hochgeladen)}: {_datei.name}")
                 _bericht = {}
                 with st.spinner(tx(f"Verarbeite '{_datei.name}' ...")):
-                    _n, _hinweis = process_uploaded_pdf(
-                        _datei, ziel_raum, _projekt, _bilder,
-                        benutzer_=st.session_state["username"],
-                        ist_verwalter=is_admin(),
-                        fortschritt=_bildstand,
-                        nach_dem_schreiben=refresh_document_index,
-                        bericht=_bericht)
+                    try:
+                        _n, _hinweis = process_uploaded_pdf(
+                            _datei, ziel_raum, _projekt, _bilder,
+                            benutzer_=st.session_state["username"],
+                            ist_verwalter=is_admin(),
+                            fortschritt=_bildstand,
+                            nach_dem_schreiben=refresh_document_index,
+                            bericht=_bericht)
+                    except aufnehmen.Abgelehnt as _abgelehnt:
+                        _n, _hinweis = 0, str(_abgelehnt)
                 _ergebnisse.append((_datei.name, _n, _hinweis))
                 # Seiten, die die Texterkennung nicht las und das
                 # Sehmodell noch nicht versucht hat: die bietet der Knopf

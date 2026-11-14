@@ -38,6 +38,35 @@ MINDEST_TEXT = paths.env_int("BILD_MINDEST_TEXT", 60)
 
 BILD_ENDUNGEN = (".tif", ".tiff", ".jpg", ".jpeg", ".png")
 
+# The largest page image that is rendered, in megapixels. A PDF states
+# its own page size: one page of 200 x 200 inches at 300 dpi asks for
+# ten gigabytes. A0 at 200 dpi is 74 megapixels.
+SEITE_MAX_MP = paths.env_int("SEITE_MAX_MEGAPIXEL", 80)
+
+# The largest image file that is turned into a page. A PNG of a few
+# kilobytes can declare 50 000 x 50 000 pixels.
+BILD_MAX_MP = paths.env_int("BILD_MAX_MEGAPIXEL", 200)
+
+
+class ZuGross(ValueError):
+    """A page or image larger than this installation reads."""
+
+
+def dpi_fuer(seite, dpi):
+    """dpi, lowered until the rendered page fits into SEITE_MAX_MP.
+
+    0 when it does not even fit at 50 dpi -- then the page is not
+    rendered at all.
+    """
+    breite, hoehe = seite.rect.width / 72, seite.rect.height / 72
+    if breite <= 0 or hoehe <= 0:
+        return 0
+    grenze = SEITE_MAX_MP * 1_000_000
+    if breite * hoehe * dpi * dpi <= grenze:
+        return dpi
+    passend = int((grenze / (breite * hoehe)) ** 0.5)
+    return passend if passend >= 50 else 0
+
 _zustand = None
 
 
@@ -82,6 +111,12 @@ def oeffne(pfad):
     doc = pymupdf.open(pfad)
     if doc.is_pdf:
         return doc
+    # An image: its page is as large as its pixels. Checked before it is
+    # decoded for the conversion.
+    for seite in doc:
+        if abs(seite.rect) > BILD_MAX_MP * 1_000_000:
+            doc.close()
+            raise ZuGross(f"Bild größer als {BILD_MAX_MP} Megapixel.")
     pdf = doc.convert_to_pdf()
     doc.close()
     return pymupdf.open("pdf", pdf)
@@ -112,7 +147,10 @@ def lies(seite):
     if not verfuegbar()[0]:
         return ""
     try:
-        tp = seite.get_textpage_ocr(language=SPRACHEN, dpi=DPI, full=True)
+        dpi = dpi_fuer(seite, DPI)
+        if not dpi:
+            return ""
+        tp = seite.get_textpage_ocr(language=SPRACHEN, dpi=dpi, full=True)
         return aufraeumen(seite.get_text(textpage=tp) or "")
     except Exception:
         return ""

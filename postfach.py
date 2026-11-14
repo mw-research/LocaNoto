@@ -2000,6 +2000,8 @@ _MAIL = re.compile(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+")
 # Text of attachments for the model: per attachment and per call.
 ATTACHMENT_CHARS = 4000
 ATTACHMENT_TOTAL = 8000
+# How much of a Word attachment's document part is unpacked for that.
+ATTACHMENT_XML_BYTES = 20 * 1024 * 1024
 
 
 def attachment_text(name, data, limit=ATTACHMENT_CHARS):
@@ -2010,8 +2012,13 @@ def attachment_text(name, data, limit=ATTACHMENT_CHARS):
         if kind == "pdf":
             return db_files.pdf_text(data, limit)
         if kind == "docx":
+            # An attachment comes from anyone who can send a mail: the
+            # document part is read up to a bound, not whatever it
+            # unpacks to.
             with zipfile.ZipFile(io.BytesIO(data)) as z:
-                xml = z.read("word/document.xml").decode("utf-8", "replace")
+                with z.open("word/document.xml") as part:
+                    xml = part.read(ATTACHMENT_XML_BYTES).decode(
+                        "utf-8", "replace")
             xml = re.sub(r"</w:p>", "\n", xml)
             return " ".join(html.unescape(re.sub(r"<[^>]+>", "", xml)).split())[:limit]
         if not kind and os.path.splitext(str(name).lower())[1] in (

@@ -131,7 +131,11 @@ def beschreibungen(doc, dateiname, fortschritt=None, seiten=None,
             if seiten is not None and (nr + 1) not in seiten:
                 continue
             try:
-                bild = seite.get_pixmap(dpi=SEITEN_DPI).tobytes("png")
+                import ocr
+                _dpi = ocr.dpi_fuer(seite, SEITEN_DPI)
+                if not _dpi:
+                    continue
+                bild = seite.get_pixmap(dpi=_dpi).tobytes("png")
                 text = vision.beschreibe(
                     bild, "Gib den gesamten lesbaren Inhalt dieser Seite "
                           "wieder -- Ueberschriften, Fliesstext, "

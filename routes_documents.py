@@ -113,6 +113,8 @@ def upload(file: UploadFile = File(...), room: str = Form(...),
                 streng=True, sehmodell=vision, bericht=report)
     except aufnehmen.KeinRecht as e:
         raise HTTPException(403, str(e))
+    except aufnehmen.Abgelehnt as e:
+        raise HTTPException(e.status, str(e))
     return {"file": file.filename, "room": room, "passages": passages,
             "searchable": bool(passages),
             "ocr_pages": report.get("ocr_seiten", 0),
