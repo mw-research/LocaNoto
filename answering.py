@@ -550,11 +550,12 @@ def _describe(connections, web_confirm):
     return out
 
 
-def _unconnected(req):
+def _unconnected(req, mine=None):
     """Mailboxes that need a login this request does not carry."""
     return [n for n, a in mcp.lies_konfiguration().items()
             if a.get("art") != "websuche" and mcp.braucht_anmeldung(n)
-            and n not in (req.mailboxes or {})]
+            and n not in (req.mailboxes or {})
+            and (mine is None or n in mine)]
 
 
 # --- AN ANSWER UNDER WAY, IN THE CHAT ---
@@ -809,7 +810,12 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
     notes = []
     web_confirm = False
     if mcp.eingerichtet():
-        unconnected = _unconnected(req)
+        # Mailboxes of other people and other workspaces do not exist for
+        # this answer: neither offered nor named as "not connected".
+        import mailboxes as _mailboxes
+        mine = _mailboxes.visible(user)
+        not_mine = set(mcp.lies_konfiguration()) - mine
+        unconnected = _unconnected(req, mine)
         web_confirm = _web_on_confirmation(
             user, req, settings, question, hits,
             mailbox=any(n in (req.mailboxes or {}) for n in mcp.lies_konfiguration()
@@ -821,7 +827,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                        + ", ".join(unconnected) + ". Nur wenn nach Mail oder "
                        "Kalender gefragt ist: der Nutzer verbindet sie unter "
                        "Einstellungen > Postfaecher.\n")
-        skip = set(unconnected)
+        skip = set(unconnected) | not_mine
         if not (req.web or web_confirm):
             skip |= set(settings["web_servers"])
         connections = mcp.verbinde(

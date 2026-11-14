@@ -196,6 +196,15 @@ TEXTS = {
     "personal (everyone signs in with their own account)":
         "persönlich (jeder meldet sich mit seinem Konto an)",
     "Only for shared mailboxes": "Nur für Funktionspostfächer",
+    "Visible to": "Sichtbar für", "members of": "Mitglieder von",
+    "everyone": "alle", "everyone (own login)": "alle (eigene Anmeldung)",
+    "Owner": "Besitzer", "Assign": "Zuordnen",
+    "Personal: only for this user (empty: every user sees it and signs in with their own account)":
+        "Persönlich: nur für diesen Benutzer (leer: jeder sieht es und meldet sich mit seinem Konto an)",
+    "Shared: workspace whose members see the mailbox and get its tickets (empty: everyone)":
+        "Funktionspostfach: Arbeitsbereich, dessen Mitglieder das Postfach sehen und seine Tickets bekommen (leer: alle)",
+    "They see the mailbox and get every ticket; change them in the workspace.":
+        "Sie sehen das Postfach und bekommen jedes Ticket; geändert werden sie im Arbeitsbereich.",
     "Search users": "Benutzer suchen", "users": "Benutzer", "Created": "Erstellt", "Documents from the database": "Dokumente aus der Datenbank",
     "Web search allowed": "Websuche erlaubt", "Web search blocked": "Websuche gesperrt",
     "Block": "Sperren", "Allow": "Erlauben",
@@ -578,7 +587,8 @@ def _prefill(p, mail="", ticket=""):
     Built here from the name in the link -- the link itself carries no
     mail text, so nothing of it lands in an access log.
     """
-    if mail and mail in mail_watch.mailboxes():
+    if mail and mail in mail_watch.mailboxes() \
+            and mailboxes.visible_to(p.name, mail):
         return mail_watch.question_for(p.name, mail)
     box, _, tid = ticket.partition(":")
     if box and tid and box in tickets.boxes_for(p.name, p.is_admin):
@@ -923,7 +933,7 @@ def _settings_context(p, request):
                     for n in presets.namen() + presets.eigene(p.name)],
         "mailboxes": [dict(m, connected=m["name"] in connected,
                            watch=mail_watch.watching(p.name, m["name"]))
-                      for m in mailboxes.overview()
+                      for m in mailboxes.overview(p.name)
                       if m["kind"] == "mailbox"],
         "tokens": [(k[:12], e.get("bezeichnung", ""), e.get("erstellt", ""))
                    for k, e in auth.liste() if e.get("benutzer") == p.name],
@@ -1015,6 +1025,7 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
         sealed.pop(server, None)
         response = HTMLResponse("")
     else:
+        mailboxes.require_visible(p.name, server)
         header = mailboxes.header_for(server, user, secret)
         try:
             mailboxes.check(server, header)
@@ -1088,7 +1099,8 @@ def set_my_lists(request: Request, sub: str = Form(""), action: str = Form("save
 @router.post("/ui/settings/mailbox/{server}/watch")
 def watch_mailbox(server: str, request: Request, on: str = Form(""),
                   p: Principal = Depends(principal)):
-    if server not in mail_watch.mailboxes():
+    if server not in mail_watch.mailboxes() \
+            or not mailboxes.visible_to(p.name, server):
         raise HTTPException(404, "Unknown mailbox.")
     mail_watch.set_watch(p.name, server, on == "1")
     return HTMLResponse("")

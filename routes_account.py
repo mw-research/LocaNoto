@@ -302,7 +302,7 @@ def list_mailboxes(request: Request, p: Principal = Depends(principal)):
     connected = set(sessions.unseal(p.name,
                                     request.cookies.get(SEALED_COOKIE)))
     return [dict(m, connected=m["name"] in connected)
-            for m in mailboxes.overview()]
+            for m in mailboxes.overview(p.name)]
 
 
 class MailboxLogin(BaseModel):
@@ -319,6 +319,7 @@ def mailbox_login(server: str, body: MailboxLogin, request: Request,
     locanoto_sealed and used for later questions. API clients (token):
     send the login with each question instead (POST /ask, "mailboxes").
     """
+    mailboxes.require_visible(p.name, server)
     header = mailboxes.header_for(server, body.user, body.secret)
     try:
         tools = mailboxes.check(server, header)
@@ -362,8 +363,13 @@ def mailbox_headers(p, request, given=None):
     """Headers for this request: sealed cookie plus logins sent along."""
     headers = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE)) \
         if p.via == "session" else {}
-    headers = {k: v for k, v in headers.items() if not k.startswith(SQL_PREFIX)}
+    # Only mailboxes that are (still) this user's: a login sealed in the
+    # browser before a mailbox was given to somebody else is dropped.
+    mine = mailboxes.visible(p.name)
+    headers = {k: v for k, v in headers.items()
+               if not k.startswith(SQL_PREFIX) and k in mine}
     for server, login in (given or {}).items():
+        mailboxes.require_visible(p.name, server)
         headers[server] = mailboxes.header_for(
             server, login.get("user", ""), login.get("secret", ""))
     return headers

@@ -86,7 +86,8 @@ def set_watch(user, server, on):
 
 def maybe_check(user, headers):
     """Starts a check of the user's connected mailboxes if one is due."""
-    boxes = set(mailboxes())
+    import mailboxes as _mailboxes
+    boxes = set(mailboxes()) & _mailboxes.visible(user)
     servers = [s for s in (headers or {}) if s in boxes and watching(user, s)]
     if not servers or CHECK_MINUTES <= 0:
         return False

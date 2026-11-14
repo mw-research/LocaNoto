@@ -6,7 +6,13 @@
   <table class="files">
   {% for m in boxes %}
     <tr><td><strong>{{ m.name }}</strong></td><td class="muted">{{ m.kind }} · {{ m.transport }} · {{ m.login }}{% if m.personal %} · {{ t('personal') }}{% endif %}{% if m.mailbox %} · {{ m.mailbox }}{% endif %}
-      · {% if m.auto_reply %}{{ t('answers on its own') }} · {{ t('with notice') if m.notice else t('WITHOUT notice') }}{% else %}{{ t('prepares drafts') }}{% endif %}</td>
+      · {% if m.auto_reply %}{{ t('answers on its own') }} · {{ t('with notice') if m.notice else t('WITHOUT notice') }}{% else %}{{ t('prepares drafts') }}{% endif %}
+      {% if m.kind == "mailbox" %}<br><strong>{{ t('Visible to') }}:</strong>
+        {% if m.owner %}{{ m.owner }}{% elif m.room %}{{ t('members of') }} {{ m.room_name }}{% else %}{{ t('everyone') }}{% endif %}{% endif %}</td>
+      <td>{% if m.kind == "mailbox" %}<form hx-post="/ui/admin/mailboxes/{{ m.name|urlencode }}/access" hx-target="#mb-notice" class="inline">
+        {% if m.personal %}<select name="owner" aria-label="{{ t('Owner') }}"><option value="">{{ t('everyone (own login)') }}</option>{% for u in users %}<option value="{{ u }}"{% if u == m.owner %} selected{% endif %}>{{ u }}</option>{% endfor %}</select>
+        {% else %}<select name="room" aria-label="{{ t('Workspace') }}"><option value="">{{ t('everyone') }}</option>{% for id, label in rooms %}<option value="{{ id }}"{% if id == m.room %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}
+        <button type="submit">{{ t('Assign') }}</button></form>{% endif %}</td>
       <td><form hx-post="/ui/admin/mailboxes/{{ m.name }}/delete" hx-confirm="{{ t('Delete') }} {{ m.name }}?" class="inline"><button type="submit" class="danger">{{ t('Delete') }}</button></form></td></tr>
   {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
   </table>
@@ -19,6 +25,10 @@
     <label>{{ t('Address, command, Exchange server or IMAP server (imap.gmail.com)') }}<input name="target"></label>
     <label>{{ t('Address of a shared mailbox (only for shared ones)') }}<input name="mailbox"></label>
     <label class="check"><input type="checkbox" name="personal" value="1" checked> {{ t('personal (everyone signs in with their own account)') }}</label>
+    <label>{{ t('Personal: only for this user (empty: every user sees it and signs in with their own account)') }}
+      <select name="owner"><option value="">{{ t('everyone (own login)') }}</option>{% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}</select></label>
+    <label>{{ t('Shared: workspace whose members see the mailbox and get its tickets (empty: everyone)') }}
+      <select name="room"><option value="">{{ t('everyone') }}</option>{% for id, label in rooms %}<option value="{{ id }}">{{ label }}</option>{% endfor %}</select></label>
     <fieldset>
       <legend>{{ t('Only for shared mailboxes') }}</legend>
       <label class="check"><input type="checkbox" name="auto" value="1"> {{ t('may answer on its own (no confirmation)') }}</label>
@@ -38,8 +48,12 @@
     <label class="check"><input type="checkbox" name="enabled" value="1"{% if ts.enabled %} checked{% endif %}> {{ t('Ticket system on') }}</label>
     <p class="muted">{{ t('No login is stored. Members connect this mailbox under Settings with their own account; while one of them has LocaNoto open, the mailbox is checked every minute.') }}</p>
     <label>{{ t('Standard answer ({ticket}, {subject}, {name} are filled in)') }}<textarea name="answer" rows="7">{{ ts.answer }}</textarea></label>
+    {% if box_rooms.get(name) %}
+    <p class="muted">{{ t('Members') }}: {{ t('members of') }} {{ box_rooms[name] }}. {{ t('They see the mailbox and get every ticket; change them in the workspace.') }}</p>
+    {% else %}
     <p class="muted">{{ t('Members (get every ticket)') }}</p>
-    {% set name = "members" %}{% set chosen = ts.members_chosen %}{% set source = "/ui/users/suggest" %}{% set placeholder = t('Search user and add ...') %}{% include "chooser.html" %}
+    {% set box_name = name %}{% set name = "members" %}{% set chosen = ts.members_chosen %}{% set source = "/ui/users/suggest" %}{% set placeholder = t('Search user and add ...') %}{% include "chooser.html" %}{% set name = box_name %}
+    {% endif %}
     <label>{{ t('Forward every new mail to (addresses, comma separated)') }}<input name="forward" value="{{ ts.forward|join(', ') }}"></label>
     <label>{{ t('Ticket prefix') }}<input name="prefix" value="{{ ts.prefix }}" maxlength="6"></label>
     <button type="submit" class="primary">{{ t('Save') }}</button>

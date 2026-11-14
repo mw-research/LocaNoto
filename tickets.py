@@ -136,10 +136,46 @@ def enabled_boxes():
             if c.get("enabled") and s in boxes]
 
 
+def room_of(server):
+    """The workspace a shared mailbox belongs to, or ""."""
+    return (mcp.lies_konfiguration().get(server) or {}).get("room") or ""
+
+
+def members_of(server, cfg=None):
+    """Who gets the tickets of this mailbox.
+
+    A mailbox that belongs to a workspace: the members of the workspace.
+    Otherwise the list from the ticket settings.
+    """
+    room = room_of(server)
+    if not room:
+        cfg = cfg if cfg is not None else (_read_config().get(server) or {})
+        return list(cfg.get("members") or [])
+    import benutzer
+    import raeume
+    if "*" in ((raeume.liste().get(room) or {}).get("mitglieder") or []):
+        return benutzer.namen()
+    by_hand, by_group = raeume.mitglieder_gesamt(room)
+    return sorted(set(by_hand) | set(by_group))
+
+
 def boxes_for(user, is_admin=False):
-    """Mailboxes with tickets this user sees: members, and admins all."""
-    return [s for s in enabled_boxes()
-            if is_admin or user in (_read_config()[s].get("members") or [])]
+    """Mailboxes with tickets this user sees.
+
+    Of a mailbox that belongs to a workspace: its members, an admin too
+    only as a member. Of the others: the members from the ticket
+    settings, and admins all.
+    """
+    import raeume
+    out = []
+    for s in enabled_boxes():
+        room = room_of(s)
+        if room:
+            if raeume.darf_lesen(user, room):
+                out.append(s)
+        elif is_admin or user in (_read_config()[s].get("members") or []):
+            out.append(s)
+    return out
 
 
 # --- STATE ---
@@ -373,7 +409,7 @@ def _fill(template, **values):
 def _handle(server, cfg, state, conn, m):
     """One new mail: a reply to a ticket, a new ticket, or nothing."""
     sender = f"{m['name']} <{m['address']}>" if m.get("name") else (m.get("address") or "?")
-    members = list(cfg.get("members") or [])
+    members = members_of(server, cfg)
     if m.get("auto"):
         # also an out-of-office answer to the standard answer, which
         # carries the ticket number: it neither reopens nor notifies

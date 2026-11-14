@@ -2,7 +2,8 @@
 
 USER SIDE
 
-    overview()                       which mailboxes exist, which need a login
+    overview(user)                   the mailboxes this user sees, which need a login
+    visible_to(user, server)         may this user see and use that mailbox?
     header_for(server, user, secret) the login header for one server
     check(server, header)            log in once and list the tools
     send_draft(user, chat_id, draft_id, headers)
@@ -32,12 +33,15 @@ ADMIN SIDE
 
     templates()                      the kinds of servers (mcp.VORLAGEN)
     create(name, template, target, personal, **options)
+    set_access(name, owner, room)    whose mailbox it is, for an existing entry
     remove(name)
     tools(server, header=None)       what a server offers, which tools send
 """
 import attachments
+import benutzer
 import chats
 import mcp
+import raeume
 import workspace_notes
 
 
@@ -56,10 +60,84 @@ class SendFailed(Exception):
 NOTICE_DEFAULT = mcp.HINWEIS_VORGABE
 
 
-def overview():
+# --- WHO SEES A MAILBOX ---
+#
+# Every entry used to be listed for every user, and everyone could try a
+# login on it. Two fields say whose it is:
+#
+#   owner   on a personal entry: that user alone. Without it the entry is
+#           a kind of mailbox everyone connects with their own account
+#           (the company's Exchange), as before.
+#   room    on a shared mailbox: the members of that workspace, and nobody
+#           else -- an admin too only as a member. Without it, everyone,
+#           as before.
+#
+# The rule is asked wherever a mailbox is listed, connected, used in an
+# answer, watched or shows its tickets.
+
+def visible_to(user, server, entry=None):
+    a = entry if entry is not None else mcp.lies_konfiguration().get(server)
+    if not a:
+        return False
+    if a.get("art") == "websuche":
+        return True
+    if a.get("persoenlich"):
+        return not a.get("owner") or a["owner"] == user
+    return not a.get("room") or raeume.darf_lesen(user, a["room"])
+
+
+def visible(user):
+    """Names of the entries this user sees."""
+    return {n for n, a in mcp.lies_konfiguration().items()
+            if visible_to(user, n, a)}
+
+
+def require_visible(user, server):
+    """NotFound for a mailbox that is not this user's -- the same answer
+    as for one that does not exist."""
+    if not visible_to(user, server):
+        raise NotFound(f"No mailbox '{server}'.")
+
+
+def _access_problem(personal, owner, room):
+    owner, room = str(owner or "").strip().lower(), str(room or "").strip()
+    if personal and owner and not benutzer.eintrag(owner):
+        return f"No user '{owner}'."
+    if not personal and room:
+        if room not in raeume.liste() or raeume.ist_privat(room):
+            return f"No workspace '{room}'."
+    return ""
+
+
+def set_access(name, owner="", room=""):
+    """Whose mailbox an existing entry is. (ok, message)."""
+    data = mcp.lies_konfiguration()
+    a = data.get(name)
+    if not a or a.get("art") == "websuche":
+        return False, f"No mailbox '{name}'."
+    personal = bool(a.get("persoenlich"))
+    problem = _access_problem(personal, owner, room)
+    if problem:
+        return False, problem
+    a.pop("owner", None)
+    a.pop("room", None)
+    if personal and str(owner or "").strip():
+        a["owner"] = str(owner).strip().lower()
+    if not personal and str(room or "").strip():
+        a["room"] = str(room).strip()
+    mcp.schreibe_konfiguration(data)
+    return True, "Saved."
+
+
+def overview(user=None):
+    """The entries, for user only those that user sees (None: all)."""
     out = []
     for name, a in sorted(mcp.lies_konfiguration().items()):
+        if user is not None and not visible_to(user, name, a):
+            continue
         out.append({"name": name,
+                    "owner": a.get("owner") or "",
+                    "room": a.get("room") or "",
                     "kind": "websearch" if a.get("art") == "websuche"
                     else "mailbox",
                     "transport": a.get("transport", "http"),
@@ -122,6 +200,11 @@ def send_draft(user, chat_id, draft_id, headers):
         raise ValueError(f"Draft already {draft['state']}.")
     if draft.get("kind") == "web":
         raise ValueError("A web search is confirmed in the chat.")
+    # A mailbox that was given to somebody else since the draft was
+    # written is no longer this user's. Asked before the draft is
+    # claimed, so a refusal leaves it as it was.
+    if draft.get("server") in mcp.lies_konfiguration():
+        require_visible(user, draft["server"])
     # Claim it before sending, under the chat lock: a second click finds
     # "sending" and stops.
     import dateisperre
@@ -247,6 +330,11 @@ def templates():
 
 
 def create(name, template, target, personal=True, **options):
+    problem = _access_problem(personal, options.get("owner"), options.get("room"))
+    if problem:
+        return False, problem
+    if options.get("owner"):
+        options["owner"] = str(options["owner"]).strip().lower()
     return mcp.lege_an(name, template, target, persoenlich=personal,
                        **options)
 

@@ -86,7 +86,9 @@ _STDIO_UMGEBUNG = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "TMPDIR",
 # address. Everything else (command, environment, headers, transport) is
 # set by the kind or by hand in mcp.json.
 ERLAUBTE_ANGABEN = ("postfach", "automatisch", "hinweis", "hinweis_anhaengen",
-                    "sendet", "textfeld")
+                    "sendet", "textfeld",
+                    # who sees and uses the entry (mailboxes.visible_to)
+                    "owner", "room")
 
 _VERSION = "2024-11-05"
 
@@ -243,6 +245,11 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     angaben["persoenlich"] = bool(persoenlich)
     if persoenlich:
         weitere.pop("automatisch", None)
+    # A personal mailbox belongs to a person, a shared one to a workspace.
+    weitere.pop("room" if persoenlich else "owner", None)
+    for feld in ("owner", "room"):
+        if not str(weitere.get(feld) or "").strip():
+            weitere.pop(feld, None)
     angaben.update({k: v for k, v in weitere.items() if v is not None})
     daten[name] = angaben
     return schreibe_konfiguration(daten)

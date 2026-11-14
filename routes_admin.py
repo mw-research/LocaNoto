@@ -708,7 +708,9 @@ class NewMailbox(BaseModel):
     personal: bool = True
     options: dict = Field(default_factory=dict,
                           description="postfach, automatisch, hinweis, "
-                                      "hinweis_anhaengen, sendet, textfeld")
+                                      "hinweis_anhaengen, sendet, textfeld; "
+                                      "owner (personal: only this user), "
+                                      "room (shared: only this workspace)")
 
 
 @router.post("/mailboxes", tags=["mailboxes"])
@@ -716,6 +718,23 @@ def create_mailbox(body: NewMailbox, p: Principal = Depends(admin)):
     message = _ok(mailboxes.create(body.name, body.template, body.target,
                                    body.personal, **body.options))
     benutzer.protokolliere("postfach", body.name, p.name, body.template)
+    return {"message": message}
+
+
+class MailboxAccess(BaseModel):
+    owner: str = Field(default="", description="personal mailbox: only "
+                                                "this user; empty: everyone")
+    room: str = Field(default="", description="shared mailbox: only the "
+                                               "members of this workspace")
+
+
+@router.put("/mailboxes/{name}/access", tags=["mailboxes"])
+def mailbox_access(name: str, body: MailboxAccess,
+                   p: Principal = Depends(admin)):
+    """Whose mailbox it is: who sees it, connects it and gets its tickets."""
+    message = _ok(mailboxes.set_access(name, body.owner, body.room))
+    benutzer.protokolliere("postfach_zugang", name, p.name,
+                           (body.owner or body.room or "alle").strip())
     return {"message": message}
 
 

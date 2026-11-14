@@ -349,8 +349,15 @@ def mailboxes_page(request: Request):
     boxes = mailboxes.overview()
     shared = [b["name"] for b in boxes
               if b["kind"] == "mailbox" and not b["personal"]]
+    rooms = [(r, raeume.bezeichnung(r)) for r in sorted(raeume.liste())
+             if not raeume.ist_privat(r)]
+    room_names = dict(rooms)
+    for b in boxes:
+        b["room_name"] = room_names.get(b["room"], b["room"])
     return render("admin_mailboxes.html", request, nav=_nav(p, "admin"),
                   boxes=boxes, templates=mailboxes.templates(),
+                  users=benutzer.namen(), rooms=rooms,
+                  box_rooms={b["name"]: b["room_name"] for b in boxes if b["room"]},
                   notice_default=mailboxes.NOTICE_DEFAULT,
                   ticket_boxes=[(n, dict(s_, members_chosen=[(m, m) for m in s_["members"]],
                                          status=tickets.status(n)))
@@ -402,11 +409,15 @@ def mailbox_create(request: Request, name: str = Form(...),
                    template: str = Form(...), target: str = Form(""),
                    personal: str = Form(""), mailbox: str = Form(""),
                    auto: str = Form(""), notice: str = Form(""),
-                   notice_text: str = Form(""),
+                   notice_text: str = Form(""), owner: str = Form(""),
+                   room: str = Form(""),
                    p: Principal = Depends(principal)):
     _admin(p)
     page_language(p.name)
     options = {"postfach": mailbox} if mailbox else {}
+    # Whose it is: a personal mailbox one user's, a shared one a
+    # workspace's. Empty leaves it to everyone.
+    options.update(owner=owner.strip() or None, room=room.strip() or None)
     # The same three settings as in the classic page: a shared mailbox may
     # answer on its own, by default with a notice under each such mail.
     # mcp.lege_an drops "automatisch" for personal mailboxes.
@@ -416,6 +427,20 @@ def mailbox_create(request: Request, name: str = Form(...),
                                    **options)
     if ok:
         benutzer.protokolliere("postfach", name, p.name, template)
+        return _reload("/admin/mailboxes")
+    return _notice(tm(message), False)
+
+
+@router.post("/ui/admin/mailboxes/{name}/access")
+def mailbox_access(name: str, request: Request, owner: str = Form(""),
+                   room: str = Form(""), p: Principal = Depends(principal)):
+    """Whose mailbox an existing entry is (mailboxes.set_access)."""
+    _admin(p)
+    page_language(p.name)
+    ok, message = mailboxes.set_access(name, owner, room)
+    if ok:
+        benutzer.protokolliere("postfach_zugang", name, p.name,
+                               (owner or room or "alle").strip())
         return _reload("/admin/mailboxes")
     return _notice(tm(message), False)
 
