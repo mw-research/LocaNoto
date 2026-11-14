@@ -59,9 +59,10 @@ class Login(BaseModel):
 def login(body: Login, request: Request, response: Response):
     """Sign in with name and password. Sets the session cookie.
 
-    Failed attempts are counted per name and per address; after
-    LOGIN_ATTEMPTS within LOGIN_WINDOW_MINUTES the answer is 429 for both,
-    whether or not the password would have been right.
+    Failed attempts are counted for the name from this address
+    (LOGIN_ATTEMPTS), for the name from anywhere and for the address
+    (both much higher); over a limit within LOGIN_WINDOW_MINUTES the
+    answer is 429, whether or not the password would have been right.
     """
     name = body.username.strip().lower()
     address = _client_address(request)

@@ -236,6 +236,11 @@ def client_for(user, password="Passwort-123456"):
 
 print(f"=== store: {'Postgres' if database.active() else 'files'} ===")
 anon = TestClient(server.app)
+_r_up = anon.post(f"{API}/documents", data={"room": "allgemein"},
+                  files={"file": ("x.txt", b"x" * 1000, "text/plain")})
+check("an upload without sign-in is refused before its body is read",
+      _r_up.status_code == 401 and _r_up.json().get("detail") == "Sign in first.",
+      _r_up.text)
 check("health without sign-in", anon.get(f"{API}/health").json()["status"] == "ok")
 check("ready", anon.get(f"{API}/ready").status_code == 200)
 check("me without sign-in is 401", anon.get(f"{API}/me").status_code == 401)

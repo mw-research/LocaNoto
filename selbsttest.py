@@ -6999,6 +6999,22 @@ except ValueError:
     _geschrieben_h = False
 pruef("und geschrieben wird eine solche Zuordnung nicht", not _geschrieben_h)
 
+# --- HARDENING: WRONG PASSWORDS DO NOT LOCK THE REAL PERSON OUT ---
+#
+# Failed sign-ins were counted per name. Ten wrong passwords for "markus"
+# from anywhere, and markus got "too many failed sign-ins" with the right
+# one -- repeatable at will.
+pruef("die Grenze je Name ueber alle Adressen liegt weit ueber der je Adresse",
+      _ses_h.LOGIN_ATTEMPTS_PER_NAME >= _ses_h.LOGIN_ATTEMPTS * 5)
+for _ in range(_ses_h.LOGIN_ATTEMPTS + 2):
+    _ses_h.login_attempt("haertung-opfer", "203.0.113.9")
+pruef("von der Adresse der Fehlversuche ist der Name gesperrt",
+      _ses_h.login_blocked("haertung-opfer", "203.0.113.9")
+      and not _ses_h.login_attempt("haertung-opfer", "203.0.113.9"))
+pruef("von einer anderen Adresse meldet sich dieselbe Person weiter an",
+      not _ses_h.login_blocked("haertung-opfer", "198.51.100.7")
+      and _ses_h.login_attempt("haertung-opfer", "198.51.100.7"))
+
 print()
 # Die Namen VOR der Zahl. Wer nur die letzte Zeile liest, sah bisher
 # "383 von 385" und wusste nicht, welche zwei -- dreimal ist dabei ein

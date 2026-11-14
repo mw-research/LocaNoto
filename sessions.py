@@ -52,6 +52,13 @@ LOGIN_ATTEMPTS = paths.env_int("LOGIN_ATTEMPTS", 10)
 # Per address much higher: a whole office may sit behind one address, and
 # a low limit there would let one person lock everyone out.
 LOGIN_ATTEMPTS_PER_ADDRESS = paths.env_int("LOGIN_ATTEMPTS_PER_ADDRESS", 100)
+# Per name over all addresses: also much higher. LOGIN_ATTEMPTS counts a
+# name together with the address the attempts come from -- counted for
+# the name alone, ten wrong passwords from anywhere locked the real
+# person out, as often as somebody cared to repeat them. This ceiling
+# still stops guessing that is spread over many addresses.
+LOGIN_ATTEMPTS_PER_NAME = paths.env_int("LOGIN_ATTEMPTS_PER_NAME",
+                                        LOGIN_ATTEMPTS * 10)
 LOGIN_WINDOW_MINUTES = paths.env_int("LOGIN_WINDOW_MINUTES", 15)
 
 
@@ -197,7 +204,8 @@ def count(key, window_seconds):
 
 
 def _login_limits(name, address):
-    return ((f"login:name:{name}", LOGIN_ATTEMPTS),
+    return ((f"login:pair:{name}|{address}", LOGIN_ATTEMPTS),
+            (f"login:name:{name}", LOGIN_ATTEMPTS_PER_NAME),
             (f"login:addr:{address}", LOGIN_ATTEMPTS_PER_ADDRESS))
 
 

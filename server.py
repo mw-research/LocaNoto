@@ -145,10 +145,31 @@ def clear_session_cookies(response):
         response.delete_cookie(name, path="/")
 
 
+def _signed_in(request):
+    """Is there a valid token or session on this request? No side effects."""
+    token = (request.headers.get("x-locanoto-token")
+             or _bearer(request.headers.get("authorization", "")))
+    if token:
+        name = auth.pruefe(token)
+        return bool(name and benutzer.eintrag(name))
+    return bool(sessions.verify(request.cookies.get(SESSION_COOKIE)))
+
+
 @app.middleware("http")
 async def _headers(request: Request, call_next):
     started = time.time()
-    response = await call_next(request)
+    # A multipart body (an upload) is read and spooled to a temporary
+    # file before the route checks who is asking. Without this, anyone
+    # who reaches the server could fill its disk 200 MB at a time. Every
+    # multipart request comes from a signed-in page or a token; sign-in
+    # itself is JSON.
+    if (request.method in ("POST", "PUT", "PATCH")
+            and request.headers.get("content-type", "").lower().startswith("multipart/")
+            and not _signed_in(request)):
+        response = JSONResponse(status_code=401,
+                                content={"detail": "Sign in first."})
+    else:
+        response = await call_next(request)
     renewed = getattr(request.state, "renewed_session", None)
     if renewed:
         response.set_cookie(SESSION_COOKIE, renewed, httponly=True,
