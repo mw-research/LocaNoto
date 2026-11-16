@@ -161,6 +161,26 @@ VORLAGEN = {
         "beschreibung": "lokaler Prozess (stdio)",
         "angaben": {"transport": "stdio", "anmeldung": "keine"},
     },
+    # A data connector (connectors/README.md): a service of its own that
+    # knows one system -- an ERP, an MES, a database -- and offers tools
+    # to ask it. It says itself what it is for, which of its tools only
+    # read, and returns tables LocaNoto lists under the answer.
+    "connector": {
+        "beschreibung": "Datenanschluss (ERP, MES, Datenbank) über HTTP",
+        "angaben": {"transport": "http", "anmeldung": "keine",
+                    "art": "connector"},
+    },
+    "connector_login": {
+        "beschreibung": "Datenanschluss, jeder meldet sich mit seinem "
+                        "Konto des Systems an",
+        "angaben": {"transport": "http", "anmeldung": "basic",
+                    "art": "connector"},
+    },
+    "connector_token": {
+        "beschreibung": "Datenanschluss, Anmeldung je Nutzer mit Token",
+        "angaben": {"transport": "http", "anmeldung": "bearer",
+                    "art": "connector"},
+    },
 }
 
 
@@ -242,6 +262,11 @@ def lege_an(name, vorlage, ziel, persoenlich=True, **weitere):
     # Ein persoenliches Postfach antwortet NIE von selbst. Die
     # Freischaltung gibt es nur fuer Funktionspostfaecher -- so war es
     # besprochen, und so steht es hier.
+    if angaben.get("art") == "connector":
+        # A connector is a system, not somebody's mailbox: it can belong
+        # to a workspace (room), never to one person, and sends no mail.
+        persoenlich = False
+        weitere.pop("automatisch", None)
     angaben["persoenlich"] = bool(persoenlich)
     if persoenlich:
         weitere.pop("automatisch", None)
@@ -285,6 +310,15 @@ class Verbindung:
         self._prozess = None
         self._sperre = threading.Lock()
         self._bereit = False
+        # What the server says it is for (MCP "instructions").
+        self.instructions = ""
+        # A data connector: tables its tools returned in this answer, and
+        # the tools that are not marked read-only -- those wait for a
+        # person (pipeline.werkzeuglauf asks "confirm").
+        self.connector = self.angaben.get("art") == "connector"
+        self.tables = []
+        if self.connector:
+            self.confirm = set()
 
     # --- JSON-RPC ---
 
@@ -380,10 +414,12 @@ class Verbindung:
         """Handschlag. Ohne ihn weist ein Server jeden Aufruf ab."""
         if self._bereit:
             return
-        self._ruf("initialize", {
+        hallo = self._ruf("initialize", {
             "protocolVersion": _VERSION,
             "capabilities": {},
             "clientInfo": {"name": "LocaNoto", "version": "1.0"}})
+        self.instructions = " ".join(
+            str(hallo.get("instructions") or "").split())[:800]
         # Die Bestaetigung ist eine Mitteilung ohne Antwort. Wer hier
         # auf eine wartet, haengt.
         self._ruf("notifications/initialized", antwort_erwartet=False)
@@ -403,6 +439,12 @@ class Verbindung:
                 "beschreibung": (w.get("description") or "")[:600],
                 "schema": w.get("inputSchema") or {"type": "object"},
             })
+            # A connector's tool runs on the model's word only if the
+            # connector marks it as reading. Anything else -- also a tool
+            # that says nothing -- becomes a draft for the user.
+            if self.connector and (w.get("annotations") or {}).get(
+                    "readOnlyHint") is not True:
+                self.confirm.add(w["name"])
         return aus
 
     def rufe(self, name, argumente=None):
@@ -424,6 +466,21 @@ class Verbindung:
         text = "\n".join(teile).strip()
         if ergebnis.get("isError"):
             raise Fehler(f"{self.name}/{name}: {text or 'Fehler ohne Text'}")
+        # A table (structuredContent with columns and rows): remembered
+        # for the list under the answer. The model reads the text; a
+        # connector that sends only the table gets it written out here.
+        tabelle = ergebnis.get("structuredContent")
+        if (isinstance(tabelle, dict) and isinstance(tabelle.get("columns"), list)
+                and isinstance(tabelle.get("rows"), list)):
+            self.tables.append({
+                "server": self.name, "tool": name,
+                "query": _aufruf_text(argumente),
+                "rows": len(tabelle["rows"]),
+                "source": " ".join(str(tabelle.get("source") or "").split())[:200],
+                "truncated": bool(tabelle.get("truncated"))})
+            if not text:
+                import sqlpruefung
+                text = sqlpruefung.als_tabelle(tabelle["columns"], tabelle["rows"])
         return text
 
     def schliesse(self):
@@ -434,6 +491,20 @@ class Verbindung:
                 pass
             self._prozess = None
         self._bereit = False
+
+
+def _aufruf_text(argumente):
+    """The arguments of a call as a line for the list under the answer:
+    the query itself if there is one, otherwise all of them."""
+    argumente = argumente or {}
+    texte = [v for v in argumente.values() if isinstance(v, str)]
+    if len(argumente) == 1 and texte:
+        return texte[0][:2000]
+    return json.dumps(argumente, ensure_ascii=False)[:2000]
+
+
+def ist_connector(server):
+    return _angaben(server).get("art") == "connector"
 
 
 ANMELDUNGEN = {

@@ -197,6 +197,10 @@ TEXTS = {
         "persönlich (jeder meldet sich mit seinem Konto an)",
     "Only for shared mailboxes": "Nur für Funktionspostfächer",
     "Visible to": "Sichtbar für", "members of": "Mitglieder von",
+    "Mailboxes and data connectors": "Postfächer und Datenanschlüsse",
+    "Data connectors": "Datenanschlüsse", "shortened": "gekürzt",
+    "Action in": "Aktion in", "Run": "Ausführen",
+    "data connector": "Datenanschluss",
     "everyone": "alle", "everyone (own login)": "alle (eigene Anmeldung)",
     "Owner": "Besitzer", "Assign": "Zuordnen",
     "Personal: only for this user (empty: every user sees it and signs in with their own account)":
@@ -934,7 +938,9 @@ def _settings_context(p, request):
         "mailboxes": [dict(m, connected=m["name"] in connected,
                            watch=mail_watch.watching(p.name, m["name"]))
                       for m in mailboxes.overview(p.name)
-                      if m["kind"] == "mailbox"],
+                      # a data connector is listed where it needs a login
+                      if m["kind"] == "mailbox"
+                      or (m["kind"] == "connector" and m["login"] != "keine")],
         "tokens": [(k[:12], e.get("bezeichnung", ""), e.get("erstellt", ""))
                    for k, e in auth.liste() if e.get("benutzer") == p.name],
         "lists": _my_lists(p),

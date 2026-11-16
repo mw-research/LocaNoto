@@ -70,7 +70,7 @@ def _save(user, state):
 def mailboxes():
     """The configured mailboxes (not web search services)."""
     return [n for n, a in mcp.lies_konfiguration().items()
-            if a.get("art") != "websuche"]
+            if a.get("art") not in ("websuche", "connector")]
 
 
 def watching(user, server):

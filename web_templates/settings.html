@@ -45,10 +45,10 @@
 
 {% if mailboxes %}
 <section class="card">
-  <h2>{{ t('Mailboxes') }}</h2>
+  <h2>{{ t('Mailboxes and data connectors') }}</h2>
   {% for m in mailboxes %}
   <form hx-post="/ui/settings/mailbox/{{ m.name }}" hx-target="#mb-{{ loop.index }}" class="inline wide">
-    <strong>{{ m.name }}</strong>
+    <strong>{{ m.name }}</strong>{% if m.kind == 'connector' %} <span class="muted">{{ t('data connector') }}</span>{% endif %}
     {% if m.connected %}
       <span class="ok">{{ t('connected') }}</span>
       <input type="hidden" name="action" value="disconnect">
@@ -59,7 +59,7 @@
       <button type="submit">{{ t('Connect') }}</button>
     {% endif %}
   </form>
-  {% if m.connected %}
+  {% if m.connected and m.kind == 'mailbox' %}
   <form hx-post="/ui/settings/mailbox/{{ m.name }}/watch" hx-trigger="change" hx-target="#mb-{{ loop.index }}" class="inline">
     <label class="check"><input type="checkbox" name="on" value="1"{% if m.watch %} checked{% endif %}> {{ t('Notify me about new mail') }}</label>
   </form>

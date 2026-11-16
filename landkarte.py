@@ -36,6 +36,7 @@ SCHICHT = {
         "routes_documents", "routes_admin", "worker", "test_api", "web",
         "test_multipod", "web_admin", "doctor", "make_ca", "trustbundle",
         "reembed", "test_reembed", "web_tickets", "test_mail_tools",
+        "test_connector",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",

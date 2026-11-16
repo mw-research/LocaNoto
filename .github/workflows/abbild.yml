@@ -241,6 +241,15 @@ jobs:
           grep -E "FAIL|Traceback|Error" /tmp/mail.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_mail_tools::/' || true
           tail -1 /tmp/mail.log | grep -q "all checks passed"
 
+      # The connector interface and the SQL connector (test_connector.py):
+      # real connectors on local ports, asked the way LocaNoto asks them.
+      - name: Datenanschluesse pruefen
+        if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
+        run: |
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_connector.py 2>&1 | tee /tmp/connector.log
+          grep -E "FAIL|Traceback|Error" /tmp/connector.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_connector::/' || true
+          tail -1 /tmp/connector.log | grep -q "all passed"
+
       # Changing the embedding model against a real pgvector: vectors of a
       # second model from the stored text, switch, refusal of a model
       # without vectors (test_reembed.py).

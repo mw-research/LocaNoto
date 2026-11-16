@@ -850,6 +850,10 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                 else:
                     entwurf = {"server": server, "werkzeug": name,
                                "argumente": argumente, "call_id": r.id}
+                    if getattr(verbindungen[server], "connector", False):
+                        # An action in a connected system, not a message:
+                        # the page words it so.
+                        entwurf["kind"] = "connector"
                     if vorschau:
                         entwurf["vorschau"] = vorschau
                     entwuerfe.append(entwurf)

@@ -543,6 +543,19 @@ def _describe(connections, web_confirm):
                     "Mails und Kalender lesen; Mails, Termine und Einladungen "
                     "als Entwurf")
             out.append(f"Postfach {name} ({addr}): {kind}")
+        elif getattr(c, "connector", False):
+            # What the connector says about itself, read at the handshake.
+            # It is configuration, but it still passes the same filter as
+            # every other text from outside.
+            try:
+                c.oeffne()
+            except Exception:
+                pass
+            about = pipeline.entschaerfen(getattr(c, "instructions", "") or "")
+            out.append(f"Datenanschluss {name}"
+                       + (f": {about}" if about else "")
+                       + " Werkzeuge, die etwas aendern, werden zum Entwurf "
+                         "fuer den Nutzer.")
         elif web_confirm and getattr(c, "confirm", None) is not None:
             out.append(f"Websuche {name} (nur nach Bestaetigung des Nutzers)")
         else:
@@ -806,6 +819,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
         benutzer=user)
     system += sql_note(sql_info)
     extra, drafts = [], []
+    connector_calls = []
     connections = {}
     notes = []
     web_confirm = False
@@ -898,6 +912,10 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                     pass
         for p in progress:
             yield "tool", {"progress": p}
+        # What data connectors returned: listed under the answer like a
+        # database query -- which system, which query, how many rows.
+        connector_calls = [t for c in connections.values()
+                           for t in (getattr(c, "tables", None) or [])][:20]
     system += pipeline.answer_tool_note(extra, described, drafts)
     if notes:
         system += ("\n<werkzeughinweise>\n" + "\n".join(notes[:10])
@@ -966,6 +984,8 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
         # Like the database query: which sheet, which query, how many rows.
         message["lists"] = {"sheets": [{k: s.get(k) for k in ("sheet", "query", "rows", "reason")}
                                        for s in list_info["sheets"]]}
+    if connector_calls:
+        message["connector"] = connector_calls
     if sql_info:
         # The query stays with the answer: it is what the numbers rest on,
         # as a source page is for a quote.

@@ -711,6 +711,28 @@ Without an assignment every user sees every entry and can sign in to it.
 For everyone else the mailbox does not exist: not in the settings, not in
 the chat, not among the tickets.
 
+### How do I connect an ERP, an MES or a database to LocaNoto?
+
+Through a **data connector**: a small service of its own that knows
+exactly one system and offers LocaNoto tools to ask it. LocaNoto does not
+know the system, only the interface. For SQL databases (PostgreSQL,
+MySQL/MariaDB, Microsoft SQL Server, Oracle, SQLite) a finished connector
+is included; for any other system you build one to the same interface.
+Description and example: `connectors/README.md`.
+
+1. Start the connector next to LocaNoto (container or pod).
+2. **Admin area** → **Mailboxes** → **Create** → kind "Datenanschluss",
+   address `http://<name>:8000/mcp`. With a login per user: kind
+   "Datenanschluss, jeder meldet sich mit seinem Konto an"; users then
+   connect under **Settings**.
+3. Assign it to a **workspace** → only its members see the connector and
+   can ask it.
+
+In the chat the model asks the connector by itself when the question fits.
+Below the answer it says which connector returned how many rows for which
+query. Tools that change something in the system are never run by LocaNoto
+on its own: they appear as a draft and run only on your click.
+
 ### How do I set up web search in LocaNoto as an admin?
 
 1. Run the search service separately from LocaNoto (`REFERENZ.md`,

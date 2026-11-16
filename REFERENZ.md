@@ -482,20 +482,20 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `altbestand`, `answering`, `api` +74 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `altbestand`, `answering` +77 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `app`, `auth`, `benutzer` +24 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +16 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `api`, `app`, `auth`, `benutzer` +23 |
-| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `app`, `attachments`, `aufnehmen`, `auth` +32 |
+| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `accounts`, `app`, `attachments`, `aufnehmen` +34 |
 | `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +16 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +22 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +23 |
 | `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +2 |
 | `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `mail_watch`, `pipeline`, `raeume` +7 |
 | `local_time.py` | The local time of the installation, and a calendar for the model. | `TIMEZONE` | `imap_mailbox`, `mail_watch`, `pipeline`, `postfach` +4 |
 | **Bestand** | | | |
-| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `altbestand`, `answering`, `api` +35 |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `api`, `app`, `aufnehmen`, `bestandsliste` +20 |
-| `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `accounts`, `api`, `app` +21 |
-| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `app`, `aufnehmen`, `compare_search`, `doc_actions` +14 |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `accounts`, `altbestand`, `answering` +39 |
+| `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `accounts`, `api`, `app` +24 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `accounts`, `api`, `app`, `aufnehmen` +21 |
+| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `accounts`, `app`, `aufnehmen`, `compare_search` +15 |
 | `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `answering`, `api`, `app`, `routes_admin` +5 |
 | `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `doc_actions`, `keyword_index`, `pg_keywords`, `selbsttest` +4 |
 | `pg_collection.py` | Chroma-compatible collections on Postgres + pgvector. | — | `migrate_to_postgres`, `store` |
@@ -504,44 +504,44 @@ Dateien importieren sie.
 | **Fachlogik** | | | |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +2 |
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +12 |
-| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS`, `TABELLEN_BLAETTER` +9 | `answering`, `api`, `app`, `listen_diagnose` +6 |
-| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `app`, `attachments` +12 |
-| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `app`, `routes_account`, `routes_chat`, `server` +6 |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mail_watch` +11 |
-| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | — | `api`, `app`, `attachments`, `doc_actions` +7 |
+| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `app`, `listen_diagnose` +6 |
+| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `app`, `attachments` +13 |
+| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `app`, `routes_account`, `routes_chat`, `server` +7 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_STDIO`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `mail_watch` +12 |
+| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | `AUFNAHME_GLEICHZEITIG`, `AUFNAHME_MAX_SEITEN`, `AUFNAHME_WARTEN_SEKUNDEN` +1 | `accounts`, `api`, `app`, `attachments` +9 |
 | `imap_mailbox.py` | Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers. | `POSTFACH_HOLGRENZE`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
 | `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
 | `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +4 |
-| `tickets.py` | A ticket system for shared mailboxes (info@, service@, ...). | `TICKET_KEEP_DAYS`, `TICKET_POLL_SECONDS` | `test_api`, `test_mail_tools`, `web`, `web_admin` +1 |
+| `tickets.py` | A ticket system for shared mailboxes (info@, service@, ...). | `TICKET_KEEP_DAYS`, `TICKET_POLL_SECONDS` | `selbsttest`, `test_api`, `test_mail_tools`, `web` +2 |
 | `created_files.py` | Files the model creates on request: Excel, Word, PDF, PowerPoint. | `CREATED_FILES_KEEP`, `CREATED_FILES_MAX_ROWS`, `FILES_TOOL` | `answering`, `attachments`, `db_files`, `routes_documents` +2 |
+| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `answering`, `doctor`, `mail_watch`, `routes_account` +8 |
+| `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +7 | `api`, `routes_account`, `selbsttest`, `server` +2 |
 | `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +8 | `answering`, `app`, `selbsttest`, `test_mail_tools` +2 |
+| `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `accounts`, `answering`, `api`, `app` +9 |
 | `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `app`, `routes_admin` +5 |
-| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `answering`, `doctor`, `routes_account`, `routes_admin` +5 |
-| `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `answering`, `api`, `app`, `doc_actions` +8 |
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `attachments`, `mailboxes` +8 |
-| `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +6 | `routes_account`, `test_api`, `web` |
+| `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MAX_MEGAPIXEL`, `BILD_MINDEST_TEXT`, `OCR_DPI` +2 | `aufnehmen`, `bildtext`, `ingest`, `routes_chat` +1 |
+| `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | `AUFNAHME_ENTPACKT_MAX_MB` | `app`, `aufnehmen`, `ingest`, `ingest_images` +2 |
+| `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_ATTEMPTS_PER_NAME` +4 | `app`, `oidc`, `routes_account`, `selbsttest` +4 |
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `app`, `routes_account`, `routes_admin` +5 |
-| `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_WINDOW_MINUTES` +3 | `oidc`, `routes_account`, `server`, `web` +2 |
 | `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `selbsttest`, `web` |
-| `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MINDEST_TEXT`, `OCR_DPI`, `OCR_SPRACHEN` | `aufnehmen`, `ingest`, `selbsttest` |
-| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `app`, `pipeline` +6 |
 | `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `app`, `routes_admin`, `routes_documents`, `server` +1 |
+| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `app`, `pipeline` +6 |
 | `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `app`, `pipeline`, `routes_account` +5 |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `aufnehmen`, `ingest`, `ingest_images` |
-| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` +1 |
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `app`, `create_token` +7 |
-| `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | — | `app`, `aufnehmen`, `ingest`, `ingest_images` +1 |
-| `db_files.py` | Documents in database results: files in binary columns, paths, links. | `SQL_FILE_ROOTS` | `answering`, `test_mail_tools` |
-| `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `test_mail_tools`, `web` |
+| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` +1 |
+| `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `selbsttest`, `verwaltung` +1 |
+| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `app`, `mcp` +3 |
+| `db_files.py` | Documents in database results: files in binary columns, paths, links. | `SQL_FILE_ROOTS` | `answering`, `postfach`, `test_mail_tools` |
+| `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `test_connector`, `test_mail_tools`, `web` |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `app`, `attachments`, `bildtext` +2 |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `routes_documents`, `selbsttest` |
-| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `app`, `sqldb` +1 |
 | `jobs.py` | Background jobs: ingest, images, storage sync, backup. | `JOB_HEARTBEAT_TIMEOUT` | `routes_admin`, `web`, `web_admin`, `worker` |
 | `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `jobs`, `selbsttest`, `verwaltung` +1 |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
 | `attachments.py` | Files a user may attach to a mail: the own workspace and this chat's images. | `ATTACHMENT_MAX_MB` | `answering`, `mailboxes`, `selbsttest` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `routes_admin`, `selbsttest` +2 |
-| `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `web` |
 | `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `selbsttest`, `server`, `test_api` +2 |
 | `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `app`, `routes_admin`, `verwaltung` |
 | `notices.py` | Notices for one user: new mail, new tickets, replies to tickets. | — | `mail_watch`, `routes_chat`, `test_mail_tools`, `tickets` +1 |
@@ -555,17 +555,18 @@ Dateien importieren sie.
 | `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME`, `UI_LOGO` | `server`, `test_api`, `web_admin`, `web_tickets` |
 | `test_api.py` | Exercises every endpoint of server.py against a real installation. | `SELFTEST_DATABASE` | — |
 | `routes_admin.py` | API: the admin area -- everything verwaltung.py and the admin parts of | — | `server` |
+| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD`, `SICHERUNG_VERSCHLUESSELN` | `app`, `routes_admin`, `selbsttest`, `test_api` +2 |
 | `test_mail_tools.py` | Mail, calendar and tickets without a mail server. | — | — |
-| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD` | `app`, `routes_admin`, `selbsttest`, `test_api` +2 |
+| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | `selbsttest` |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
-| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | `selbsttest` |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
 | `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server`, `web` |
+| `test_connector.py` | The connector interface and the SQL connector, without an ERP. | — | — |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
-| `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
 | `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
+| `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
 | `uebersetzen.py` | Oberflaechentexte fuer die Uebersetzung einwickeln und einsammeln. | — | `selbsttest` |
 | `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |

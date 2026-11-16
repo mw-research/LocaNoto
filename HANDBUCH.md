@@ -745,6 +745,29 @@ eine Auswahl → **Zuordnen**:
 Für alle anderen gibt es das Postfach nicht: nicht in den Einstellungen,
 nicht im Chat, nicht bei den Tickets.
 
+### Wie binde ich ein ERP, ein MES oder eine Datenbank an LocaNoto an?
+
+Über einen **Datenanschluss**: einen eigenen kleinen Dienst, der genau ein
+System kennt und LocaNoto Werkzeuge anbietet, um es zu fragen. LocaNoto
+kennt das System nicht, nur die Schnittstelle. Für SQL-Datenbanken
+(PostgreSQL, MySQL/MariaDB, Microsoft SQL Server, Oracle, SQLite) liegt ein
+fertiger Anschluss bei; für jedes andere System baut man einen nach
+derselben Schnittstelle. Beschreibung und Beispiel: `connectors/README.md`.
+
+1. Den Anschluss neben LocaNoto starten (Container oder Pod).
+2. **Admin-Bereich** → **Postfächer** → **Anlegen** → Art
+   „Datenanschluss", Adresse `http://<name>:8000/mcp`. Mit Anmeldung je
+   Nutzer: Art „Datenanschluss, jeder meldet sich mit seinem Konto an";
+   die Nutzer verbinden sich dann unter **Einstellungen**.
+3. Einem **Arbeitsbereich** zuordnen → nur dessen Mitglieder sehen den
+   Anschluss und können ihn fragen.
+
+Im Chat fragt das Modell den Anschluss von selbst, wenn die Frage dazu
+passt. Unter der Antwort steht, welcher Anschluss mit welcher Abfrage wie
+viele Zeilen geliefert hat. Werkzeuge, die im System etwas ändern, führt
+LocaNoto nie von selbst aus: Sie erscheinen als Entwurf und laufen erst mit
+deinem Klick.
+
 ### Wie richte ich als Admin die Websuche in LocaNoto ein?
 
 1. Suchdienst getrennt von LocaNoto betreiben (`REFERENZ.md`, „Websuche").

@@ -7,9 +7,9 @@
   {% for m in boxes %}
     <tr><td><strong>{{ m.name }}</strong></td><td class="muted">{{ m.kind }} · {{ m.transport }} · {{ m.login }}{% if m.personal %} · {{ t('personal') }}{% endif %}{% if m.mailbox %} · {{ m.mailbox }}{% endif %}
       · {% if m.auto_reply %}{{ t('answers on its own') }} · {{ t('with notice') if m.notice else t('WITHOUT notice') }}{% else %}{{ t('prepares drafts') }}{% endif %}
-      {% if m.kind == "mailbox" %}<br><strong>{{ t('Visible to') }}:</strong>
+      {% if m.kind in ("mailbox", "connector") %}<br><strong>{{ t('Visible to') }}:</strong>
         {% if m.owner %}{{ m.owner }}{% elif m.room %}{{ t('members of') }} {{ m.room_name }}{% else %}{{ t('everyone') }}{% endif %}{% endif %}</td>
-      <td>{% if m.kind == "mailbox" %}<form hx-post="/ui/admin/mailboxes/{{ m.name|urlencode }}/access" hx-target="#mb-notice" class="inline">
+      <td>{% if m.kind in ("mailbox", "connector") %}<form hx-post="/ui/admin/mailboxes/{{ m.name|urlencode }}/access" hx-target="#mb-notice" class="inline">
         {% if m.personal %}<select name="owner" aria-label="{{ t('Owner') }}"><option value="">{{ t('everyone (own login)') }}</option>{% for u in users %}<option value="{{ u }}"{% if u == m.owner %} selected{% endif %}>{{ u }}</option>{% endfor %}</select>
         {% else %}<select name="room" aria-label="{{ t('Workspace') }}"><option value="">{{ t('everyone') }}</option>{% for id, label in rooms %}<option value="{{ id }}"{% if id == m.room %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}
         <button type="submit">{{ t('Assign') }}</button></form>{% endif %}</td>

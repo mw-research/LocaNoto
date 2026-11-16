@@ -139,6 +139,7 @@ def overview(user=None):
                     "owner": a.get("owner") or "",
                     "room": a.get("room") or "",
                     "kind": "websearch" if a.get("art") == "websuche"
+                    else "connector" if a.get("art") == "connector"
                     else "mailbox",
                     "transport": a.get("transport", "http"),
                     "login": mcp.anmeldeart(name),

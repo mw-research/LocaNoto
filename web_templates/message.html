@@ -50,6 +50,17 @@
     {% endfor %}
   </details>
   {% endif %}
+  {% if m.connector %}
+  <details class="sources sql">
+    <summary>{{ t('Data connectors') }} ({{ m.connector|length }})</summary>
+    {% for c in m.connector %}
+    <div class="source">
+      <div class="source-head">{{ c.server }} · {{ c.tool }} · {{ c.rows }} {{ t('rows') }}{% if c.truncated %} · {{ t('shortened') }}{% endif %}{% if c.source %} · {{ c.source }}{% endif %}</div>
+      {% if c.query %}<pre>{{ c.query }}</pre>{% endif %}
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
   {% if m.lists and m.lists.sheets %}
   <details class="sources sql">
     <summary>{{ t('Lists') }} ({{ m.lists.sheets|length }})</summary>

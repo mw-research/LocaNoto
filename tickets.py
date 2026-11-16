@@ -111,7 +111,7 @@ def settings(server):
 def configure(server, enabled, answer="", members=(), forward=(), prefix="T"):
     """Sets the ticket settings of a mailbox. (ok, message)."""
     entry = mcp.lies_konfiguration().get(server)
-    if not entry or entry.get("art") == "websuche":
+    if not entry or entry.get("art") in ("websuche", "connector"):
         return False, "Unknown mailbox."
     if entry.get("persoenlich"):
         return False, "Tickets only for shared mailboxes."
