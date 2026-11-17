@@ -88,6 +88,9 @@ class AskBody(BaseModel):
                                     "a failed or broken-off answer is replaced")
     source_texts: bool = Field(default=True,
                                description="include the passages")
+    intern: bool = Field(default=False,
+                         description="the answer only on the internal model, "
+                                     "also where an external one is released")
 
 
 def _request(p, body, http_request):
@@ -111,7 +114,8 @@ def _request(p, body, http_request):
                                   {k: v.model_dump()
                                    for k, v in body.mailboxes.items()}),
         history=body.history, save=body.save, web_draft=body.web_draft,
-        retry=body.retry, sql_logins=sql_logins(p, http_request))
+        retry=body.retry, sql_logins=sql_logins(p, http_request),
+        intern=body.intern)
 
 
 def public_message(m, with_texts=True):

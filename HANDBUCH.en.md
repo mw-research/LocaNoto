@@ -711,6 +711,32 @@ Without an assignment every user sees every entry and can sign in to it.
 For everyone else the mailbox does not exist: not in the settings, not in
 the chat, not among the tickets.
 
+### When does an external model answer in LocaNoto?
+
+Only when the operator has set one up (`EXTERN_BASE_URL`,
+`EXTERN_API_KEY`, `EXTERN_MODEL`; Azure OpenAI also `EXTERN_API_VERSION`)
+and the admin has released the sources of an answer for it. Otherwise the
+internal model always answers.
+
+**Admin area** → **External model**: one tick "external allowed" per
+source -- each workspace, personal workspaces, database, lists, web
+search, each mailbox and each data connector, and "chat without any
+source". Nothing is ticked out of the box.
+
+Everything before the answer -- search terms, database query, tools --
+runs on the internal model. Only the answer itself can go out, and only
+when every one of its sources is released. It also stays internal when:
+
+- an earlier answer in the same chat was internal,
+- an image is in the chat,
+- the question starts with `/intern`, "internal only" is ticked in the
+  chat, or a keyword occurs (out of the box: intern, vertraulich, geheim
+  and their English counterparts; adjustable on the same page).
+
+Glossary and personal instruction go along only when released. Below each
+answer it says which model answered and why. If the external model does
+not answer, the internal one writes the answer; never the other way round.
+
 ### How do I connect an ERP, an MES or a database to LocaNoto?
 
 Through a **data connector**: a small service of its own that knows

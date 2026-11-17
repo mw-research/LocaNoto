@@ -9,6 +9,9 @@
   {% else %}
   {% if m.web_search %}<p class="muted">{{ t('Web search') }}: {{ m.web_search.anfrage or m.web_search.adresse }}</p>{% endif %}
   <div class="answer">{{ m|answer_html|safe }}</div>
+  {% if m.route %}
+  <p class="muted route">{% if m.route.external %}{{ t('Answered by the external model') }} ({{ m.route.model }}).{% else %}{{ t('Answered by the internal model, because') }}: {% for kind, name in m.route.why %}{{ t(route_reasons.get(kind, kind)) }}{% if name %} {{ name }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</p>
+  {% endif %}
   {% if m.broken %}
   <p class="status error">{{ t('The answer broke off.') }}{% if m.fehler %} {{ m.fehler }}{% endif %}</p>
   <button type="button" class="primary" data-retry>{{ t('Ask again') }}</button>

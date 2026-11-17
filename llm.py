@@ -297,7 +297,9 @@ class GuardedClient:
         return ready or ordered               # all resting: try anyway
 
     def _call(self, kind, kw):
-        if SEND_USER == "pseudonym" and "user" not in kw:
+        # Never to the external model (external_model.py): not even a
+        # pseudonym of the user leaves the house.
+        if SEND_USER == "pseudonym" and "user" not in kw and self.task != "EXTERN":
             alias = pseudonym(_acting_for.get())
             if alias:
                 kw["user"] = alias

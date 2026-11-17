@@ -492,18 +492,22 @@ def kontext(treffer, bild_texte=(), bloecke=()):
     return "\n\n".join(teile) + "\n\n"
 
 
-def systemprompt(kontexttext, preset=None, benutzer=None):
+def systemprompt(kontexttext, preset=None, benutzer=None, hausdaten=True):
     """Vorlage mit Rolle und Kontext gefuellt.
 
     benutzer haengt dessen persoenliche Anweisung an (prompts.anweisung).
     Ohne ihn -- Werkzeuge, die keinen Menschen kennen -- bleibt es bei der
     Vorlage.
+
+    hausdaten=False: without the glossary and the personal instruction --
+    the prompt for an external model the operator has not released them
+    for (external_model.py).
     """
     import prompts
     rolle = os.getenv("EXPERT_ROLE", "technischer Assistent")
     text = (_vorlage("system_prompt.txt", RUECKFALL_SYSTEMPROMPT, preset)
             .replace("{EXPERT_ROLE}", rolle)
-            .replace("{GLOSSAR}", _glossarblock(preset))
+            .replace("{GLOSSAR}", _glossarblock(preset) if hausdaten else "")
             .replace("{CONTEXT_PLATZHALTER}", kontexttext))
     # Today and the weekdays around it: the model has no clock, and a
     # weekday it computes itself is wrong often enough to matter.
@@ -511,7 +515,9 @@ def systemprompt(kontexttext, preset=None, benutzer=None):
     # Added here and not only in the template: a prompt an admin edited
     # under "Prompts und Glossar" keeps the rule.
     text += FREMDTEXT_REGEL
-    return prompts.mit_anweisung(text, benutzer) if benutzer else text
+    if benutzer and hausdaten:
+        return prompts.mit_anweisung(text, benutzer)
+    return text
 
 
 # Prompt injection: text from documents, mails, web pages and tools can be

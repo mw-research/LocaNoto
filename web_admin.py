@@ -339,6 +339,47 @@ def database_note(room: str, request: Request, note: str = Form(""),
     return _notice(tm(message), False)
 
 
+# --- EXTERNAL MODEL ---
+
+@router.get("/admin/external")
+def external_page(request: Request):
+    p, away = _page(request)
+    if away:
+        return away
+    import external_model
+    import mcp
+    tools = sorted((n, a.get("art") or "mailbox")
+                   for n, a in mcp.lies_konfiguration().items()
+                   if a.get("art") != "websuche")
+    rooms = [(r, raeume.bezeichnung(r)) for r in sorted(raeume.liste())
+             if not raeume.ist_privat(r)]
+    return render("admin_external.html", request, nav=_nav(p, "admin"),
+                  configured=external_model.configured(),
+                  model=external_model.model(), s=external_model.settings(),
+                  rooms=rooms, tools=tools, web=bool(mcp.websuche_server()))
+
+
+@router.post("/ui/admin/external")
+async def external_save(request: Request, p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    import external_model
+    form = await request.form()
+    words = [w.strip() for w in str(form.get("keywords") or "").replace(";", ",").split(",")]
+    ok, message = external_model.save({
+        "no_source": bool(form.get("no_source")),
+        "personal": bool(form.get("personal")),
+        "database": bool(form.get("database")),
+        "lists": bool(form.get("lists")),
+        "web": bool(form.get("web")),
+        "house_texts": bool(form.get("house_texts")),
+        "rooms": {str(r): True for r in form.getlist("room")},
+        "tools": {str(s): True for s in form.getlist("tool")},
+        "keywords": [w for w in words if w]}, by=p.name)
+    # external_model speaks English; the page words are in web.TEXTS.
+    return _notice(t(message), ok)
+
+
 # --- MAILBOXES ---
 
 @router.get("/admin/mailboxes")

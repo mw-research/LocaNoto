@@ -39,6 +39,7 @@
       preset: form.preset && form.preset.value ? form.preset.value : null,
       web: !!(form.web && form.web.checked),
       sql: !!(form.sql && form.sql.checked),
+      intern: !!(form.intern && form.intern.checked),
       images: []
     };
     if (body.sql && form.sql_room) body.sql_room = form.sql_room.value;

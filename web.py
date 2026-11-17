@@ -200,6 +200,33 @@ TEXTS = {
     "Mailboxes and data connectors": "Postfächer und Datenanschlüsse",
     "Data connectors": "Datenanschlüsse", "shortened": "gekürzt",
     "Action in": "Aktion in", "Run": "Ausführen",
+    "No installation key: the settings cannot be signed.":
+        "Kein Installationsschlüssel: Die Einstellungen lassen sich nicht signieren.",
+    "External model": "Externes Modell", "Model": "Modell", "Source": "Quelle",
+    "External allowed": "Extern erlaubt",
+    "Chat without any source": "Chat ohne jede Quelle",
+    "Personal workspaces (all)": "Persönliche Arbeitsbereiche (alle)",
+    "Data connector": "Datenanschluss", "Mailbox": "Postfach",
+    "Glossary and personal instructions go along": "Glossar und persönliche Anweisungen gehen mit",
+    "Keywords that keep an answer internal (comma separated)":
+        "Stichwörter, die eine Antwort intern halten (durch Komma getrennt)",
+    "No external model is set up. Every answer is written by the internal model.":
+        "Kein externes Modell eingerichtet. Jede Antwort schreibt das interne Modell.",
+    "To set one up, the operator enters EXTERN_BASE_URL, EXTERN_API_KEY and EXTERN_MODEL (Azure OpenAI also EXTERN_API_VERSION) in the environment and restarts LocaNoto.":
+        "Zum Einrichten trägt der Betreiber EXTERN_BASE_URL, EXTERN_API_KEY und EXTERN_MODEL (bei Azure OpenAI auch EXTERN_API_VERSION) in die Umgebung ein und startet LocaNoto neu.",
+    "Everything before the answer -- search terms, database query, tools -- runs on the internal model. The external model only writes the answer, and only when every source of that answer is released here. Anything not ticked keeps the answer internal. A user can always ask for the internal model: \"/intern\" at the start of the question, the switch in the chat, or a keyword below.":
+        "Alles vor der Antwort – Suchbegriffe, Datenbankabfrage, Werkzeuge – läuft auf dem internen Modell. Das externe Modell schreibt nur die Antwort, und nur wenn jede Quelle dieser Antwort hier freigegeben ist. Was nicht angehakt ist, hält die Antwort intern. Ein Nutzer kann immer das interne Modell verlangen: „/intern“ am Anfang der Frage, der Schalter im Chat oder ein Stichwort unten.",
+    "internal only": "nur intern",
+    "Answered by the external model": "Beantwortet vom externen Modell",
+    "Answered by the internal model, because": "Beantwortet vom internen Modell, weil",
+    "asked for by the user": "vom Nutzer verlangt",
+    "keyword in the question": "Stichwort in der Frage",
+    "earlier answer in this chat internal": "frühere Antwort im Chat intern",
+    "image in the chat": "Bild im Chat", "chat without a source": "Chat ohne Quelle",
+    "passage of unknown origin": "Abschnitt unbekannter Herkunft",
+    "tool": "Werkzeug", "external model not reachable": "externes Modell nicht erreichbar",
+    "lists": "Listen", "database": "Datenbank", "web search": "Websuche",
+    "workspace": "Arbeitsbereich",
     "data connector": "Datenanschluss",
     "everyone": "alle", "everyone (own login)": "alle (eigene Anmeldung)",
     "Owner": "Besitzer", "Assign": "Zuordnen",
@@ -487,6 +514,8 @@ def answer_html(m):
 
 _env.filters["answer_html"] = answer_html
 _env.globals["source_link"] = source_link
+# Why an answer stayed internal: the words for each reason (external_model.py).
+_env.globals["route_reasons"] = answering.external_model.REASONS
 
 
 def _optional(request):
@@ -553,6 +582,7 @@ def _chat_options(p, request=None):
         "presets": [(n, presets.anzeige(n))
                     for n in presets.namen() + presets.eigene(p.name)],
         "web": bool(answering.mcp.websuche_server()),
+        "external": answering.external_model.configured(),
         # workspaces whose database this user may query ("" = the one from
         # the environment)
         "sql": [(r, raeume.bezeichnung(r) if r else t("Database"))

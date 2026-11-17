@@ -52,6 +52,7 @@ web search against the rooms asked, the SQL account through
 sqlquellen.fuer_benutzer.
 """
 import dataclasses
+import itertools
 import json
 import logging
 import os
@@ -64,6 +65,7 @@ import budget
 import chats
 import created_files
 import db_files
+import external_model
 import feedback
 import llm
 import mcp
@@ -138,6 +140,7 @@ class Request:
     sql_logins: dict = dataclasses.field(default_factory=dict)
     # {room: {"benutzer", "passwort"}} -- personal SQL logins of this
     # session, like mailbox logins never stored
+    intern: bool = False                # the answer only on the internal model
 
 
 class Refused(Exception):
@@ -732,7 +735,8 @@ def _ask(user, req):
 def _new_question(user, req, chat_id, new_chat, messages, model):
     """Images, the question into the chat, the chat event."""
     import vision
-    question = (req.question or "").strip()
+    asked, question = external_model.take_command((req.question or "").strip())
+    asked = asked or req.intern
     # Images: stored with the chat, described by the vision model. The
     # description is a probe and context; the chat model gets text only.
     image_paths, image_texts, failed = [], [], []
@@ -753,6 +757,10 @@ def _new_question(user, req, chat_id, new_chat, messages, model):
         question = DEFAULT_IMAGE_QUESTION
 
     user_message = {"role": "user", "content": question}
+    if asked:
+        # Asked for the internal model: kept with the question, so asking
+        # again or continuing after a web search keeps it.
+        user_message["intern"] = True
     if image_paths:
         user_message["bilder"] = image_paths
     messages.append(user_message)
@@ -814,10 +822,10 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
         yield "lists", info
 
     # 4. context, tools (mailboxes, web search)
-    system = pipeline.systemprompt(
-        pipeline.kontext(hits, image_texts, bloecke=blocks), req.preset,
-        benutzer=user)
+    context_text = pipeline.kontext(hits, image_texts, bloecke=blocks)
+    system = pipeline.systemprompt(context_text, req.preset, benutzer=user)
     system += sql_note(sql_info)
+    tail_after_tools = ""
     extra, drafts = [], []
     connector_calls = []
     connections = {}
@@ -893,6 +901,7 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
         file_tools = created_files.Tools(user)
         connections[created_files.SERVER] = file_tools
     described = _describe(connections, web_confirm)
+    described_by = dict(zip(connections, described))
     system += pipeline.tools_preamble(described)
     if connections:
         progress = []
@@ -918,17 +927,69 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                            for t in (getattr(c, "tables", None) or [])][:20]
     system += pipeline.answer_tool_note(extra, described, drafts)
     if notes:
-        system += ("\n<werkzeughinweise>\n" + "\n".join(notes[:10])
-                   + "\nBetrifft die Frage diese Werkzeuge: dem Nutzer sagen, "
-                     "was nicht ging. Nichts erfinden.\n</werkzeughinweise>\n")
+        tail_after_tools = (
+            "\n<werkzeughinweise>\n" + "\n".join(notes[:10])
+            + "\nBetrifft die Frage diese Werkzeuge: dem Nutzer sagen, "
+              "was nicht ging. Nichts erfinden.\n</werkzeughinweise>\n")
+        system += tail_after_tools
 
-    # 5. the answer, saved every few seconds while it grows
+    # 5. which model writes the answer (external_model.py). Everything
+    # before ran on the internal one; this is the one place where the
+    # context can leave the house, and only when all of it is released.
+    asked = next((bool(m.get("intern")) for m in reversed(messages)
+                  if m.get("role") == "user"), False)
+    route = external_model.decide(
+        question, hits=hits, blocks=blocks, extra=extra,
+        image_texts=image_texts, history=messages[:-1], asked=asked,
+        web_servers=settings["web_servers"],
+        builtin=(workspace_notes.SERVER, created_files.SERVER))
+    answer_client, answer_model, answer_system = client("CHAT", user), model, system
+    if route and route["external"]:
+        used = [n for n in external_model.called_servers(extra) if n in described_by]
+        house = external_model.settings()["house_texts"]
+        answer_system = (
+            pipeline.systemprompt(context_text, req.preset, benutzer=user,
+                                  hausdaten=house)
+            + sql_note(sql_info)
+            + (pipeline.tools_preamble([described_by[n] for n in used])
+               if used else "")
+            + pipeline.answer_tool_note(extra, [described_by[n] for n in used],
+                                        drafts)
+            + tail_after_tools)
+        answer_client, answer_model = external_model.client(), route["model"]
+        _log.info("external answer for %s (%s): %s", user, answer_model,
+                  ", ".join(sorted({str((h.get("meta") or {}).get("raum"))
+                                    for h in hits}
+                                   | set(external_model.called_servers(extra))))
+                  or "no source")
+    if route is not None:
+        yield "route", route
+
+    # 6. the answer, saved every few seconds while it grows
     parts = []
     if run:
         run.update(status="", force=True)
     try:
-        for piece in pipeline.antwort(client("CHAT", user), model, system,
-                                      messages, zusatz=extra):
+        stream = pipeline.antwort(answer_client, answer_model, answer_system,
+                                  messages, zusatz=extra)
+        if route and route["external"]:
+            # The external model does not answer at all: the internal one
+            # does, with a note. Never the other way round.
+            try:
+                first = next(stream)
+            except StopIteration:
+                first = None
+            except Exception as e:
+                _log.warning("external model failed for %s: %s", user,
+                             type(e).__name__)
+                route = {"external": False, "model": "",
+                         "why": [["external_failed", ""]]}
+                yield "route", route
+                stream = pipeline.antwort(client("CHAT", user), model, system,
+                                          messages, zusatz=extra)
+            else:
+                stream = itertools.chain([] if first is None else [first], stream)
+        for piece in stream:
             piece = piece if isinstance(piece, str) else str(piece)
             parts.append(piece)
             yield "text", {"text": piece}
@@ -964,7 +1025,11 @@ def _answer(user, req, settings, chat_id, messages, question, image_texts,
                "sources": cited, "sources_more": others, "sonden": probes,
                "zahlen": numbers, "entwuerfe": drafts,
                "web": pipeline.webtreffer(extra, settings["web_servers"]),
-               "modell": model}
+               "modell": route["model"] if route and route["external"] else model}
+    if route is not None:
+        # Which model wrote it and why; the next question of the chat reads
+        # it (an internal answer keeps the chat internal).
+        message["route"] = route
     if file_tools is not None and file_tools.created:
         message["files"] = list(file_tools.created)
     if extra:

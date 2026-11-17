@@ -721,6 +721,38 @@ def create_mailbox(body: NewMailbox, p: Principal = Depends(admin)):
     return {"message": message}
 
 
+class ExternalRelease(BaseModel):
+    no_source: bool = False
+    rooms: dict[str, bool] = Field(default_factory=dict)
+    personal: bool = False
+    database: bool = False
+    lists: bool = False
+    web: bool = False
+    tools: dict[str, bool] = Field(default_factory=dict)
+    house_texts: bool = False
+    keywords: list[str] = Field(default_factory=list)
+
+
+@router.get("/external-model", tags=["admin"])
+def external_model_get(p: Principal = Depends(admin)):
+    """Whether an external model is set up, and what may go to it."""
+    import external_model
+    return {"configured": external_model.configured(),
+            "model": external_model.model(),
+            "settings": external_model.settings()}
+
+
+@router.put("/external-model", tags=["admin"])
+def external_model_put(body: ExternalRelease, p: Principal = Depends(admin)):
+    """What may go to the external model. Anything not released keeps an
+    answer internal."""
+    import external_model
+    ok, message = external_model.save(body.model_dump(), by=p.name)
+    if not ok:
+        raise HTTPException(400, message)
+    return {"message": message, "settings": external_model.settings()}
+
+
 class MailboxAccess(BaseModel):
     owner: str = Field(default="", description="personal mailbox: only "
                                                 "this user; empty: everyone")

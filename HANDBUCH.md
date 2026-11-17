@@ -745,6 +745,34 @@ eine Auswahl → **Zuordnen**:
 Für alle anderen gibt es das Postfach nicht: nicht in den Einstellungen,
 nicht im Chat, nicht bei den Tickets.
 
+### Wann antwortet in LocaNoto ein externes Modell?
+
+Nur wenn der Betreiber eines eingerichtet hat (`EXTERN_BASE_URL`,
+`EXTERN_API_KEY`, `EXTERN_MODEL`; Azure OpenAI auch `EXTERN_API_VERSION`)
+und der Admin die Quellen einer Antwort dafür freigegeben hat. Sonst
+antwortet immer das interne Modell.
+
+**Admin-Bereich** → **Externes Modell**: je Quelle ein Haken „extern
+erlaubt" – jeder Arbeitsbereich, persönliche Arbeitsbereiche, Datenbank,
+Listen, Websuche, jedes Postfach und jeder Datenanschluss, dazu „Chat ohne
+jede Quelle". Ab Werk ist nichts angehakt.
+
+Alles vor der Antwort – Suchbegriffe, Datenbankabfrage, Werkzeuge – läuft
+auf dem internen Modell. Erst die Antwort selbst kann nach außen gehen,
+und nur wenn jede ihrer Quellen freigegeben ist. Intern bleibt sie
+außerdem, wenn:
+
+- eine frühere Antwort im selben Chat intern war,
+- ein Bild im Chat ist,
+- die Frage mit `/intern` beginnt, im Chat „nur intern" angehakt ist
+  oder ein Stichwort vorkommt (ab Werk: intern, vertraulich, geheim und
+  ihre englischen Gegenstücke; einstellbar auf derselben Seite).
+
+Glossar und persönliche Anweisung gehen nur mit, wenn sie freigegeben
+sind. Unter jeder Antwort steht, welches Modell geantwortet hat und
+warum. Antwortet das externe Modell nicht, schreibt das interne die
+Antwort; umgekehrt nie.
+
 ### Wie binde ich ein ERP, ein MES oder eine Datenbank an LocaNoto an?
 
 Über einen **Datenanschluss**: einen eigenen kleinen Dienst, der genau ein

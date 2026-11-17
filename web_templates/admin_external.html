@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block main %}
+{% include "admin_nav.html" %}
+<h1>{{ t('External model') }}</h1>
+{% if not configured %}
+<section class="card">
+  <p>{{ t('No external model is set up. Every answer is written by the internal model.') }}</p>
+  <p class="muted">{{ t('To set one up, the operator enters EXTERN_BASE_URL, EXTERN_API_KEY and EXTERN_MODEL (Azure OpenAI also EXTERN_API_VERSION) in the environment and restarts LocaNoto.') }}</p>
+</section>
+{% else %}
+<section class="card">
+  <p>{{ t('Model') }}: <code>{{ model }}</code></p>
+  <p class="muted">{{ t('Everything before the answer -- search terms, database query, tools -- runs on the internal model. The external model only writes the answer, and only when every source of that answer is released here. Anything not ticked keeps the answer internal. A user can always ask for the internal model: "/intern" at the start of the question, the switch in the chat, or a keyword below.') }}</p>
+  <form hx-post="/ui/admin/external" hx-target="#ext-notice">
+    <table class="files">
+      <tr><th>{{ t('Source') }}</th><th>{{ t('External allowed') }}</th></tr>
+      <tr><td>{{ t('Chat without any source') }}</td><td><input type="checkbox" name="no_source" value="1"{% if s.no_source %} checked{% endif %} aria-label="{{ t('Chat without any source') }}"></td></tr>
+      {% for id, label in rooms %}
+      <tr><td>{{ t('Workspace') }} {{ label }}</td><td><input type="checkbox" name="room" value="{{ id }}"{% if s.rooms.get(id) %} checked{% endif %} aria-label="{{ label }}"></td></tr>
+      {% endfor %}
+      <tr><td>{{ t('Personal workspaces (all)') }}</td><td><input type="checkbox" name="personal" value="1"{% if s.personal %} checked{% endif %} aria-label="{{ t('Personal workspaces (all)') }}"></td></tr>
+      <tr><td>{{ t('Database') }}</td><td><input type="checkbox" name="database" value="1"{% if s.database %} checked{% endif %} aria-label="{{ t('Database') }}"></td></tr>
+      <tr><td>{{ t('Lists') }}</td><td><input type="checkbox" name="lists" value="1"{% if s.lists %} checked{% endif %} aria-label="{{ t('Lists') }}"></td></tr>
+      {% if web %}<tr><td>{{ t('Web search') }}</td><td><input type="checkbox" name="web" value="1"{% if s.web %} checked{% endif %} aria-label="{{ t('Web search') }}"></td></tr>{% endif %}
+      {% for name, kind in tools %}
+      <tr><td>{{ t('Data connector') if kind == 'connector' else t('Mailbox') }} {{ name }}</td><td><input type="checkbox" name="tool" value="{{ name }}"{% if s.tools.get(name) %} checked{% endif %} aria-label="{{ name }}"></td></tr>
+      {% endfor %}
+      <tr><td>{{ t('Glossary and personal instructions go along') }}</td><td><input type="checkbox" name="house_texts" value="1"{% if s.house_texts %} checked{% endif %} aria-label="{{ t('Glossary and personal instructions go along') }}"></td></tr>
+    </table>
+    <label>{{ t('Keywords that keep an answer internal (comma separated)') }}
+      <input name="keywords" value="{{ s.keywords|join(', ') }}"></label>
+    <button type="submit" class="primary">{{ t('Save') }}</button>
+  </form>
+  <div id="ext-notice"></div>
+</section>
+{% endif %}
+{% endblock %}
