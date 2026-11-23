@@ -562,7 +562,8 @@ _konfig_alt = _mcp_w.KONFIG
 _mcp_w.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_kalender.json")
 # An entry as created before the calendar existed: its own list of
 # sending tools does not know the calendar, and it may answer on its own.
-io.open(_mcp_w.KONFIG, "w", encoding="utf-8").write(json.dumps({
+# Through statefiles: with Postgres, mcp reads its config from there.
+statefiles.write(_mcp_w.KONFIG, json.dumps({
     "info": {"transport": "exchange", "anmeldung": "basic",
              "postfach": "info@test.de", "persoenlich": False,
              "automatisch": True, "hinweis_anhaengen": False,
@@ -582,7 +583,7 @@ pruef("Adressbuch, Frei/Gebucht, Anhaenge, Markieren ohne Rueckfrage",
       not any(_mcp_w.braucht_bestaetigung("info", _w, {})
               for _w in ("address_lookup", "calendar_free", "mail_attachments", "mail_mark",
                          "out_of_office")))
-os.remove(_mcp_w.KONFIG)
+statefiles.remove(_mcp_w.KONFIG)
 _mcp_w.KONFIG = _konfig_alt
 
 

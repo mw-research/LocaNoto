@@ -106,8 +106,13 @@ pruef("the re-embedding job works in a window over midnight, and only there",
       _reembed.window("20-6", _at(23)) and _reembed.window("20-6", _at(3))
       and not _reembed.window("20-6", _at(12)) and _reembed.window("", _at(12))
       and _reembed.window("9-17", _at(10)) and not _reembed.window("9-17", _at(18)))
-pruef("without Postgres it says that a new model means reading again",
-      _reembed.main([]) == 1)
+_db_active = _reembed.database.active
+_reembed.database.active = lambda: False
+try:
+    pruef("without Postgres it says that a new model means reading again",
+          _reembed.main([]) == 1)
+finally:
+    _reembed.database.active = _db_active
 import hintergrund as _hg_re
 pruef("it is a job the admin page can start",
       _hg_re.LAEUFE.get("vektoren", ("",))[0] == "reembed.py")

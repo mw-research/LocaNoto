@@ -218,7 +218,7 @@ pruef("Werkzeugergebnisse gelten nicht mehr 'wie der <context>'",
 import mcp as _mcp_pi
 _alt_pi = _mcp_pi.KONFIG
 _mcp_pi.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp_pi.json")
-io.open(_mcp_pi.KONFIG, "w", encoding="utf-8").write(json.dumps({
+statefiles.write(_mcp_pi.KONFIG, json.dumps({
     "info": {"transport": "exchange", "anmeldung": "basic",
              "postfach": "info@test.de", "persoenlich": False,
              "automatisch": True, "hinweis_anhaengen": False, "textfeld": "body",
@@ -238,5 +238,5 @@ pruef("eine neue Mail, Weiterleiten und Antwort an alle warten auf einen Mensche
       and _mcp_pi.braucht_bestaetigung("info", "antwort_senden",
                                        {"kennung": "m1", "body": "x", "allen": True}))
 _mcp_pi.AUTOMATISCH_SENDEN = False
-os.remove(_mcp_pi.KONFIG)
+statefiles.remove(_mcp_pi.KONFIG)
 _mcp_pi.KONFIG = _alt_pi
