@@ -1,8 +1,6 @@
 """User accounts together with their storage account (OpenCloud).
 
-The Streamlit pages did these steps one after another in three places
-(own password, admin password, new user, delete user). Here they are
-functions, so every front end does all of them:
+Each step is a function, so every front end does all of them:
 
     create(name, password, role, by)        user + personal room + storage account
     left_over(name)                         what a former account of the name left

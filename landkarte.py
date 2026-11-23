@@ -25,7 +25,7 @@ BASIS = os.path.dirname(os.path.abspath(__file__))
 # hier ein -- der Selbsttest besteht darauf.
 SCHICHT = {
     "Einstiege": (
-        "app", "verwaltung", "api", "ingest", "ingest_images", "abgleich",
+        "api", "ingest", "ingest_images", "abgleich",
         "einrichten", "sicherung", "selbsttest", "lasttest", "spiegeln",
         "altbestand", "websuche", "uebersetzen",
         "create_user", "create_token", "manage_users", "bestandsliste",
@@ -43,7 +43,7 @@ SCHICHT = {
         "aufnehmen",
         "lesen", "tables", "textutils", "vision", "bildtext", "sqldb", "db_files",
         "sqlpruefung", "sqlquellen", "chats", "feedback", "notzugang",
-        "prompts", "presets", "quellticket", "hintergrund", "envcheck", "mcp",
+        "prompts", "presets", "hintergrund", "envcheck", "mcp",
         "postfach", "ocr", "answering", "doc_actions", "web_sources",
         "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
         "auth", "sicherheit", "datentraeger", "workspace_notes",

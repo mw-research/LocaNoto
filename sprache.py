@@ -17,13 +17,13 @@ Reihenfolge ein, oder mit {0}, {1} ... in einer anderen. Ein Muster
 braucht festen Text neben den Platzhaltern -- eines nur aus {} passte
 auf alles.
 
-WELCHE SPRACHE GILT, haelt dieser Faden. Streamlit fuehrt jede Sitzung
-in einem eigenen Faden aus, und die Schnittstelle jede Anfrage: setze()
-am Anfang eines Laufs genuegt, und niemand reicht die Sprache durch.
+WELCHE SPRACHE GILT, haelt dieser Faden. Der Server fuehrt jede Anfrage
+in einem eigenen Faden aus: setze() am Anfang genuegt, und niemand
+reicht die Sprache durch.
 Gespeichert wird die Wahl je Nutzer in config/sprachen.json -- keine
 Berechtigung, nur eine Vorliebe, deshalb ohne Signatur.
 
-Was noch nicht uebersetzt ist: python uebersetzen.py --fehlend
+Was noch nicht uebersetzt ist: python uebersetzen.py --english
 """
 import json
 import os

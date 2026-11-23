@@ -100,18 +100,6 @@ def pruefe_pfad(p):
     return True, "Verknüpft."
 
 
-def setze_pfad(p):
-    """Legt den Ordner fest. (ok, meldung)."""
-    ok, meldung = pruefe_pfad(p)
-    if not ok:
-        return False, meldung
-    try:
-        dateisperre.schreibe_atomar(PFAD_DATEI, (p or "").strip())
-    except OSError as e:
-        return False, f'Speichern fehlgeschlagen: {e}'
-    _zwischenspeicher.clear()
-    return True, meldung
-
 ENDUNGEN = (".xlsx", ".xlsm", ".csv", ".tsv")
 
 # Ab dieser Zeilenzahl gilt ein Blatt als gross. Solche Blaetter stehen im
@@ -740,11 +728,6 @@ def sichtbar(eintraege, benutzer, notzugang=()):
         if offen is not None:
             aus.append(offen)
     return aus
-
-
-def raeume_von(eintraege):
-    """Die Raeume, aus denen Listen im Katalog stehen."""
-    return sorted({e.get("raum") or _ALLGEMEIN for e in eintraege})
 
 
 def bereiche(eintraege):

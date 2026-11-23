@@ -3,8 +3,8 @@
 # Drei Container, ein Volume fuer den Bestand:
 #
 #     chroma   die Vektordatenbank, auf /app/data/chroma_db
-#     app      die Oberflaeche (Streamlit)
-#     api      die HTTP-Schnittstelle (uvicorn)
+#     app      Oberflaeche und Schnittstelle (server.py)
+#     api      die alte HTTP-Schnittstelle (api.py)
 #
 # Warum alle drei in EINEM Pod und nicht als getrennte Dienste: sie greifen
 # auf denselben Bestand zu, und der liegt auf einem Volume, das genau ein
@@ -63,15 +63,12 @@ spec:
   #
   #   1. Das Datenvolume ist ReadWriteOnce -- ein zweiter Pod koennte es
   #      nicht einhaengen.
-  #   2. Streamlit haelt den Sitzungszustand im Arbeitsspeicher. Ein
-  #      zweiter Pod braeuchte klebende Sitzungen, sonst landet jeder
-  #      zweite Klick bei einer Instanz, die den Chat nicht kennt.
+  #   2. Stichwortindex und Hintergrundlaeufe liegen auf diesem Volume
+  #      und in diesem Pod.
   #   3. Die Kennungen laufender Prozesse (PID) gelten nur auf ihrem
   #      Rechner.
   #
-  # Was mehrere Instanzen moeglich machen wuerde: Stichwortindex und
-  # Sitzungszustand in eine Server-Datenbank verlegen. Das ist ein Umbau,
-  # keine Einstellung.
+  # Mehrere Instanzen: k8s/enterprise/ mit Postgres.
   replicas: 1
   strategy:
     # Recreate: beim Ausrollen darf nicht kurz ein zweiter Pod dasselbe
@@ -139,8 +136,8 @@ spec:
         # --- OBERFLAECHE ---
         - name: app
           image: locanoto:lokal
-          command: ["streamlit", "run", "app.py",
-                    "--server.port=8501", "--server.address=0.0.0.0"]
+          command: ["uvicorn", "server:app",
+                    "--host", "0.0.0.0", "--port", "8501"]
           envFrom:
             - configMapRef:
                 name: locanoto
@@ -155,13 +152,13 @@ spec:
               mountPath: /app/config
           readinessProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/ready
               port: 8501
             initialDelaySeconds: 15
             periodSeconds: 10
           startupProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/health
               port: 8501
             # Grosszuegig: beim ersten Start laedt der Reranker sein Modell
             # aus dem Abbild, und der Stichwortindex baut sich neu auf,

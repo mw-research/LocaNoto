@@ -58,7 +58,7 @@ _client = None
 
 # EINE SPERRE UM DAS ERZEUGEN.
 #
-# Streamlit gibt jeder Sitzung einen eigenen Faden im SELBEN Prozess.
+# Der Server beantwortet Anfragen in Faeden im SELBEN Prozess.
 # Fragen drei Leute gleichzeitig, laufen drei Faeden durch client() --
 # und ohne Sperre sehen alle drei "_client is None" und bauen jeder
 # einen PersistentClient auf denselben Pfad. Genau der Fall, den der
@@ -129,10 +129,9 @@ def collection(anlegen=True):
 
 # Gefundene Sammlungen behalten.
 #
-# get_collection() ist ein HTTP-Aufruf. Streamlit fuehrt das Skript bei
-# JEDEM Klick von oben nach unten aus, und die Sammlungen werden dabei an
-# mehreren Stellen aufgeloest -- gemessen 13 bis 16 Rundlaeufe je Klick,
-# nur um Handles zu holen, die sich nie aendern.
+# get_collection() ist ein HTTP-Aufruf, und eine Frage loest die
+# Sammlungen an mehreren Stellen auf -- ohne Ablage viele Rundlaeufe
+# je Frage, nur um Handles zu holen, die sich nie aendern.
 #
 # Nur ERFOLGE werden behalten. Ein None -- die Sammlung gibt es noch nicht
 # -- darf nicht haengen bleiben, sonst waere ein Raum nach seinem ersten

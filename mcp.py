@@ -592,10 +592,6 @@ def _aufruf_text(argumente):
     return json.dumps(argumente, ensure_ascii=False)[:2000]
 
 
-def ist_connector(server):
-    return _angaben(server).get("art") == "connector"
-
-
 ANMELDUNGEN = {
     "keine": "keine Anmeldung -- der Server regelt es selbst",
     "basic": "Benutzer und Passwort (Authorization: Basic)",

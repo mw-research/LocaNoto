@@ -107,10 +107,10 @@ spec:
       #   fsGroup: 1000
       initContainers:
         - name: wiederanlauf
-          image: ghcr.io/mw-research/locanoto:schlank
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           # Ohne das holt der Knoten das Abbild NIE wieder: bei einem
           # Namen ohne :latest ist die Vorgabe IfNotPresent, und
-          # ":schlank" zeigt bei jedem Bau woandershin. Der Knoten
+          # ":enterprise-schlank" zeigt bei jedem Bau woandershin. Der Knoten
           # behaelt seine alte Fassung -- im Protokoll steht dann
           # "already present on machine", und man sucht den Fehler im
           # Programm, waehrend die Behebung laengst gebaut ist.
@@ -141,7 +141,7 @@ spec:
               mountPath: /var/lib/locanoto
       containers:
         - name: app
-          image: ghcr.io/mw-research/locanoto:schlank
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
@@ -170,13 +170,13 @@ spec:
               memory: 4Gi
           startupProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/health
               port: 8501
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/ready
               port: 8501
             periodSeconds: 15
           volumeMounts:

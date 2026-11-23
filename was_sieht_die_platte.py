@@ -251,7 +251,7 @@ if os.path.exists(fb):
     zeile("Rueckmeldungen", offen > 0,
           f"{offen} Zeilen im Klartext." if offen else
           "Alle verschluesselt.",
-          "In der Seitenleiste neu verschluesseln." if offen else "")
+          "Admin > Rueckmeldungen > Neu verschluesseln." if offen else "")
 
 # --- 4b. Die Abzuege ---
 #

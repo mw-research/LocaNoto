@@ -1,7 +1,7 @@
 """Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt.
 
-Streamlit bedient alle Sitzungen in einem Prozess, jede in einem eigenen
-Faden. Wer eine Datei liest, im Speicher aendert und zurueckschreibt,
+Der Server bedient alle Anfragen in einem Prozess, jede in einem
+eigenen Faden. Wer eine Datei liest, im Speicher aendert und zurueckschreibt,
 ueberschreibt dabei, was ein anderer Faden inzwischen geschrieben hat.
 Dazu kommen Skripte wie create_user.py, die per kubectl exec in einem
 eigenen Prozess laufen.

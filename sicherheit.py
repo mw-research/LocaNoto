@@ -102,7 +102,7 @@ def lage():
 
 
 def kurz():
-    """Eine Zeile fuer die Seitenleiste."""
+    """Eine Zeile fuer die Verwaltung."""
     z = lage()
     offen = [n for n, ok, _t in z if not ok]
     if not offen:

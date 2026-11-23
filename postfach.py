@@ -572,7 +572,7 @@ class Postfach:
         """(Benutzer, Passwort) aus dem Kopf der Sitzung.
 
         Gespeichert wird in der Sitzung der fertige Kopf und nicht das
-        Passwort -- so steht es in app.py, und so bleibt es. EWS
+        Passwort (siehe sessions.py). EWS
         braucht beides einzeln, also wird hier zurueckgerechnet. Das
         Passwort entsteht dabei nur als lokale Variable dieses Aufrufs.
         """

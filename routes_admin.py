@@ -1,5 +1,4 @@
-"""API: the admin area -- everything verwaltung.py and the admin parts of
-the chat page offer.
+"""API: the admin area -- everything the admin pages offer.
 
 Users        GET/POST /admin/users, PUT .../role, PUT .../password,
              DELETE /admin/users/{name}, POST /admin/users/sign,

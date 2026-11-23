@@ -1,7 +1,7 @@
 """Lange Laeufe aus der Oberflaeche anstossen und beobachten.
 
 Eine Bildbeschreibung dauert Minuten, ein vollstaendiger Ingest Stunden.
-Beides im Streamlit-Ablauf auszufuehren hiesse, den Nutzer vor einem
+Beides in einer Anfrage auszufuehren hiesse, den Nutzer vor einem
 Fortschrittsbalken sitzen zu lassen, der eine Sitzung nicht ueberlebt --
 ein Seitenwechsel, ein Neuladen, und der Lauf ist weg.
 

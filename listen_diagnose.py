@@ -47,7 +47,7 @@ print()
 print("=" * 64)
 print("2. WELCHE BLAETTER WERDEN UEBERHAUPT ANGEFRAGT?")
 print("=" * 64)
-# Der Filter aus app.py: als "gross" markierte Blaetter bleiben aussen vor,
+# Der Filter der Suche: als "gross" markierte Blaetter bleiben aussen vor,
 # solange der Haken fuer grosse Listen nicht gesetzt ist.
 grosse = [x for x in e if x.get("gross")]
 klein = [x for x in e if not x.get("gross")]

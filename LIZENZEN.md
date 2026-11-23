@@ -1,6 +1,6 @@
 # Lizenzen der Abhängigkeiten
 
-172 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
+168 Pakete aus `requirements.txt`. Die Angaben stammen von PyPI und
 gelten für die jeweils gepinnte Fassung.
 
 LocaNoto selbst steht unter AGPL-3.0 (siehe `LICENSE`).
@@ -66,14 +66,12 @@ Sie ist keine Rechtsauskunft.
 | `aiohappyeyeballs` | 2.7.1 | Python Software Foundation License |
 | `aiohttp` | 3.14.3 | Apache-2.0 AND MIT |
 | `aiosignal` | 1.4.0 | Apache Software License |
-| `altair` | 6.2.2 | BSD License |
 | `annotated-doc` | 0.0.5 | MIT |
 | `annotated-types` | 0.8.0 | MIT License |
 | `anyio` | 4.14.2 | MIT |
 | `async-timeout` | 5.0.1 | Apache Software License |
 | `attrs` | 26.1.0 | MIT |
 | `bcrypt` | 5.0.0 | Apache Software License |
-| `blinker` | 1.9.0 | MIT License |
 | `build` | 1.5.0 | MIT |
 | `cached-property` | 2.0.1 | BSD License |
 | `charset-normalizer` | 3.5.0 | MIT |
@@ -127,7 +125,6 @@ Sie ist keine Rechtsauskunft.
 | `mmh3` | 5.2.1 | MIT License |
 | `mpmath` | 1.3.0 | BSD License |
 | `multidict` | 6.7.1 | Apache License 2.0 |
-| `narwhals` | 2.24.0 | MIT |
 | `networkx` | 3.4.2 | BSD License |
 | `numpy` | 2.2.6 | BSD License |
 | `oauthlib` | 3.3.1 | BSD-3-Clause |
@@ -147,12 +144,10 @@ Sie ist keine Rechtsauskunft.
 | `propcache` | 0.5.2 | Apache Software License |
 | `protobuf` | 7.35.1 | 3-Clause BSD License |
 | `psutil` | 7.2.2 | BSD-3-Clause |
-| `pyarrow` | 24.0.0 | Apache-2.0 |
 | `pybase64` | 1.5.0 | BSD-2-Clause |
 | `pydantic` | 2.13.4 | MIT |
 | `pydantic-settings` | 2.15.0 | MIT License |
 | `pydantic_core` | 2.46.4 | MIT |
-| `pydeck` | 0.9.3 | Apache License 2.0 |
 | `Pygments` | 2.20.0 | BSD-2-Clause |
 | `PyJWT` | 2.15.1 | MIT License |
 | `PyPika` | 0.51.1 | Apache Software License |
@@ -184,13 +179,11 @@ Sie ist keine Rechtsauskunft.
 | `six` | 1.17.0 | MIT License |
 | `sniffio` | 1.3.1 | Apache Software License; MIT License |
 | `starlette` | 1.3.1 | BSD-3-Clause |
-| `streamlit` | 1.61.1 | Apache-2.0 |
 | `sympy` | 1.14.0 | BSD License |
 | `tenacity` | 9.1.4 | Apache Software License |
 | `threadpoolctl` | 3.6.0 | BSD License |
 | `tiktoken` | 0.13.0 | MIT License … |
 | `tokenizers` | 0.22.2 | Apache Software License |
-| `toml` | 0.10.2 | MIT License |
 | `tomli` | 2.4.1 | MIT |
 | `torch` | 2.13.0 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT |
 | `torchvision` | 0.28.0 | BSD |
@@ -205,7 +198,6 @@ Sie ist keine Rechtsauskunft.
 | `uuid_utils` | 0.17.0 | BSD-3-Clause |
 | `uvicorn` | 0.52.2 | BSD-3-Clause |
 | `uvloop` | 0.22.1 | Apache Software License; MIT License |
-| `watchdog` | 6.0.0 | Apache Software License |
 | `watchfiles` | 1.2.0 | MIT License |
 | `websocket-client` | 1.9.0 | Apache Software License |
 | `websockets` | 16.1.1 | BSD-3-Clause |

@@ -205,15 +205,6 @@ def unseen(user):
     return [t for t in tasks(user) if t["state"] != "running" and not t.get("seen")]
 
 
-def mark_seen(user, task_ids=None):
-    with dateisperre.gesperrt(_path(user)):
-        items = _load(user)
-        for t in items:
-            if t["state"] != "running" and (task_ids is None or t["id"] in task_ids):
-                t["seen"] = True
-        _save(user, items)
-
-
 def remove(user, task_id):
     with dateisperre.gesperrt(_path(user)):
         items = _load(user)

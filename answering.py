@@ -1,10 +1,9 @@
 """The whole way from a question to a saved answer, as a stream of events.
 
-The Streamlit page grew this flow inside its own code: images, probes,
-search, SQL, lists, tools (mailboxes, web search), the streamed answer,
-partial saves, the chat title. The API had only a part of it. This module
-is the one place for all of it, so the API and any other front end answer
-the same question the same way.
+Images, probes, search, SQL, lists, tools (mailboxes, web search), the
+streamed answer, partial saves, the chat title -- all in one place, so
+the web pages, the API and any other front end answer the same question
+the same way.
 
     for event, data in answering.ask("anna", answering.Request(question="...")):
         ...
@@ -42,8 +41,7 @@ and their short ids still resolve, in any pod.
 
 CREDENTIALS. Mailbox credentials come with the request (Request.mailboxes)
 and are only held for its duration -- never written, never logged, never
-put into a chat. That is the same rule the Streamlit page follows with its
-session memory, and the only one that holds with several pods.
+put into a chat. It is the only rule that holds with several pods.
 
 PERMISSIONS are checked here, not by the caller: rooms through
 pipeline.sammlungen (membership and confirmed emergency access), the

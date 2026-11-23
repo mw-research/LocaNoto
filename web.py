@@ -80,6 +80,9 @@ TEXTS = {
     "Sign in": "Anmelden", "Sign out": "Abmelden", "Name": "Name",
     "Password": "Passwort", "Sign in with the company account":
         "Mit dem Firmenkonto anmelden", "or": "oder",
+    "Source code": "Quelltext",
+    "lines are stored in the clear.": "Zeilen liegen im Klartext.",
+    "Encrypt again": "Neu verschluesseln",
     "Chat": "Chat", "Documents": "Dokumente", "Web sources": "Quellen im Netz",
     "Settings": "Einstellungen", "Admin": "Admin", "New chat": "Neuer Chat",
     "Ask a question about your documents ...":

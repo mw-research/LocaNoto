@@ -203,20 +203,21 @@ jobs:
 
       # The enterprise image must also carry the server's dependencies
       # and start it: a missing package would only show as a crash loop
-      # in the cluster.
+      # in the cluster. Started without a command, so the image's own
+      # CMD is what is checked.
       - name: Server im Abbild pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main'
         run: |
           docker run --rm "$ABBILD" python -c "import psycopg, jwt, jinja2, markdown_it, multipart, pymssql"
-          docker run -d --name probe -p 8700:8700 -e COOKIE_SECURE=0 \
+          docker run -d --name probe -p 8501:8501 -e COOKIE_SECURE=0 \
             -e LOCANOTO_SCHLUESSEL="$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" \
-            "$ABBILD" uvicorn server:app --host 0.0.0.0 --port 8700
+            "$ABBILD"
           for i in $(seq 1 60); do
-            curl -fs http://127.0.0.1:8700/api/v1/ready && break
+            curl -fs http://127.0.0.1:8501/api/v1/ready && break
             sleep 2
           done
-          curl -fs http://127.0.0.1:8700/api/v1/ready
-          curl -fs -o /dev/null http://127.0.0.1:8700/login
+          curl -fs http://127.0.0.1:8501/api/v1/ready
+          curl -fs -o /dev/null http://127.0.0.1:8501/login
           docker logs probe | tail -20
           docker rm -f probe
 

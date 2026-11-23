@@ -181,7 +181,3 @@ def embed_batch(client, texts, model, batch_size=None, keep_alive=None,
     return out
 
 
-def embed_one(client, text, model, keep_alive=None):
-    vectors = embed_batch(client, [text], model, batch_size=1,
-                          keep_alive=keep_alive)
-    return vectors[0] if vectors else None

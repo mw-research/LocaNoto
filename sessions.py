@@ -216,12 +216,6 @@ def login_blocked(name, address):
                for k, limit in _login_limits(name, address))
 
 
-def login_failed(name, address):
-    window = LOGIN_WINDOW_MINUTES * 60
-    for k, limit in _login_limits(name, address):
-        hit(k, limit, window)
-
-
 def login_attempt(name, address):
     """Count an attempt BEFORE the password is checked. False: over limit.
 

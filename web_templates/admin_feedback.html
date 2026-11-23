@@ -8,6 +8,12 @@
     <button type="submit">{{ t('Archive') }}</button>
   </form>
   <a href="/api/v1/admin/feedback/download">{{ t('Download') }}</a>
+  {% if plain %}
+  <p class="muted">{{ plain }} {{ t('lines are stored in the clear.') }}</p>
+  <form hx-post="/ui/admin/feedback/reencrypt" class="inline">
+    <button type="submit">{{ t('Encrypt again') }}</button>
+  </form>
+  {% endif %}
 </section>
 {% for title, rows in ((t('Questions without an answer'), empty), (t('Not helpful'), down)) %}
 <section class="card">

@@ -14,9 +14,9 @@
 # die drei Objekte darunter. Eng gefasst: nur exec, nur in diesem
 # Namensraum.
 #
-# Die Alternative ohne RBAC: die Knoepfe in der Seitenleiste unter
-# "Nachtragen und neu einlesen". Die Laeufe sind dort abgekoppelt und
-# ueberleben ein Neuladen der Oberflaeche -- nur eben nicht ohne einen
+# Die Alternative ohne RBAC: die Knoepfe auf der Seite Admin unter
+# "Hintergrundlaeufe". Die Laeufe sind dort abgekoppelt und
+# ueberleben ein Neuladen der Seite -- nur eben nicht ohne einen
 # Menschen, der sie anstoesst.
 ---
 apiVersion: v1

@@ -136,7 +136,7 @@ def _api_bewerte(paare):
     statt Nullen zurueckzugeben: eine Rangfolge, in der jeder Kandidat den
     Wert 0.0 hat, ist keine Rangfolge, sondern Zufall -- und sie faellt
     niemandem auf, weil kein Fehler erscheint. Ein Abbruch dagegen laesst
-    die Fusionsreihenfolge stehen und steht in der Seitenleiste.
+    die Fusionsreihenfolge stehen und steht in den Einstellungen.
 
     Eine Anfrage traegt genau eine query. Die Sonde ist bei einer
     Multi-Query-Suche aber je Kandidat verschieden, deshalb wird nach Sonde
@@ -381,13 +381,13 @@ class Bewerter:
     # --- Anzeige ---
 
     def beschreibung(self):
-        """Der Zustand von jetzt, fuer die Seitenleiste.
+        """Der Zustand von jetzt, fuer die Einstellungen.
 
         Zwei Angaben, und der Unterschied ist die Frage aus dem Betrieb:
         was GILT (ist ein Endpunkt eingerichtet, ist ein Ausfall
         vermerkt) und was beim letzten Bewerten GESCHEHEN ist. Das erste
         allein laesst offen, ob der Endpunkt je gerufen wurde -- gemeldet
-        wurde genau das: "laut Seitenleiste haengt der Reranker am
+        wurde genau das: "laut Anzeige haengt der Reranker am
         Endpunkt, aber dort entsteht keine Last".
         """
         return self._lage() + self._zuletzt()
@@ -448,8 +448,8 @@ def lade_bewerter():
     Endpunkt ausfaellt oder zurueckkommt.
 
     Die Probe beim Start bleibt, aber sie ENTSCHEIDET nichts mehr. Sie
-    zeigt einen falschen Pfad oder einen falschen Schluessel sofort in der
-    Seitenleiste, statt erst bei der ersten Frage eines Nutzers. Schlaegt
+    zeigt einen falschen Pfad oder einen falschen Schluessel sofort in den
+    Einstellungen, statt erst bei der ersten Frage eines Nutzers. Schlaegt
     sie fehl, weil das Modell gerade aufwacht, ist das ein Hinweis -- und
     beim naechsten Aufruf ein neuer Versuch.
     """
@@ -458,10 +458,9 @@ def lade_bewerter():
 
     b = Bewerter()
     if RERANKER_BASE_URL:
-        # Die Probe laeuft NEBENHER. Vorher blockierte sie den ersten
-        # Skriptlauf von Streamlit und den Import von api.py um bis zu
-        # RERANKER_TIMEOUT Sekunden -- bei einem kalten Modellserver also
-        # jeden Containerstart. Bis sie durch ist, gilt der Endpunkt als
+        # Die Probe laeuft NEBENHER. Sonst blockierte sie den Start des
+        # Servers um bis zu RERANKER_TIMEOUT Sekunden -- bei einem kalten
+        # Modellserver also jeden Containerstart. Bis sie durch ist, gilt der Endpunkt als
         # unbestaetigt und die Rangfolge kommt aus der Fusion.
         import time
         b._ausfall_zeit = time.time() - RERANKER_ERNEUT

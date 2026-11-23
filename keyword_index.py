@@ -141,27 +141,6 @@ def journal_modus(con=None):
             con.close()
 
 
-def schema_aktuell(con=None):
-    """Hat die Tabelle die Raumspalte?
-
-    Ein Index aus der Zeit vor den Raeumen hat sie nicht. Er ist dann nicht
-    kaputt, aber er kann nicht nach Raum filtern -- und ein Stichworttreffer
-    ohne Raumfilter waere genau das Leck, das die Raeume schliessen sollen.
-    """
-    if database.active():
-        return True
-    own = con is None
-    con = con or connect()
-    try:
-        vorhanden = {r[1] for r in con.execute("PRAGMA table_info(chunks)")}
-        return "raum" in vorhanden
-    except sqlite3.Error:
-        return False
-    finally:
-        if own:
-            con.close()
-
-
 def passt_zu(paare, con=None):
     """(passt, im_index, in_sammlungen).
 

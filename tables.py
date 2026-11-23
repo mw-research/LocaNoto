@@ -4,10 +4,8 @@ Zwei Gruende fuer dieses Modul:
 
 1. Die Ueberschriftenzeile ueber einer Tabelle ist der wirksamste
    Retrieval-Anker im Korpus -- sie enthaelt in aller Regel Nummer und
-   Titel der Tabelle. ingest.py stellte sie voran, der Upload-Pfad in
-   app.py nicht. Ueber die Oberflaeche hochgeladene Dokumente bekamen
-   dadurch schlechtere Chunks als die per Skript eingelesenen. Beide Pfade
-   rufen jetzt dieselbe Funktion.
+   Titel der Tabelle. ingest.py und der Upload rufen dieselbe
+   Funktion und stellen sie voran.
 
 2. to_markdown() kann sehr grosse Chunks erzeugen -- in Tests einzelne
    Tabellen von ueber 60 000 Zeichen, also rund 15 000 Token. Ein einzelner

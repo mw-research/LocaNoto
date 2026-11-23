@@ -97,10 +97,6 @@ def verfuegbar():
     return _zustand
 
 
-def ist_bild(name):
-    return str(name or "").lower().endswith(BILD_ENDUNGEN)
-
-
 def oeffne(pfad):
     """Ein Dokument als PDF. Bilddateien werden dabei umgewandelt.
 

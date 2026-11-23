@@ -14,5 +14,6 @@
   <p class="or">{{ t('or') }}</p>
   <a class="button wide" href="/api/v1/auth/oidc/login?next={{ next|urlencode }}">{{ t('Sign in with the company account') }}</a>
   {% endif %}
+  <p class="legal muted">{{ brand }} · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> · <a href="https://github.com/mw-research/LocaNoto">{{ t('Source code') }}</a></p>
 </section>
 {% endblock %}

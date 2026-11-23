@@ -11,9 +11,8 @@ USER SIDE
 
 Credentials never stay on the server. A client sends them with each
 request that needs them (or keeps them sealed in its session cookie, see
-sessions.py); here they live for the duration of a call. That is the
-rule the Streamlit page follows with its session memory, and it is the
-only one that holds when every request may reach another pod.
+sessions.py); here they live for the duration of a call. It is the
+only rule that holds when every request may reach another pod.
 
 Drafts: a tool that sends something is not run during an answer, it is
 stored as a draft in the (encrypted) chat message. send_draft runs

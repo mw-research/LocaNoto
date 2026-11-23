@@ -222,7 +222,7 @@ def ablage(raum):
     und die Unterordner wie gewohnt zu Sachgebieten werden.
 
     DER ALLGEMEINE RAUM IST DIE AUSNAHME und behaelt den Wurzelbereich.
-    Genauso legt der Upload ab (siehe app.py): dort liegt der gewachsene
+    Genauso legt der Upload ab (aufnehmen.py): dort liegt der gewachsene
     Bestand, und ein Ingest ueber data/dokumente soll ihn als "(Basis)"
     sehen und nicht als Sachgebiet "allgemein".
 

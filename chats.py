@@ -255,17 +255,3 @@ def loesche(benutzer, kennung):
             pass
 
 
-def zaehle_klartext(benutzer):
-    """Wie viele Verlaeufe noch unverschluesselt daliegen -- fuer die Anzeige."""
-    o = ordner(benutzer)
-    offen = 0
-    for name in statefiles.listdir(o):
-        if not (name.endswith(".json") or name == INDEX):
-            continue
-        try:
-            with statefiles.open(os.path.join(o, name), "rb") as f:
-                if not geheim.ist_verschluesselt(f.read(8)):
-                    offen += 1
-        except OSError:
-            pass
-    return offen

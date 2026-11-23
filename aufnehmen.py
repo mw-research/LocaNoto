@@ -4,17 +4,10 @@ Lesen, Tabellen abtrennen, Abbildungen beschreiben lassen,
 vektorisieren, in beide Indizes schreiben und die Datei ablegen --
 lokal und, wenn eingerichtet, in ownCloud.
 
-WARUM EIGEN: das stand in app.py, und app.py importiert streamlit.
-Damit war dieser Weg weder von der Schnittstelle noch vom Selbsttest
-erreichbar -- ein Masseningest ueber HTTP war nicht moeglich, und die
-teuerste Funktion der Anwendung war zugleich die einzige ungetestete.
-
-Herausgeloest wurde verbatim. Gebraucht wurden vierzehn Namen aus
-app.py, davon acht aus streamlit: sechsmal der Benutzername aus dem
-Sitzungszustand, einmal eine Fortschrittszeile, einmal eine Warnung.
-Sie sind jetzt Parameter. Vom Dateiobjekt braucht die Funktion .name
-und .getvalue() -- mehr nicht, weshalb ein Upload aus der Oberflaeche
-und einer aus einer HTTP-Anfrage hier ununterscheidbar sind.
+Benutzer, Fortschrittsanzeige und Warnungen sind Parameter. Vom
+Dateiobjekt braucht die Funktion .name und .getvalue() -- mehr nicht,
+weshalb ein Upload aus der Oberflaeche und einer aus einer HTTP-Anfrage
+hier ununterscheidbar sind.
 
 DER EINE UNTERSCHIED zwischen den Eingaengen steht in `streng`. Ein
 Raum, in den der Nutzer nicht schreiben darf, wurde bisher still durch

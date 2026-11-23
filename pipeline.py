@@ -1,12 +1,8 @@
 """Suche und Antwort -- unabhaengig von der Oberflaeche.
 
-Dieser Ablauf steckte bis hierher mitten im Streamlit-Skript: Sonden
-erzeugen, hybrid suchen, Ranglisten verschmelzen, Kontext bauen, Antwort
-holen -- verschachtelt mit st.spinner, st.caption und st.session_state.
-Damit konnte ihn nichts anderes aufrufen als die Oberflaeche selbst.
-
-Hier steht er ohne Streamlit. Was hineingeht, wird uebergeben; was
-herauskommt, sind Daten. Eine zweite Bedienung -- ein Aufruf ueber HTTP,
+Sonden erzeugen, hybrid suchen, Ranglisten verschmelzen, Kontext
+bauen, Antwort holen. Was hineingeht, wird uebergeben; was herauskommt,
+sind Daten. Eine zweite Bedienung -- ein Aufruf ueber HTTP,
 ein Skript -- benutzt dieselben Funktionen und bekommt damit auch dieselben
 Antworten. Zwei getrennte Umsetzungen wuerden auf dieselbe Frage
 verschieden antworten, und der Unterschied faellt erst auf, wenn ihn jemand

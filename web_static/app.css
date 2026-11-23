@@ -97,6 +97,7 @@ form.inline.wide { display: flex; }
 form.inline.wide input { flex: 1; min-width: 8rem; }
 .busy { opacity: .6; pointer-events: none; }
 .or { text-align: center; color: var(--muted); }
+.legal { text-align: center; font-size: .85em; margin-top: 1.5em; }
 fieldset { border: 1px solid var(--border); border-radius: 6px; margin: .5rem 0; }
 
 /* chat */

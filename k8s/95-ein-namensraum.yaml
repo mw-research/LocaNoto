@@ -149,7 +149,7 @@ spec:
         - name: app
           # Die schlanke Variante aus .github/workflows/abbild.yml:
           # torch ohne CUDA, kein Reranker-Modell im Abbild.
-          image: ghcr.io/mw-research/locanoto:schlank
+          image: ghcr.io/mw-research/locanoto:enterprise-schlank
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
@@ -165,19 +165,19 @@ spec:
             limits:
               cpu: "2"
               memory: 4Gi
-          # Streamlit braucht beim ersten Start eine Weile: Modelle
-          # laden, Index pruefen. Eine zu fruehe Probe toetet den Pod
+          # Der erste Start braucht eine Weile: Modelle laden, Index
+          # pruefen. Eine zu fruehe Probe toetet den Pod
           # und startet ihn neu, wieder und wieder -- ein CrashLoop, der
           # keiner ist.
           startupProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/health
               port: 8501
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /_stcore/health
+              path: /api/v1/ready
               port: 8501
             periodSeconds: 15
           volumeMounts:

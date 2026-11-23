@@ -1,7 +1,6 @@
 """Sources from the web: search, read, take over into the own room.
 
-The same three steps as "Quellen im Netz" on the Streamlit page, without
-the page:
+The three steps behind the page "Web sources":
 
     search(query, count=10)           -> [{nr, titel, adresse, text, anfrage}]
     read(url)                         -> plain text of the page

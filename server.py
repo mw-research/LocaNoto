@@ -2,8 +2,7 @@
 
     uvicorn server:app --host 0.0.0.0 --port 8700
 
-Everything the Streamlit pages can do is reachable here, for users and
-admins: asking (also streamed), chats, documents, workspaces, web sources,
+The web pages (web.py) and the API, for users and admins: asking (also streamed), chats, documents, workspaces, web sources,
 mailboxes and drafts, the SQL source, lists, settings, and the whole admin
 area. The interactive reference is at /api/v1/docs.
 

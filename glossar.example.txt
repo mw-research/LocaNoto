@@ -18,7 +18,7 @@
 #     FA = Fertigungsauftrag; Modul 530 Fertigungsauftraege bearbeiten
 #
 # Woher die Eintraege kommen: nicht aus dem Kopf, sondern aus dem Betrieb.
-# In der Seitenleiste steht unter "Rueckmeldungen" die Liste der Fragen, die
+# Unter Admin > Rueckmeldungen steht die Liste der Fragen, die
 # nichts gefunden haben. Genau die gehoeren hierher, zusammen mit dem Wort,
 # unter dem der Bestand die Sache fuehrt.
 #

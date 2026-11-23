@@ -185,8 +185,10 @@ def feedback_page(request: Request):
         return away
     return render("admin_feedback.html", request, nav=_nav(p, "admin"),
                   counts=feedback.zaehle(),
-                  empty=feedback.lese(grenze=30, art="leer"),
-                  down=feedback.lese(grenze=30, art="daumen_runter"),
+                  empty=feedback.lese(grenze=feedback.ANZEIGE_GRENZE, art="leer"),
+                  down=feedback.lese(grenze=feedback.ANZEIGE_GRENZE,
+                                     art="daumen_runter"),
+                  plain=feedback.klartextzeilen(),
                   archives=feedback.ablagen())
 
 
@@ -194,6 +196,13 @@ def feedback_page(request: Request):
 def feedback_archive(request: Request, p: Principal = Depends(principal)):
     _admin(p)
     feedback.archiviere()
+    return _reload("/admin/feedback")
+
+
+@router.post("/ui/admin/feedback/reencrypt")
+def feedback_reencrypt(request: Request, p: Principal = Depends(principal)):
+    _admin(p)
+    feedback.neu_verschluesseln()
     return _reload("/admin/feedback")
 
 

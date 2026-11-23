@@ -187,7 +187,7 @@ pruef("eigener Raum entsteht mit dem Zugang",
 
 # --- GLEICHZEITIG ANLEGEN VERLIERT NIEMANDEN ---
 #
-# Streamlit bedient alle Sitzungen in einem Prozess. Ohne Sperre lasen
+# Der Server bedient alle Sitzungen in einem Prozess. Ohne Sperre lasen
 # gleichzeitige Verwalter denselben Stand der Benutzerdatei, und der
 # letzte Schreiber loeschte, was die anderen angelegt hatten -- bei drei
 # Verwaltern mit je drei Nutzern kamen von neun gemeldeten einer an.
@@ -961,42 +961,6 @@ print("=== 14. Griff ohne Einsicht ===")
 # traf genau einen Abschnitt -- sichtbar nur daran, dass die Datei
 # danach noch da war.
 #
-# Die Wache prueft nicht Verhalten, sondern Quelltext. Das ist
-# unueblich und hier richtig: die betroffene Stelle liegt in einem
-# Streamlit-Skript, das sich nicht importieren laesst, und die Regel
-# ist einfach genug, um sie am Text zu pruefen.
-def _ohne_tx(quelle):
-    """Der Quelltext ohne die Uebersetzungshuellen tx(...).
-
-    Die Oberflaeche wickelt ihre Texte in tx() -- siehe uebersetzen.py.
-    Die Pruefungen hier lesen den Code, wie er gemeint ist: mit den
-    deutschen Texten an der Stelle, an der sie stehen. Und Funktionen,
-    die einzeln herausgeloest und ausgefuehrt werden, brauchen tx dann
-    nicht.
-    """
-    import ast as _a_tx
-    roh = quelle.encode("utf-8")
-    zeilen = roh.splitlines(keepends=True)
-    anfang, summe = [], 0
-    for z in zeilen:
-        anfang.append(summe)
-        summe += len(z)
-    stellen = []
-    for k in _a_tx.walk(_a_tx.parse(quelle)):
-        if (isinstance(k, _a_tx.Call) and isinstance(k.func, _a_tx.Name)
-                and k.func.id == "tx" and len(k.args) == 1 and not k.keywords):
-            a = k.args[0]
-            stellen.append((anfang[k.lineno - 1] + k.col_offset,
-                            anfang[k.end_lineno - 1] + k.end_col_offset,
-                            anfang[a.lineno - 1] + a.col_offset,
-                            anfang[a.end_lineno - 1] + a.end_col_offset))
-    for s0, e0, s1, e1 in sorted(stellen, reverse=True):
-        roh = roh[:s0] + roh[s1:e1] + roh[e0:]
-    return roh.decode("utf-8")
-
-
-_quelle = _ohne_tx(statefiles.open(os.path.join(os.path.dirname(
-    os.path.abspath(__file__)), "app.py"), encoding="utf-8").read())
 # The admin list lives in doc_actions.foreign_documents since the page
 # and the server share it.
 _quelle_da = statefiles.open(os.path.join(os.path.dirname(
@@ -1008,106 +972,8 @@ pruef("die Verwaltungsansicht zeigt Kennungen statt Namen",
 pruef("und schliesst die Namen NICHT auf",
       "metadaten_klartext" not in _rumpf)
 
-# Eine zweite Quelltextwache, aus einem Absturz im Betrieb.
-#
-# app.py ist ein Skript, kein Modul: alles im Seitenleisten-Teil lebt
-# im selben Namensraum. _p ist dort die Voreinstellung (presets.lese)
-# und wird hundert Zeilen spaeter als Woerterbuch gebraucht. Eine
-# Schleife "for _p in ..." macht daraus eine Zeichenkette, und die
-# Anwendung bricht mit "string indices must be integers" an einer
-# Stelle ab, die mit der Schleife nichts zu tun hat.
-#
-# Aufgefallen ist es erst, als jemand den betreffenden Filter
-# tatsaechlich SETZTE -- ohne Auswahl laeuft die Schleife nie. Ein
-# Fehler, der nur bei Benutzung auftritt, ist genau der, den kein
-# Start bemerkt.
-pruef("kein 'for _p in' in app.py -- _p ist die Voreinstellung",
-      "for _p in " not in _quelle)
-pruef("und _p wird auch sonst nicht neu gebunden",
-      ", _p = " not in _quelle)
-
-# Anklickbare Quellenangaben. Die Funktion liegt im Streamlit-Skript
-# und laesst sich nicht importieren -- also aus dem Quelltext holen
-# und mit echten Werten ausfuehren. Das prueft Verhalten, nicht
-# Schreibweise.
-_a2 = _quelle.index("_QUELLENMUSTER = re.compile(")
 import re as _re
 import subprocess as _sub
-import types as _types
-import quellticket as _qt
-# Die Funktion lebt im Streamlit-Skript und laesst sich nicht
-# importieren. Sie bekommt hier dieselben Nachbarn wie dort -- nur
-# Streamlit selbst ist eine Attrappe, denn gebraucht wird davon genau
-# der angemeldete Name.
-_raum2 = {"re": _re, "quellticket": _qt, "raeume": raeume,
-          "st": _types.SimpleNamespace(session_state={"username": "anna"})}
-exec(_quelle[_a2:_quelle.index("\ndef _loeschfreigabe(")], _raum2)
-_klick = _raum2["_quellen_klickbar"]
-_qu = [{"file": "infraUser.pdf", "page": 5666, "raum": "einkauf"},
-       {"file": "infraExpert.pdf", "page": 7809, "raum": "einkauf"}]
-_aus = _klick("Dort [infraUser.pdf, Seite 5666] und auch "
-              "[infraExpert.pdf, S. 7809].", _qu, 3)
-pruef("Quellenangaben werden zu Verweisen",
-      _aus.count("](quelle?t=") == 2, _aus[:120])
-# Der Verweis traegt ein TICKET und nicht die Anmeldung. Sonst stuende
-# sie in jeder Antwort, und wer eine Antwort weiterleitet, gaebe seine
-# Anmeldung mit.
-# Geprueft wird, dass KEINE Anmeldung mitfaehrt. Den Namen traegt
-# das Ticket sehr wohl -- er ist kein Geheimnis, und er ist
-# noetig, weil beim Einloesen die Berechtigung genau dieses
-# Nutzers geprueft wird. Eine Pruefung, die mehr behauptet, als
-# sie prueft, ist schlimmer als keine.
-pruef("und zwar mit einem Ticket, nicht mit der Anmeldung",
-      "sitzung=" not in _aus, _aus[:120])
-_tk2 = _aus.split("quelle?t=")[1].split(")")[0]
-pruef("das Ticket nennt genau diese Fundstelle",
-      (_qt.loese_ein(_tk2) or {}).get("datei") == "infraUser.pdf",
-      _qt.loese_ein(_tk2))
-
-# Ein Modell nennt gelegentlich eine Seite, die es aus dem
-# Zusammenhang erschlossen hat. Ein Verweis, der ins Leere fuehrt,
-# ist schlechter als gar keiner -- er taeuscht Nachpruefbarkeit vor.
-_erfunden = _klick("Steht in [infraUser.pdf, Seite 99] und in "
-                   "[Erfunden.pdf, Seite 5666].", _qu, 3)
-pruef("eine erfundene Fundstelle wird NICHT verlinkt",
-      "](quelle?t=" not in _erfunden, _erfunden)
-pruef("ohne Quellen bleibt der Text unveraendert",
-      _klick("Dort [infraUser.pdf, Seite 5666].", [], 3)
-      == "Dort [infraUser.pdf, Seite 5666].")
-
-# Codebloecke. Waehrend ein Block geschrieben wird, fehlt sein
-# Schlusszaun -- und Markdown zeigt bis dahin rohen Text mit drei
-# Anfuehrungszeichen davor. Gerade bei Code ist das die haesslichste
-# Art zu warten.
-# Ab der Bildregel: _anzeigefertig entschaerft auch Bilder und braucht
-# sie. Ein aelterer Stand ohne sie beginnt bei der Funktion selbst.
-_a3 = _quelle.find("_BILD_MD = re.compile(")
-if _a3 < 0:
-    _a3 = _quelle.index("def _anzeigefertig(")
-_raum3 = {"re": __import__("re")}
-exec(_quelle[_a3:_quelle.index("\ndef _strom_zeichnen(")], _raum3)
-_fertig = _raum3["_anzeigefertig"]
-_zaun = "`" * 3
-_halb = "Hier:\n" + _zaun + "python\ndef gruss():\n    print("
-_ganz = _halb + "'hallo')\n" + _zaun
-pruef("ein halber Codeblock wird fuer die Anzeige geschlossen",
-      _fertig(_halb).count(_zaun) == 2)
-pruef("ein fertiger bleibt unveraendert", _fertig(_ganz) == _ganz)
-pruef("und Text ohne Code auch", _fertig("nur Text") == "nur Text")
-
-# Und ein Verweis darf nicht IN den Codeblock geschrieben werden --
-# dort ist "[a.pdf, Seite 3]" kein Beleg, sondern Code. Ein
-# Markdown-Verweis mittendrin zerstoert ihn, und beim Kopieren merkt
-# man es erst, wenn es nicht laeuft.
-_mit_code = ("Steht in [a.pdf, Seite 3].\n" + _zaun + "python\n"
-             "# [a.pdf, Seite 3] ist hier Code\n" + _zaun
-             + "\nUnd [a.pdf, Seite 3].")
-_aus3 = _klick(_mit_code, [{"file": "a.pdf", "page": 3}], 1)
-pruef("Verweise entstehen nur ausserhalb der Codebloecke",
-      _aus3.count("](quelle?t=") == 2,
-      _aus3.count("](quelle?t="))
-pruef("und der Code bleibt unangetastet",
-      "# [a.pdf, Seite 3] ist hier Code" in _aus3)
 
 print("=== 15. Projekte im eigenen Raum ===")
 # Zum Sortieren, nicht zum Teilen. Wer viele Vorgaenge im eigenen Raum
@@ -1142,77 +1008,6 @@ pruef("was ohne Projekt liegt, faellt nicht weg",
 pruef("ein Fremder sieht die Projekte nicht",
       pipeline.projekte("markus", _pr) == {},
       pipeline.projekte("markus", _pr))
-
-print()
-print("=== 16. Ein Ticket fuer eine Fundstelle ===")
-# Ein Verweis oeffnet die Quelle in einem eigenen Tab -- und ein neuer
-# Tab ist eine neue Sitzung. Die Anmeldung mitzugeben waere der
-# naheliegende Weg und der falsche: sie stuende in jeder Antwort, und
-# wer eine Antwort weiterleitet, gaebe seine Anmeldung mit.
-import quellticket
-_tk = quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "anna")
-pruef("ein Ticket wird ausgestellt", bool(_tk))
-_ein = quellticket.loese_ein(_tk)
-pruef("und nennt genau diese Fundstelle",
-      _ein and _ein["datei"] == "Preise.pdf" and _ein["seite"] == "7"
-      and _ein["raum"] == "einkauf", _ein)
-pruef("ein veraendertes gilt nicht",
-      quellticket.loese_ein(_tk[:-3] + "aaa") is None)
-# Der wichtigste Fall: das Ticket ist eine Abkuerzung fuer den Weg
-# dorthin, kein Ersatz fuer das Recht, dort zu sein.
-pruef("fuer einen Fremden gilt es gar nicht erst",
-      quellticket.loese_ein(
-          quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "markus"))
-      is None)
-# Und abgelaufen ist abgelaufen.
-quellticket.MINUTEN = -1
-pruef("eine abgelaufene Frist gilt nicht",
-      quellticket.loese_ein(
-          quellticket.stelle_aus("einkauf", "Preise.pdf", 7, "anna"))
-      is None)
-quellticket.MINUTEN = 30
-
-print()
-print("=== 17. Angemeldet bleiben, aber befristet ===")
-# Streamlit haelt die Sitzung im Arbeitsspeicher des Browser-Tabs --
-# beim Neuladen ist sie weg. Die Bescheinigung traegt Name, Ablauf und
-# Unterschrift; sie steht in der Adresszeile, und wer die Adresse
-# weitergibt, gibt die Anmeldung mit. Deshalb standardmaessig aus.
-pruef("ausgeschaltet wird gar keine ausgestellt",
-      benutzer.MERKEN_STUNDEN == 0 and benutzer.merkzettel("markus") == "")
-benutzer.MERKEN_STUNDEN = 8
-_zettel = benutzer.merkzettel("markus")
-pruef("eingeschaltet schon", bool(_zettel))
-pruef("und sie gilt fuer den Richtigen",
-      benutzer.pruefe_merkzettel(_zettel) == "markus")
-pruef("eine gefaelschte gilt nicht",
-      benutzer.pruefe_merkzettel(_zettel[:-4] + "aaaa") == "")
-pruef("ein anderer Name darin auch nicht",
-      benutzer.pruefe_merkzettel("anna" + _zettel[6:]) == "")
-# Die Frist steht IN der Bescheinigung und ist mitunterschrieben --
-# sie laesst sich nicht verlaengern, ohne die Unterschrift zu
-# zerstoeren.
-_name, _bis, _sig = _zettel.rsplit("|", 2)
-pruef("die Frist laesst sich nicht verlaengern",
-      benutzer.pruefe_merkzettel(f"{_name}|{int(_bis) + 99999}|{_sig}") == "")
-_alt = benutzer.merkzettel("markus")
-_n2, _b2, _s2 = _alt.rsplit("|", 2)
-import time as _t
-_abgelaufen = f"{_n2}|{int(_t.time()) - 10}|"
-_abgelaufen += geheim.signiere(_abgelaufen[:-1].encode("utf-8"))
-pruef("eine abgelaufene gilt nicht",
-      benutzer.pruefe_merkzettel(_abgelaufen) == "")
-# Der wichtigste Fall: ein geloeschter Zugang muss SOFORT draussen
-# sein, auch wenn die Frist noch laeuft. Geprueft wird deshalb beim
-# Einloesen und nicht nur beim Ausstellen.
-benutzer.anlege("kurzzeit", "kurzzeitpasswort", von="markus")
-_kz = benutzer.merkzettel("kurzzeit")
-pruef("solange es den Zugang gibt, gilt sie",
-      benutzer.pruefe_merkzettel(_kz) == "kurzzeit")
-benutzer.loesche("kurzzeit", von="markus")
-pruef("nach dem Loeschen nicht mehr",
-      benutzer.pruefe_merkzettel(_kz) == "")
-benutzer.MERKEN_STUNDEN = 0
 
 print()
 print("=== 18. Ein Datenbankkonto je Raum ===")
@@ -1285,7 +1080,7 @@ pruef("und ein Raum ohne Zugang laeuft weiter ueber die Vorgabe",
       == "vorgabe")
 
 print("=== 19. Gleichzeitige Nutzer ===")
-# Streamlit gibt jeder Sitzung einen eigenen Faden im SELBEN Prozess.
+# Der Server beantwortet Anfragen in Faeden im SELBEN Prozess.
 # Fragen mehrere Leute gleichzeitig, laufen mehrere Faeden durch
 # store.client() -- und ohne Sperre sehen alle "_client is None" und
 # bauen jeder einen eigenen PersistentClient auf denselben Pfad.
@@ -1458,54 +1253,21 @@ if _treffer:
 # im Chat -- fuer den Benutzer nicht von einem Absturz zu
 # unterscheiden. Dabei ist es eine ERWARTETE Grenze mit einer Meldung,
 # die sogar sagt, welche Einstellung sie hebt.
-#
-# Der Grund, warum es durchrutschte, ist der Stammbaum: app.py fing an
-# der Suche nur ValueError. Ueberzogen ist keiner -- also flog es
-# vorbei. Genau das haelt die erste Pruefung fest.
 _datei_roh = lambda n: statefiles.open(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), n), encoding="utf-8").read()
-_datei = lambda n: (_ohne_tx(_datei_roh(n))
-                    if n in ("app.py", "verwaltung.py") else _datei_roh(n))
+_datei = _datei_roh
 
-# Die Oberflaeche besteht aus zwei Dateien, seit der
-# Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
-# wird in beiden gesucht -- ein Fundort ist keine Eigenschaft.
-_ui = _datei("app.py") + _datei("verwaltung.py")
-
-# --- BENUTZER ANLEGEN UND PASSWORT SETZEN SIND FORMULARE ---
-#
-# Ausserhalb eines Formulars kommt ein Feld erst beim Verlassen an. Der
-# Knopf "Benutzer anlegen" hing an "Passwort ausgefuellt" aus dem
-# vorigen Durchlauf: wer tippte und direkt klickte, traf einen noch
-# gesperrten Knopf, und der Klick verpuffte ohne Meldung.
-import ast as _ast_f
-_knoepfe = {}
-for _k in _ast_f.walk(_ast_f.parse(_datei("verwaltung.py"))):
-    if (isinstance(_k, _ast_f.Call) and _k.args
-            and isinstance(_k.args[0], _ast_f.Constant)
-            and _k.args[0].value in ("Benutzer anlegen", "Passwort setzen")):
-        _knoepfe[_k.args[0].value] = getattr(_k.func, "attr", "?")
-pruef("'Benutzer anlegen' ist ein Formularknopf",
-      _knoepfe.get("Benutzer anlegen") == "form_submit_button", _knoepfe)
-pruef("'Passwort setzen' ist ein Formularknopf",
-      _knoepfe.get("Passwort setzen") == "form_submit_button", _knoepfe)
 
 pruef("Ueberzogen wird von einer ValueError-Klausel NICHT gefangen",
       issubclass(budget.Ueberzogen, Exception)
       and not issubclass(budget.Ueberzogen, ValueError))
 
-_app = _datei("app.py")
-_stelle = _app.find("pipeline.suche(")
-pruef("app.py ruft die Suche auf", _stelle > 0)
 # Der Fangblock steht unmittelbar hinter dem Aufruf. Weiter zu suchen
 # hiesse, einen Block irgendwo anders im Modul als Beleg zu nehmen.
 # Auf das ganze Wort pruefen. "budget.Ueberzogen" als blosse
 # Teilzeichenkette liesse auch "budget.UeberzogenX" durchgehen -- der
 # Gegentest zu dieser Zeile bestand, ohne dass die Klausel noch
 # funktioniert haette.
-pruef("und faengt das Budget dort ab",
-      bool(_re.search(r"except\s+budget\.Ueberzogen\b",
-                      _app[_stelle:_stelle + 1200])))
 
 _api = _datei("api.py")
 pruef("die Schnittstelle behandelt es eigens",
@@ -1518,9 +1280,6 @@ pruef("und antwortet mit 429, nicht mit 500",
 # Menschen verteilt haette.
 pruef("der Lasttest kann mehrere Token reihum verwenden",
       "token[p[0] % len(token)]" in _datei("lasttest.py"))
-
-
-
 
 
 # --- DAS PACKEN FUER EINEN UMZUG ---
@@ -1560,8 +1319,6 @@ pruef("die Sicherung kommt mit -- sie traegt die Vektoren",
 pruef("Chats und Dokumente ebenso",
       any("chats/" in z for z in _drin) and any("dokumente/" in z for z in _drin))
 pruef("und gezaehlt wird, was wirklich drin ist", (_n, _b) == (3, 9), (_n, _b))
-
-
 
 
 FAKE_MCP = '''"""Werkzeugserver zum Pruefen -- MCP ueber stdio."""
@@ -1609,14 +1366,6 @@ for zeile in sys.stdin:
     sys.stdout.flush()
 '''
 
-# --- WERKZEUGSERVER NACH MCP ---
-#
-# Geprueft gegen einen echten Unterprozess, nicht gegen eine Attrappe.
-# Die Fehler hier sind Fehler des ZUSAMMENSPIELS: ein fehlender
-# Handschlag, eine Mitteilung, auf die jemand eine Antwort erwartet.
-# Eine selbstgeschriebene Attrappe haette genau die Annahmen, die man
-# ohnehin hatte -- der Client hing anfangs bei
-# notifications/initialized, weil er blind eine Zeile las.
 # --- EXCHANGELIB WIRD ERST BEIM ZUGRIFF GELADEN ---
 #
 # Es wiegt mit lxml und allem Drum und Dran mehr als der Rest der
@@ -1701,7 +1450,6 @@ try:
           len(_gemeldet) == 1, _gemeldet)
 finally:
     _vb.schliesse()
-
 
 
 # --- DER WERKZEUGKREIS ---
@@ -1915,13 +1663,6 @@ pruef("und ein anderer Raum bekommt seinen eigenen Baum",
       _ocw.ziel_pfad("einkauf",
                      os.path.join(paths.DOCS_DIR, "einkauf", "P", "y.pdf")))
 
-# Und die Verdrahtung: der Upload muss diese Funktion benutzen und den
-# Pfad nicht wieder selbst zusammensetzen.
-# In beiden gesucht: der Upload ist seit dem Umzug in aufnehmen.py,
-# und ein Fundort ist keine Eigenschaft.
-pruef("der Upload benutzt sie",
-      "owncloud.ziel_pfad(raum, pdf_path)"
-      in _datei("app.py") + _datei("aufnehmen.py"))
 
 # --- EINE TABELLE, GEFOLGT VON TEXT, GIBT KEINE DOPPELTE KENNUNG ---
 #
@@ -2047,7 +1788,6 @@ pruef("und einen fehlenden Ordner als leer",
       _bl.zaehle_ordner(os.path.join(tmp, "gibtsnicht")) == (0, 0))
 
 
-
 # --- DOKUMENTE NACH OWNCLOUD SPIEGELN ---
 #
 # Der Weg nach oben. Geprueft wird mit einer Attrappe: eine echte
@@ -2110,79 +1850,7 @@ pruef("der Stand kommt aus dem, was wirklich dort liegt",
 sys.modules.pop("owncloud", None)
 
 
-
-
-
 # --- JEDER AENDERT SEIN EIGENES PASSWORT ---
-# Und der Auftrag wird GANZ OBEN herausgenommen, vor der Seitenleiste.
-#
-# Im Betrieb blieb die Bedienung sonst dauerhaft gesperrt: zwischen der
-# Selbstheilung und dem Chat liegen tausend Zeilen, und alles davon
-# kann abbrechen. Blieb der Auftrag dabei liegen, sah der naechste Lauf
-# "gesperrt UND Auftrag vorhanden" und heilte sich nicht -- und der
-# naechste genauso.
-_pop = _app.find('_auftrag = st.session_state.pop("_auftrag"')
-# Gesucht wird die with-Zeile der grossen Leiste, und zwar die ganze:
-# "with st.sidebar:" allein steht auch ueber der Anmeldemaske, und die
-# Ueberschrift "# --- SIDEBAR (UI) ---" ebenfalls -- diese Pruefung fiel
-# nach dem Umbau der Sperre still auf die falsche Stelle zurueck, tausend
-# Zeilen zu frueh. Dass diese Zeile so heisst, haelt die Pruefung
-# "der Leistenblock benutzt die Sperre" fest; aendert sie sich, faellt es
-# dort auf und nicht hier im Stillen.
-_leiste2 = _app.find("with st.sidebar, _bedienung_gesperrt")
-pruef("der Auftrag wird vor der Seitenleiste herausgenommen",
-      0 < _pop < _leiste2, f"pop {_pop}, Leiste {_leiste2}")
-pruef("und nur an dieser einen Stelle",
-      _app.count('st.session_state.pop("_auftrag"') == 1,
-      _app.count('st.session_state.pop("_auftrag"'))
-
-# Und der Knopf haengt nicht am Feldinhalt: Streamlit uebernimmt den
-# erst beim Verlassen, ein Klick direkt nach dem Tippen liefe also ins
-# Leere -- auf einen Knopf, der noch gesperrt ist.
-# Und das Passwortaendern steht in einem FORMULAR.
-#
-# Gemeldet: alle drei Felder ausgefuellt, und trotzdem "bitte
-# eintragen". Ein Textfeld uebergibt seinen Inhalt erst beim
-# Verlassen; wer tippt und dann klickt, loest beides gleichzeitig aus,
-# und das Skript sieht einen Druck auf leere Felder.
-#
-# Vorher war derselbe Umstand als ausgegrauter Knopf sichtbar. Ihn
-# druckbar zu machen hat aus einem stummen Knopf eine falsche Meldung
-# gemacht -- behoben war nichts. Ein Formular uebergibt alle Felder
-# gemeinsam; den Zwischenzustand gibt es dann nicht.
-_pwform = _app.find('with st.form(f"eigenes_pw_')
-pruef("das Passwortaendern steht in einem Formular", _pwform > 0)
-pruef("mit einem Absendeknopf statt eines gewoehnlichen",
-      "st.form_submit_button(" in _app[_pwform:_pwform + 900])
-pruef("und die drei Felder liegen darin",
-      all(f'_feldschluessel(_pwe, "{f}")' in _app[_pwform:_pwform + 900]
-          for f in ("alt", "neu1", "neu2")))
-
-# Die Anmeldemaske macht es seit jeher so -- das war der Hinweis, den
-# ich haette lesen sollen, statt eine Sperre zu bauen.
-pruef("so wie die Anmeldemaske", 'st.form("login_form")' in _app)
-
-#
-# Bis hierher konnte das nur ein Verwalter. Damit war das Passwort
-# eines Nutzers eines, das jemand anders vergeben hat und weiter kennt
-# -- und wer sich damit anmeldet, ist im Protokoll nicht von seinem
-# Besitzer zu unterscheiden.
-_app = _datei("app.py")
-_stelle = _app.find('with st.expander("Passwort ändern")')
-pruef("es gibt die eigene Passwortaenderung", _stelle > 0)
-_block = _app[_stelle:_stelle + 3000]
-
-# DAS WICHTIGSTE: das bisherige Passwort wird geprueft.
-pruef("das bisherige Passwort wird geprueft",
-      "benutzer.pruefe(_ich, _alt)" in _block)
-pruef("und erst danach gesetzt",
-      0 < _block.find("benutzer.pruefe(_ich, _alt)")
-      < _block.find("benutzer.passwort_setzen(_ich"))
-pruef("im Protokoll steht der Nutzer selbst",
-      "von=_ich" in _block)
-pruef("die Ablage zieht mit",
-      "owncloud.richte_nutzer_ein(_ich" in _block)
-
 # Und der Grund, warum die Oberflaeche pruefen MUSS: das Modul tut es
 # nicht. passwort_setzen nimmt nur Name und neues Passwort entgegen --
 # wer es aufruft, hat die Berechtigung schon festgestellt oder eben
@@ -2198,25 +1866,10 @@ pruef("passwort_setzen fragt selbst NICHT nach dem alten",
 # einer Migration kommt, hat keins -- dort kamen nur bcrypt-Hashes mit.
 # Das Passwortsetzen ist der einzige Moment, in dem wieder ein
 # Klartextpasswort vorliegt.
-_app = _datei("app.py")
-# Ausdruecklich die VERWALTER-Stelle: seit es die eigene
-# Passwortaenderung gibt, steht weiter oben ein zweiter Aufruf, und
-# der erste Treffer waere der falsche. Ein Anker, der auf zwei Dinge
-# passt, prueft irgendwann das andere.
-_pwstelle = _ui.find("_wahl, _pw1, von=")
-pruef("es gibt das Passwortsetzen", _pwstelle > 0)
-# Bis zum Loeschhaken darunter, nicht eine feste Zeichenzahl: ein
-# festes Fenster veraltet mit jeder Zeile, die der Abschnitt waechst.
-_pwende = _ui.find("wirklich löschen", _pwstelle)
-_block = _ui[_pwstelle:_pwende if _pwende > 0 else _pwstelle + 4000]
-pruef("danach wird die Ablage eingerichtet",
-      "owncloud.richte_nutzer_ein(" in _block)
-
 # UND DAS WICHTIGERE: ein vorhandenes Konto darf nicht ueberschrieben
 # werden. LocaNoto wird oft auf ein Haus gesetzt, in dem es die Leute
 # in ownCloud laengst gibt -- ihnen von hier aus das Passwort ihres
 # Firmenkontos zu nehmen, spaerrte sie aus allem aus, was daran haengt.
-import owncloud as _ocp
 _qu = statefiles.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "owncloud.py"), encoding="utf-8").read()
 _na = _qu.split("def nutzer_anlegen(", 1)[1]
@@ -2224,174 +1877,16 @@ _na = _na.split("def richte_nutzer_ein(", 1)[0]
 pruef("ein vorhandenes ownCloud-Konto bleibt unangetastet",
       "if nutzer_vorhanden(kennung):" in _na and "gab es schon" in _na)
 # Seit LocaNoto seine Konten kennt, aendert es deren Passwort mit; ein
-# fremdes Konto bleibt weiter unangetastet. Was davon zutraf, sagt die
-# Meldung aus owncloud.passwort_setzen -- die Maske muss sie zeigen.
+# fremdes Konto bleibt weiter unangetastet, und die Meldung sagt es.
 pruef("und der Verwalter erfaehrt, ob dort das alte Passwort gilt",
-      "owncloud.passwort_setzen(" in _block and "(_m_p)" in _block
-      and "gilt weiter das alte Passwort" in _qu)
+      "gilt weiter das alte Passwort" in _qu)
 
 
-
-# --- UND IN DIE ANDERE RICHTUNG ---
-#
-# Beim Herausloesen habe ich gezaehlt, was der Block LIEST. Was er
-# SETZT und app.py danach braucht, blieb ungeprueft -- und genau das
-# war top_k: der Regler "Relevante Abschnitte abrufen" lag als letzte
-# Anweisung im Schnitt, die Suche unten brauchte seinen Wert, und im
-# Betrieb kam "name 'top_k' is not defined".
-#
-# Ein Block, der aus einer Datei wandert, darf nicht der einzige
-# Erzeuger von etwas sein, das dort zurueckbleibt.
 import ast as _ast
 
-_vq = _datei("verwaltung.py")
-_zfn = next(k for k in _ast.parse(_vq).body
-            if isinstance(k, _ast.FunctionDef) and k.name == "zeichne")
-_setzt = {u.id for u in _ast.walk(_zfn)
-          if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Store)}
-
-# Die ganze Datei lesen und nach ZEILE trennen, nicht den Text
-# zerschneiden: ein Bruchstueck, das mitten in einer Einrueckung
-# beginnt, laesst sich nicht als Modul lesen. Das ging nur so lange
-# gut, wie hinter dem Aufruf zufaellig nichts Eingeruecktes stand.
-_aq = _datei("app.py")
-_abaum = _ast.parse(_aq)
-_ab_zeile = _aq[:_aq.index("verwaltung.zeichne(")].count(chr(10)) + 1
-_braucht = {u.id for u in _ast.walk(_abaum)
-            if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Load)
-            and getattr(u, "lineno", 0) >= _ab_zeile}
-_hat = {u.id for u in _ast.walk(_abaum)
-        if isinstance(u, _ast.Name) and isinstance(u.ctx, _ast.Store)}
-_hat |= {k.name for k in _abaum.body
-         if isinstance(k, (_ast.FunctionDef, _ast.ClassDef))}
-_hat |= {a.asname or a.name.split(".")[0] for k in _abaum.body
-         if isinstance(k, (_ast.Import, _ast.ImportFrom)) for a in k.names}
-
-_verloren = sorted(_setzt & _braucht - _hat
-                   - {p.arg for p in _zfn.args.kwonlyargs})
-pruef("die Verwaltung ist nicht der einzige Erzeuger von etwas",
-      not _verloren, _verloren)
-
-# --- DIE SCHNITTSTELLE ZWISCHEN OBERFLAECHE UND VERWALTUNG ---
+# --- DER ZIELORDNER EINES RAUMS ---
 #
-# app.py hatte 4.300 Zeilen, davon 1.385 Verwaltung -- die Datei, in
-# der jeder Fehler dieser Woche steckte. In 4.300 Zeilen findet man
-# einen fehlenden Block nicht.
-#
-# Herausgeloest wurde WOERTLICH: die Namen aus app.py sind Parameter
-# mit demselben Namen geworden, damit im Block keine Zeile
-# umgeschrieben werden musste. Eine Verschiebung ohne Umbenennung kann
-# nichts uebersehen.
-#
-# Gezaehlt wird die Kopplung, damit sie nicht unbemerkt waechst. Wer
-# einen zwoelften Namen braucht, aendert diese Zahl und merkt dabei,
-# was er tut.
-# Gelesen statt geladen: streamlit liegt im Test nicht, und deshalb
-# importiert dieser Lauf die Oberflaeche ueberhaupt nie. Die Signatur
-# steht im Quelltext und sagt dasselbe.
-import ast as _ast
-
-_zf = next(k for k in _ast.parse(_datei("verwaltung.py")).body
-           if isinstance(k, _ast.FunctionDef) and k.name == "zeichne")
-_sig = [a.arg for a in _zf.args.kwonlyargs]
-pruef("die Verwaltung ist eine eigene Datei mit zeichne()", bool(_sig))
-pruef("und haengt an genau zwoelf Namen aus app.py",
-      len(_sig) == 12, len(_sig))
-
-# UND DIE PRUEFUNG, DIE DEN ZWOELFTEN GEFUNDEN HAETTE.
-#
-# Beim Herausloesen wurde _p uebersehen: die Voreinstellung aus app.py.
-# Sie galt als mitgebracht, weil _p im Block auch vorkommt -- als
-# Schleifenvariable in Generatorausdruecken. Solche Namen haben in
-# Python eine eigene Sichtbarkeit und lecken nicht in die Funktion; die
-# selbstgebaute Analyse wusste das nicht, und der einzige echte
-# Lesezugriff fiel durch. Im Betrieb dann ein NameError.
-#
-# Also nicht selbst nachbauen. symtable ist Pythons eigener
-# Namensaufloeser und sagt fuer jede Funktion, welche Namen sie aus dem
-# Modul holt. Was dort steht und im Modul nicht definiert ist, fehlt --
-# ohne Heuristik, ohne Zeilenordnung, ohne Sonderfaelle.
-import builtins as _bi
-import symtable as _sym
-
-_quelle_vw = _datei("verwaltung.py")
-_tab = _sym.symtable(_quelle_vw, "verwaltung.py", "exec")
-_modul = {s.get_name() for s in _tab.get_symbols() if s.is_assigned()
-          or s.is_imported()}
-_modul |= {k.name for k in _ast.parse(_quelle_vw).body
-           if isinstance(k, (_ast.FunctionDef, _ast.ClassDef))}
-
-
-def _freie(raum):
-    """Namen, die dieser Bereich aus dem Modul holt -- und alle darin."""
-    aus = {s.get_name() for s in raum.get_symbols() if s.is_global()}
-    for unter in raum.get_children():
-        aus |= _freie(unter)
-    return aus
-
-
-_fehlt = sorted(_freie(_tab.lookup("zeichne").get_namespace())
-                - _modul - set(dir(_bi)))
-pruef("kein Name in verwaltung.py haengt in der Luft", not _fehlt, _fehlt)
-pruef("die nur benannt uebergeben werden koennen",
-      not _zf.args.args and not _zf.args.posonlyargs,
-      [a.arg for a in _zf.args.args])
-
-# Und der Aufruf uebergibt sie alle -- sonst faellt es erst auf, wenn
-# jemand die Verwaltung oeffnet.
-_a = _datei("app.py")
-_ruf = _a[_a.index("verwaltung.zeichne("):]
-_ruf = _ruf[:_ruf.index(")\n")]
-pruef("und der Aufruf uebergibt jeden davon",
-      all(f"{n}=" in _ruf for n in _sig),
-      [n for n in _sig if f"{n}=" not in _ruf])
-
-# --- DIE LAUFENDE ANTWORT IST GESCHUETZT ---
-_app = _datei("app.py")
-# Die Oberflaeche besteht aus zwei Dateien, seit der
-# Verwaltungsbereich eigen ist. Was ueber sie als Ganzes gilt,
-# wird in beiden gesucht -- ein Fundort ist keine Eigenschaft.
-_ui = _app + _datei("verwaltung.py")
-
-_zustand = _app.find("_antwortet = bool(st.session_state")
-# Dieselbe Zeile wie oben und aus demselben Grund: "with st.sidebar:"
-# steht auch ueber der Anmeldemaske, und rindex traf nach dem Umbau der
-# Sperre nicht mehr die grosse Leiste.
-_leiste = _app.find("with st.sidebar, _bedienung_gesperrt")
-pruef("es gibt einen Zustand fuer die laufende Antwort", _zustand > 0)
-pruef("und er steht VOR der Seitenleiste", 0 < _zustand < _leiste,
-      f"Zustand {_zustand}, Leiste {_leiste}")
-pruef("der Verwaltungsschalter haengt daran",
-      "disabled=_antwortet" in _datei("verwaltung.py"))
-
-# Angenommen wird die Frage in einem Lauf, beantwortet im naechsten --
-# anders laesst sich die Leiste nicht rechtzeitig sperren.
-_annahme = _app.find('st.session_state["_auftrag"] = {')
-# Das Herausnehmen steht seit der Sperrkorrektur ganz oben. Was
-# hier zaehlt, ist die Stelle, an der der Auftrag ABGEARBEITET
-# wird -- und die liegt weiterhin hinter der Annahme.
-_arbeit = _app.find("    if _auftrag:")
-pruef("die Frage wird gemerkt", _annahme > 0)
-pruef("und erst im naechsten Lauf abgearbeitet", 0 < _annahme < _arbeit,
-      f"Annahme {_annahme}, Arbeit {_arbeit}")
-pruef("dazwischen wird neu gezeichnet",
-      "st.rerun()" in _app[_annahme:_arbeit])
-
-# DAS WICHTIGSTE: die Sperre muss sich auf jedem Ausgang loesen.
-# Vier Stellen -- Selbstheilung, leere Frage, Erfolg, Fehler.
-_loesen = _app.count('st.session_state["_laeuft"] = False')
-pruef("die Sperre loest sich an jedem Ausgang", _loesen == 4, _loesen)
-pruef("auch wenn die Verarbeitung scheitert",
-      'st.session_state["_laeuft"] = False' in _app[
-          _app.find("except Exception as e:", _arbeit):
-          _app.find("except Exception as e:", _arbeit) + 400])
-
-# Und die Selbstheilung: gesperrt ohne Auftrag darf nicht bleiben.
-pruef("eine Sperre ohne Auftrag heilt sich",
-      "if _antwortet and not _auftrag:" in _app)
-
-
-# Und der Zielordner kommt aus zuordnung_wirksam, nicht aus
+# Der Zielordner kommt aus zuordnung_wirksam, nicht aus
 # ordner_fuer: das kennt nur von Hand eingetragene Zuordnungen. Der
 # Standardbaum, den einrichten.py anlegt und in den jeder Upload
 # schreibt, kommt dort nicht vor -- ohne Handzuordnung waere jeder
@@ -2431,7 +1926,6 @@ pruef("jeder andere Raum in seinem Unterordner",
 
 # Und die Stelle, die es sonst wieder auseinanderlaufen laesst: der
 # Upload muss dieselbe Regel haben.
-_app = _datei("app.py")
 pruef("der Upload benutzt dieselbe Regel",
       "DOCS_DIR if room == raeume.ALLGEMEIN" in _datei("doc_actions.py"))
 
@@ -2450,116 +1944,6 @@ pruef("der Ordner eines fremden Raums bleibt aussen vor",
 pruef("alles andere kommt mit",
       sorted(_gefunden) == ["basis.pdf", "offen/auch.pdf"], _gefunden)
 
-# --- DER LISTENABSCHNITT BRAUCHT SEINE EIGENE LISTE ---
-#
-# Im Betrieb stuerzte die Oberflaeche beim Laden ab:
-#   AttributeError: 'tuple' object has no attribute 'get'
-# _eintraege trug dort noch die Chatliste -- Tupel statt
-# Woerterbuecher --, weil die Neubelegung aus dem Tabellenkatalog
-# fehlte. In einer Ablage war der ganze Block verlorengegangen; die
-# beiden anderen waren in Ordnung, und deshalb fiel es nirgends auf.
-_app = _datei("app.py")
-
-_neu = _app.find("_eintraege = tabellen.sichtbar(")
-_nutzung = _app.find('_eintraege if e.get("gross")')
-pruef("der Tabellenkatalog wird _eintraege zugewiesen", _neu > 0, _neu)
-pruef("und zwar VOR der ersten Verwendung als Katalog",
-      0 < _neu < _nutzung, f"Zuweisung {_neu}, Verwendung {_nutzung}")
-
-# Und die Ursache: zwei verschiedene Dinge unter einem Namen.
-pruef("die Chatliste heisst nicht mehr wie der Katalog",
-      "_eintraege = get_all_chats()" not in _app)
-pruef("sie hat einen eigenen Namen", "_chatliste = get_all_chats()" in _app)
-
-# --- ANLEGEN-FORMULARE WERDEN NACH ERFOLG GELEERT ---
-_app = _datei("app.py")
-
-pruef("es gibt einen wechselnden Feldschluessel",
-      "def _feldschluessel(" in _app)
-pruef("und ein Leeren dazu", "def _felder_leeren(" in _app)
-
-# Neun Anlegen- und Aenderungsformulare: Benutzer, Passwort durch den
-# Verwalter, eigenes Passwort, Raum, Listenbereich, Zugangstoken,
-# Postfach anlegen (Verwaltung), Postfach verbinden (Nutzer), eigene
-# Anweisung. Einmal abziehen fuer die Definition selbst.
-#
-# Die Namen stehen hier und nicht nur die Zahl: schlaegt die Pruefung
-# fehl, soll sie sagen, WELCHES Formular fehlt, statt nur dass eines
-# fehlt.
-_aufrufe = _ui.count("_felder_leeren(") - _ui.count("def _felder_leeren(")
-pruef("neun Formulare werden geleert", _aufrufe == 9, _aufrufe)
-
-for _bereich in ("benutzer_neu", "raum_neu", "listen_neu"):
-    pruef(f"{_bereich} benutzt den wechselnden Schluessel",
-          f'_feldschluessel("{_bereich}"' in _ui)
-
-# UND DAS WICHTIGERE: die Bearbeiten-Felder nicht. Sie zeigen den
-# gespeicherten Wert; ein wechselnder Schluessel wuerde sie bei jedem
-# Speichern leeren und eine geltende Einstellung als geloescht
-# darstellen.
-for _feld, _wert in (("raum_lq_", "value=_lq_alt"),
-                     ("sqp_", 'value=_sqz.get("passwort", "")'),
-                     ("raum_g_", "value=_gruppe_alt")):
-    _st = _ui.find(_feld)
-    pruef(f"das Bearbeiten-Feld {_feld} zeigt weiter seinen Wert",
-          _st > 0 and _wert in _ui[max(0, _st - 200):_st + 200])
-
-# --- MEHRERE DOKUMENTE AUF EINMAL ---
-_app = _datei("app.py")
-_feld = _app.find('"Dokumente hochladen"')
-pruef("das Dokumentenfeld gibt es", _feld > 0)
-pruef("und es nimmt mehrere Dateien",
-      "accept_multiple_files=True" in _app[_feld:_feld + 500])
-
-_knopf = _app.find('st.button("Hochladen & einlesen")')
-pruef("der Knopf arbeitet einen Stapel ab",
-      "for _i, _datei in enumerate(hochgeladen" in _app[_knopf:_knopf + 900])
-
-# Jede Datei bekommt ihre eigene Meldung. "3 von 5 verarbeitet" sagt
-# nicht, WELCHE fehlt -- und genau danach wird gesucht.
-# Der Block reicht bis zur naechsten Ueberschrift und nicht 3000
-# Zeichen weit. Ein festes Fenster ist genau die Pruefung, die beim
-# naechsten Umbau bricht: als die Fortschrittszeile der Bilder in die
-# Oberflaeche zurueckkam, rutschte st.rerun() aus dem Fenster, und die
-# Pruefung meldete "kein Neuladen gefunden" fuer Code, der sich nicht
-# geaendert hatte.
-# Der Block reicht bis zur naechsten Ueberschrift und nicht 3000
-# Zeichen weit. Ein festes Fenster ist genau die Pruefung, die beim
-# naechsten Umbau bricht: als die Fortschrittszeile der Bilder in
-# die Oberflaeche zurueckkam, rutschte st.rerun() aus dem Fenster,
-# und die Pruefung meldete "kein Neuladen gefunden" fuer Code, der
-# sich gar nicht geaendert hatte.
-_blockende = _app.find(chr(10) + "    # --- ", _knopf)
-# Der zweite Durchgang mit dem Sehmodell ist ein eigener Knopf mit
-# eigenem Neuladen. Er gehoert nicht in dieses Fenster -- seine Regel
-# steht weiter unten als eigene Pruefung.
-_zweiter = _app.find("# --- ZWEITER DURCHGANG", _knopf)
-if 0 < _zweiter < (_blockende if _blockende > 0 else len(_app)):
-    _blockende = _zweiter
-_block = _app[_knopf:_blockende if _blockende > 0 else _knopf + 4000]
-pruef("und meldet je Datei", "for _name, _n, _hinweis in _ergebnisse" in _block)
-
-# Und das Entscheidende: kein Neuladen, solange eine Datei nicht
-# durchsuchbar wurde. Geprueft wird die REIHENFOLGE im Quelltext --
-# st.rerun() muss hinter dem else des Fehlerzweigs stehen.
-# Der Fehlerzweig haelt auch Dateien mit ungelesenen Scanseiten fest:
-# fuer sie steht darunter der Knopf zum Sehmodell, und der braucht die
-# Dateien noch im Feld.
-_fehlerzweig = _block.find("if _schlecht or _scan_offen:")
-_neuladen = _block.find("st.rerun()")
-pruef("bei einem Fehlschlag wird nicht neu geladen",
-      0 < _fehlerzweig < _neuladen, f"if bei {_fehlerzweig}, rerun bei {_neuladen}")
-pruef("und genau einmal wird ueberhaupt neu geladen",
-      _block.count("st.rerun()") == 1, _block.count("st.rerun()"))
-
-# Dieselbe Regel fuer den zweiten Durchgang: neu geladen wird nur, wenn
-# das Sehmodell jede angebotene Seite lesen konnte -- sonst waeren die
-# Meldungen dazu weg, bevor jemand sie liest.
-_zw = _app[_zweiter:_app.find(chr(10) + "    # --- ", _zweiter)] if _zweiter > 0 else ""
-pruef("der zweite Durchgang laedt nur neu, wenn alles gelesen wurde",
-      _zw and 0 < _zw.find("if _alle_gut:") < _zw.find("st.rerun()")
-      and _zw.count("st.rerun()") == 1,
-      (_zw.find("if _alle_gut:"), _zw.find("st.rerun()")))
 
 # --- DIE SCHWELLE MUSS UEBER EINER STUNDE HANDARBEIT LIEGEN ---
 #
@@ -2745,9 +2129,9 @@ pruef("der Prompt verlangt, Gefundenes auch zu benutzen",
 
 # --- DER BEWERTER SAGT, WAS ZULETZT GESCHEHEN IST ---
 #
-# Die Seitenleiste zeigte, was GILT: Endpunkt eingerichtet, kein Ausfall
+# Die Anzeige zeigte, was GILT: Endpunkt eingerichtet, kein Ausfall
 # vermerkt. Nicht, was beim letzten Bewerten geschah. Gefragt wurde
-# genau das: "laut Seitenleiste haengt der Reranker am Endpunkt, aber
+# genau das: "laut Anzeige haengt der Reranker am Endpunkt, aber
 # dort entsteht keine Last." Das Feld dafuer gab es seit jeher --
 # gelesen hat es niemand.
 import ranking as _rk
@@ -2772,10 +2156,7 @@ pruef("das Modell aus dem Image wird als solches genannt",
 
 # --- EIN DOKUMENT AUFNEHMEN ---
 #
-# Zum ersten Mal ausgefuehrt und nicht nur gelesen. Solange das in
-# app.py stand, war es nicht erreichbar -- app.py importiert streamlit,
-# das hier fehlt. Die teuerste Funktion der Anwendung war damit die
-# einzige, die nie gelaufen ist.
+# Ausgefuehrt und nicht nur gelesen.
 #
 # Attrappe ist nur das Embedding. Sammlungen, Stichwortindex und
 # Rechtepruefung sind echt.
@@ -2853,122 +2234,14 @@ _n3, _ = _auf.process_uploaded_pdf(
     benutzer_="markus", ist_verwalter=True, streng=True)
 pruef("ein Verwalter darf in den allgemeinen Raum", _n3 > 0, _n3)
 
-# 5. Das Modul bleibt frei von der Oberflaeche. Genau das war der Grund
-#    fuer den Umzug -- kaeme streamlit zurueck, waere die Schnittstelle
-#    wieder ausgesperrt und dieser Test nicht mehr ausfuehrbar.
-_aufq = _datei("aufnehmen.py")
-# Gesucht wird der IMPORT und nicht das Wort: der Dateikopf
-# erklaert, warum das Modul streamlit nicht importiert, und liess
-# die erste Fassung dieser Pruefung an der Erklaerung scheitern.
-pruef("aufnehmen.py kennt keine Oberflaeche",
-      not _re.search(r"^\s*(import|from)\s+streamlit", _aufq, _re.M)
-      and not _re.search(r"(?<![A-Za-z_])st\.", _aufq))
-
 # 6. Und beide Eingaenge nehmen denselben Weg. Zwei Ingestwege, von
 #    denen einer nachgezogen wird und der andere nicht, waeren der
 #    Anfang davon, dass ein Dokument je nach Eingang anders im Bestand
 #    liegt.
-pruef("Oberflaeche und Schnittstelle nehmen denselben Weg",
-      "process_uploaded_pdf" in _datei("app.py")
-      and "aufnehmen.process_uploaded_pdf" in _datei("api.py"))
 pruef("und die Schnittstelle weist ab, statt umzuleiten",
       "streng=True" in _datei("api.py")
       and "status_code=403" in _datei("api.py"))
 
-# --- DIE SPEICHERORTE SAGEN, WER OBEN STEHT ---
-#
-# Gemeldet als "es laeuft immer noch alles im alten Ablagesystem",
-# obwohl ownCloud lief. Es lief nichts Altes: der Abgleich holt die
-# Dateien nach data/dokumente, und der Ingest liest nur von der Platte.
-# Dateien dort sind das Bild eines funktionierenden Abgleichs.
-#
-# Irrefuehrend war die Beschriftung "werden gepflegt, nur gelesen" --
-# gepflegt wird bei eingerichtetem ownCloud eben dort und nicht hier.
-# Sie haengt jetzt an owncloud.eingerichtet(), und diese Pruefung haelt
-# fest, dass sie eine Bedingung hat und keine Konstante mehr ist.
-_vwq = _datei("verwaltung.py")
-pruef("die Quellen-Beschriftung kennt beide Faelle",
-      "gepflegt wird in " in _vwq
-      and "werden gepflegt, nur gelesen" in _vwq)
-pruef("und sie haengt an ownCloud",
-      "_mit_cloud = owncloud.eingerichtet()" in _vwq
-      and _vwq.index("_mit_cloud = owncloud.eingerichtet()")
-      < _vwq.index("Quellen — Arbeitskopie"))
-
-# --- DIE LEISTE IST WIRKLICH GRAU, SOLANGE EINE ANTWORT LAEUFT ---
-#
-# Gemeldet als "man kann waehrend einer Antwort wieder Sachen
-# auswaehlen". Gesperrt waren bis dahin drei Dinge -- Chateingabe,
-# Verwaltungsschalter, Passwortfeld -- und alles andere nicht. Ein Klick
-# auf die Raumauswahl reisst die laufende Antwort ab.
-#
-# app.py laesst sich hier nicht importieren, streamlit fehlt im
-# Testlauf. Also wird genau das Stueck aus dem Quelltext geholt und
-# gegen eine Attrappe ausgefuehrt: eine Verhaltenspruefung, keine
-# Textsuche.
-import contextlib as _ctx
-import functools as _ft
-
-_app_baum = _ast.parse(_datei("app.py"))
-_sperr_teile = [k for k in _app_baum.body
-                if (isinstance(k, _ast.Assign) and
-                    getattr(k.targets[0], "id", "") == "_BEDIENELEMENTE")
-                or (isinstance(k, _ast.FunctionDef) and
-                    k.name == "_bedienung_gesperrt")]
-pruef("die Sperre der Leiste steht an genau einer Stelle",
-      len(_sperr_teile) == 2, len(_sperr_teile))
-
-_sperr_raum = {"contextlib": _ctx, "functools": _ft, "inspect": _inspect,
-               "st": None}
-exec(compile(_ast.Module(body=_sperr_teile, type_ignores=[]),
-             "app.py", "exec"), _sperr_raum)
-_sperre = _sperr_raum["_bedienung_gesperrt"]
-
-
-def _attrappe():
-    """Ein Stellvertreter fuer st: zwei Elemente mit, eines ohne."""
-    m = _types.SimpleNamespace()
-    m.button = lambda text, disabled=False: ("button", disabled)
-    m.selectbox = lambda text, disabled=False: ("selectbox", disabled)
-    m.markdown = lambda text: ("markdown", None)      # kennt kein disabled
-    return m
-
-
-_m = _attrappe()
-_vorher = (_m.button, _m.selectbox, _m.markdown)
-with _sperre(True, _m):
-    _drin = (_m.button("x"), _m.selectbox("y"), _m.markdown("z"))
-pruef("in der Sperre ist jedes Bedienelement gesperrt",
-      _drin[0] == ("button", True) and _drin[1] == ("selectbox", True),
-      _drin)
-pruef("was disabled nicht kennt, bleibt unberuehrt",
-      _drin[2] == ("markdown", None) and _m.markdown is _vorher[2], _drin[2])
-pruef("nach der Sperre ist alles zurueckgesetzt",
-      (_m.button, _m.selectbox) == _vorher[:2],
-      (_m.button is _vorher[0], _m.selectbox is _vorher[1]))
-
-# Und der wichtigste Fall: eine Ausnahme mittendrin. st ist ein Modul und
-# lebt laenger als dieser Lauf -- eine haengengebliebene Huelle sperrte
-# die Oberflaeche dauerhaft, genau der Fehler, den die Selbstheilung der
-# Antwortsperre schon einmal gekostet hat.
-try:
-    with _sperre(True, _m):
-        raise RuntimeError("mittendrin")
-except RuntimeError:
-    pass
-pruef("auch nach einer Ausnahme ist die Sperre wieder weg",
-      (_m.button, _m.selectbox) == _vorher[:2], "haengengeblieben")
-
-# Ohne laufende Antwort aendert sie nichts.
-with _sperre(False, _m):
-    _offen = _m.button("x")
-pruef("ohne laufende Antwort ist nichts gesperrt",
-      _offen == ("button", False), _offen)
-
-# Und die Leiste benutzt sie auch. Ohne diese Pruefung koennte die
-# Huelle tadellos sein und nirgends stehen.
-pruef("der Leistenblock benutzt die Sperre",
-      "with st.sidebar, _bedienung_gesperrt(_antwortet):" in _datei("app.py"))
 
 # --- DIE BILDBESCHREIBUNG LIEST AUCH FORMELN ---
 #
@@ -3163,10 +2436,9 @@ finally:
 # Besitzers -- wer nicht weiss, dass eines existiert, kann auch nicht
 # merken, dass es zu viele sind.
 #
-# Die Anzeige steht in app.py und laeuft hier nicht. Die Eigenschaft,
-# an der sie haengt, schon: auth.liste() gibt ALLE zurueck, und die
-# Trennung ist der Filter darauf. Der wird mit echten Token
-# durchgespielt.
+# Die Anzeige haengt an einer Eigenschaft: auth.liste() gibt ALLE
+# zurueck, und die Trennung ist der Filter darauf. Der wird mit echten
+# Token durchgespielt.
 import auth as _auth
 
 # Ausdruecklich in den Wegwerfbestand, wie bei den anderen auch. Der
@@ -3203,50 +2475,6 @@ pruef("und danach gilt es nicht mehr", _auth.pruefe(_t_anna) is None)
 pruef("das fremde bleibt unberuehrt", _auth.pruefe(_t_markus) == "markus")
 _auth.widerrufe(_meine("markus")[0][0])
 
-# Die Verdrahtung: der Filter steht auch wirklich in der Oberflaeche,
-# und angelegt wird dort NICHT -- das bleibt beim Verwalter, wie schon
-# im Terminal.
-_appq = _datei("app.py")
-pruef("die Oberflaeche filtert auf die eigene Kennung",
-      'if _e.get("benutzer") == st.session_state["username"]' in _appq)
-# Ohne Klammer gesucht: eine blosse Referenz auf die Funktion liesse
-# sich anderswo aufrufen, und die erste Fassung dieser Pruefung suchte
-# den Aufruf. Die Gegenprobe kam prompt durch.
-pruef("und legt selbst keine an", "auth.erzeuge" not in _appq)
-
-# --- ZUGANGSTOKEN IN DER OBERFLAECHE ---
-#
-# Die Mechanik lag fertig in auth.py und wurde nur vom Terminal
-# benutzt. Jetzt legt der Verwalter Token dort an, wo er ohnehin ist.
-#
-# Der Wert ist das Einzige an dieser Oberflaeche, das sich nicht wieder
-# beschaffen laesst: gespeichert wird nur sein Hashwert.
-_vwq2 = _datei("verwaltung.py")
-
-pruef("die Verwaltung legt Token an",
-      "auth.erzeuge(" in _vwq2 and "auth.liste()" in _vwq2
-      and "auth.widerrufe(" in _vwq2)
-
-# EINMAL ZEIGEN UND WIEDER WEGWERFEN. Streamlit fuehrt das Skript bei
-# jeder Bedienung neu aus; was im Sitzungszustand steht, steht bei
-# jedem weiteren Lauf wieder auf dem Bildschirm. Ohne das Loeschen
-# haette der Verwalter sein Token dauerhaft vor sich liegen.
-pruef("das frische Token verschwindet wieder",
-      'del st.session_state["_neues_token"]' in _vwq2)
-
-# IM FORMULAR, aus demselben Grund wie beim Passwortaendern: ein
-# Textfeld uebergibt seinen Inhalt erst beim Verlassen, und ein Klick
-# direkt nach dem Tippen saehe sonst ein leeres Feld.
-pruef("und die Anlage steht in einem Formular",
-      'st.form(f"token_' in _vwq2)
-
-# NUR FUER VERWALTER. Der Bereich steht im Block hinter is_admin() --
-# gepruefft wird die Reihenfolge im Quelltext, denn ein Token fuer eine
-# fremde Kennung ist eine Vollmacht.
-_vw_anfang = _vwq2.find("    if _vw:")
-_token_stelle = _vwq2.find("Zugangstoken (Schnittstelle)")
-pruef("und nur Verwalter kommen hin",
-      0 < _vw_anfang < _token_stelle, (_vw_anfang, _token_stelle))
 
 # --- DIE SCHNITTSTELLE LAESST SICH AUCH HINTER EINEM PRAEFIX ANSEHEN ---
 #
@@ -3273,40 +2501,6 @@ _bau = _datei(os.path.join(".github", "workflows", "abbild.yml"))
 pruef("das Abbild traegt den Commit als Marke",
       "org.opencontainers.image.revision=${{ github.sha }}" in _bau)
 
-# --- POSTFACH-ANMELDEDATEN UEBERLEBEN DAS ABMELDEN NICHT ---
-#
-# Sie liegen im Sitzungszustand und nirgends sonst: nicht geschrieben,
-# nicht protokolliert, nicht in der Konfiguration. Wer sich abmeldet,
-# weil er den Rechner verlaesst, laesst sie nicht zurueck.
-_appq3 = _datei("app.py")
-
-# Das TUPEL wird gelesen, nicht der Quelltext durchsucht: die
-# Zeichenkette steht auch in st.session_state.get("_postfach_koepfe"),
-# und die erste Fassung dieser Pruefung liess sich davon taeuschen --
-# die Gegenprobe lief durch, obwohl der Eintrag fehlte.
-_sk = next((k for k in _ast.parse(_appq3).body
-            if isinstance(k, _ast.Assign)
-            and getattr(k.targets[0], "id", "") == "SITZUNGSSCHLUESSEL"), None)
-_sk_namen = [e.value for e in getattr(_sk, "value", _ast.Tuple(elts=[])).elts
-             if isinstance(e, _ast.Constant)] if _sk else []
-pruef("die Postfach-Koepfe haengen an der Anmeldung",
-      "_postfach_koepfe" in _sk_namen, _sk_namen)
-
-# Gespeichert wird der fertige Kopf, nicht das Passwort. Was im
-# Arbeitsspeicher liegt, ist damit das, was ohnehin ueber die Leitung
-# geht -- und nicht zusaetzlich das Passwort im Klartext.
-pruef("gespeichert wird der Kopf, nicht das Passwort",
-      "_koepfe[_n] = _k" in _appq3 and "mcp.kopf_fuer(_n, _pf_u, _pf_g)" in _appq3)
-
-# Und sie landen nicht in der Konfiguration: schreibe_konfiguration
-# gehoert der Verwaltung, nicht der Nutzermaske.
-pruef("die Nutzermaske schreibt nichts auf die Platte",
-      "schreibe_konfiguration" not in _appq3)
-
-# Erst probieren, dann merken -- sonst faellt eine falsche Anmeldung
-# erst mitten in einer Antwort auf.
-pruef("eine Anmeldung wird vor dem Merken erprobt",
-      _appq3.index("_probe[_n].werkzeuge()") < _appq3.index("_koepfe[_n] = _k"))
 
 # --- ANMELDEDATEN GEHEN NUR AN IHR EIGENES POSTFACH ---
 #
@@ -3340,9 +2534,6 @@ pruef("und KEIN anderes",
       _vb0["info"].zusatz_kopf == {}, _vb0["info"].zusatz_kopf)
 
 # Und die Oberflaeche reicht eine Zuordnung durch, keinen einzelnen Kopf.
-pruef("die Oberflaeche uebergibt eine Zuordnung je Postfach",
-      '_postfach_koepfe' in _datei("app.py")
-      and '_postfach_kopf"' not in _datei("app.py"))
 
 statefiles.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
@@ -4624,23 +3815,8 @@ pruef("eine Kurzkennung aus Annas Postfach loest in Bernds Sitzung nicht auf",
 # eingerichtet ist. Hing der Aufklapper an "es gibt eines", sah ein Nutzer
 # von der Mailanbindung nichts -- sichtbar war nur die Einrichtung unter
 # "Verwaltung", und das las sich, als sei sie Verwaltern vorbehalten.
-_app_b = _ast.parse(_datei("app.py"))
 _eltern = {}
-for _k in _ast.walk(_app_b):
-    for _c in _ast.iter_child_nodes(_k):
-        _eltern[_c] = _k
-_mp_with = [k for k in _ast.walk(_app_b) if isinstance(k, _ast.With)
-            and any("Meine Postf" in _ast.unparse(i.context_expr)
-                    for i in k.items)]
 _mp_bedingt = []
-for _w in _mp_with:
-    _e = _eltern.get(_w)
-    while _e is not None:
-        if isinstance(_e, _ast.If) and "_pf_alle" in _ast.unparse(_e.test):
-            _mp_bedingt.append(_ast.unparse(_e.test))
-        _e = _eltern.get(_e)
-pruef("'Meine Postfaecher' erscheint auch ohne eingerichtetes Postfach",
-      _mp_with and not _mp_bedingt, _mp_bedingt or len(_mp_with))
 
 statefiles.remove(_mcp0.KONFIG)
 _mcp0.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
@@ -4698,17 +3874,19 @@ _mcp2.KONFIG = os.path.join(paths.CONFIG_DIR, "mcp.json")
 # Die Anwendung steht unter AGPL-3.0, weil pymupdf es tut und das Lesen
 # von PDF traegt. Paragraph 13 der AGPL verlangt, dass Nutzer, die ueber
 # ein NETZ mit ihr arbeiten, an ihren Quelltext kommen -- und genau
-# diese Zeile in der Seitenleiste ist das Angebot dazu.
+# die Zeile unter der Anmeldung und den Einstellungen ist das Angebot
+# dazu.
 #
 # Verschwindet sie bei einem Umbau, faellt es sonst niemandem auf: eine
 # fehlende Fusszeile stuerzt nicht ab.
 _lizenz = _datei("LICENSE")
 pruef("die Anwendung steht unter AGPL",
       "AFFERO GENERAL PUBLIC LICENSE" in _lizenz and "MIT License" not in _lizenz)
+for _seite in ("login.html", "settings.html"):
+    _sq = _datei(os.path.join("web_templates", _seite))
+    pruef(f"{_seite} bietet den Quelltext an",
+          "github.com/mw-research/LocaNoto" in _sq and "agpl-3.0" in _sq)
 
-_appq2 = _datei("app.py")
-pruef("und die Oberflaeche bietet den Quelltext an",
-      "agpl-3.0" in _appq2 and "github.com/mw-research/LocaNoto" in _appq2)
 
 # --- JEDE ABHAENGIGKEIT STEHT IN DER LIZENZAUFSTELLUNG ---
 #
@@ -4725,11 +3903,6 @@ _fehlt_lizenz = sorted({p for p in _gepinnt if f"`{p}`" not in _lz})
 pruef("jede gepinnte Abhaengigkeit steht in LIZENZEN.md",
       not _fehlt_lizenz, _fehlt_lizenz[:6])
 
-# --- DIE LANDKARTE STIMMT MIT DEM CODE UEBEREIN ---
-#
-# Eine Uebersicht, die nur meistens stimmt, kostet mehr als sie bringt:
-# wer ihr glaubt, sucht an der falschen Stelle. landkarte.py liest sie
-# aus dem Code, und hier steht, woran sie sich halten muss.
 # --- GLEICHZEITIG SCHREIBEN, UEBERALL ---
 #
 # Dasselbe Loch wie beim Anlegen von Benutzern stand an weiteren
@@ -4906,40 +4079,6 @@ pruef("keine Datei schreibt ueber eine Zwischendatei mit festem Namen",
 # Oberflaeche gibt und im Handbuch nicht, ist fuer diese Fragen
 # unsichtbar -- LocaNoto antwortet dann "steht nicht im Bestand".
 #
-# Gelesen werden die Bereichsnamen aus dem Code: jeder Aufklapper der
-# Verwaltung, jede Ueberschrift der Seitenleiste, jeder Aufklapper mit
-# festem Namen. Dynamische Namen (Raeume, Dateien) fallen heraus.
-import ast as _ast_h
-import re as _re_h
-_hb = _datei("HANDBUCH.md")
-
-
-def _hb_name(k):
-    if isinstance(k, _ast_h.Constant) and isinstance(k.value, str):
-        roh = k.value
-    elif isinstance(k, _ast_h.JoinedStr):
-        roh = "".join(t.value for t in k.values
-                      if isinstance(t, _ast_h.Constant))
-    elif isinstance(k, _ast_h.BinOp) and isinstance(k.left, _ast_h.Constant):
-        roh = k.left.value
-    else:
-        return ""
-    roh = roh.split("(")[0]
-    return _re_h.sub(r"^[^\w]+", "", roh).strip(" :-\u2014")
-
-
-_hb_fehlt = []
-for _hd, _arten in (("verwaltung.py", ("expander",)),
-                    ("app.py", ("expander", "header", "subheader"))):
-    for _k in _ast_h.walk(_ast_h.parse(_datei(_hd))):
-        if (isinstance(_k, _ast_h.Call)
-                and getattr(_k.func, "attr", "") in _arten and _k.args):
-            _n = _hb_name(_k.args[0])
-            if _n and _n not in _hb:
-                _hb_fehlt.append(f"{_hd}:{_k.lineno} {_n}")
-pruef("jeder Bereich der Oberflaeche steht im Handbuch", not _hb_fehlt,
-      _hb_fehlt)
-
 # Eingelesen wird es wie jedes Markdown: je Ueberschrift ein Abschnitt,
 # ab 1500 Zeichen weiter zerteilt. Ein zerteilter Abschnitt verliert
 # seine Ueberschrift -- und die Ueberschrift ist die Frage, ueber die er
@@ -5035,19 +4174,6 @@ finally:
     (_ocl.URL, _ocl.BENUTZER, _ocl.PASSWORT, _ocl._sitzung,
      _ocl.ordner_anlegen) = _ocl_alt
 
-# Und die Oberflaeche ruft es auch: Loeschen ueber den Namen, Loeschen
-# ueber die Kennung, Verschieben. Gelesen aus app.py, weil die Seite
-# selbst sich hier nicht starten laesst.
-_app_q = _datei("app.py")
-
-
-def _fn_rumpf(name):
-    for _k in _ast.parse(_app_q).body:
-        if isinstance(_k, _ast.FunctionDef) and _k.name == name:
-            return _ast.unparse(_k)
-    return ""
-
-
 # Der Loeschweg steht in aufnehmen.entferne_dokument; die Oberflaeche und
 # die Schnittstelle rufen ihn beide.
 _auf_q = _datei("aufnehmen.py")
@@ -5055,8 +4181,8 @@ _ent_q = ""
 for _k in _ast.parse(_auf_q).body:
     if isinstance(_k, _ast.FunctionDef) and _k.name == "entferne_dokument":
         _ent_q = _ast.unparse(_k)
-pruef("Loeschen in der Oberflaeche loescht in ownCloud mit",
-      "entferne_dokument(" in _fn_rumpf("loesche_dokument")
+pruef("Loeschen loescht in ownCloud mit",
+      "entferne_dokument(" in _datei("doc_actions.py")
       and _ent_q.count("owncloud.entferne(") == 2, _ent_q.count("owncloud.entferne("))
 
 # --- LOESCHEN UEBER DIE SCHNITTSTELLE ---
@@ -5136,9 +4262,8 @@ pruef("die Schnittstelle hat DELETE /dokumente auf dem gemeinsamen Weg",
       and "aufnehmen.entferne_dokument(" in _api_q
       and "benutzer_=kennung" in _api_q[_api_q.find('@app.delete("/dokumente")'):]
       and "status_code=403" in _api_q and "status_code=404" in _api_q)
-pruef("Verschieben in der Oberflaeche verschiebt in ownCloud mit",
-      "doc_actions.move(" in _fn_rumpf("verschiebe_dokument")
-      and "owncloud.verschiebe(" in _datei("doc_actions.py"))
+pruef("Verschieben verschiebt in ownCloud mit",
+      "owncloud.verschiebe(" in _datei("doc_actions.py"))
 
 # --- OWNCLOUD-KONTEN FOLGEN LOCANOTO, ABER NUR DIE EIGENEN ---
 #
@@ -5756,49 +4881,7 @@ try:
 except Exception as e:
     pruef("Websuche laesst sich pruefen", False, f"{type(e).__name__}: {e}")
 
-_app_q = _datei("app.py")
-pruef("die Oberflaeche bietet beim Uebernehmen keinen Raum an",
-      "webziel_" not in _app_q
-      and "aufnehmen.webseite_aufnehmen(" in _app_q)
-pruef("es gibt die Quellensuche ohne Antwort",
-      'st.expander("Quellen im Netz")' in _app_q
-      and '"anzahl": 10, "lesen": 0' in _app_q)
-# Fremder Text laedt nichts nach. Die Funktionen stehen in app.py, das
-# hier nicht importierbar ist (streamlit fehlt) -- also einzeln
-# herausgeloest und ausgefuehrt.
-import ast as _ast_w
-_app_baum = _ast_w.parse(_app_q)
-_app_ns = {"re": __import__("re")}
-for _kn in _app_baum.body:
-    if ((isinstance(_kn, _ast_w.Assign)
-         and any(getattr(_t, "id", "") == "_BILD_MD" for _t in _kn.targets))
-            or (isinstance(_kn, _ast_w.FunctionDef) and _kn.name in
-                ("_ohne_fremdbilder", "_md_roh", "_anzeigefertig"))):
-        exec(compile(_ast_w.Module([_kn], []), "app.py", "exec"), _app_ns)
-_ofb = _app_ns.get("_ohne_fremdbilder", lambda t: t)
-_mdr = _app_ns.get("_md_roh", lambda t: t)
-pruef("ein Bild in einer Antwort wird ein Link und laedt nichts nach",
-      _ofb("A ![x](https://b.example/?d=GEHEIM) B")
-      == "A [Bild: x](https://b.example/?d=GEHEIM) B"
-      and "![" not in _ofb("![y][1]\n\n[1]: https://b.example/z.png")
-      and _ofb("Hallo! [Link](https://a.example)")
-      == "Hallo! [Link](https://a.example)")
-pruef("auch waehrend die Antwort entsteht",
-      "![" not in _app_ns.get("_anzeigefertig", lambda t: t)(
-          "Teil ![z](https://e.example/q)"))
-pruef("fremde Titel und Ausschnitte werden maskiert",
-      "![" not in _mdr("![b](https://x.example)")
-      and "](" not in _mdr("[l](https://x.example)"))
-pruef("die Quellensuche steht vor dem Chat und braucht keinen Bestand",
-      0 < _app_q.find("# --- QUELLEN IM NETZ SUCHEN ---")
-      < _app_q.find("_bestand = _zahl_abschnitte("))
-pruef("uebernommen wird der gelesene, gepufferte Text",
-      '_web_lesen(_w["adresse"])' in _app_q
-      and "disabled=True" in _app_q[_app_q.find("def _web_vorschau"):
-                                    _app_q.find("def _web_uebernehmen")])
-pruef("die Oberflaeche verbindet die Websuche nur, wenn sie frei ist",
-      "ohne=(() if _web_frei else _web_server)" in _app_q
-      and "raeume.websuche_erlaubt(r)" in _app_q)
+
 _k98 = os.path.join(_k8s_oc, "98-websuche.yaml")
 if statefiles.exists(_k98):
     _k98q = statefiles.open(_k98, encoding="utf-8").read()
@@ -5875,13 +4958,12 @@ try:
                     if not str(v).strip()]
     pruef("jede Uebersetzung hat dieselben Platzhalter und ist nicht leer",
           not _spr_kaputt, _spr_kaputt[:5])
-    _spr_fehlt = _ueb.fehlend()
-    pruef("jeder Oberflaechentext hat eine englische Fassung",
+    _spr_fehlt = _ueb.missing_english()
+    pruef("jede Meldung, die die Seiten zeigen, hat eine englische Fassung",
           not _spr_fehlt, _spr_fehlt[:5])
-    _spr_offen = {n: len(_ueb.stellen(__import__("ast").parse(_datei_roh(n))))
-                  for n in ("app.py", "verwaltung.py")}
-    pruef("jeder Oberflaechentext ist eingewickelt (tx)",
-          not any(_spr_offen.values()), _spr_offen)
+    _spr_de = _ueb.missing_german()
+    pruef("jeder Text der Seiten hat eine deutsche Fassung",
+          _ueb.page_texts() and not _spr_de, _spr_de[:5])
 except Exception as e:
     pruef("die Uebersetzung laesst sich pruefen", False,
           f"{type(e).__name__}: {e}")
@@ -5933,23 +5015,6 @@ except Exception as e:
     pruef("Voreinstellungen und Modelle lassen sich pruefen", False,
           f"{type(e).__name__}: {e}")
 
-_ae_q = _datei("app.py")
-pruef("das Modell wird gewaehlt, nicht eingetippt",
-      'st.text_input("Chat Modell"' not in _ae_q
-      and "llm.chat_modelle()" in _ae_q)
-_ae_ns = {"re": __import__("re")}
-for _ae_k in __import__("ast").parse(_ae_q).body:
-    if (isinstance(_ae_k, __import__("ast").FunctionDef)
-            and _ae_k.name in ("_titel_bereinigen", "_titel_anzeige")):
-        exec(compile(__import__("ast").Module([_ae_k], []), "app.py", "exec"),
-             _ae_ns)
-_tb = _ae_ns.get("_titel_bereinigen", lambda t: t)
-_ta = _ae_ns.get("_titel_anzeige", lambda t: t)
-pruef("ein Chat-Titel ist ein kurzer Satz ohne Unterstriche und ohne Datum",
-      _tb('"Prüffristen_für Druckbehälter."') == "Prüffristen für Druckbehälter"
-      and len(_tb("wort " * 40)) <= 62
-      and _ta("Druckbehaelter_Pruefung 26-10-26") == "Druckbehaelter Pruefung"
-      and "datetime.now().strftime('%y-%m-%d')" not in _ae_q)
 pruef("die Schnittstelle erlaubt eigene, keine fremden Voreinstellungen",
       "presets.erlaubt(anfrage.preset, kennung)" in _datei("api.py"))
 
@@ -5957,14 +5022,6 @@ _spr_sys = _datei("system_prompt.txt")
 pruef("Antworten kommen in der Sprache der Frage",
       "ANTWORTSPRACHE" in _spr_sys and "[Dateiname, page X]" in _spr_sys
       and "Sprache der Frage" in _datei("search_prompt.txt"))
-_spr_q = _datei("app.py")
-_spr_m = re.search(r"_QUELLENMUSTER = re\.compile\(\s*(r\"[^\n]+\")\)", _spr_q)
-pruef("Zitate mit 'page' werden verlinkt wie mit 'Seite'",
-      bool(_spr_m) and re.search(eval(_spr_m.group(1)),
-                                 "[a.pdf, page 3]") is not None
-      and re.search(eval(_spr_m.group(1)), "[a.pdf, Seite 3]") is not None)
-pruef("gemerkt wird nur, was auf der Anmeldeseite gewaehlt wurde",
-      '"_sprache_vor_anmeldung"' in _spr_q)
 _hb_de = re.findall(r"^### .*$", _datei("HANDBUCH.md"), re.M)
 try:
     _hb_en = re.findall(r"^### .*$", _datei("HANDBUCH.en.md"), re.M)
@@ -5974,16 +5031,6 @@ pruef("das englische Handbuch hat dieselben Abschnitte, jeder nennt LocaNoto",
       len(_hb_de) == len(_hb_en) and all("LocaNoto" in h for h in _hb_en),
       (len(_hb_de), len(_hb_en)))
 
-# Und die Oberflaeche ruft es an allen fuenf Stellen.
-_vw_q, _ap_q = _datei("verwaltung.py"), _datei("app.py")
-pruef("Benutzer loeschen ruft das Loeschen in ownCloud",
-      "owncloud.konto_loeschen(_wahl)" in _vw_q)
-pruef("Passwort setzen und aendern ziehen ownCloud mit",
-      "owncloud.passwort_setzen(" in _vw_q
-      and "owncloud.passwort_setzen(_ich" in _ap_q)
-pruef("Daten loeschen und Raum leeren leeren den ownCloud-Ordner",
-      "owncloud.leere_raumordner(" in _vw_q
-      and "owncloud.leere_raumordner(_wahl_s)" in _ap_q)
 
 # --- DIE GRUNDLAGEN SETZT DER VERWALTER, DER NUTZER VERFEINERT ---
 #
@@ -6032,29 +5079,8 @@ except Exception as e:
 # Oberflaeche und Schnittstelle geben den Nutzer mit; der Bereich steht
 # fuer jeden da, nicht nur fuer Verwalter; und das Loeschen eines
 # Benutzers nimmt seine Anweisung mit.
-_ap_a, _api_a = _datei("app.py"), _datei("api.py")
-pruef("Oberflaeche und Schnittstelle haengen die Anweisung an",
-      'benutzer=st.session_state["username"])' in _ap_a
-      and "benutzer=kennung)" in _api_a)
-_app_ba = _ast.parse(_ap_a)
 _eltern_a = {}
-for _k in _ast.walk(_app_ba):
-    for _c in _ast.iter_child_nodes(_k):
-        _eltern_a[_c] = _k
-_mw_a = [k for k in _ast.walk(_app_ba) if isinstance(k, _ast.With)
-         and any("Meine Anweisung" in _ast.unparse(i.context_expr)
-                 for i in k.items)]
 _nur_vw = []
-for _w in _mw_a:
-    _e = _eltern_a.get(_w)
-    while _e is not None:
-        if isinstance(_e, _ast.If) and "is_admin" in _ast.unparse(_e.test):
-            _nur_vw.append(_ast.unparse(_e.test))
-        _e = _eltern_a.get(_e)
-pruef("'Meine Anweisung' steht fuer jeden Nutzer da",
-      _mw_a and not _nur_vw, _nur_vw or len(_mw_a))
-pruef("Benutzer loeschen nimmt die Anweisung mit",
-      "prompts.anweisung_loeschen(_wahl)" in _datei("verwaltung.py"))
 
 # --- GESCANNTE SEITEN WERDEN GELESEN ---
 #
@@ -6205,10 +5231,6 @@ pruef("und das Modell erfaehrt es im Kontext",
       'herkunft="texterkennung"' in pipeline.kontext(
           [{"meta": {"file_name": "a.pdf", "page": 1, "quelle": "ocr"},
             "text": "t"}]))
-pruef("die Oberflaeche zeigt die Herkunft und bietet das Sehmodell an",
-      "aus Texterkennung" in _datei("app.py")
-      and "Mit Sehmodell lesen" in _datei("app.py")
-      and '"tiff"' in _datei("app.py"))
 pruef("das Abbild bringt Deutsch und Englisch fuer die Texterkennung mit",
       "tesseract-ocr-deu" in _datei("Dockerfile")
       and "tesseract-ocr-eng" in _datei("Dockerfile"))
@@ -6281,8 +5303,7 @@ pruef("jede Datei kommt in der Landkarte der REFERENZ.md vor",
       not _fehlt_doku, _fehlt_doku)
 
 # 4. Jede Datei sagt in einem Satz, was sie tut. Ohne Dateikopf bleibt
-#    die Zelle leer -- app.py war so eine, 2900 Zeilen ohne ein Wort
-#    darueber.
+#    die Zelle leer.
 _stumm = sorted(n for n, i in _karte.items() if not i["kopf"].strip())
 pruef("jede Datei sagt in ihrem Kopf, was sie tut", not _stumm, _stumm)
 
@@ -6302,17 +5323,6 @@ if database.active():
     ).fetchone()[0]
     pruef("chats live in Postgres", _chats_db > 0, _chats_db)
 
-# --- SOURCES UNDER AN ANSWER START CLOSED ---
-#
-# The first source under every answer used to open by itself. With long
-# passages the page grew after each answer and jumped to its end,
-# wherever the reader had scrolled to.
-_app_src = _datei("app.py")
-_q_anf = _app_src.index("# --- QUELLEN DAUERHAFT ANZEIGEN ---")
-_q_rumpf = _app_src[_q_anf:_app_src.index("for t in source", _q_anf)]
-pruef("Quellen unter einer Antwort stehen anfangs zu",
-      "expanded=False" in _q_rumpf and "_k == 0" not in _q_rumpf,
-      _q_rumpf[-200:])
 
 # --- WAS DER CODE LIEST, STEHT IN DER VORLAGE ---
 #
@@ -7021,8 +6031,6 @@ pruef("ein Passwort ueber 72 Bytes wird beim Setzen abgewiesen, nicht beim Hashe
       "72" in benutzer.passwort_setzen("anna", _lang_h, von="anna")[1]
       and "72" in benutzer.anlege("langpass", _lang_h, von="markus")[1]
       and benutzer.eintrag("langpass") is None)
-pruef("die klassische Anmeldung zaehlt Fehlversuche",
-      "sessions.login_attempt(_name_l" in _datei("app.py"))
 
 # --- HARDENING: SETTING SOMEBODY'S PASSWORD IS A WAY IN ---
 #

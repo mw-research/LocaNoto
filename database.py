@@ -20,8 +20,8 @@ once, when the schema is created; every vector written or searched is
 shortened to it (shorten()). Changing it later needs a new schema.
 
 CONNECTIONS. One connection per thread, kept and checked before use.
-Streamlit runs every session in its own thread; a shared connection would
-interleave their statements.
+The server answers requests in several threads; a shared connection
+would interleave their statements.
 
     python database.py --check     connect, migrate, print the state
 """

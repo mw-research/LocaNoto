@@ -106,13 +106,11 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     RERANKER_MODEL=${RERANKER_MODEL}
 
-# Telemetrie abschalten. ChromaDB und Streamlit senden von sich aus
-# Nutzungsdaten nach draussen -- fuer einen Container, der ohne Netzzugang
-# laufen soll, ein offener Kanal. Streamlit liest zusaetzlich
-# .streamlit/config.toml, das mit dem Code hereinkopiert wird.
+# Telemetrie abschalten. ChromaDB sendet von sich aus Nutzungsdaten nach
+# draussen -- fuer einen Container, der ohne Netzzugang laufen soll, ein
+# offener Kanal.
 ENV ANONYMIZED_TELEMETRY=False \
-    CHROMA_ANONYMIZED_TELEMETRY=False \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    CHROMA_ANONYMIZED_TELEMETRY=False
 
 # Keine .pyc-Dateien zur Laufzeit. Sie landeten sonst in der
 # Schreibschicht des Containers -- unnoetig, weil sie bei jedem neuen
@@ -124,4 +122,7 @@ COPY . .
 
 EXPOSE 8501 8700
 
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# The web UI and the API (server.py). Port 8501 for a single container
+# (docker-compose.yaml, k8s/30, 95, 96); the Deployments in k8s/enterprise
+# start it on 8700 with their own command.
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8501"]

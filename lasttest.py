@@ -1,10 +1,8 @@
 """Wie viele Leute gleichzeitig? -- python lasttest.py
 
-Misst gegen die SCHNITTSTELLE, nicht gegen die Oberflaeche. Das ist
-Absicht: die Oberflaeche haelt Sitzungen im Arbeitsspeicher und laesst
-sich nicht vervielfachen, die Schnittstelle ist zustandslos. Was hier
-herauskommt, ist also die Obergrenze dessen, was die Anwendung
-LEISTEN kann -- nicht das, was Streamlit davon durchlaesst.
+Misst gegen die SCHNITTSTELLE: dieselben Funktionen, die auch die
+Seiten rufen, ohne den Weg ueber den Browser. Was hier herauskommt, ist
+die Obergrenze dessen, was eine Instanz LEISTEN kann.
 
     python lasttest.py --adresse http://127.0.0.1:8600 \\
         --token DEIN_TOKEN --gleichzeitig 1,2,4,8 --je 6

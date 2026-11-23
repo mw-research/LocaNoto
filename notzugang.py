@@ -262,7 +262,7 @@ def schliesse(raum, von, durch="?"):
 
 
 def beschreibung():
-    """Kurzer Stand fuer die Seitenleiste."""
+    """Kurzer Stand fuer die Verwaltung."""
     traeger_ = benutzer.traeger("notzugang")
     if not traeger_:
         return ("nicht einsatzbereit -- niemand traegt die Rolle "

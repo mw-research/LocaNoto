@@ -1,8 +1,7 @@
 """Document actions with their permission checks: move, delete, wipe.
 
-These lived in the Streamlit page, which also decided who may use them by
-showing or hiding a button. Here every function checks the permission
-itself, so any front end (API, web pages) can call it directly.
+Every function checks the permission itself, so any front end (API,
+web pages) can call it directly -- hiding a button is no permission.
 
     move(user, file_name, from_room, to_room, is_admin=False)
     delete(user, file_name, room, is_admin=False)

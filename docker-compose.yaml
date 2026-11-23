@@ -163,7 +163,6 @@ x-umgebung: &umgebung
   - SQL_SCHEMA_MAX_CHARS=${SQL_SCHEMA_MAX_CHARS:-}
   - SQL_SAMPLE_ROWS=${SQL_SAMPLE_ROWS:-}
   - SQL_FILE_ROOTS=${SQL_FILE_ROOTS:-}
-  - SQL_DEFAULT_ON=${SQL_DEFAULT_ON:-}
   - SQL_MODEL=${SQL_MODEL:-}
   - SQL_BASE_URL=${SQL_BASE_URL:-}
   - SQL_API_KEY=${SQL_API_KEY:-}
@@ -180,7 +179,6 @@ x-umgebung: &umgebung
   - TABELLEN_BLAETTER=${TABELLEN_BLAETTER:-}
   - TABELLEN_TREFFER_BLAETTER=${TABELLEN_TREFFER_BLAETTER:-}
   - TABELLEN_SPEICHER_BLAETTER=${TABELLEN_SPEICHER_BLAETTER:-}
-  - TABELLEN_DEFAULT_ON=${TABELLEN_DEFAULT_ON:-}
   - DATABASE_URL=${DATABASE_URL:-}
   - DATABASE_DIMENSIONS=${DATABASE_DIMENSIONS:-}
   - SESSION_MAX_HOURS=${SESSION_MAX_HOURS:-}
@@ -209,7 +207,10 @@ x-umgebung: &umgebung
   - CHAT_MAX_CONCURRENT=${CHAT_MAX_CONCURRENT:-}
   - EMBEDDING_MAX_CONCURRENT=${EMBEDDING_MAX_CONCURRENT:-}
   - SEALED_MINUTES=${SEALED_MINUTES:-}
-  - COOKIE_SECURE=${COOKIE_SECURE:-}
+  # Sign-in cookies only over https. Without a proxy with TLS in front
+  # the page is plain http, and a browser drops such cookies on every
+  # address but localhost -- so 0 here. With TLS in front: COOKIE_SECURE=1.
+  - COOKIE_SECURE=${COOKIE_SECURE:-0}
   - LOGIN_ATTEMPTS=${LOGIN_ATTEMPTS:-}
   - LOGIN_ATTEMPTS_PER_NAME=${LOGIN_ATTEMPTS_PER_NAME:-}
   - LOGIN_ATTEMPTS_PER_ADDRESS=${LOGIN_ATTEMPTS_PER_ADDRESS:-}
@@ -232,8 +233,6 @@ x-umgebung: &umgebung
   - LOCANOTO_SCHLUESSEL=${LOCANOTO_SCHLUESSEL:-}
   - LOCANOTO_SCHLUESSEL_DATEI=${LOCANOTO_SCHLUESSEL_DATEI:-}
   - SITZUNG_MINUTEN=${SITZUNG_MINUTEN:-}
-  - SITZUNG_MERKEN_STUNDEN=${SITZUNG_MERKEN_STUNDEN:-}
-  - QUELLE_TICKET_MINUTEN=${QUELLE_TICKET_MINUTEN:-}
   - BILD_MINDEST_TEXT=${BILD_MINDEST_TEXT:-}
   - BILD_SEITEN_DPI=${BILD_SEITEN_DPI:-}
   # Speicherwurzeln IM Container. Wohin sie vom Host zeigen, steht bei den
@@ -556,8 +555,8 @@ volumes:
 #   3. Die zwei Bloecke unten einkommentieren und in jedem Dienst
 #      "secrets: [locanoto_schluessel]" ergaenzen.
 #
-#   4. docker compose up -d, dann in der Seitenleiste unter
-#      "Sicherheitslage" nachsehen: dort muss "Aus einem Secret" stehen.
+#   4. docker compose up -d, dann oben auf der Seite Admin
+#      nachsehen: dort muss "Aus einem Secret" stehen.
 #
 # Danach gehoert ./secrets/ NICHT ins Git und NICHT in die Sicherung der
 # Daten -- der Sinn ist ja, dass Schluessel und Daten getrennt liegen.

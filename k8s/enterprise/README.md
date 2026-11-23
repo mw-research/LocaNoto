@@ -9,7 +9,6 @@ names, sizes and hosts are placeholders.
 | `20-config.yaml` | ConfigMap; the commands to create the Secrets |
 | `30-server.yaml` | API and web interface, 2–10 pods (HPA), shared documents volume (ReadWriteMany) |
 | `31-worker.yaml` | background jobs from the Postgres queue |
-| `32-pages.yaml` | optional: the Streamlit pages during the change-over (sticky sessions) |
 | `40-gateway.yaml` | LiteLLM proxy in front of the model servers/keys, message logging off |
 | `50-network.yaml` | Ingress, NetworkPolicies for Postgres and the gateway |
 | `60-migrate.yaml` | one-time move of an existing installation |
@@ -58,7 +57,7 @@ backup.
 
 1. Measure the search before deciding the vector size: on the old
    installation `python compare_search.py run questions.txt --user <name> --out old.json`.
-2. Stop the old pages (`kubectl scale deploy/locanoto --replicas=0`).
+2. Stop the old installation (`kubectl scale deploy/locanoto --replicas=0`).
 3. `kubectl apply -f 60-migrate.yaml` and follow `kubectl logs -f job/locanoto-migrate`
    (check, run, verify; the old volumes are mounted read-only).
 4. Start server and workers; run the same questions against the new one
