@@ -3,6 +3,20 @@
 {% include "admin_nav.html" %}
 <h1>{{ t('Admin') }}</h1>
 {% if security %}<pre class="status">{{ security }}</pre>{% endif %}
+{% if security_details %}{% set d = security_details %}
+<details class="edit status-details">
+  <summary>{{ t('Security in detail') }}</summary>
+  <table class="files">
+  {% for name, ok, text in d.points %}<tr><td>{{ '✓' if ok else '✗' }}</td><td>{{ name }}</td><td class="muted">{{ text }}</td></tr>{% endfor %}
+    <tr><td></td><td>{{ t('Installation key') }}</td><td class="muted">{{ d.key }}</td></tr>
+    <tr><td></td><td>{{ t('Store') }}</td><td class="muted">{{ d.store }}</td></tr>
+  {% for name, path, own in d.roots %}<tr><td></td><td>{{ t('Storage roots') }}: {{ name }}</td><td class="muted"><code>{{ path }}</code> · {{ t('set from outside') if own else t('default') }}</td></tr>{% endfor %}
+  </table>
+  {% if d.differing %}<p>{{ t('Settings that differ from .env.example') }}: <code>{{ d.differing|join(', ') }}</code></p>{% endif %}
+  {% if d.unknown %}<p>{{ t('Settings not in .env.example') }}: <code>{{ d.unknown|join(', ') }}</code></p>{% endif %}
+  {% if d.missing %}<p class="muted">{{ d.missing }} {{ t('settings of the template not set (their default applies)') }}</p>{% endif %}
+</details>
+{% endif %}
 
 <section class="card">
   <h2>{{ t('Users') }}</h2>
@@ -52,8 +66,10 @@
   <h2>{{ t('Jobs') }}</h2>
   <table class="files">
   {% for j in jobs %}
-    <tr><td>{{ j.label }}</td><td class="muted">{{ j.state }}</td>
-      <td><form hx-post="/ui/admin/jobs/{{ j.name }}" hx-target="#job-{{ j.name }}" class="inline"><button type="submit">{{ t('Start') }}</button></form></td>
+    <tr><td>{{ tm(j.label) }}</td><td class="muted">{{ t(j.state) }}</td>
+      <td><form hx-post="/ui/admin/jobs/{{ j.name }}" hx-target="#job-{{ j.name }}" class="inline"><button type="submit">{{ t('Start') }}</button></form>
+        {% if j.state in ('running', 'queued') %}<form hx-post="/ui/admin/jobs/{{ j.name }}/cancel" hx-target="#job-{{ j.name }}" hx-confirm="{{ t('Cancel this job?') }}" class="inline"><button type="submit" class="danger">{{ t('Cancel') }}</button></form>{% endif %}
+        <form hx-get="/ui/admin/jobs/{{ j.name }}/log" hx-target="#job-{{ j.name }}" class="inline"><button type="submit">{{ t('Log') }}</button></form></td>
       <td id="job-{{ j.name }}"></td></tr>
   {% endfor %}
   </table>

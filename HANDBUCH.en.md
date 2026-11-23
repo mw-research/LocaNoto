@@ -50,7 +50,9 @@ To the right are your name and **Sign out**.
 ### How do I switch LocaNoto to English?
 
 **Settings** → **Language** → choose Deutsch or English → **Save**. The
-choice takes effect immediately and is remembered for your account.
+choice takes effect immediately and is remembered for your account. On the
+sign-in page, **Deutsch · English** below the form switches the language of
+that page; this browser keeps it.
 
 You can ask in any language: LocaNoto answers in the language of the
 question, even if the documents are German. File names, values and
@@ -582,7 +584,9 @@ page **Users** but through the company directory or, on the server, with
 ### How do I create a workspace in LocaNoto as an admin?
 
 **Admin** → **Workspaces** → **New workspace**: ID (lower-case letters,
-digits, `_`, `-`), **Label**, **Members** → **Create**.
+digits, `_`, `-`), **Label**, **Members** → **Create**. With a file store
+set up, LocaNoto creates its folder and shares there at once; a message
+names what did not work.
 
 Find an existing workspace with **Search workspaces** → **Edit** →
 editable there:
@@ -624,7 +628,8 @@ named by `ingest.py` in its output.
   the document folder completely.
 
 Both keep running when you leave the page, and skip what has already been
-processed.
+processed. Each job shows its state; **Log** shows its output, **Cancel**
+(while it runs or waits) stops it.
 
 ### How do I set up lists (Excel, CSV) in LocaNoto as an admin?
 
@@ -877,8 +882,8 @@ absent for a longer time:
 1. An admin: **Admin** → **Emergency access** → **Request access to a
    personal workspace** → choose the workspace, enter a **Reason** →
    **Request**.
-2. A person with the role `notzugang` signs in and opens
-   `/admin/emergency` → under **Requests**, **Confirm** or **Reject**.
+2. A person with the role `notzugang` signs in → **Emergency access** at
+   the top → under **Requests**, **Confirm** or **Reject**.
 3. Confirmed → access applies for 24 hours and expires by itself; under
    **Open grants**, **Close** ends it early.
 
@@ -1021,10 +1026,11 @@ ownCloud.
 - **Security status:** **Admin** shows a line at the top – "alle Punkte
   erfuellt" (all points met) or which points are open.
 - **Encryption of the feedback:** **Admin** → **Feedback** (see there).
-- **Everything in detail** – the security checklist, what is encrypted,
-  signed or stored in plain text, storage locations, `.env` settings that
-  are missing, differ or are outdated (names only, no values):
-  `GET /api/v1/admin/status` through the API.
+- **Security in detail** (open it below the line on **Admin**) – every
+  point of the checklist with its explanation, where the installation key
+  comes from, the store, the three storage locations and `.env` settings
+  that differ from the template or are unknown to it (names only, no
+  values). The same machine-readable: `GET /api/v1/admin/status`.
 - On the server, `python doctor.py` checks key, database, model
   endpoints, web search, file store and public address.
 

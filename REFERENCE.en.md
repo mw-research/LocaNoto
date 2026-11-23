@@ -205,7 +205,8 @@ room permissions as the web interface.
 Every user switches the interface between English and German under
 **Settings → Language**; the choice is remembered per account.
 `LOCANOTO_SPRACHE=en` makes English the default for everyone else and for
-the sign-in page. **Answers come in the language of the question**, even
+the sign-in page, where **Deutsch · English** switches it for that browser
+(cookie `locanoto_lang`). **Answers come in the language of the question**, even
 when the documents are German — file names, values and quotations stay
 as they are. For a question in another language, two of the three search
 probes are written in German, because keyword search only finds words as

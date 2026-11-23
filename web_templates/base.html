@@ -22,6 +22,7 @@
     {% if nav.tickets %}<a href="/tickets" class="{{ 'on' if nav.active == 'tickets' }}">{{ t('Tickets') }}</a>{% endif %}
     <a href="/settings" class="{{ 'on' if nav.active == 'settings' }}">{{ t('Settings') }}</a>
     {% if nav.admin %}<a href="/admin" class="{{ 'on' if nav.active == 'admin' }}">{{ t('Admin') }}</a>{% endif %}
+    {% if nav.emergency %}<a href="/admin/emergency" class="{{ 'on' if nav.active == 'admin' }}">{{ t('Emergency access') }}</a>{% endif %}
   </nav>
   <span class="who">{{ nav.user }}</span>
   <button type="button" class="link" data-logout>{{ t('Sign out') }}</button>

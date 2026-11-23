@@ -52,6 +52,8 @@ Rechts daneben stehen dein Name und **Abmelden**.
 
 **Einstellungen** → **Sprache** → Deutsch oder English wählen →
 **Speichern**. Die Wahl gilt sofort und wird für deinen Zugang gemerkt.
+Auf der Anmeldeseite stellt **Deutsch · English** unter dem Formular die
+Sprache dieser Seite um; dieser Browser behält sie.
 
 Fragen kannst du in jeder Sprache: LocaNoto antwortet in der Sprache der
 Frage, auch bei deutschen Dokumenten. Dateinamen, Werte und Zitate bleiben
@@ -610,7 +612,8 @@ vergeben, sondern über das Firmenverzeichnis oder auf dem Server mit
 
 **Admin** → **Arbeitsbereiche** → **Neuer Arbeitsbereich**: Kennung
 (Kleinbuchstaben, Ziffern, `_`, `-`), **Bezeichnung**, **Mitglieder** →
-**Anlegen**.
+**Anlegen**. Ist eine Ablage eingerichtet, legt LocaNoto dort Ordner und
+Freigaben gleich mit an; eine Meldung nennt, was dabei nicht ging.
 
 Bestehenden Arbeitsbereich über **Arbeitsbereiche suchen** finden →
 **Bearbeiten** → dort änderbar:
@@ -654,7 +657,8 @@ nicht lesen kann, nennt `ingest.py` in seiner Ausgabe.
   vollständig ein.
 
 Beide laufen weiter, wenn du die Seite verlässt, und überspringen bereits
-Verarbeitetes.
+Verarbeitetes. Neben jedem Lauf steht sein Zustand; **Protokoll** zeigt
+seine Ausgabe, **Abbrechen** (solange er läuft oder wartet) beendet ihn.
 
 ### Wie richte ich als Admin Listen (Excel, CSV) in LocaNoto ein?
 
@@ -916,9 +920,8 @@ oder fällt länger aus:
 1. Ein Admin: **Admin** → **Notzugang** → **Zugang zu einem persönlichen
    Arbeitsbereich beantragen** → Arbeitsbereich wählen, **Grund**
    eintragen → **Beantragen**.
-2. Eine Person mit der Rolle `notzugang` meldet sich an und öffnet
-   `/admin/emergency` → unter **Anträge** **Bestätigen** oder
-   **Ablehnen**.
+2. Eine Person mit der Rolle `notzugang` meldet sich an → oben
+   **Notzugang** → unter **Anträge** **Bestätigen** oder **Ablehnen**.
 3. Bestätigt → der Zugang gilt 24 Stunden und erlischt von selbst; unter
    **Offene Zugänge** beendet **Schließen** ihn vorzeitig.
 
@@ -1064,10 +1067,12 @@ ownCloud.
   erfuellt" oder welche Punkte offen sind.
 - **Verschlüsselung der Rückmeldungen:** **Admin** → **Rückmeldungen**
   (siehe dort).
-- **Alles im Einzelnen** – Prüfliste der Sicherheitslage, was
-  verschlüsselt, signiert oder im Klartext liegt, Speicherorte, Einstellungen
-  der `.env`, die fehlen, abweichen oder veraltet sind (nur Namen, keine
-  Werte): `GET /api/v1/admin/status` über die Schnittstelle.
+- **Sicherheitslage im Einzelnen** (auf **Admin** unter der Zeile
+  aufklappen) – jeder Punkt der Prüfliste mit Erklärung, woher der
+  Installationsschlüssel kommt, der Bestand, die drei Speicherorte und
+  Einstellungen der `.env`, die von der Vorlage abweichen oder ihr fremd
+  sind (nur Namen, keine Werte). Dasselbe maschinenlesbar:
+  `GET /api/v1/admin/status`.
 - Auf dem Server prüft `python doctor.py` Schlüssel, Datenbank,
   Modell-Endpunkte, Websuche, Ablage und öffentliche Adresse.
 

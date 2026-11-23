@@ -193,7 +193,9 @@ direkt im Browser; `/api/v1/docs` listet alle:
 | `/api/v1/admin/audit` → `chain` | `[true, …]` — Protokollkette in Ordnung |
 | `/api/v1/admin/status` → `env_drift` | fehlende, abweichende und unbekannte Einträge der `.env` (nur Namen) — die abweichenden ansehen |
 
-Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage.
+Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage;
+**Sicherheitslage im Einzelnen** darunter zeigt jeden Punkt, Schlüssel,
+Bestand, Speicherorte und abweichende Einstellungen.
 `docker compose exec locanoto_bot python doctor.py` prüft Schlüssel,
 Datenbank und Modell-Endpunkte in einem Lauf.
 
@@ -511,9 +513,9 @@ Dateien importieren sie.
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `answering`, `api` +76 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `answering`, `api` +77 |
 | `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `aufnehmen`, `doctor` +16 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `auth`, `benutzer`, `chats` +22 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `auth`, `benutzer`, `chats` +23 |
 | `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `accounts`, `attachments`, `aufnehmen`, `auth` +34 |
 | `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +15 |
 | `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +23 |
@@ -532,7 +534,7 @@ Dateien importieren sie.
 | `vector_columns.py` | Which vector column belongs to which embedding model (Postgres only). | `EMBEDDING_NEXT_DIMENSIONS`, `EMBEDDING_NEXT_MODEL` | `doctor`, `pg_collection`, `reembed`, `tests/test_reembed` |
 | **Fachlogik** | | | |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +1 |
-| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +9 |
+| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +10 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `routes_admin`, `routes_documents` +4 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `attachments`, `routes_admin` +12 |
 | `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `routes_account`, `routes_chat`, `server`, `tests/test_api` +8 |
@@ -568,12 +570,12 @@ Dateien importieren sie.
 | `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `tests/test_connector`, `tests/test_mail_tools`, `web` |
 | `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `attachments`, `bildtext`, `routes_chat` |
 | `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `aufnehmen`, `routes_documents` |
-| `jobs.py` | Background jobs: ingest, images, storage sync, backup. | `JOB_HEARTBEAT_TIMEOUT` | `routes_admin`, `web`, `web_admin`, `worker` |
+| `jobs.py` | Background jobs: ingest, images, storage sync, backup. | `JOB_HEARTBEAT_TIMEOUT` | `routes_admin`, `tests/test_api`, `web`, `web_admin` +1 |
 | `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `jobs`, `worker` |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
 | `attachments.py` | Files a user may attach to a mail: the own workspace and this chat's images. | `ATTACHMENT_MAX_MB` | `answering`, `mailboxes` |
 | `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `einrichten`, `routes_admin`, `web` |
-| `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `routes_admin` |
+| `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `routes_admin`, `web` |
 | `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `server`, `tests/test_api`, `web` +1 |
 | `notices.py` | Notices for one user: new mail, new tickets, replies to tickets. | — | `mail_watch`, `routes_chat`, `tests/test_mail_tools`, `tickets` +1 |
 | `metrics.py` | Counters in the Prometheus text format, for /metrics. | — | `server` |
@@ -728,8 +730,9 @@ Abschnitt **Hintergrundläufe** an, je Lauf mit **Starten**:
 Alle laufen als **eigener Vorgang**: die Oberfläche bleibt benutzbar, ein
 Neuladen oder Abmelden beendet sie nicht. Bereits Verarbeitetes wird
 übersprungen, ein Abbruch kostet also nur Zeit. Die Seite zeigt je Lauf
-seinen Zustand. Die letzten Protokollzeilen liefert
-`GET /api/v1/admin/jobs/{name}/log`, abgebrochen wird mit
+seinen Zustand, **Protokoll** die letzten Zeilen seiner Ausgabe, und
+**Abbrechen** (solange er läuft oder wartet) beendet ihn. An der
+Schnittstelle: `GET /api/v1/admin/jobs/{name}/log` und
 `DELETE /api/v1/admin/jobs/{name}`.
 
 Ein zweiter Start desselben Laufs wird abgelehnt, solange der erste läuft.
@@ -1161,8 +1164,10 @@ Zahl der Zuständigkeiten, nicht mit der Zahl der Nutzer.
 
 Angelegt und verwaltet werden Räume auf der Seite **Admin** im Abschnitt
 **Arbeitsbereiche** (nur Administratoren): **Neuer Arbeitsbereich** mit
-Kennung, Bezeichnung und Mitgliedern, **Bearbeiten** für Bezeichnung,
-Mitglieder, Gruppe und Websuche, **Arbeitsbereich entfernen**. Beim
+Kennung, Bezeichnung und Mitgliedern — mit eingerichteter Ablage samt
+Ordner und Freigaben dort —, **Bearbeiten** für Bezeichnung, Mitglieder,
+Gruppe und Websuche, **Arbeitsbereich entfernen**. Wer nur die Rolle
+`notzugang` hat, sieht statt **Admin** den Reiter **Notzugang**. Beim
 Upload auf der Seite **Dokumente** wählt der Nutzer den Raum; vorgegeben
 ist der eigene, sodass niemand versehentlich etwas teilt.
 
@@ -1455,8 +1460,9 @@ Sinn ist, dass Schlüssel und Daten getrennt liegen.
 
 ### Was danach noch offen ist
 
-Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage,
-`GET /api/v1/admin/status` führt jeden einzeln auf (`security`), und
+Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage
+und führt sie unter **Sicherheitslage im Einzelnen** mit Erklärung auf,
+`GET /api/v1/admin/status` ebenso (`security`), und
 `einrichten.py` zeigt sie am Ende. Drei Punkte lassen sich nicht
 schließen, nur eingrenzen:
 
@@ -3003,7 +3009,9 @@ Adresse `http://websuche:8000/mcp`. Prüfen ohne LocaNoto:
 Die Oberfläche gibt es auf Deutsch und Englisch. Jeder Nutzer schaltet
 unter **Einstellungen → Sprache** um; die Wahl wird je Zugang in
 `config/sprachen.json` gemerkt. Wer nichts gewählt hat, bekommt
-`LOCANOTO_SPRACHE` (Vorgabe `de`), ebenso die Anmeldeseite.
+`LOCANOTO_SPRACHE` (Vorgabe `de`). Die Anmeldeseite folgt dieser
+Vorgabe; **Deutsch · English** darauf stellt sie um, und ein Cookie
+(`locanoto_lang`) behält die Wahl für diesen Browser.
 
 **Antworten kommen in der Sprache der Frage**, auch wenn die Dokumente
 deutsch sind; Dateinamen, Werte und Zitate bleiben im Original. Dafür

@@ -1,4 +1,4 @@
-<nav class="subnav">
+{% if nav.admin %}<nav class="subnav">
   <a href="/admin">{{ t('Users') }} · {{ t('Workspaces') }} · {{ t('Jobs') }}</a>
   <a href="/admin/backups">{{ t('Backups') }}</a>
   <a href="/admin/emergency">{{ t('Emergency access') }}</a>
@@ -10,4 +10,4 @@
   <a href="/admin/databases">{{ t('Databases') }}</a>
   <a href="/admin/external">{{ t('External model') }}</a>
   <a href="/api/v1/docs">API</a>
-</nav>
+</nav>{% endif %}

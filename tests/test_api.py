@@ -1330,6 +1330,33 @@ check("a header row of another list folder has a key of its own",
       and tabellen.kopf_schluessel("/mnt/listen/einkauf", "a.csv")
       == "/mnt/listen/einkauf::a.csv")
 
+# --- jobs, security, login language, emergency tab ---
+print("== jobs, security, login language, emergency tab")
+import jobs  # noqa: E402
+_job = jobs.names()[0]
+check("a job's log is shown", markus.get(f"/ui/admin/jobs/{_job}/log").text.startswith('<pre class="log">'))
+check("nothing running: nothing to cancel",
+      "error" in markus.post(f"/ui/admin/jobs/{_job}/cancel").text)
+check("only admins cancel or read logs",
+      anna.post(f"/ui/admin/jobs/{_job}/cancel").status_code == 403
+      and anna.get(f"/ui/admin/jobs/{_job}/log").status_code == 403
+      and markus.get("/ui/admin/jobs/gibtsnicht/log").status_code == 404)
+_adm = markus.get("/admin").text
+check("the admin page shows the security state in detail",
+      "status-details" in _adm and "/ui/admin/jobs/" in _adm and "/log" in _adm)
+_anon = TestClient(server.app)
+_en = _anon.get("/login", params={"lang": "en"})
+check("the sign-in page switches language and keeps it",
+      'lang="en"' in _en.text and _anon.get("/login").text.count('lang="en"') >= 1
+      and 'lang="de"' in _anon.get("/login", params={"lang": "de"}).text)
+check("an unknown language is ignored", _anon.get("/login", params={"lang": "xx"}).status_code == 200)
+benutzer.anlege("nora", "Passwort-123456", rolle="notzugang")
+_nora = client_for("nora")
+_home = _nora.get("/").text
+check("the emergency role gets a tab, not the admin pages",
+      'href="/admin/emergency"' in _home and 'href="/admin"' not in _home
+      and 'class="subnav"' not in _nora.get("/admin/emergency").text, _home[:600])
+
 # --- every route called? ---
 routes = {(m, r.path) for r in server.app.routes
           if hasattr(r, "methods") and r.path.startswith(API)

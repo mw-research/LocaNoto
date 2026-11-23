@@ -10,6 +10,7 @@
     <button type="submit" class="primary">{{ t('Sign in') }}</button>
     <p class="error" data-error hidden></p>
   </form>
+  <p class="lang">{% for code, name in languages.items() %}{% if not loop.first %} · {% endif %}{% if code == lang %}<strong>{{ name }}</strong>{% else %}<a href="/login?lang={{ code }}&amp;next={{ next|urlencode }}">{{ name }}</a>{% endif %}{% endfor %}</p>
   {% if directory %}
   <p class="or">{{ t('or') }}</p>
   <a class="button wide" href="/api/v1/auth/oidc/login?next={{ next|urlencode }}">{{ t('Sign in with the company account') }}</a>

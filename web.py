@@ -112,6 +112,18 @@ TEXTS = {
         "leer: wird erkannt.",
     "Header row: a row number from 1.": "Kopfzeile: eine Zeilennummer ab 1.",
     "Include large lists": "Große Listen einbeziehen",
+    "idle": "bereit", "queued": "wartet", "failed": "fehlgeschlagen", "done": "fertig",
+    "cancelled": "abgebrochen", "cancelling": "wird abgebrochen", "Log": "Protokoll",
+    "Nothing to cancel.": "Es läuft nichts, das sich abbrechen ließe.",
+    "(no output yet)": "(noch keine Ausgabe)", "Cancel this job?": "Diesen Lauf abbrechen?",
+    "Security in detail": "Sicherheitslage im Einzelnen", "Installation key": "Installationsschlüssel",
+    "Store": "Bestand", "Storage roots": "Speicherorte", "set from outside": "von außen gesetzt",
+    "default": "Vorgabe",
+    "Settings that differ from .env.example": "Einstellungen, die von .env.example abweichen",
+    "Settings not in .env.example": "Einstellungen, die .env.example nicht kennt",
+    "settings of the template not set (their default applies)":
+        "Einstellungen der Vorlage nicht gesetzt (es gilt ihre Vorgabe)",
+    "Workspace created; the storage reported:": "Arbeitsbereich angelegt; die Ablage meldet:",
     "Chat": "Chat", "Documents": "Dokumente", "Web sources": "Quellen im Netz",
     "Settings": "Einstellungen", "Admin": "Admin", "New chat": "Neuer Chat",
     "Ask a question about your documents ...":
@@ -583,6 +595,8 @@ def to_login_handler(_request, error):
 
 def _nav(p, active):
     return {"user": p.name, "admin": p.is_admin, "active": active,
+            # the second person of an emergency access, without admin rights
+            "emergency": getattr(p, "is_emergency", False) and not p.is_admin,
             "tickets": bool(tickets.boxes_for(p.name, p.is_admin))}
 
 
@@ -597,12 +611,25 @@ def favicon():
                         headers={"Cache-Control": "public, max-age=86400"})
 
 
+LANGUAGE_COOKIE = "locanoto_lang"
+
+
 @router.get("/login")
-def login_page(request: Request, next: str = "/"):
+def login_page(request: Request, next: str = "/", lang: str = ""):
+    """The sign-in page, in the language chosen there (a cookie keeps it
+    for this browser) or the installation's default. After signing in,
+    the user's own choice under Settings applies."""
     import oidc
     page_language()
-    return render("login.html", request, next=oidc.safe_next(next),
-                  directory=oidc.enabled())
+    code = lang if lang in sprache.SPRACHEN else request.cookies.get(LANGUAGE_COOKIE, "")
+    if code in sprache.SPRACHEN:
+        sprache.setze(code)
+    response = render("login.html", request, next=oidc.safe_next(next),
+                      directory=oidc.enabled(), languages=sprache.SPRACHEN)
+    if lang in sprache.SPRACHEN:
+        response.set_cookie(LANGUAGE_COOKIE, lang, max_age=365 * 86400,
+                            samesite="strict", secure=COOKIE_SECURE, path="/")
+    return response
 
 
 # --- PRESETS AND LISTS (also used by web_admin) ---
@@ -1346,6 +1373,22 @@ def revoke_token(token_id: str, request: Request,
 
 # --- ADMIN ---
 
+def _security_details():
+    """The security state for the admin page: every point, the key, the
+    store, the three roots and settings that differ from the template."""
+    import envcheck
+    import geheim
+    import sicherheit
+    import store
+    import paths
+    missing, differing, unknown = envcheck.vergleiche()
+    return {"points": [(tm(n), ok, tm(text)) for n, ok, text in sicherheit.lage()],
+            "key": tm(geheim.beschreibung()), "store": tm(store.beschreibung()),
+            "roots": [(tm(n), path, own) for n, path, own in paths.wurzeln()],
+            "differing": sorted(differing), "unknown": sorted(unknown),
+            "missing": len(missing)}
+
+
 def _admin_context(p):
     import sicherheit
     return {
@@ -1361,6 +1404,7 @@ def _admin_context(p):
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
         "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
+        "security_details": _security_details(),
     }
 
 
@@ -1474,9 +1518,16 @@ async def admin_create_workspace(request: Request,
     if not room_id or not label:
         return _notice(t("Id and label."), False)
     ok, message = raeume.anlegen(room_id, label, "", members)
-    if ok:
-        benutzer.protokolliere("raum_angelegt", room_id, p.name)
-    return _back_to_admin() if ok else _notice(tm(message), False)
+    if not ok:
+        return _notice(tm(message), False)
+    benutzer.protokolliere("raum_angelegt", room_id, p.name)
+    import owncloud
+    if owncloud.eingerichtet():
+        report = owncloud.richte_raum_ein(room_id)
+        if report["fehler"]:
+            return _notice(t("Workspace created; the storage reported:") + " "
+                           + "; ".join(tm(f) for f in report["fehler"]), False)
+    return _back_to_admin()
 
 
 def _shared_rooms():
@@ -1645,5 +1696,31 @@ def admin_start_job(name: str, request: Request,
                     p: Principal = Depends(principal)):
     _admin(p)
     page_language(p.name)
+    if name not in jobs.names():
+        raise HTTPException(404, "No such job.")
     result = jobs.start(name, by=p.name)
     return _notice(tm(result.get("message", "")), result.get("started", False))
+
+
+@router.post("/ui/admin/jobs/{name}/cancel")
+def admin_cancel_job(name: str, request: Request,
+                     p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    if name not in jobs.names():
+        raise HTTPException(404, "No such job.")
+    if jobs.cancel(name, by=p.name).get("cancelled"):
+        benutzer.protokolliere("lauf_abgebrochen", name, p.name)
+        return _notice(t("Cancelled."))
+    return _notice(t("Nothing to cancel."), False)
+
+
+@router.get("/ui/admin/jobs/{name}/log")
+def admin_job_log(name: str, request: Request,
+                  p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    if name not in jobs.names():
+        raise HTTPException(404, "No such job.")
+    text = jobs.log(name, 200) or t("(no output yet)")
+    return HTMLResponse(f'<pre class="log">{html.escape(text)}</pre>')
