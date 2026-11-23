@@ -5,7 +5,7 @@
 Renders the Docker and the Kubernetes installation for typical answers
 and checks the result with a real YAML parser; checks that no secret ends
 up in the answers file, that a "$" in a secret survives compose, that
-make_ca.py issues a certificate that chains to its CA, that the trust
+deploy/make_ca.py issues a certificate that chains to its CA, that the trust
 bundle carries the extra authorities, and that doctor.py reports in
 plain words. The full install is tested in CI (.github/workflows/
 installation.yml) on Docker and on a kind cluster.

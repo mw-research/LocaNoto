@@ -69,14 +69,31 @@ reranker, …): [deploy/README.md](deploy/README.md).
 | [deploy/README.md](deploy/README.md) | Installer |
 | [k8s/enterprise/README.md](k8s/enterprise/README.md) | Kubernetes manifests |
 | [deploy/demo-erp/README.md](deploy/demo-erp/README.md) | Sample database for demonstrations |
+| [connectors/README.md](connectors/README.md) | Data connectors for ERP, MES and databases |
 | [.env.example](.env.example) | All settings |
+
+## Layout
+
+| Folder | Content |
+|---|---|
+| `/` | the application: `server.py` (web UI and API), `worker.py`, the modules and the runs an installation starts (`ingest.py`, `abgleich.py`, `sicherung.py`, `einrichten.py`, …) |
+| `scripts/` | tools for running it by hand: create users and tokens, diagnostics, moving, load test |
+| `tests/` | self-test (`selftest.py`, parts in `selftest_parts/`) and the checks `test_*.py` |
+| `web_templates/`, `web_static/` | pages and styling of the web UI |
+| `connectors/` | interface and SQL connector for data connectors |
+| `deploy/` | installer and setup helpers |
+| `k8s/` | Kubernetes manifests, `k8s/enterprise/` for several instances with Postgres |
 
 ## Tests
 
 ```bash
-python selbsttest.py
-python test_api.py
+python tests/selftest.py
+python tests/test_api.py
 ```
+
+The other `tests/test_*.py` run the same way; `test_multipod.py`,
+`test_migration.py` and `test_reembed.py` need a Postgres server with
+pgvector in `SELFTEST_DATABASE`.
 
 ## Former edition
 

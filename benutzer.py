@@ -2,7 +2,7 @@
 
 Vorher: config/users.json war eine Zuordnung Name -> bcrypt-Hash, und wer
 Verwalter ist, stand in ADMIN_USERS in der .env. Zwei Skripte
-(create_user.py, manage_users.py) schrieben ohne jede Nachfrage in die
+(scripts/create_user.py, scripts/manage_users.py) schrieben ohne jede Nachfrage in die
 Datei -- wer sie starten konnte, legte sich einen Zugang an, und nichts
 hielt es fest.
 

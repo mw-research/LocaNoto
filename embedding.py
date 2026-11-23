@@ -9,7 +9,6 @@ Gebuendelt sinkt das auf einen Bruchteil. Die Batchgroesse ist bewusst
 konservativ: zu grosse Batches lassen den Server bei langen Chunks in
 Timeouts laufen.
 """
-import os
 from concurrent.futures import ThreadPoolExecutor
 
 import paths

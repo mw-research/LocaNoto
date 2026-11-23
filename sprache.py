@@ -23,7 +23,7 @@ reicht die Sprache durch.
 Gespeichert wird die Wahl je Nutzer in config/sprachen.json -- keine
 Berechtigung, nur eine Vorliebe, deshalb ohne Signatur.
 
-Was noch nicht uebersetzt ist: python uebersetzen.py --english
+Was noch nicht uebersetzt ist: python scripts/translations.py --english
 """
 import json
 import os
@@ -141,12 +141,3 @@ def t(text):
     return _englisch(text)
 
 
-def uebersetzt(funktion=None):
-    """format_func fuer Auswahlfelder: zeigt uebersetzt, Werte bleiben.
-
-    Die Werte einer Auswahl vergleicht der Code mit deutschen Texten;
-    uebersetzt wird deshalb nur, was angezeigt wird.
-    """
-    if funktion is None:
-        return lambda wert: t(str(wert))
-    return lambda wert: t(funktion(wert))

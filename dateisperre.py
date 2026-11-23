@@ -3,7 +3,7 @@
 Der Server bedient alle Anfragen in einem Prozess, jede in einem
 eigenen Faden. Wer eine Datei liest, im Speicher aendert und zurueckschreibt,
 ueberschreibt dabei, was ein anderer Faden inzwischen geschrieben hat.
-Dazu kommen Skripte wie create_user.py, die per kubectl exec in einem
+Dazu kommen Skripte wie scripts/create_user.py, die per kubectl exec in einem
 eigenen Prozess laufen.
 
 gesperrt() schliesst beides aus: eine Fadensperre fuer diesen Prozess

@@ -69,14 +69,31 @@ Netzlaufwerk für Listen, Reranker, …): [deploy/README.md](deploy/README.md).
 | [deploy/README.md](deploy/README.md) | Installer |
 | [k8s/enterprise/README.md](k8s/enterprise/README.md) | Kubernetes-Manifeste |
 | [deploy/demo-erp/README.md](deploy/demo-erp/README.md) | Beispieldatenbank für Vorführungen |
+| [connectors/README.md](connectors/README.md) | Datenanschlüsse für ERP, MES und Datenbanken |
 | [.env.example](.env.example) | Alle Einstellungen |
+
+## Aufbau
+
+| Ordner | Inhalt |
+|---|---|
+| `/` | die Anwendung: `server.py` (Web-Oberfläche und Schnittstelle), `worker.py`, die Module und die Läufe, die eine Installation startet (`ingest.py`, `abgleich.py`, `sicherung.py`, `einrichten.py`, …) |
+| `scripts/` | Werkzeuge für den Betrieb von Hand: Benutzer und Token anlegen, Diagnosen, Umzug, Lasttest |
+| `tests/` | Selbsttest (`selftest.py`, Teile in `selftest_parts/`) und die Prüfungen `test_*.py` |
+| `web_templates/`, `web_static/` | Seiten und Gestaltung der Web-Oberfläche |
+| `connectors/` | Schnittstelle und SQL-Anschluss für Datenanschlüsse |
+| `deploy/` | Installer und Hilfen für die Einrichtung |
+| `k8s/` | Kubernetes-Manifeste, `k8s/enterprise/` für mehrere Instanzen mit Postgres |
 
 ## Tests
 
 ```bash
-python selbsttest.py
-python test_api.py
+python tests/selftest.py
+python tests/test_api.py
 ```
+
+Die übrigen `tests/test_*.py` laufen genauso; `test_multipod.py`,
+`test_migration.py` und `test_reembed.py` brauchen einen Postgres-Server
+mit pgvector in `SELFTEST_DATABASE`.
 
 ## Frühere Ausgabe
 

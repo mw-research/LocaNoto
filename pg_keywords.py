@@ -26,7 +26,7 @@ removed, every term ORed, terms of five letters or more also as prefix
 ("Toleranz" finds "Toleranzen"). Prefixes cannot be matched on hashes,
 so every word of five letters or more is stored with each of its
 prefixes from five letters on. Ranking uses ts_rank_cd instead of BM25;
-compare_search.py measures whether that changes results.
+scripts/compare_search.py measures whether that changes results.
 """
 import hashlib
 import hmac

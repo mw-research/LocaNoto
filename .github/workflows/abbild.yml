@@ -222,57 +222,57 @@ jobs:
           docker rm -f probe
 
       # Every endpoint against a throw-away installation inside the image
-      # (test_api.py, models replaced by stand-ins): the image has every
+      # (tests/test_api.py, models replaced by stand-ins): the image has every
       # package the API needs, a developer's machine not always. Once per
       # build, on amd64.
       - name: API im Abbild pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
-          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_api.py 2>&1 | tee /tmp/api.log
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python tests/test_api.py 2>&1 | tee /tmp/api.log
           # failures as annotations: readable on the run page without the log
           grep -E "FAIL|Traceback|Error" /tmp/api.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_api::/' || true
           tail -1 /tmp/api.log | grep -q "all passed"
 
       # Mail, calendar, drafts, notices and tickets against stand-ins for
-      # the model and the mailbox (test_mail_tools.py).
+      # the model and the mailbox (tests/test_mail_tools.py).
       - name: Postfach und Tickets pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
-          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_mail_tools.py 2>&1 | tee /tmp/mail.log
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python tests/test_mail_tools.py 2>&1 | tee /tmp/mail.log
           grep -E "FAIL|Traceback|Error" /tmp/mail.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_mail_tools::/' || true
           tail -1 /tmp/mail.log | grep -q "all checks passed"
 
-      # The connector interface and the SQL connector (test_connector.py):
+      # The connector interface and the SQL connector (tests/test_connector.py):
       # real connectors on local ports, asked the way LocaNoto asks them.
       - name: Datenanschluesse pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
-          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_connector.py 2>&1 | tee /tmp/connector.log
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python tests/test_connector.py 2>&1 | tee /tmp/connector.log
           grep -E "FAIL|Traceback|Error" /tmp/connector.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_connector::/' || true
           tail -1 /tmp/connector.log | grep -q "all passed"
 
-      # Internal and external model (test_external_model.py): the external
+      # Internal and external model (tests/test_external_model.py): the external
       # one sees nothing but the answer of a question whose every source
       # is released.
       - name: Internes und externes Modell pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
-          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_external_model.py 2>&1 | tee /tmp/external.log
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python tests/test_external_model.py 2>&1 | tee /tmp/external.log
           grep -E "FAIL|Traceback|Error" /tmp/external.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_external_model::/' || true
           tail -1 /tmp/external.log | grep -q "all passed"
 
-      # Tool servers behind OAuth 2.1 (test_mcp_oauth.py), against the
+      # Tool servers behind OAuth 2.1 (tests/test_mcp_oauth.py), against the
       # stand-in in deploy/fake_oauth_mcp.py.
       - name: Werkzeugserver mit OAuth pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
-          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python test_mcp_oauth.py 2>&1 | tee /tmp/oauth.log
+          docker run --rm -e PYTHONIOENCODING=utf-8 "$ABBILD" python tests/test_mcp_oauth.py 2>&1 | tee /tmp/oauth.log
           grep -E "FAIL|Traceback|Error" /tmp/oauth.log | head -20 | cut -c1-400 | sed 's/^/::error title=test_mcp_oauth::/' || true
           tail -1 /tmp/oauth.log | grep -q "all passed"
 
       # Changing the embedding model against a real pgvector: vectors of a
       # second model from the stored text, switch, refusal of a model
-      # without vectors (test_reembed.py).
+      # without vectors (tests/test_reembed.py).
       - name: Modellwechsel auf Postgres pruefen
         if: env.AKTIV == 'true' && github.ref_name == 'main' && matrix.arch == 'amd64'
         run: |
@@ -284,7 +284,7 @@ jobs:
           done
           docker run --rm --network reembed -e PYTHONIOENCODING=utf-8 \
             -e SELFTEST_DATABASE=postgresql://postgres:pw@pg:5432/postgres \
-            "$ABBILD" python test_reembed.py 2>&1 | tee /tmp/reembed.log
+            "$ABBILD" python tests/test_reembed.py 2>&1 | tee /tmp/reembed.log
           tail -1 /tmp/reembed.log | grep -q "all passed"
           docker rm -f pg
 

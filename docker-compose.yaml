@@ -367,7 +367,7 @@ services:
   # --- HTTP-SCHNITTSTELLE ---
   #
   # Dieselbe Suche wie in der Oberflaeche, ohne Browser. Zugang ueber ein
-  # Token je Nutzer (create_token.py).
+  # Token je Nutzer (scripts/create_token.py).
   api:
     build: *bau
     image: locanoto:lokal

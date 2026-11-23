@@ -13,8 +13,6 @@ Zwei Gruende fuer dieses Modul:
    Groesse verdraengt den restlichen Kontext des LLM. Mit dem Limit bleibt
    der groesste Chunk im Bereich von MAX_TABLE_CHARS.
 """
-import os
-
 import paths
 import re
 

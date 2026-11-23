@@ -39,7 +39,7 @@ def _storage_password(name, password, by):
 # The emergency role confirms an admin's access to a personal workspace.
 # If an admin could hand it out, the second person could be the admin's
 # own puppet account. So it is assigned outside the app only: the company
-# directory (OIDC_EMERGENCY_GROUPS) or manage_users.py on the server.
+# directory (OIDC_EMERGENCY_GROUPS) or scripts/manage_users.py on the server.
 APP_ROLES = ("admin", "nutzer")
 
 
@@ -96,7 +96,7 @@ def purge_left_over(name, by="?"):
 def create(name, password, role="nutzer", by="?"):
     if role not in APP_ROLES:
         return False, ("The role notzugang is assigned through the directory "
-                       "or manage_users.py on the server."), []
+                       "or scripts/manage_users.py on the server."), []
     rest = left_over(name)
     if rest and not benutzer.eintrag((name or "").strip().lower()):
         return False, ("A former account of this name left " + " and ".join(rest)
@@ -163,7 +163,7 @@ def change_own_password(name, old, new):
 def set_role(name, role, by="?"):
     if role not in APP_ROLES or benutzer.hat_rolle(name, "notzugang"):
         return False, ("The role notzugang is assigned and removed through "
-                       "the directory or manage_users.py on the server."), []
+                       "the directory or scripts/manage_users.py on the server."), []
     ok, message = benutzer.rolle_setzen(name, role, von=by)
     return ok, message, []
 

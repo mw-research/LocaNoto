@@ -66,9 +66,10 @@ between users.
 | a named workspace | its members | its members |
 | a personal workspace | only its owner | the owner and admins |
 
-Administrators see documents in foreign rooms only in the admin area, and
-only room and file name; they never flow into their searches or answers. A
-**strict mode** hides even file names. Access to a personal room of someone
+Administrators see documents in foreign rooms only through the admin API
+(`GET /api/v1/admin/foreign-documents`), and only as room and file id;
+they never flow into their searches or answers. A **strict mode** hides
+even that list for personal rooms. Access to a personal room of someone
 who is no longer reachable requires **two people**: an administrator
 requests it with a reason, a holder of the `notzugang` role confirms it, and
 it expires after 24 hours.
@@ -111,7 +112,10 @@ Microsoft 365, which no longer accepts passwords there). Mails can carry
 attachments from the user's own workspace and the chat's images only. Any tool server speaking
 the Model Context Protocol can be added. Tools that send something are never
 executed by the model on its own: the user sees a draft and clicks *send*.
-Credentials of personal mailboxes live only in the session memory.
+Admins set mailboxes up under **Admin → Mailboxes**; every user connects
+them under **Settings → Mailboxes and data connectors**. Credentials of
+personal mailboxes live only in the browser's sealed session cookie
+(encrypted with the installation key), never on the server.
 
 A draft that fails is checked against the *Sent* folder (the calendar for
 appointments): found counts as sent, not found may be sent again, and
@@ -147,8 +151,9 @@ folders: every user gets `<root>/<user name>` (Settings → My lists).
 ### Web search
 
 When documents are not enough, the model may look things up on the web —
-**only if switched on**: per chat by the user, and for shared rooms only
-after an administrator allowed it for that room. Only the search query
+**only if switched on**: per question by the user (**Web search** in the
+chat options), and for shared rooms only after an administrator allowed
+it for that room (**Admin → Workspaces**, **Allow**). Only the search query
 leaves the house, via a self-hosted SearXNG and without user identity. The
 search service (`websuche.py`) runs in its own pod without any LocaNoto
 secret or volume, checks every address and every redirect against private
@@ -158,20 +163,34 @@ Without the switch, the model can **propose** a web search (`WEB_TOOL`):
 it becomes a draft showing the exact search text, and only the user's
 click sends it; the answer then continues in the same chat.
 
-Results appear under the answer, separate from document sources. A
-NotebookLM-style **source search** lets users collect sources without
-asking a question: search a topic, **read** each page as plain text inside
-LocaNoto, tick what to keep, and import it. Imported pages always go to the
-user's **personal room**; they reach a shared room only by moving them
-there.
+Results appear under the answer, separate from document sources. The
+**Web sources** page is a NotebookLM-style source search that collects
+sources without asking a question: search a topic (the search runs in the
+background and stays under **My searches** until deleted), **Read** each
+page as plain text inside LocaNoto, tick what to keep, and **Take over
+selected into my workspace**. **Search in the web** in the chat starts the
+same search with the typed text after showing it. Imported pages always
+go to the user's **personal room**; they reach a shared room only by
+moving them there.
 
 Text from the web cannot load anything: titles and excerpts are escaped,
 and every Markdown image in an answer is turned into a plain link.
 
-### HTTP API
+### Web interface and HTTP API
 
-`api.py` (FastAPI) offers asking questions, uploading and deleting documents,
-feedback and presets, authenticated with signed per-user tokens:
+`server.py` (FastAPI) serves the web interface — pages **Chat**,
+**Documents**, **Web sources**, **Tickets** (when switched on),
+**Settings** and **Admin** (Users · Workspaces · Jobs, Backups, Emergency
+access, Prompts and glossary, Feedback, Storage, Mailboxes, Lists,
+Databases, External model) — and every function of those pages as an HTTP
+API under `/api/v1`, documented at `/api/v1/docs`. The API accepts the
+session cookie of the pages or a signed per-user token. Functions without
+a control on the pages (own and shared presets, list upload, header rows,
+storage mapping, job logs, the status of encryption, storage and models)
+are reached through the API.
+
+`api.py` (port 8600) offers a smaller API for scripts: asking questions,
+uploading and deleting documents, feedback and presets:
 
 ```bash
 curl -H "X-LocaNoto-Token: lnt_..." http://127.0.0.1:8600/status
@@ -179,15 +198,15 @@ curl -H "X-LocaNoto-Token: lnt_..." http://127.0.0.1:8600/status
 
 Endpoints: `GET /gesundheit`, `GET /status`, `GET /dokumente`,
 `GET /raeume`, `POST /frage`, `POST /rueckmeldung`, `POST /aufnehmen`,
-`DELETE /dokumente`, `GET /voreinstellungen`. The API applies the same room
-permissions as the user interface.
+`DELETE /dokumente`, `GET /voreinstellungen`. Both APIs apply the same
+room permissions as the web interface.
 
 ### Languages
 
-Every user switches the interface between English and German in the
-sidebar (**🌐 Sprache / Language**), also on the login page; the choice is
-remembered per account. `LOCANOTO_SPRACHE=en` makes English the default
-for everyone else. **Answers come in the language of the question**, even
+Every user switches the interface between English and German under
+**Settings → Language**; the choice is remembered per account.
+`LOCANOTO_SPRACHE=en` makes English the default for everyone else and for
+the sign-in page. **Answers come in the language of the question**, even
 when the documents are German — file names, values and quotations stay
 as they are. For a question in another language, two of the three search
 probes are written in German, because keyword search only finds words as
@@ -197,20 +216,24 @@ these rules; the HTTP API reports in German.
 
 ### Presets and models
 
-Every user creates **own presets** (model, passages per question, list
-areas) under Settings → *My presets*; admins create shared presets, which
-may also carry their own prompts. The model is chosen from `CHAT_MODEL`
-and `CHAT_MODELLE` (comma-separated) — no free text; with a single model
-there is no selection. Chat titles are a short phrase.
+A preset bundles model, passages per question and list areas; it is
+chosen in the chat under **Workspaces · Model**. Every user creates
+**own presets** through the API (`PUT /api/v1/me/presets/{label}`);
+admins create shared presets (`PUT /api/v1/admin/presets/{name}`), which
+may also carry their own prompts. **Settings → Presets** lists the ones a
+user has. The model is chosen from `CHAT_MODEL` and `CHAT_MODELLE`
+(comma-separated) — no free text. Chat titles are a short phrase.
 
 ### Learning from use
 
-Questions that found nothing and thumbs-down answers are logged. From them,
-administrators maintain a **glossary** of in-house terms (e.g. an
-abbreviation and the term the documents actually use); it takes effect with
-the next question. Administrators set the base prompt; every user can add a
-personal instruction that is appended to it — the rules of the base prompt
-take precedence.
+Questions that found nothing and thumbs-down answers are logged and listed
+under **Admin → Feedback**. From them, administrators maintain a
+**glossary** of in-house terms (e.g. an abbreviation and the term the
+documents actually use); it takes effect with the next question.
+Administrators edit the base prompt and the glossary under **Admin →
+Prompts and glossary**; every user can add a **Personal instruction**
+under Settings that is appended to it — the rules of the base prompt take
+precedence.
 
 ---
 
@@ -264,7 +287,10 @@ the first administrator in both systems, builds the folder tree with its
 shares, and finally shows what is still open. It is safe to run again.
 Without a file store: `python einrichten.py --ohne-owncloud`.
 
-The UI runs on `http://localhost:8501`.
+The UI runs on `http://localhost:8501` (or the port in `APP_PORT`), the
+API reference on `http://localhost:8501/api/v1/docs`. Without a TLS proxy
+in front, `COOKIE_SECURE` stays 0 (the compose default); behind TLS set
+`COOKIE_SECURE=1`.
 
 **Back up the installation key — the one thing nobody can recover:**
 
@@ -275,22 +301,27 @@ docker compose exec -T locanoto_bot cat /app/config/schluessel.key > ~/locanoto-
 Without it all chat histories are unreadable, without any error message.
 
 Load documents by putting them into `data/dokumente/` (one folder per room)
-and running `python ingest.py`, or upload them in the UI. Web search is a
-separate profile: set `SEARXNG_SECRET` (`openssl rand -hex 32`), then
+and running `python ingest.py`, or upload them on the **Documents** page.
+Web search is a separate profile: set `SEARXNG_SECRET`
+(`openssl rand -hex 32`), then
 `docker compose --profile websuche up -d`.
 
 ## Kubernetes
 
 Manifests are in [`k8s/`](k8s/README.md): storage, configuration, the
-application pod (app, API and ChromaDB as a sidecar), schedules, OpenCloud
-(`97-opencloud.yaml`) and web search (`98-websuche.yaml`, with
+application pod (`server.py` on 8501 with probes on `/api/v1/health` and
+`/api/v1/ready`, `api.py` on 8600, ChromaDB as a sidecar), schedules,
+OpenCloud (`97-opencloud.yaml`) and web search (`98-websuche.yaml`, with
 NetworkPolicies).
 
 The data volume holds two SQLite databases and **needs block storage**
 (local disk, Ceph RBD, iSCSI, cloud disks) — not NFS, SMB or CephFS. On a
 network share SQLite silently falls back to another journal mode and the
-index gets corrupted; the UI reports the actual mode under *Speicherorte*.
-The application runs as **one replica**.
+index gets corrupted; `GET /api/v1/admin/status` reports the actual mode
+(`keyword_index`). The application runs as **one replica**: the volume is
+`ReadWriteOnce`, and the keyword index and background jobs live on it and
+in that pod. Sign-in does not depend on the pod — the session is a cookie.
+Several replicas: `k8s/enterprise/` with Postgres (below).
 
 ---
 
@@ -319,14 +350,14 @@ never stored on the server; browsers keep them sealed in a cookie.
 ```bash
 python database.py --check                         # connect, create the schema, show it
 python migrate_to_postgres.py check|run|verify     # move an installation
-python compare_search.py run QUESTIONS.txt --user NAME --out old.json   # before and after
+python scripts/compare_search.py run QUESTIONS.txt --user NAME --out old.json   # before and after
 uvicorn server:app --host 0.0.0.0 --port 8700 --proxy-headers
 python worker.py
 ```
 
-Tests: `SELFTEST_DATABASE=<server url> python selbsttest.py` (the self-test
-against a throwaway database), `test_api.py` (every endpoint),
-`test_migration.py`, `test_multipod.py` (two servers and a worker on one
+Tests: `SELFTEST_DATABASE=<server url> python tests/selftest.py` (the self-test
+against a throwaway database), `tests/test_api.py` (every endpoint),
+`tests/test_migration.py`, `tests/test_multipod.py` (two servers and a worker on one
 database).
 
 ## Security model, honestly
@@ -340,7 +371,7 @@ database).
 
 The application can hide what it writes, not what it must be able to read.
 **An encrypted disk is the foundation**, not an extra.
-`python was_sieht_die_platte.py` walks the data directory without the
+`python scripts/disk_inventory.py` walks the data directory without the
 application and the key and reports what a finder could extract.
 
 - Every entry in the user file and the token file is **signed**; an entry
@@ -352,14 +383,17 @@ application and the key and reports what a finder could extract.
 ## Operations
 
 ```bash
-docker compose exec locanoto_bot python selbsttest.py    # self-test after every update
+docker compose exec locanoto_bot python tests/selftest.py    # self-test after every update
 docker compose exec locanoto_bot python abgleich.py --pruefen   # what changed in the file store, touches nothing
-python landkarte.py                                       # map of all modules and their dependencies
+python scripts/module_map.py                                       # map of all modules and their dependencies
 ```
 
 Each task can use its own model server (`CHAT_`, `EMBEDDING_`, `VISION_`,
 `SQL_`, `TITLE_` prefixes, Azure OpenAI supported); the resolved mapping is
-shown in the UI under *Modell-Endpunkte*. With Postgres, a new embedding
+shown to admins at `GET /api/v1/models` (`endpoints`, and `ranking` for
+the reranker in use). `python doctor.py` checks key, database, models and
+file store in one run; long jobs (ingest, images, sync, backup) start
+under **Admin → Jobs**. With Postgres, a new embedding
 model needs no re-ingest: `reembed.py` computes the vectors from the stored
 text in the background (see `vector_columns.py`). Without Postgres it means
 re-ingesting everything.

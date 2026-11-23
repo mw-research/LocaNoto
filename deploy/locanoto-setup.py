@@ -60,7 +60,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 
 VERSION = "1"
 IMAGE = "ghcr.io/mw-research/locanoto:enterprise-schlank"
@@ -400,9 +399,9 @@ class Runner:
         self.a = a
 
     def make_ca(self, args, stdin=None):
-        cmd = ["python", "make_ca.py"] + args
+        cmd = ["python", "deploy/make_ca.py"] + args
         here = os.path.dirname(os.path.abspath(__file__))
-        local = os.path.join(here, "..", "make_ca.py")
+        local = os.path.join(here, "make_ca.py")
         try:
             import cryptography  # noqa: F401
             if os.path.isfile(local):
@@ -447,7 +446,7 @@ def server_cert(a, sec, runner, hosts):
                 ["kubectl", "-n", a["namespace"], "run", name, "-i", "--rm",
                  "--restart=Never", "--quiet", "--pod-running-timeout=10m",
                  f"--image={a['image']}", "--",
-                 "sh", "-c", "cat > /tmp/ca.json && python make_ca.py cert /tmp/ca.json "
+                 "sh", "-c", "cat > /tmp/ca.json && python deploy/make_ca.py cert /tmp/ca.json "
                  + " ".join(hosts)], input=data, capture_output=True, text=True)
             return json.loads(r.stdout.strip().splitlines()[-1])
         return runner.make_ca(["cert", tmp] + hosts)

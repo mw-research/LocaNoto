@@ -9,7 +9,7 @@
   </form>
   <a href="/api/v1/admin/feedback/download">{{ t('Download') }}</a>
   {% if plain %}
-  <p class="muted">{{ plain }} {{ t('lines are stored in the clear.') }}</p>
+  <p class="muted">{{ t('Lines stored in the clear') }}: {{ plain }}</p>
   <form hx-post="/ui/admin/feedback/reencrypt" class="inline">
     <button type="submit">{{ t('Encrypt again') }}</button>
   </form>

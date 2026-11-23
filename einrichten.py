@@ -285,7 +285,7 @@ def main():
     sagt("  * Dokumente nach data/dokumente/ legen und einlesen:")
     sagt(f"      {_vorspann()} python ingest.py")
     sagt("  * Den Stand jederzeit nachsehen:")
-    sagt(f"      {_vorspann()} python was_sieht_die_platte.py")
+    sagt(f"      {_vorspann()} python scripts/disk_inventory.py")
     return 0
 
 
@@ -298,7 +298,7 @@ def _frage_passwort(was="  Passwort: "):
     merkt es nicht beim Anlegen, sondern an der Anmeldemaske -- und bis
     dahin ist oft schon etwas eingelesen.
 
-    create_user.py fragt seit jeher doppelt. Dass einrichten.py es
+    scripts/create_user.py fragt seit jeher doppelt. Dass einrichten.py es
     nicht tat, war keine Entscheidung, sondern ein uebersehener
     Unterschied zwischen zwei Wegen zum selben Ziel.
     """

@@ -146,7 +146,7 @@ The model writes the query, so it is not trusted:
    (PostgreSQL, MySQL, Oracle, SQLite); every query has a time limit and
    a row limit.
 
-Tested: SQLite and PostgreSQL (`test_connector.py`). Microsoft SQL Server
+Tested: SQLite and PostgreSQL (`tests/test_connector.py`). Microsoft SQL Server
 uses the driver LocaNoto's built-in database access uses. For MySQL/MariaDB
 and Oracle the driver has to be added to the image (`pip install pymysql`,
 `pip install oracledb`); these two paths have not run against a server.

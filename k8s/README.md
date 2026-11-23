@@ -7,8 +7,8 @@ eingeschlossen — liegt auf einem externen Volume, und zwar **in genau der
 ```
 Pod locanoto                    PVC locanoto-daten  →  /app/data
  ├── chroma  (Sidecar)              dokumente/              Originaldateien
- ├── app     (Streamlit)            chats/                  Verläufe, verschlüsselt
- └── api     (uvicorn)              chroma_db/              die Vektordatenbank
+ ├── app     (server.py)            chats/                  Verläufe, verschlüsselt
+ └── api     (api.py)               chroma_db/              die Vektordatenbank
                                     keyword_index.sqlite3   Stichwortindex
                                     tabellen_katalog.json   Listenkatalog
                                     feedback.jsonl          Rückmeldungen
@@ -75,7 +75,7 @@ kubectl apply -f k8s/20-konfiguration.yaml   # nur die ConfigMap, siehe Datei
 kubectl apply -f k8s/30-anwendung.yaml
 
 # 4. Ersten Benutzer anlegen -- er wird Verwalter
-kubectl exec -it deploy/locanoto -c app -- python create_user.py
+kubectl exec -it deploy/locanoto -c app -- python scripts/create_user.py
 
 # 5. Optional: nächtlicher Abgleich und Abzug
 kubectl apply -f k8s/40-zeitplan.yaml
@@ -149,15 +149,14 @@ im Manifest, was zu ändern ist.
 
 1. Das Datenvolume ist `ReadWriteOnce` — ein zweiter Pod könnte es nicht
    einhängen.
-2. Streamlit hält den Sitzungszustand im Arbeitsspeicher. Ein zweiter Pod
-   bräuchte klebende Sitzungen, sonst landet jeder zweite Klick bei einer
-   Instanz, die den Chat nicht kennt.
+2. Stichwortindex und Hintergrundläufe liegen auf diesem Volume und in
+   diesem Pod.
 3. Prozesskennungen (PID) gelten nur auf ihrem Rechner.
 
-Was mehrere Instanzen möglich machen würde: Stichwortindex und
-Sitzungszustand in eine Server-Datenbank verlegen. Das ist ein Umbau. Für
-eine interne Wissenssuche mit drei bis einigen hundert Nutzern trägt eine
-Instanz; die Modellzeit ist der Engpass, nicht die Anwendung.
+Mehrere Instanzen: `k8s/enterprise/` mit Postgres, dort liegen Bestand,
+Stichwortindex und Hintergrundläufe in der Datenbank. Für eine interne
+Wissenssuche mit drei bis einigen hundert Nutzern trägt eine Instanz; die
+Modellzeit ist der Engpass, nicht die Anwendung.
 
 `strategy: Recreate` gehört dazu: beim Ausrollen darf nicht kurz ein
 zweiter Pod dasselbe Volume einhängen wollen. Er käme nicht hoch, und der
@@ -200,9 +199,11 @@ Zugangsschutz unterscheiden sich in jedem Haus. Zum Ausprobieren:
 kubectl port-forward deploy/locanoto 8501:8501
 ```
 
-Für den Betrieb gehört ein Ingress mit TLS davor. Die HTTP-Schnittstelle
-(8600) überträgt ihr Token im Kopf der Anfrage — unverschlüsselt wäre es
-auf dem Draht mitlesbar.
+Dann `http://localhost:8501` öffnen. Für den Betrieb gehört ein Ingress
+mit TLS davor: die Anmeldung setzt Cookies nur über https
+(`COOKIE_SECURE`, Vorgabe 1; `localhost` nimmt der Browser davon aus),
+und die HTTP-Schnittstellen übertragen ihr Token im Kopf der Anfrage —
+unverschlüsselt wäre es auf dem Draht mitlesbar.
 
 Chroma steht absichtlich **nicht** im Service und lauscht nur auf
 `127.0.0.1`. Er kennt keine Nutzer: wer ihn erreicht, liest alles und darf

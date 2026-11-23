@@ -153,9 +153,9 @@ Bestand endgültig unlesbar** — ohne eine einzige Fehlermeldung, denn die
 Dateien liegen ja noch da. Er gehört an einen anderen Ort als die
 Datensicherung; sonst liegt beides beisammen.
 
-Und in der Seitenleiste unter *Benutzer verwalten* auf **Jetzt
-signieren**: danach kann sich ein von Hand in `config/users.json`
-eingetragener Zugang nicht mehr anmelden.
+Dann die Benutzerdatei signieren — `python scripts/manage_users.py`,
+Punkt 5, oder `POST /api/v1/admin/users/sign`: danach kann sich ein von
+Hand in `config/users.json` eingetragener Zugang nicht anmelden.
 
 ### 5. Dokumente einlesen
 
@@ -167,9 +167,9 @@ docker compose exec locanoto_bot python ingest.py
 ```
 
 Der Lauf ist unterbrechbar und setzt auf Seitenebene wieder auf. Für
-Abbildungen zusätzlich `python ingest_images.py`. Beides geht auch über
-die Seitenleiste unter *Nachtragen und neu einlesen* und läuft dort
-abgekoppelt weiter.
+Abbildungen zusätzlich `python ingest_images.py`. Beides geht auch unter
+**Admin → Hintergrundläufe** (**Starten**) und läuft dort abgekoppelt
+weiter.
 
 Wer die Dokumente in ownCloud pflegt, überspringt das und richtet den
 [Abgleich](#-dokumente-aus-owncloud) ein.
@@ -177,15 +177,25 @@ Wer die Dokumente in ownCloud pflegt, überspringt das und richtet den
 ### 6. Prüfliste
 
 Die Oberfläche steht auf `http://localhost:8501`, oder auf dem Port aus
-`APP_PORT`. Als Verwalter in der Seitenleiste:
+`APP_PORT`. Ohne TLS-Proxy davor bleibt `COOKIE_SECURE=0` (Vorgabe in
+der Compose-Datei); hinter einem Proxy mit TLS gehört `COOKIE_SECURE=1`
+in die `.env`.
 
-| | soll zeigen |
+Als Verwalter angemeldet, öffnen sich die folgenden Adressen der API
+direkt im Browser; `/api/v1/docs` listet alle:
+
+| Adresse → Feld | soll zeigen |
 |---|---|
-| *Verschlüsselung* | „an" — sonst fehlt `cryptography` im Abbild |
-| *Speicherorte* | Journalmodus `wal` — sonst liegt `data/` auf einer Freigabe |
-| *Modell-Endpunkte* | `RANGFOLGE  Endpunkt …` (nicht „Modell aus dem Image") |
-| *Benutzer verwalten* | „signiert", Protokollkette in Ordnung |
-| *Konfiguration* | erscheint nur, wenn Einträge fehlen oder abweichen |
+| `/api/v1/admin/status` → `encryption` | „an" — sonst fehlt `cryptography` im Abbild |
+| `/api/v1/admin/status` → `keyword_index` | `wal` — sonst liegt `data/` auf einer Freigabe |
+| `/api/v1/models` → `ranking` | `Endpunkt …` (nicht „Modell aus dem Image") |
+| `/api/v1/admin/users` → `file_state` | `signiert` |
+| `/api/v1/admin/audit` → `chain` | `[true, …]` — Protokollkette in Ordnung |
+| `/api/v1/admin/status` → `env_drift` | fehlende, abweichende und unbekannte Einträge der `.env` (nur Namen) — die abweichenden ansehen |
+
+Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage.
+`docker compose exec locanoto_bot python doctor.py` prüft Schlüssel,
+Datenbank und Modell-Endpunkte in einem Lauf.
 
 Dann eine Testfrage. Treffer mit Datei und Seite = fertig.
 
@@ -200,8 +210,8 @@ der `data/`-Struktur, die es auch neben der Compose-Datei gibt:
 ```
 Pod locanoto                    PVC locanoto-daten  →  /app/data
  ├── chroma  (Sidecar)              dokumente/  chats/  chroma_db/
- ├── app     (Streamlit)            keyword_index.sqlite3
- └── api     (uvicorn)              tabellen_katalog.json  feedback.jsonl
+ ├── app     (server.py, 8501)      keyword_index.sqlite3
+ └── api     (api.py, 8600)         tabellen_katalog.json  feedback.jsonl
                                     sicherungen/  owncloud/
 
                                 PVC locanoto-konfig →  /app/config
@@ -229,8 +239,8 @@ Persistent heißt nicht automatisch Dateifreigabe, und das ist die
 Verwechslung, an der es beim Aufsetzen scheitert. Eine Freigabe trägt
 SQLite im WAL-Betrieb nicht, und das Ergebnis ist kein Fehler, sondern
 ein beschädigter Index — SQLite fällt dabei **still** auf einen anderen
-Journalmodus zurück. Die Oberfläche liest den tatsächlichen Modus zurück
-und meldet es unter *Speicherorte*.
+Journalmodus zurück. Die Anwendung liest den tatsächlichen Modus zurück
+und meldet ihn unter `GET /api/v1/admin/status` (`keyword_index`).
 
 ### Aufsetzen
 
@@ -288,12 +298,14 @@ ist.
 
 ### Eine Instanz
 
-`replicas: 1`. Das Volume ist
-`ReadWriteOnce`, Streamlit hält den Sitzungszustand im Arbeitsspeicher,
-PID-Dateien gelten nur auf ihrem Rechner. Mehrere Instanzen bräuchten
-Stichwortindex und Sitzungszustand in einer Server-Datenbank — ein Umbau.
+`replicas: 1`. Das Volume ist `ReadWriteOnce`, Stichwortindex und
+Hintergrundläufe liegen auf diesem Volume und in diesem Pod, und
+PID-Dateien gelten nur auf ihrem Rechner. Die Anmeldung hängt nicht am
+Pod — die Sitzung steht im Cookie des Browsers. Mehrere Instanzen laufen
+mit [`k8s/enterprise/`](#-enterprise-fassung-mehrere-pods-postgres-sso):
+dort liegt aller geteilte Zustand in Postgres.
 Für eine interne Wissenssuche ist die Modellzeit der Engpass, nicht die
-Anwendung: [`lasttest.py`](lasttest.py) misst den Eigenanteil der
+Anwendung: [`scripts/load_test.py`](scripts/load_test.py) misst den Eigenanteil der
 Anwendung an einer Antwort, und der bleibt von 2 bis 32 gleichzeitigen
 Fragen flach.
 
@@ -304,7 +316,7 @@ Fragen flach.
 Ist `DATABASE_URL` gesetzt, liegt aller geteilte Zustand in **Postgres mit
 pgvector** statt in Dateien, SQLite und Chroma, und LocaNoto läuft in
 beliebig vielen zustandslosen Pods. Ohne die Variable bleibt alles wie in
-diesem README beschrieben.
+dieser Referenz beschrieben.
 
 | Teil | Aufgabe |
 |---|---|
@@ -326,35 +338,47 @@ gespeichert; Browser halten sie versiegelt im Cookie.
 ```bash
 python database.py --check                         # verbinden, Schema anlegen, anzeigen
 python migrate_to_postgres.py check|run|verify     # eine Installation umziehen
-python compare_search.py run FRAGEN.txt --user NAME --out alt.json      # vorher und nachher
+python scripts/compare_search.py run FRAGEN.txt --user NAME --out alt.json      # vorher und nachher
 uvicorn server:app --host 0.0.0.0 --port 8700 --proxy-headers
 python worker.py
 ```
 
-Tests: `SELFTEST_DATABASE=<Server-URL> python selbsttest.py` (Selbsttest
-gegen eine Wegwerf-Datenbank), `test_api.py` (jeder Endpunkt),
-`test_migration.py`, `test_multipod.py` (zwei Server und ein Worker auf
+Tests: `SELFTEST_DATABASE=<Server-URL> python tests/selftest.py` (Selbsttest
+gegen eine Wegwerf-Datenbank), `tests/test_api.py` (jeder Endpunkt),
+`tests/test_migration.py`, `tests/test_multipod.py` (zwei Server und ein Worker auf
 einer Datenbank).
 
 ## 🗺️ Die Landkarte
 
-Gut sechzig Dateien. Dieser Abschnitt nennt für jede, was sie tut,
+Gut hundert Dateien. Dieser Abschnitt nennt für jede, was sie tut,
 welche Werte sie aus der `.env` liest und welche Dateien sie benutzen.
 
 Er wird erzeugt, nicht gepflegt:
 
 ```bash
-python landkarte.py              # die Übersicht
-python landkarte.py --tabelle    # die Tabelle unten
+python scripts/module_map.py              # die Übersicht
+python scripts/module_map.py --tabelle    # die Tabelle unten
 ```
 
 Der Selbsttest prüft, dass jede Datei hier aufgeführt ist.
+
+### Ordner
+
+| Ordner | Inhalt |
+|---|---|
+| Wurzel | die Anwendung und die Skripte, die eine Installation startet: `server.py`, `worker.py`, `ingest.py`, `abgleich.py`, `sicherung.py`, `einrichten.py`, `websuche.py`, `api.py`, `doctor.py` … |
+| `scripts/` | Werkzeuge, die man von Hand startet: Benutzer und Token, Diagnosen, Inventur, Übersetzungen, Lasttest |
+| `tests/` | `tests/selftest.py` mit seinen Teilen in `tests/selftest_parts/`, dazu `tests/test_*.py` |
+| `deploy/` | Installer und Helfer für die Bereitstellung (`deploy/locanoto-setup.py`, `deploy/make_ca.py`) |
+| `connectors/` | Datenanschlüsse für ERP, MES und Datenbanken |
+| `k8s/` | Manifeste für Kubernetes, `k8s/enterprise/` für die Fassung mit Postgres |
+| `web_templates/`, `web_static/` | Seitenvorlagen (Jinja) sowie Skripte, Stile und Bilder der Weboberfläche |
 
 ### Vier Schichten, und keine Kante zeigt nach oben
 
 ```mermaid
 flowchart TB
-    EIN["① EINSTIEGE — was man startet<br/><br/>app.py · verwaltung.py · api.py · ingest.py<br/>abgleich.py · einrichten.py · sicherung.py"]
+    EIN["① EINSTIEGE — was man startet<br/><br/>server.py · web.py · routes_*.py · api.py · worker.py<br/>ingest.py · abgleich.py · einrichten.py · sicherung.py"]
     FACH["② FACHLOGIK — der Weg zur Antwort<br/><br/>pipeline.py · ranking.py · mcp.py · postfach.py<br/>tabellen.py · owncloud.py · lesen.py · tables.py"]
     BEST["③ BESTAND — wo etwas liegt<br/><br/>store.py → Chroma · keyword_index.py → SQLite FTS5<br/>raeume.py · benutzer.py · raumschluessel.py · budget.py"]
     GRU["④ GRUNDLAGE — kennt nichts über sich<br/><br/>paths.py — .env und alle Pfade<br/>geheim.py · llm.py · embedding.py"]
@@ -371,23 +395,26 @@ aus Versehen umbauen.
 
 | Schicht | Umfang | Regel |
 |---|---|---|
-| ① Einstiege | gut die Hälfte | wird gestartet oder gezeichnet; keine tiefere Schicht kennt sie |
-| ② Fachlogik | rund ein Drittel | kennt den Bestand, nicht die Oberfläche |
-| ③ Bestand | sechs Dateien | weiß, wo etwas liegt und wer es sehen darf |
-| ④ Grundlage | vier Dateien | kennt nur sich selbst und die `.env` |
+| ① Einstiege | rund ein Fünftel | wird gestartet oder liefert Seiten und Endpunkte; keine tiefere Schicht kennt sie |
+| ② Fachlogik | gut zwei Fünftel | kennt den Bestand, nicht die Oberfläche |
+| ③ Bestand | neun Dateien | weiß, wo etwas liegt und wer es sehen darf |
+| ④ Grundlage | neun Dateien | kennt nur sich selbst und die `.env` |
 
-Genaue Zahlen nennt `python landkarte.py` — im README stünden sie nach
+Darüber stehen die Werkzeuge in `scripts/` und die Tests in `tests/`:
+sie dürfen jede Schicht benutzen, und keine der vier benutzt sie.
+
+Genaue Zahlen nennt `python scripts/module_map.py` — hier stünden sie nach
 der nächsten Datei falsch.
 
 ### Der Weg einer Frage
 
-Derselbe für die Oberfläche und für die Schnittstelle: beide rufen
-`pipeline.py`. Eine Antwort über HTTP ist damit dieselbe wie im
-Browser.
+Derselbe für die Weboberfläche, die API unter `/api/v1` und `api.py`:
+alle rufen `pipeline.py`, die ersten beiden über `answering.py`. Eine
+Antwort über HTTP ist damit dieselbe wie im Browser.
 
 ```mermaid
 sequenceDiagram
-    participant U as app.py / api.py
+    participant U as server.py / api.py
     participant P as pipeline.py
     participant E as embedding.py
     participant S as store.py
@@ -435,22 +462,24 @@ auch dort und nicht an drei Stellen.
 
 | Befehl | wofür |
 |---|---|
+| `uvicorn server:app --host 0.0.0.0 --port 8501` | Die Anwendung: Weboberfläche und API unter `/api/v1` (so startet sie das Abbild) |
 | `python einrichten.py` | Von null auf lauffähig — Schlüssel, erster Verwalter, Ordnerbaum |
+| `python doctor.py` | Ist die Installation vollständig? Schlüssel, Datenbank, Modelle, Ablage |
 | `python ingest.py` | Dokumente einlesen; `INGEST_RAUM` setzt den Zielraum |
 | `python ingest_images.py` | Abbildungen beschreiben und durchsuchbar machen |
 | `python abgleich.py --pruefen` | Was hat sich in ownCloud geändert? Fasst nichts an |
 | `python abgleich.py` | Gruppen, dann Dateien, dann einlesen |
 | `python sicherung.py` | Abzug der Vektordatenbank, ohne Modell zurückspielbar |
-| `python bestandsliste.py` | Was liegt in dieser Installation? |
-| `python selbsttest.py` | Stehen die Grundfunktionen? |
-| `python landkarte.py` | Diese Übersicht, aus dem Code gelesen |
-| `python lasttest.py` | Wie viele Leute gleichzeitig? |
+| `python scripts/inventory.py` | Was liegt in dieser Installation? |
+| `python tests/selftest.py` | Stehen die Grundfunktionen? |
+| `python scripts/module_map.py` | Diese Übersicht, aus dem Code gelesen |
+| `python scripts/load_test.py` | Wie viele Leute gleichzeitig? |
 | `python mcp.py` | Was bietet ein angebundener Werkzeugserver an? |
 | `python postfach.py <name>` | Steht die Anmeldung an einem Exchange-Postfach? |
-| `python create_token.py` | Zugangstoken für die Schnittstelle |
-| `python raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? |
-| `python listen_diagnose.py` | Warum findet die Listenabfrage nichts? |
-| `python was_sieht_die_platte.py` | Was liest jemand, der die Platte hat, aber nicht den Schlüssel? |
+| `python scripts/create_token.py` | Zugangstoken für die Schnittstelle |
+| `python scripts/room_diagnosis.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? |
+| `python scripts/list_diagnosis.py` | Warum findet die Listenabfrage nichts? |
+| `python scripts/disk_inventory.py` | Was liest jemand, der die Platte hat, aber nicht den Schlüssel? |
 
 ### Wohin die Variablen gehen
 
@@ -465,141 +494,139 @@ eine Datei. Die zwölf Ausnahmen:
 | `INGEST_RAUM`, `INGEST_ORDNER` | `ingest`, `ingest_images` | zwei Läufe mit derselben Steuerung |
 | `MIN_AREA`, `MIN_LONG_EDGE` | `bildtext`, `ingest_images` | dieselbe Schwelle beim Hochladen und im Stapellauf |
 | `VISION_TIMEOUT` | `vision`, `ingest_images` | eine Frage darf kürzer warten als ein Nachtlauf |
-| `TOP_K` | `api`, `app`, `selbsttest` | Vorgabe für beide Oberflächen; der Selbsttest prüft sie |
-| `HELPER_TIMEOUT` | `app`, `pipeline` | dieselbe Grenze für Vorstufen und Nebenläufe |
+| `TOP_K` | `answering`, `api` | Vorgabe für die Weboberfläche samt `/api/v1` und für `api.py` |
+| `HELPER_TIMEOUT` | `answering`, `pipeline` | dieselbe Grenze für Vorstufen und Nebenläufe |
 | `TABELLEN_PFAD` | `paths`, `tabellen` | `paths` legt den Ort fest, `tabellen` liest ihn |
 
 Alles Übrige steht in [`.env.example`](.env.example), kommentiert mit dem
 Grund, warum es den Eintrag gibt. Was in der eigenen `.env` fehlt oder
-abweicht, zeigt die Oberfläche unter *Konfiguration* — nur Namen, keine
-Werte.
+abweicht, zeigt `GET /api/v1/admin/status` unter `env_drift` — nur Namen,
+keine Werte.
 
 ### Jede Datei in einem Satz
 
-Erzeugt mit `python landkarte.py --tabelle`. „Liefert an" heißt: diese
+Erzeugt mit `python scripts/module_map.py --tabelle`. „Liefert an" heißt: diese
 Dateien importieren sie.
 
 | Datei | Aufgabe | liest aus der `.env` | liefert an |
 |---|---|---|---|
 | **Grundlage** | | | |
-| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `altbestand`, `answering` +80 |
-| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `app`, `aufnehmen` +18 |
-| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `app`, `auth`, `benutzer` +26 |
-| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `accounts`, `app`, `attachments`, `aufnehmen` +37 |
-| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +16 |
-| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +25 |
-| `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `app`, `aufnehmen`, `ingest`, `ingest_images` +2 |
-| `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `app`, `mail_watch`, `pipeline`, `raeume` +7 |
+| `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `answering`, `api` +76 |
+| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `aufnehmen`, `doctor` +15 |
+| `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `auth`, `benutzer`, `chats` +22 |
+| `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `accounts`, `attachments`, `aufnehmen`, `auth` +34 |
+| `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +15 |
+| `dateisperre.py` | Eine Datei aendern, ohne dass ein gleichzeitiger Schreiber es verschluckt. | — | `answering`, `auth`, `benutzer`, `chats` +23 |
+| `embedding.py` | Embedding-Aufrufe, gebuendelt. | `EMBED_BATCH_SIZE`, `EMBED_MIN_CHARS`, `EMBED_PARALLEL` +1 | `aufnehmen`, `ingest`, `ingest_images`, `pipeline` +1 |
+| `sprache.py` | Oberflaechensprache: Deutsch oder Englisch, je Nutzer. | `LOCANOTO_SPRACHE` | `mail_watch`, `pipeline`, `raeume`, `routes_account` +4 |
 | `local_time.py` | The local time of the installation, and a calendar for the model. | `TIMEZONE` | `imap_mailbox`, `mail_watch`, `pipeline`, `postfach` +4 |
 | **Bestand** | | | |
-| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `accounts`, `altbestand`, `answering` +42 |
-| `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS`, `SITZUNG_MERKEN_STUNDEN` | `abgleich`, `accounts`, `api`, `app` +27 |
-| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `accounts`, `api`, `app`, `aufnehmen` +21 |
-| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `accounts`, `app`, `aufnehmen`, `compare_search` +15 |
-| `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `answering`, `api`, `app`, `routes_admin` +5 |
-| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `doc_actions`, `keyword_index`, `pg_keywords`, `selbsttest` +4 |
+| `raeume.py` | Raeume: wer darf welche Abschnitte sehen. | `OWNCLOUD_GRUPPEN_HOECHSTALTER`, `PRIVAT_STRENG` | `abgleich`, `accounts`, `answering`, `api` +38 |
+| `store.py` | Zugang zur Vektordatenbank -- an einer Stelle. | `CHROMA_CLOUD_DATABASE`, `CHROMA_CLOUD_KEY`, `CHROMA_CLOUD_TENANT` +6 | `accounts`, `api`, `aufnehmen`, `doc_actions` +18 |
+| `benutzer.py` | Benutzer, Rollen und ein Protokoll, das Aenderungen sichtbar macht. | `ADMIN_USERS` | `abgleich`, `accounts`, `api`, `budget` +24 |
+| `keyword_index.py` | Plattenbasierter Keyword-Index auf SQLite FTS5. | `LOCANOTO_STICHWORTINDEX` | `accounts`, `aufnehmen`, `doc_actions`, `ingest` +12 |
+| `budget.py` | Wie viel darf in einer Stunde entschluesselt werden -- und wer merkt es. | `BUDGET_ABSCHNITTE`, `BUDGET_FENSTER_MINUTEN`, `BUDGET_RAEUME` +1 | `answering`, `api`, `routes_admin`, `routes_chat` +3 |
+| `raumschluessel.py` | Je Raum ein eigener Schluessel -- verpackt mit dem Installationsschluessel. | — | `doc_actions`, `keyword_index`, `pg_keywords`, `sicherheit` +3 |
 | `pg_collection.py` | Chroma-compatible collections on Postgres + pgvector. | — | `migrate_to_postgres`, `store` |
-| `pg_keywords.py` | Keyword search on Postgres -- the enterprise counterpart of keyword_index. | — | `compare_search`, `keyword_index`, `raum_diagnose` |
-| `vector_columns.py` | Which vector column belongs to which embedding model (Postgres only). | `EMBEDDING_NEXT_DIMENSIONS`, `EMBEDDING_NEXT_MODEL` | `doctor`, `pg_collection`, `reembed`, `test_reembed` |
+| `pg_keywords.py` | Keyword search on Postgres -- the enterprise counterpart of keyword_index. | — | `keyword_index`, `scripts/compare_search`, `scripts/room_diagnosis` |
+| `vector_columns.py` | Which vector column belongs to which embedding model (Postgres only). | `EMBEDDING_NEXT_DIMENSIONS`, `EMBEDDING_NEXT_MODEL` | `doctor`, `pg_collection`, `reembed`, `tests/test_reembed` |
 | **Fachlogik** | | | |
-| `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +2 |
-| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `altbestand`, `app` +12 |
-| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `app`, `listen_diagnose` +6 |
-| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `app`, `attachments` +15 |
-| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `app`, `routes_account`, `routes_chat`, `server` +9 |
-| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_STDIO`, `MCP_TIMEOUT` | `answering`, `app`, `doctor`, `external_model` +15 |
-| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | `AUFNAHME_GLEICHZEITIG`, `AUFNAHME_MAX_SEITEN`, `AUFNAHME_WARTEN_SEKUNDEN` +1 | `accounts`, `api`, `app`, `attachments` +11 |
-| `imap_mailbox.py` | Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers. | `POSTFACH_HOLGRENZE`, `POSTFACH_TIMEOUT` | `mcp`, `selbsttest` |
-| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `app`, `pipeline` +1 |
-| `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `app`, `routes_admin`, `routes_documents`, `selbsttest` +4 |
-| `tickets.py` | A ticket system for shared mailboxes (info@, service@, ...). | `TICKET_KEEP_DAYS`, `TICKET_POLL_SECONDS` | `selbsttest`, `test_api`, `test_mail_tools`, `web` +2 |
-| `mcp_oauth.py` | Signing in to tool servers with OAuth 2.1, the MCP authorization standard. | `MCP_OAUTH_TIMEOUT` | `mcp`, `routes_account`, `server`, `test_mcp_oauth` +1 |
-| `created_files.py` | Files the model creates on request: Excel, Word, PDF, PowerPoint. | `CREATED_FILES_KEEP`, `CREATED_FILES_MAX_ROWS`, `FILES_TOOL` | `answering`, `attachments`, `db_files`, `routes_documents` +2 |
-| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `answering`, `doctor`, `mail_watch`, `routes_account` +9 |
-| `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +7 | `api`, `routes_account`, `selbsttest`, `server` +2 |
-| `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +8 | `answering`, `app`, `selbsttest`, `test_mail_tools` +2 |
-| `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `accounts`, `answering`, `api`, `app` +9 |
-| `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `app`, `routes_admin` +5 |
-| `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `app`, `attachments`, `mailboxes` +8 |
-| `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MAX_MEGAPIXEL`, `BILD_MINDEST_TEXT`, `OCR_DPI` +2 | `aufnehmen`, `bildtext`, `ingest`, `routes_chat` +1 |
-| `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | `AUFNAHME_ENTPACKT_MAX_MB` | `app`, `aufnehmen`, `ingest`, `ingest_images` +2 |
-| `external_model.py` | Internal and external language model: which one writes an answer. | `EXTERN_BASE_URL`, `EXTERN_MODEL` | `answering`, `routes_admin`, `test_external_model`, `web_admin` |
-| `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_ATTEMPTS_PER_NAME` +4 | `app`, `mcp_oauth`, `oidc`, `routes_account` +6 |
-| `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `app`, `routes_account`, `routes_admin` +5 |
-| `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `selbsttest`, `web` |
-| `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `app`, `routes_admin`, `routes_documents`, `server` +1 |
-| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `app`, `pipeline` +6 |
-| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `app`, `pipeline`, `routes_account` +6 |
-| `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `app`, `aufnehmen`, `ingest`, `ingest_images` |
-| `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `app`, `create_token` +7 |
-| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` +1 |
-| `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `selbsttest`, `verwaltung` +1 |
-| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `app`, `mcp` +3 |
-| `db_files.py` | Documents in database results: files in binary columns, paths, links. | `SQL_FILE_ROOTS` | `answering`, `postfach`, `test_mail_tools` |
-| `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `test_connector`, `test_mail_tools`, `web` |
-| `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `app`, `attachments`, `bildtext` +2 |
-| `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `app`, `aufnehmen`, `routes_documents`, `selbsttest` |
+| `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +1 |
+| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +9 |
+| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `routes_admin`, `routes_documents` +3 |
+| `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `attachments`, `routes_admin` +12 |
+| `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `routes_account`, `routes_chat`, `server`, `tests/test_api` +8 |
+| `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_STDIO`, `MCP_TIMEOUT` | `answering`, `doctor`, `external_model`, `mail_watch` +12 |
+| `aufnehmen.py` | Ein Dokument aufnehmen -- fuer beide Eingaenge derselbe Weg. | `AUFNAHME_GLEICHZEITIG`, `AUFNAHME_MAX_SEITEN`, `AUFNAHME_WARTEN_SEKUNDEN` +1 | `accounts`, `api`, `attachments`, `doc_actions` +8 |
+| `imap_mailbox.py` | Mailboxes over IMAP and SMTP: Gmail, GMX, web.de, own mail servers. | `POSTFACH_HOLGRENZE`, `POSTFACH_TIMEOUT` | `mcp` |
+| `ranking.py` | Kandidaten aus Vektor- und Keyword-Suche zu einer Rangfolge verschmelzen. | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `RERANKER_API_KEY` +9 | `answering`, `api`, `pipeline` |
+| `listenquellen.py` | Woher die Listen kommen -- und wer welche sieht. | `LISTEN_WURZELN` | `routes_admin`, `routes_documents`, `tabellen`, `web` +1 |
+| `tickets.py` | A ticket system for shared mailboxes (info@, service@, ...). | `TICKET_KEEP_DAYS`, `TICKET_POLL_SECONDS` | `tests/test_api`, `tests/test_mail_tools`, `web`, `web_admin` +1 |
+| `mcp_oauth.py` | Signing in to tool servers with OAuth 2.1, the MCP authorization standard. | `MCP_OAUTH_TIMEOUT` | `mcp`, `routes_account`, `server`, `tests/test_mcp_oauth` +1 |
+| `created_files.py` | Files the model creates on request: Excel, Word, PDF, PowerPoint. | `CREATED_FILES_KEEP`, `CREATED_FILES_MAX_ROWS`, `FILES_TOOL` | `answering`, `attachments`, `db_files`, `routes_documents` +1 |
+| `mailboxes.py` | Mailboxes (Exchange or MCP servers) for users and admins, without a page. | — | `answering`, `doctor`, `mail_watch`, `routes_account` +8 |
+| `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +7 | `api`, `routes_account`, `server`, `tests/test_api` +1 |
+| `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +8 | `answering`, `tests/test_mail_tools`, `web`, `web_admin` |
+| `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `accounts`, `answering`, `api`, `doc_actions` +6 |
+| `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `routes_admin`, `routes_chat` +2 |
+| `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | `AUFNAHME_ENTPACKT_MAX_MB` | `aufnehmen`, `ingest`, `ingest_images`, `tabellen` |
+| `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MAX_MEGAPIXEL`, `BILD_MINDEST_TEXT`, `OCR_DPI` +2 | `aufnehmen`, `bildtext`, `ingest`, `routes_chat` |
+| `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `attachments`, `mailboxes`, `routes_chat` +5 |
+| `external_model.py` | Internal and external language model: which one writes an answer. | `EXTERN_BASE_URL`, `EXTERN_MODEL` | `answering`, `routes_admin`, `tests/test_external_model`, `web_admin` |
+| `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `routes_account`, `routes_admin`, `tests/test_api` +2 |
+| `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_ATTEMPTS_PER_NAME` +4 | `mcp_oauth`, `oidc`, `routes_account`, `server` +4 |
+| `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `web` |
+| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `pipeline`, `prompts` +3 |
+| `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `routes_admin`, `routes_documents`, `server`, `web` |
+| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `pipeline`, `routes_account`, `routes_admin` +3 |
+| `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `aufnehmen`, `ingest`, `ingest_images` |
+| `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `routes_account`, `routes_admin` +4 |
+| `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` |
+| `accounts.py` | User accounts together with their storage account (OpenCloud). | — | `routes_account`, `routes_admin`, `web` |
+| `sqlpruefung.py` | Pruefung und Aufbereitung erzeugter SQL-Abfragen. | — | `answering`, `api`, `mcp`, `sqldb` +1 |
+| `db_files.py` | Documents in database results: files in binary columns, paths, links. | `SQL_FILE_ROOTS` | `answering`, `postfach`, `tests/test_mail_tools` |
+| `mail_watch.py` | New mail in a user's mailboxes, as notices, while LocaNoto is open. | `MAIL_CHECK_MINUTES` | `tests/test_connector`, `tests/test_mail_tools`, `web` |
+| `vision.py` | Bilder aus dem Chat beschreiben lassen. | `CHAT_BILD_MAX_KANTE`, `VISION_MAX_TOKENS`, `VISION_TIMEOUT` | `answering`, `attachments`, `bildtext`, `routes_chat` |
+| `bildtext.py` | Was auf einem Bild steht, als Text -- beim Hochladen. | `BILD_MINDEST_TEXT`, `BILD_SEITEN_DPI`, `MIN_AREA` +1 | `aufnehmen`, `routes_documents` |
 | `jobs.py` | Background jobs: ingest, images, storage sync, backup. | `JOB_HEARTBEAT_TIMEOUT` | `routes_admin`, `web`, `web_admin`, `worker` |
-| `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `app`, `jobs`, `selbsttest`, `verwaltung` +1 |
+| `hintergrund.py` | Lange Laeufe aus der Oberflaeche anstossen und beobachten. | — | `jobs`, `worker` |
 | `datentraeger.py` | Liegt ein Verzeichnis auf einem verschluesselten Datentraeger? | — | `sicherheit` |
-| `attachments.py` | Files a user may attach to a mail: the own workspace and this chat's images. | `ATTACHMENT_MAX_MB` | `answering`, `mailboxes`, `selbsttest` |
-| `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `app`, `einrichten`, `routes_admin`, `selbsttest` +2 |
-| `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `selbsttest`, `server`, `test_api` +2 |
-| `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `app`, `routes_admin`, `verwaltung` |
-| `notices.py` | Notices for one user: new mail, new tickets, replies to tickets. | — | `mail_watch`, `routes_chat`, `test_mail_tools`, `tickets` +1 |
+| `attachments.py` | Files a user may attach to a mail: the own workspace and this chat's images. | `ATTACHMENT_MAX_MB` | `answering`, `mailboxes` |
+| `sicherheit.py` | Die Sicherheitslage auf einem Bildschirm -- ehrlich, nicht beruhigend. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI` | `einrichten`, `routes_admin`, `web` |
+| `envcheck.py` | Vergleicht die .env mit der mitgelieferten Vorlage. | — | `routes_admin` |
+| `web_sources.py` | Sources from the web: search, read, take over into the own room. | — | `routes_documents`, `server`, `tests/test_api`, `web` +1 |
+| `notices.py` | Notices for one user: new mail, new tickets, replies to tickets. | — | `mail_watch`, `routes_chat`, `tests/test_mail_tools`, `tickets` +1 |
 | `metrics.py` | Counters in the Prometheus text format, for /metrics. | — | `server` |
-| `quellticket.py` | Ein Ticket fuer genau eine Fundstelle, fuer kurze Zeit. | `QUELLE_TICKET_MINUTEN` | `app`, `selbsttest` |
-| `textutils.py` | Textbereinigung fuer den Ingest. | — | `app`, `aufnehmen`, `ingest`, `tables` |
+| `textutils.py` | Textbereinigung fuer den Ingest. | — | `aufnehmen`, `ingest`, `tables` |
 | **Einstiege** | | | |
-| `selbsttest.py` | Stehen die Grundfunktionen? -- python selbsttest.py | `CHAT_MODEL`, `CHAT_MODELLE`, `SELFTEST_DATABASE` +2 | — |
-| `app.py` | Die Oberflaeche -- Anmeldung, Seitenleiste, Chat und Quellen. | `APP_TOPIC`, `COMPANY_NAME`, `HELPER_TIMEOUT` +3 | — |
-| `verwaltung.py` | Der Verwaltungsbereich der Seitenleiste. | — | `app` |
-| `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME`, `UI_LOGO` | `server`, `test_api`, `web_admin`, `web_tickets` |
-| `test_api.py` | Exercises every endpoint of server.py against a real installation. | `SELFTEST_DATABASE` | — |
-| `routes_admin.py` | API: the admin area -- everything verwaltung.py and the admin parts of | — | `server` |
-| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD`, `SICHERUNG_VERSCHLUESSELN` | `app`, `routes_admin`, `selbsttest`, `test_api` +2 |
-| `test_mail_tools.py` | Mail, calendar and tickets without a mail server. | — | — |
-| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | `selbsttest` |
+| `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME`, `UI_LOGO` | `server`, `tests/test_api`, `web_admin`, `web_tickets` |
+| `routes_admin.py` | API: the admin area -- everything the admin pages offer. | — | `server` |
+| `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD`, `SICHERUNG_VERSCHLUESSELN` | `routes_admin`, `tests/test_api`, `web_admin` |
+| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | — |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server`, `web` |
-| `test_connector.py` | The connector interface and the SQL connector, without an ERP. | — | — |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
 | `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
-| `test_mcp_oauth.py` | Tool servers behind OAuth 2.1 (the MCP authorization standard). | — | — |
-| `uebersetzen.py` | Oberflaechentexte fuer die Uebersetzung einwickeln und einsammeln. | — | `selbsttest` |
-| `test_external_model.py` | Internal and external model: which one writes an answer. | — | — |
-| `altbestand.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | `selbsttest` |
 | `server.py` | The LocaNoto server: every function as an HTTP API under /api/v1. | `API_RATE_PER_MINUTE`, `API_WURZELPFAD`, `COOKIE_SECURE` +1 | `routes_account`, `routes_admin`, `routes_chat`, `routes_documents` +7 |
-| `was_sieht_die_platte.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
-| `lasttest.py` | Wie viele Leute gleichzeitig? -- python lasttest.py | — | `selbsttest` |
 | `abgleich.py` | Aus ownCloud abgleichen: Gruppen, Dokumente, Einlesen. | — | — |
-| `test_multipod.py` | Two server processes and a worker on one database -- as two pods would run. | `SELFTEST_DATABASE` | — |
-| `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `altbestand`, `selbsttest` |
+| `spiegeln.py` | Vorhandene Dokumente nach ownCloud hochladen -- python spiegeln.py | — | `scripts/import_existing` |
 | `migrate_to_postgres.py` | Move an installation from files, SQLite and Chroma to Postgres. | — | — |
-| `reembed.py` | Compute the vectors of every passage again -- for a new embedding model. | `EMBEDDING_NEXT_BASE_URL`, `REEMBED_BATCH`, `REEMBED_HOURS` +1 | `selbsttest`, `test_reembed` |
-| `test_migration.py` | End-to-end check of the move to Postgres, without a model server. | `SELFTEST_DATABASE` | — |
-| `bestandsliste.py` | Was liegt in dieser Installation? -- python bestandsliste.py | — | `selbsttest` |
-| `test_reembed.py` | Changing the embedding model on Postgres, end to end, without a model server. | `SELFTEST_DATABASE` | — |
+| `reembed.py` | Compute the vectors of every passage again -- for a new embedding model. | `EMBEDDING_NEXT_BASE_URL`, `REEMBED_BATCH`, `REEMBED_HOURS` +1 | `tests/test_reembed` |
 | `doctor.py` | Is this installation complete? One check per part, in plain words. | `LOCANOTO_LANG`, `LOCANOTO_PUBLIC_URL`, `SSL_CERT_FILE` | — |
-| `compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `test_api`, `test_external_model`, `test_mcp_oauth`, `test_migration` +2 |
-| `listen_diagnose.py` | Warum findet die Listenabfrage nichts? | — | — |
-| `raum_diagnose.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
-| `landkarte.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | `selbsttest` |
-| `manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
-| `create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
-| `make_ca.py` | A small certificate authority for installations without a public one. | — | — |
-| `packe_umzug.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | `selbsttest` |
-| `create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
-| `pruefe_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
 | `worker.py` | Runs the background jobs queued in Postgres (see jobs.py). | `WORKER_POLL_SECONDS` | — |
 | `web_tickets.py` | Tickets of shared mailboxes in the web interface (tickets.py). | — | `server` |
-| `lizenzen.py` | Die Lizenzen der Abhaengigkeiten -- gegen die GEPINNTEN Fassungen. | — | — |
 | `rebuild_index.py` | Baut den Keyword-Index aus der bestehenden Vektordatenbank neu auf. | — | — |
 | `trustbundle.py` | One list of trusted certificate authorities for every container. | — | — |
+| **Werkzeuge** | | | |
+| `scripts/import_existing.py` | Alte ownCloud-10-Ablage mit dem Bestand von LocaNoto vergleichen. | `OWNCLOUD_PASSWORT`, `OWNCLOUD_URL`, `OWNCLOUD_USER` | — |
+| `scripts/disk_inventory.py` | Was liest jemand, der die Platte hat -- aber nicht den Schluessel? | — | — |
+| `scripts/load_test.py` | Wie viele Leute gleichzeitig? -- python scripts/load_test.py | — | — |
+| `scripts/inventory.py` | Was liegt in dieser Installation? -- python scripts/inventory.py | — | — |
+| `scripts/translations.py` | Which texts of the web UI have no translation yet. | — | — |
+| `scripts/compare_search.py` | Does the search find the same on Postgres as on Chroma and SQLite? | — | `tests/test_api`, `tests/test_external_model`, `tests/test_mcp_oauth`, `tests/test_migration` +2 |
+| `scripts/module_map.py` | Was macht welche Datei, und woher kommt ihr Wert? | — | — |
+| `scripts/list_diagnosis.py` | Warum findet die Listenabfrage nichts? | — | — |
+| `scripts/room_diagnosis.py` | Warum ist ein eingelesenes Dokument nicht abrufbar? | — | — |
+| `scripts/manage_users.py` | Benutzerverwaltung im Terminal -- nur fuer angemeldete Verwalter. | — | — |
+| `scripts/create_token.py` | Zugangstoken fuer die Schnittstelle anlegen, auflisten, widerrufen. | — | — |
+| `scripts/pack_for_move.py` | Packt den Bestand einer bestehenden Installation fuer den Umzug. | — | — |
+| `scripts/create_user.py` | Ersten Benutzer anlegen -- und danach nur noch als Verwalter. | — | — |
+| `scripts/check_env.py` | Liest der Code eine Variable, die die Compose-Datei nicht durchreicht? | — | — |
+| `scripts/licenses.py` | Die Lizenzen der Abhaengigkeiten -- gegen die GEPINNTEN Fassungen. | — | — |
+| **Tests** | | | |
+| `tests/test_api.py` | Exercises every endpoint of server.py against a real installation. | `SELFTEST_DATABASE` | — |
+| `tests/test_mail_tools.py` | Mail, calendar and tickets without a mail server. | — | — |
+| `tests/test_connector.py` | The connector interface and the SQL connector, without an ERP. | — | — |
+| `tests/test_mcp_oauth.py` | Tool servers behind OAuth 2.1 (the MCP authorization standard). | — | — |
+| `tests/test_external_model.py` | Internal and external model: which one writes an answer. | — | — |
+| `tests/test_multipod.py` | Two server processes and a worker on one database -- as two pods would run. | `SELFTEST_DATABASE` | — |
+| `tests/test_migration.py` | End-to-end check of the move to Postgres, without a model server. | `SELFTEST_DATABASE` | — |
+| `tests/test_reembed.py` | Changing the embedding model on Postgres, end to end, without a model server. | `SELFTEST_DATABASE` | — |
+| `tests/selftest.py` | Do the basic functions work? -- python tests/selftest.py | — | — |
 
 ---
 
@@ -611,17 +638,18 @@ Dateien importieren sie.
 docker compose up -d --build
 ```
 
-erzeugt den Container **neu**. Alle offenen Streamlit-Sitzungen sterben
-mit ihm. Der Browser zeigt die alte Seite weiter, aber die Verbindung
-dahinter ist tot — Eingaben laufen ohne Fehlermeldung ins Leere. Das
-sieht aus wie ein Absturz und ist keiner: **Seite neu laden**, dann
-erneut anmelden. In Kubernetes gilt dasselbe für
-`kubectl rollout restart`.
+erzeugt den Container **neu**. Die Anmeldung übersteht das: die Sitzung
+steht im Cookie des Browsers, signiert mit dem Installationsschlüssel,
+nicht im Container. Eine Antwort, die gerade geschrieben wird, bricht ab;
+unter ihr steht dann **Nochmal fragen**. Hintergrundläufe ohne Postgres
+enden mit dem Container, laufende Websuchen stehen danach als
+„Abgebrochen (Server neu gestartet).“ unter **Quellen im Netz**. In
+Kubernetes gilt dasselbe für `kubectl rollout restart`.
 
 ### Nach einem Update: Selbsttest
 
 ```bash
-python selbsttest.py
+python tests/selftest.py
 ```
 
 Läuft über den echten Suchpfad — echte Sammlungen, echter Stichwortindex,
@@ -642,13 +670,13 @@ Die Zahl der Prüfungen nennt der Lauf selbst.
 | Symptom | Ursache |
 |---|---|
 | Suche hängt nach den Sonden | Modellserver kalt oder nicht erreichbar. Die Meldung nennt den Grund; `SUCHE_EMBED_TIMEOUT` steuert die Wartezeit. |
-| „RANGFOLGE Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
+| `ranking` in `GET /api/v1/models` nennt „Modell aus dem Image" | Rerank-Endpunkt nicht erreichbar. Grund steht in derselben Zeile. |
 | Journalmodus nicht `wal` | `data/` liegt auf einer Dateifreigabe. Siehe [Speicherorte](#-speicherorte). |
-| Abzug heißt „UNVOLLSTÄNDIG" | Ein Raum ließ sich beim Sichern nicht lesen. Neu sichern; der letzte vollständige wird nicht weggeräumt. [Details](#die-vektordatenbank-sichern) |
+| Abzug steht als „unvollständig" unter **Admin → Sicherungen** | Ein Raum ließ sich beim Sichern nicht lesen. Neu sichern; der letzte vollständige wird nicht weggeräumt. [Details](#die-vektordatenbank-sichern) |
 | Quellenansicht zeigt keine Seite | Die Datei liegt im Ordner eines anderen Raums — beim Verschieben war am Ziel eine gleichnamige. Die Meldung nennt es. |
 | „Benutzerdatei außerhalb der Anwendung geändert" | Signatur passt nicht. Bestehende Nutzer arbeiten weiter, neue Einträge sind gesperrt. |
-| Rechte- oder Modellprobleme unklar | Seitenleiste → *Konfiguration* zeigt fehlende und abweichende Einträge (nur Namen, keine Werte). |
-| Ein Dokument ist eingelesen und nicht auffindbar | `python raum_diagnose.py` |
+| Rechte- oder Modellprobleme unklar | `GET /api/v1/admin/status` zeigt unter `env_drift` fehlende und abweichende Einträge (nur Namen, keine Werte); `python doctor.py` prüft Schlüssel, Datenbank und Modell-Endpunkte. |
+| Ein Dokument ist eingelesen und nicht auffindbar | `python scripts/room_diagnosis.py` |
 
 ---
 
@@ -679,31 +707,37 @@ Weboberfläche geht das mit:
 python rebuild_index.py
 ```
 
-### Nachtragen und neu einlesen
+### Hintergrundläufe
 
-Der Upload vektorisiert Text und Tabellen. **Bilder bleiben außen vor** —
-eine Beschreibung dauert je nach Sehmodell Minuten, und ein Dokument mit
-zehn Abbildungen würde den Upload-Knopf eine Stunde blockieren.
+Der Upload vektorisiert Text und Tabellen. **Bilder beschreibt er nur mit
+dem Haken Bilder beschreiben** — eine Beschreibung dauert je nach
+Sehmodell Minuten, und ein Dokument mit zehn Abbildungen hielte den
+Upload eine Stunde fest.
 
-Verwalter stoßen die beiden langen Läufe deshalb in der Seitenleiste unter
-**🔄 Nachtragen und neu einlesen** an:
+Verwalter stoßen die langen Läufe deshalb auf der Seite **Admin** im
+Abschnitt **Hintergrundläufe** an, je Lauf mit **Starten**:
 
-| Knopf | was er tut |
+| Lauf | was er tut |
 |---|---|
 | Bilder nachtragen | `ingest_images.py` — beschreibt Bilder aus PDFs und Word-Dateien |
 | Dokumente neu einlesen | `ingest.py` — vektorisiert alles im Dokumentenordner |
+| Aus ownCloud abgleichen | `abgleich.py` — Gruppen, Dateien, Einlesen |
+| Vektordatenbank sichern | `sicherung.py` — ein Abzug |
+| Vektoren neu berechnen | `reembed.py` — nur mit Postgres |
 
-Beide laufen als **eigener Vorgang**: die Oberfläche bleibt benutzbar, ein
+Alle laufen als **eigener Vorgang**: die Oberfläche bleibt benutzbar, ein
 Neuladen oder Abmelden beendet sie nicht. Bereits Verarbeitetes wird
-übersprungen, ein Abbruch kostet also nur Zeit. Während ein Lauf aktiv ist,
-zeigt der Abschnitt die letzten Protokollzeilen und bietet **Abbrechen**;
-die Anzeige aktualisiert sich beim nächsten Klick.
+übersprungen, ein Abbruch kostet also nur Zeit. Die Seite zeigt je Lauf
+seinen Zustand. Die letzten Protokollzeilen liefert
+`GET /api/v1/admin/jobs/{name}/log`, abgebrochen wird mit
+`DELETE /api/v1/admin/jobs/{name}`.
 
 Ein zweiter Start desselben Laufs wird abgelehnt, solange der erste läuft.
 
-Was es nicht gibt: eine Warteschlange, mehrere gleichzeitige Läufe, oder
-eine Wiederaufnahme nach einem Neustart des Containers. Das wäre ein
-Arbeiter neben der Anwendung — etwas anderes als ein Knopf.
+Ohne Postgres läuft jeder Lauf als Prozess im Container der Anwendung und
+endet mit ihm. Mit `DATABASE_URL` stehen die Läufe in einer Warteschlange
+in Postgres, und `worker.py` führt sie aus — siehe
+[Enterprise-Fassung](#-enterprise-fassung-mehrere-pods-postgres-sso).
 
 
 ## ☁️ Dokumente aus ownCloud
@@ -766,7 +800,7 @@ Dokumente bringt `python spiegeln.py` hinüber; es schreibt dabei den
 Stand des Abgleichs neu, sodass der nächste nächtliche Lauf nichts für
 entfallen hält.
 Was in der alten Ablage lag, LocaNoto aber nie geholt hat — andere
-Dateitypen, Späteres —, findet `python altbestand.py`: Es vergleicht ein
+Dateitypen, Späteres —, findet `python scripts/import_existing.py`: Es vergleicht ein
 altes ownCloud-10-Volume mit dem Bestand und lädt Fehlendes nach, ohne
 etwas zu überschreiben. Ablauf im Kopf der Datei.
 
@@ -785,12 +819,14 @@ trägt hier nur die Zuordnung ein. Das Holen läuft dann unverändert.
 
 Eine Zuordnung von Hand geht dem Standardbaum vor — für Unterlagen, die
 an einem gewachsenen Ort wie `/Abteilungen/Einkauf/Handbücher` gepflegt
-werden. Sie steht in `config/owncloud.json` und lässt sich in der
-Seitenleiste unter **ownCloud** setzen. Ohne Eintrag gilt der
-Standardbaum, und dann muss für einen neuen Raum niemand etwas eintragen.
+werden. Sie steht in `config/owncloud.json` und wird mit
+`PUT /api/v1/admin/storage/mapping` gesetzt; **Admin → Ablage** zeigt die
+wirksame Zuordnung je Raum. Ohne Eintrag gilt der Standardbaum, und dann
+muss für einen neuen Raum niemand etwas eintragen.
 
-**Ablage einrichten** in derselben Seitenleiste holt nach, was beim
-Anlegen nicht ging — etwa weil ownCloud gerade nicht erreichbar war. Der
+**Ordner und Freigaben der Arbeitsbereiche einrichten** unter
+**Admin → Ablage** holt nach, was beim Anlegen nicht ging — etwa weil
+ownCloud gerade nicht erreichbar war. Der
 Ablauf ist
 wiederholbar: vorhandene Ordner bleiben, Freigaben werden auf den
 Soll-Stand **gesetzt**, nicht ergänzt. Das ist der Unterschied, an dem es
@@ -816,8 +852,10 @@ docker compose exec locanoto_bot python abgleich.py
 ```
 
 holt neue und geänderte Dateien, entfernt die Abschnitte entfallener und
-liest anschließend ein. Über die Oberfläche geht dasselbe abgekoppelt, unter
-*Nachtragen und neu einlesen* → „Aus ownCloud abgleichen".
+liest anschließend ein. Über die Oberfläche geht dasselbe abgekoppelt, mit
+**Dokumente abgleichen** unter **Admin → Ablage** oder „Aus ownCloud
+abgleichen" unter **Admin → Hintergrundläufe**. Den Plan für einen Raum
+ohne Änderung liefert `GET /api/v1/admin/storage/plan?room=…`.
 
 Für den Dauerbetrieb in einen Zeitplan auf dem Server:
 
@@ -851,17 +889,16 @@ Datei liegt danach im ownCloud-Papierkorb –, verschoben über `MOVE`, ohne
 am Ziel zu überschreiben. Scheitert das, nennt die Meldung in der
 Oberfläche es.
 
-**Daten löschen** für einen ganzen Raum legt den Inhalt seines
-ownCloud-Ordners in den Papierkorb; Ordner und Freigaben bleiben, der Raum
-besteht weiter.
+Das Leeren eines ganzen Raums (`POST /api/v1/admin/workspaces/{room}/wipe`)
+legt den Inhalt seines ownCloud-Ordners in den Papierkorb; Ordner und
+Freigaben bleiben, der Raum besteht weiter.
 
 **Konten.** `config/owncloud_konten.json` führt die ownCloud-Konten, die
 LocaNoto verwaltet: jedes, das es selbst anlegt, kommt hinzu. Nur bei
 diesen löscht LocaNoto das Konto mit dem Benutzer und setzt ein neues
 Passwort auch dort. Ein vorher vorhandenes Konto kann einem Menschen
 gehören, der es für alles andere im Haus nutzt; es bleibt, bis ein
-Verwalter es unter *ownCloud → Konten* mit **Bestehende Konten
-übernehmen** vermerkt. Das Dienst- und das Verwalterkonto
+Verwalter es mit `POST /api/v1/admin/storage/adopt-accounts` vermerkt. Das Dienst- und das Verwalterkonto
 (`OWNCLOUD_USER`, `OWNCLOUD_ADMIN_USER`) fasst LocaNoto nie an, auch
 wenn ein LocaNoto-Benutzer genauso heißt. Der persönliche Ordner im
 Bereich des Dienstkontos bleibt beim Löschen eines Benutzers, wie sein
@@ -884,8 +921,9 @@ Ohne die zweite lägen die Dateirechte in ownCloud und die
 Abschnittsrechte in einer Datei daneben — ein Abteilungswechsel hätte die
 eine Seite geändert und die andere nicht.
 
-Eingetragen wird die Gruppe **am Raum selbst**, unter *Räume verwalten* →
-„ownCloud-Gruppe". Nicht in einer zweiten Zuordnungsdatei: ein Raum, dessen
+Eingetragen wird die Gruppe **am Raum selbst**, unter **Admin →
+Arbeitsbereiche** → **Bearbeiten** im Feld **Gruppe aus dem Verzeichnis
+oder der Dateiablage (optional)**. Nicht in einer zweiten Zuordnungsdatei: ein Raum, dessen
 Mitgliedschaft aus einer Gruppe kommt, soll das an einer Stelle sagen.
 
 Die Gruppenmitglieder kommen zu den von Hand eingetragenen **hinzu**, sie
@@ -907,8 +945,9 @@ keinen Anlass gibt.
 
 Passen die Kennungen in ownCloud nicht zu den hier angelegten, sieht alles
 richtig aus und niemand kommt herein — der Abgleich nennt deshalb, welche
-Kennungen er gefunden hat, die es hier nicht gibt, und die Oberfläche
-markiert sie am Raum.
+Kennungen er gefunden hat, die es hier nicht gibt.
+`GET /api/v1/admin/workspaces` zeigt je Raum die Mitglieder aus der
+Gruppe (`from_groups`) neben den eingetragenen.
 
 ### Der Preis: Aktualität
 
@@ -917,7 +956,8 @@ Frage wäre ein Rundlauf je Suchsonde, und bei nicht erreichbarem ownCloud
 stünde die Suche.
 
 Dafür gilt: **wer aus einer Gruppe entfernt wird, kommt bis zum nächsten
-Abgleich noch herein.** Das Alter des Standes steht in der Oberfläche.
+Abgleich noch herein.** Das Alter des Standes nennt
+`python abgleich.py --pruefen`.
 
 `OWNCLOUD_GRUPPEN_HOECHSTALTER` (Minuten) lässt einen zu alten Stand
 verfallen. Das ist eine Abwägung ohne richtige Antwort, und sie gehört dem
@@ -962,9 +1002,12 @@ Konfiguration getrennt von Daten, weil dort der Schlüssel liegt, mit dem
 alle Chatverläufe lesbar sind. Eine Sicherung der Dokumente soll ihn nicht
 mitnehmen: andere Rechte, andere Aufbewahrung.
 
-Zu sehen ist der ganze Zustand in der Seitenleiste unter **Speicherorte** —
-Klasse, Ort, Größe. Bei einer Frage nach der Datenhaltung ist „schau in die
-`docker-compose.yaml` und in fünf Module" keine Antwort.
+Zu sehen ist der Zustand unter `GET /api/v1/admin/status` — die drei
+Wurzeln (`storage_roots`), die Vektordatenbank (`store`) und der
+Journalmodus des Stichwortindex (`keyword_index`);
+`python scripts/inventory.py` nennt dazu, was darin liegt. Bei einer Frage nach
+der Datenhaltung ist „schau in die `docker-compose.yaml` und in fünf
+Module" keine Antwort.
 
 ### Persistent ist nicht dasselbe wie Dateifreigabe
 
@@ -983,8 +1026,8 @@ Dateisystem; über NFS oder SMB gibt es den nicht, und die Dateisperren sind
 unzuverlässig. Das Ergebnis ist kein Fehler, sondern ein beschädigter
 Index — und SQLite fällt dabei **still** auf einen anderen Journalmodus
 zurück. `PRAGMA journal_mode=WAL` schlägt nicht fehl, es bleibt einfach beim
-alten Modus. Die Oberfläche liest den tatsächlichen Modus zurück und
-meldet, wenn es nicht `wal` ist.
+alten Modus. Die Anwendung liest den tatsächlichen Modus zurück;
+`GET /api/v1/admin/status` nennt ihn unter `keyword_index`.
 
 **Und im Container gehört es auch nicht hin.** Dessen Schreibschicht
 überlebt einen Neustart des Pods nicht — der Bestand wäre nach jedem
@@ -1031,8 +1074,10 @@ docker compose exec locanoto_bot python sicherung.py liste      # vorhandene
 docker compose exec locanoto_bot python sicherung.py zurueck NAME
 ```
 
-In der Seitenleiste unter **Sicherung der Vektordatenbank** geht dasselbe,
-und der Abzug läuft dort abgekoppelt weiter.
+Unter **Admin → Sicherungen** geht dasselbe: **Jetzt sichern** startet
+den Abzug abgekoppelt; **Zurückholen** spielt einen ein, nachdem sein Name
+zur Bestätigung eingetippt ist, mit dem Haken **auch Nutzer, Chats,
+Einstellungen** samt Zustand (bei Abzügen einer Postgres-Installation).
 
 Gelesen wird über die Schnittstelle, **nicht als Dateikopie**: eine Kopie
 mitten in einem Schreibvorgang ist ein Abzug, der sich nicht zurückholen
@@ -1064,7 +1109,7 @@ ein eigenes Laufwerk; `SICHERUNG_BEHALTEN` (Vorgabe 7) räumt die ältesten
 auf — **außer dem neuesten vollständigen**, der bleibt immer stehen.
 
 **Wenn ein Raum sich nicht lesen ließ**, steht das im Abzug, in der Liste
-und in der Seitenleiste als `UNVOLLSTÄNDIG`; beim Einspielen wird es
+und unter **Admin → Sicherungen** als „unvollständig"; beim Einspielen wird es
 vorher gesagt, nicht hinterher. Ein Abzug, dem ein Raum fehlt, ist von
 außen nicht von einem vollständigen zu unterscheiden — die Dateien der
 anderen Räume liegen ja da. Der Auslöser ist eine Eigenheit von ChromaDB:
@@ -1114,9 +1159,12 @@ einem Mitglied — und „Einkauf" ein Raum mit fünfzig. Dieselbe Mechanik
 trägt drei Nutzer und tausend, denn die Zahl der Sammlungen wächst mit der
 Zahl der Zuständigkeiten, nicht mit der Zahl der Nutzer.
 
-Angelegt und verwaltet werden Räume in der Seitenleiste unter **Räume
-verwalten** (nur Administratoren). Beim Upload wählt der Nutzer den Raum;
-vorgegeben ist der eigene, sodass niemand versehentlich etwas teilt.
+Angelegt und verwaltet werden Räume auf der Seite **Admin** im Abschnitt
+**Arbeitsbereiche** (nur Administratoren): **Neuer Arbeitsbereich** mit
+Kennung, Bezeichnung und Mitgliedern, **Bearbeiten** für Bezeichnung,
+Mitglieder, Gruppe und Websuche, **Arbeitsbereich entfernen**. Beim
+Upload auf der Seite **Dokumente** wählt der Nutzer den Raum; vorgegeben
+ist der eigene, sodass niemand versehentlich etwas teilt.
 
 ### Getrennte Sammlungen
 
@@ -1188,14 +1236,15 @@ Dort ist schon ein Dateiname eine Auskunft:
 `Angebot_Kunde_Meier_2026.pdf` verrät den Vorgang, ohne dass jemand die
 Datei öffnet.
 
-`PRIVAT_STRENG=1` nimmt deshalb auch Verwaltern die Dateinamen fremder
-persönlicher Räume. Was bleibt, ist ein **Löschrecht ohne Leserecht**:
+Verwalter sehen die Dateien fremder persönlicher Räume deshalb nie mit
+Namen, nur als Dateikennung. `PRIVAT_STRENG=1` nimmt ihnen auch diese
+Liste. Was bleibt, ist ein **Löschrecht ohne Leserecht**:
 
 | | Vorgabe | `PRIVAT_STRENG=1` |
 |---|---|---|
 | Inhalte fremder Räume | nie | nie |
-| Dateinamen, für Verwalter | sichtbar | **nicht sichtbar** |
-| Verwalter sieht | Raum + Dateinamen | Raum + Anzahl |
+| Dateien, für Verwalter | als Kennung aufgelistet | **nicht aufgelistet** |
+| Verwalter sieht | Raum + Dateikennungen | Raum + Anzahl |
 | Verwalter kann löschen | einzelne Datei | den Raum als Ganzes |
 
 Für eine verwaiste Ablage eines ausgeschiedenen Mitarbeiters genügt das.
@@ -1218,14 +1267,16 @@ Die ersten drei weist die Anwendung ab und sagt warum. Der vierte Riegel
 ist der, der auch dann noch hält, wenn ein fünfter Weg dazukommt: die
 Rechteprüfung leitet den Besitzer aus der Kennung ab und sieht die Liste
 gar nicht an. Soll etwas aus einem persönlichen Raum geteilt werden,
-**verschiebt es der Besitzer** — unter *Meine Dokumente*.
+**verschiebt es der Besitzer** — auf der Seite **Dokumente** mit
+**Verschieben**.
 
 ### Der allgemeine Raum muss nicht allen offenstehen
 
-„Für alle sichtbar" ist eine Vorgabe, keine Notwendigkeit. Unter *Räume
-verwalten* → **Auf eine Mitgliederliste umstellen** bekommt auch der
-allgemeine Raum eine Liste. Danach sieht ihn nur, wer darin steht — oder in
-der zugeordneten ownCloud-Gruppe.
+„Für alle sichtbar" ist eine Vorgabe, keine Notwendigkeit. Unter **Admin →
+Arbeitsbereiche** → **Bearbeiten** bekommt auch der allgemeine Raum eine
+Liste: Haken **Für alle sichtbar (ohne Mitgliederliste)** entfernen,
+Mitglieder eintragen, **Speichern**. Danach sieht ihn nur, wer darin
+steht — oder in der zugeordneten ownCloud-Gruppe.
 
 ### Notzugang: wenn jemand nicht mehr erreichbar ist
 
@@ -1307,7 +1358,7 @@ bleibt, wer an den Server kommt, und eine verschlüsselte Platte — siehe
 Die ehrliche Antwort zuerst, und sie lässt sich nachsehen statt glauben:
 
 ```bash
-docker compose exec -T locanoto_bot python was_sieht_die_platte.py
+docker compose exec -T locanoto_bot python scripts/disk_inventory.py
 ```
 
 Das Skript tut, was ein Finder täte — es geht über das Datenverzeichnis
@@ -1396,15 +1447,18 @@ LOCANOTO_SCHLUESSEL_DATEI=/run/secrets/locanoto_schluessel
 Dazu die beiden `secrets:`-Blöcke in der `docker-compose.yaml`
 einkommentieren. `LOCANOTO_SCHLUESSEL` **in der `.env`** ist nicht
 dasselbe: der Wert steht dann in einer Datei auf einer Platte, meist
-derselben wie die Daten. Die Seitenleiste sagt es.
+derselben wie die Daten. `GET /api/v1/admin/status` sagt es unter
+`encryption`.
 
 `secrets/` gehört nicht ins Git und nicht in die Datensicherung — der
 Sinn ist, dass Schlüssel und Daten getrennt liegen.
 
 ### Was danach noch offen ist
 
-Die Seitenleiste unter **🔒 Sicherheitslage** zählt es auf. Drei Punkte
-lassen sich nicht schließen, nur eingrenzen:
+Die Seite **Admin** nennt oben die offenen Punkte der Sicherheitslage,
+`GET /api/v1/admin/status` führt jeden einzeln auf (`security`), und
+`einrichten.py` zeigt sie am Ende. Drei Punkte lassen sich nicht
+schließen, nur eingrenzen:
 
 * **Die Vektoren** bleiben lesbar, sonst gibt es keine Suche.
 * **Die Dateinamen** in den Metadaten stehen im Klartext — sie dienen als
@@ -1422,9 +1476,12 @@ lassen sich nicht schließen, nur eingrenzen:
 | ein benannter Raum | seine Mitglieder | seine Mitglieder |
 | ein persönlicher Raum | nur der Nutzer selbst | der Nutzer und Administratoren |
 
-Administratoren sehen Dokumente in fremden Räumen ausschließlich im
-Verwaltungsbereich der Seitenleiste, und dort nur Raum und Dateiname — ein
-Löschrecht ist kein Leserecht. In Suche und Antworten fließen sie nie ein.
+Administratoren sehen Dokumente in fremden Räumen ausschließlich über die
+Verwaltungs-API (`GET /api/v1/admin/foreign-documents`,
+`GET /api/v1/admin/foreign-rooms`), und dort nur Raum und eine
+Dateikennung — ein Löschrecht ist kein Leserecht. Gelöscht wird mit
+`POST /api/v1/admin/foreign-documents/delete`. In Suche und Antworten
+fließen sie nie ein.
 Wer Administrator ist, steht als Rolle in der signierten Benutzerdatei — siehe [Benutzer und Rollen](#-benutzer-und-rollen).
 
 Siehe [Räume](#-räume) für die Einrichtung.
@@ -1433,23 +1490,24 @@ Siehe [Räume](#-räume) für die Einrichtung.
 
 
 ## 👥 Benutzer und Rollen
-Angelegt werden Benutzer von Verwaltern — in der Seitenleiste unter
-**Benutzer verwalten** oder im Terminal. Beide Wege laufen durch dasselbe
-Modul und landen im selben Protokoll.
+Angelegt werden Benutzer von Verwaltern — auf der Seite **Admin** im
+Abschnitt **Nutzer** (Name, Passwort, Rolle, **Anlegen**; dort auch Rolle
+ändern, Arbeitsbereiche zuordnen, löschen), über `POST /api/v1/admin/users`
+oder im Terminal. Alle Wege landen im selben Protokoll.
 
 ```bash
-docker compose exec locanoto_bot python create_user.py     # erster Benutzer, dann als Verwalter
-docker compose exec locanoto_bot python manage_users.py    # Passwort, Rolle, löschen
+docker compose exec locanoto_bot python scripts/create_user.py     # erster Benutzer, dann als Verwalter
+docker compose exec locanoto_bot python scripts/manage_users.py    # Passwort, Rolle, löschen
 ```
 
-Vorher genügte es, `create_user.py` zu starten: wer das konnte, legte sich
+Vorher genügte es, `scripts/create_user.py` zu starten: wer das konnte, legte sich
 einen Zugang an, und nichts hielt es fest. Jetzt gilt:
 
 1. **Solange es keinen Benutzer gibt**, ist der erste Aufruf die
    Einrichtung — er legt einen Verwalter an, denn es gibt noch nichts zu
    schützen.
 2. **Danach** verlangt jeder Aufruf die Anmeldung eines vorhandenen
-   Verwalters. Das gilt auch für `create_token.py`.
+   Verwalters. Das gilt auch für `scripts/create_token.py`.
 3. **Die Rolle steht in der Benutzerdatei**, nicht mehr in `ADMIN_USERS`.
    Eine Umgebungsvariable lässt sich am Container setzen, ohne die
    Benutzerdatei anzufassen — damit war Verwalter zu werden eine Frage von
@@ -1478,23 +1536,27 @@ Nachgestellt an einer Datei mit drei Benutzern:
 | bestehende Einträge | unverändert nutzbar |
 
 Wer einen Eingriff behalten will, signiert ausdrücklich neu — in
-`manage_users.py` Punkt 5. Das steht dann im Protokoll.
+`scripts/manage_users.py` Punkt 5 oder mit `POST /api/v1/admin/users/sign`.
+Das steht dann im Protokoll.
 
 ### Das Protokoll ist verkettet
 
 Jede Änderung an Benutzern steht in `data/benutzer.log`, und jeder Eintrag
 trägt den Hash des vorherigen. Eine entfernte oder geänderte Zeile bricht
-die Kette; die Prüfung nennt die Stelle. Zu sehen in der Seitenleiste unter
-*Benutzer verwalten*.
+die Kette; die Prüfung nennt die Stelle. Zu sehen unter
+`GET /api/v1/admin/audit` — `chain` mit dem Ergebnis der Prüfung, dazu die
+letzten Einträge.
 
 Das verhindert nichts — es macht ein Aufräumen im Nachhinein sichtbar, und
 genau darum geht es bei einem Protokoll.
 
 ### Sitzungen laufen ab
 
-Nach `SITZUNG_MINUTEN` ohne Eingabe (Vorgabe 480) ist die Anmeldung vorbei.
-Vorher gab es keine Grenze: ein offener Browser an einem Arbeitsplatz blieb
-angemeldet, bis jemand von Hand ausloggte oder der Container neu startete.
+Nach `SITZUNG_MINUTEN` ohne Anfrage (Vorgabe 480) ist die Anmeldung
+vorbei, spätestens `SESSION_MAX_HOURS` (Vorgabe 12) nach der Anmeldung.
+Die Sitzung ist ein Cookie, signiert mit dem Installationsschlüssel; ein
+Neustart des Containers beendet sie nicht, ein Passwortwechsel und das
+Löschen des Zugangs schon. **Abmelden** löscht das Cookie.
 
 ### Die ehrliche Grenze
 
@@ -1580,7 +1642,7 @@ damit kein Scan. Gescannte Seiten gehen zwei Stufen:
 | Stufe | wann | Eigenschaften |
 |---|---|---|
 | Texterkennung (`ocr.py`, Tesseract) | immer, auf jedem Weg | schnell, ohne Modellserver; Fehler sind sichtbar – eine unleserliche Stelle wird Zeichensalat und gilt dann als nicht gelesen |
-| Sehmodell (`bildtext.py`) | nur für Seiten, die die Texterkennung nicht las, und nur auf Wunsch: Knopf **Mit Sehmodell lesen**, Haken **Abbildungen und gescannte Seiten beschreiben**, `sehmodell=true` an der Schnittstelle | liest schlechte Scans und Handschrift besser; ein Modellaufruf je Seite; kann eine unleserliche Stelle plausibel ergänzen |
+| Sehmodell (`bildtext.py`) | nur für Seiten, die die Texterkennung nicht las, und nur auf Wunsch: Haken **Bilder beschreiben** beim Hochladen auf der Seite **Dokumente**, `images=true` oder `vision=true` an `POST /api/v1/documents`, `sehmodell=true` an `api.py` | liest schlechte Scans und Handschrift besser; ein Modellaufruf je Seite; kann eine unleserliche Stelle plausibel ergänzen |
 
 Der erkannte Text wird mechanisch aufgeräumt, ohne Sprachmodell: am
 Zeilenende getrennte Wörter werden zusammengefügt („Druck-|behälter"),
@@ -1677,8 +1739,8 @@ werden:
 | **3. keiner** | sonst | allein die Fusion entscheidet |
 
 Keine dieser Stufen kann den Start verhindern: schlägt eine fehl, wird die
-nächste genommen. Welche gerade greift, steht in der Seitenleiste unter
-**Modell-Endpunkte**.
+nächste genommen. Welche gerade greift, steht unter `GET /api/v1/models`
+im Feld `ranking`.
 
 Der Endpunkt erwartet das Cohere-artige Schema, das LiteLLM, Jina, TEI und
 vLLM gleichermaßen sprechen — `POST /rerank` mit `query` und `documents`,
@@ -1750,8 +1812,8 @@ CHAT_API_KEY=...
 CHAT_API_VERSION=2024-10-21
 ```
 
-Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
-— ohne Schlüssel, nur Modellname und Adresse.
+Die aufgelöste Zuordnung steht für Verwalter unter `GET /api/v1/models`
+im Feld `endpoints` — ohne Schlüssel, nur Modellname und Adresse.
 
 > **Wechsel des Embedding-Modells:** Vektoren verschiedener Modelle sind
 > nicht vergleichbar und haben in der Regel schon unterschiedlich viele
@@ -1763,8 +1825,10 @@ Die aufgelöste Zuordnung steht in der Seitenleiste unter **Modell-Endpunkte**
 
 
 ## 🗄️ Datenbank
-Ist eine Datenbank hinterlegt, erscheint in der Seitenleiste der Schalter
-**Datenbank einbeziehen**. Bei jeder Frage läuft dann zusätzlich:
+Ist eine Datenbank hinterlegt, erscheint im Chat unter **Arbeitsbereiche ·
+Modell** der Haken **Datenbank**, vorgewählt; bei mehreren Datenbanken
+wählt **Datenbank von** den Arbeitsbereich. Bei jeder Frage mit Haken
+läuft dann zusätzlich:
 
 1. Das Sprachmodell bekommt das Datenbankschema und formuliert eine
    `SELECT`-Abfrage — oder meldet, dass die Frage nichts mit der Datenbank
@@ -1973,9 +2037,9 @@ die Antwort stehen könnte, dann dort gezielt nachsehen.
 
 ### Dateien hineinbekommen
 
-Verwalter laden sie in der Seitenleiste unter **📊 Listen** hoch — mehrere
-auf einmal, mit Auswahl des Bereichs und **+ neues anlegen** für einen neuen.
-Abgelegt und eingelesen wird in einem Schritt.
+Verwalter laden sie mit `POST /api/v1/admin/lists/upload` hoch — eine
+Datei je Aufruf, im Feld `area` der Bereich; ein neuer Name legt den
+Bereich an. Abgelegt und eingelesen wird in einem Schritt.
 
 Ist der Ordner nur lesend eingehängt, entfällt der Upload: dann werden die
 Dateien dort gepflegt, wo sie liegen, und ein zweiter Ablageort wäre genau
@@ -2003,7 +2067,7 @@ ihn nennen kann.
 | Änderung | nötig |
 |---|---|
 | Zeilen geändert, ergänzt, gelöscht | **nichts** — die Datei wird bei jeder Frage frisch gelesen |
-| neue Datei, neues Blatt, neue Spalte | **Listen neu einlesen** in der Seitenleiste |
+| neue Datei, neues Blatt, neue Spalte | **Listen neu einlesen** unter **Admin → Listen**; für die eigenen Listen unter **Einstellungen → Meine Listen** |
 
 Zwischengespeichert wird nur, solange Änderungsdatum und Größe gleich
 bleiben. Ein neuer Export wirkt damit ab der nächsten Frage.
@@ -2021,15 +2085,16 @@ Datenzeile ist schmaler und enthält Zahlen. Leerzeilen unter der Tabelle
 fallen weg; ohne das meldet sich eine Liste leicht mit dem Vielfachen
 ihrer tatsächlichen Positionen.
 
-Unter **Erkannte Blätter** steht je Blatt, welche Zeile genommen wurde und
-wie die Spalten heißen. Verwalter können die Zeile dort korrigieren; die
-Angabe liegt in `config/tabellen_kopf.json` und gilt, bis sie
-zurückgenommen wird.
+**Admin → Listen** zeigt unter **Blätter im Katalog** je Blatt Datei,
+Arbeitsbereich und Zeilenzahl; `GET /api/v1/lists` nennt dazu die
+erkannten Spalten (`spalten`). Verwalter setzen die Zeile von Hand mit
+`PUT /api/v1/admin/lists/header` (`file`, `sheet`, `row`); die Angabe
+liegt in `config/tabellen_kopf.json` und gilt, bis sie zurückgenommen
+wird.
 
-Sieht eine Erkennung falsch aus, fällt das dort auf: Spalten heißen dann
-`Spalte 1`, `Spalte 2`, und darüber steht eine Warnung. Eine falsche
-Kopfzeile lässt das Blatt sichtbar falsch aussehen statt es aus dem Katalog
-zu entfernen.
+Sieht eine Erkennung falsch aus, fällt das an den Spalten auf: sie heißen
+dann `Spalte 1`, `Spalte 2`. Eine falsche Kopfzeile lässt das Blatt
+sichtbar falsch aussehen statt es aus dem Katalog zu entfernen.
 
 ### Bereiche
 
@@ -2043,14 +2108,17 @@ dasselbe, was ein Raum für Dokumente ist, nur ohne Rechtewirkung:
     fertigung/             -> Bereich "fertigung"
 ```
 
-In der Seitenleiste lässt sich darauf eingrenzen, und eine Voreinstellung
-kann Bereiche mitbringen: „Einkauf" nimmt dann die Lieferantenlisten,
-„Fertigung" die Auftragslisten.
+Eingegrenzt wird über eine Voreinstellung, die Bereiche mitbringt —
+„Einkauf" nimmt dann die Lieferantenlisten, „Fertigung" die
+Auftragslisten — oder an der API mit `list_areas` an `POST /api/v1/ask`.
 
-Der **Wurzelordner** bleibt in der `.env` (`TABELLEN_PFAD`) und ist nicht
-in der Oberfläche einstellbar: ein Textfeld, in das jemand
-`/app/config` schreiben kann, machte die Token- und Passwortdatei zu einer
-abfragbaren Liste. Eine Voreinstellung wählt einen Bereich, keinen Pfad.
+Listenordner tragen Verwalter ein — ein Nutzer wählt nur einen
+Unterordner seines eigenen Ordners —, und nie in die Verzeichnisse der
+Anwendung: ein Ordner unter `/app/config` machte die Token- und
+Passwortdatei zu einer abfragbaren Liste, deshalb lehnt LocaNoto die
+eigenen Daten-, Konfigurations- und Indexverzeichnisse ab, und
+`LISTEN_WURZELN` beschränkt die erlaubten Pfade weiter. Eine
+Voreinstellung wählt einen Bereich, keinen Pfad.
 
 ### Ordner außerhalb des Containers
 
@@ -2065,12 +2133,18 @@ services:
       - /mnt/firma/listen:/listen:ro
 ```
 
-Dann in der Seitenleiste unter **📊 Listen** das Feld **Ordner** auf
-`/listen` setzen und **Ordner verknüpfen und einlesen** drücken. Der Pfad
-liegt in `config/tabellen_pfad.txt` und überlebt Updates.
+Dann unter **Admin → Listen** im Abschnitt **Listenordner je
+Arbeitsbereich** beim gewünschten Arbeitsbereich `/listen` eintragen und
+**Speichern** — der Katalog wird dabei neu eingelesen. Ist
+`LISTEN_WURZELN` gesetzt, muss der Pfad darunter liegen. Die Zuordnung
+liegt signiert in `config/listenquellen.json` und überlebt Updates. Ein
+Ordner gehört damit zu einem Arbeitsbereich: wer ihn lesen darf, sieht
+seine Listen. **Wurzel der persönlichen Ordner** gibt jedem Nutzer
+`<Wurzel>/<Benutzername>`; seinen Unterordner wählt er unter
+**Einstellungen → Meine Listen**.
 
-Ohne Oberfläche geht dasselbe über `TABELLEN_PFAD` in der `.env`. Die
-Reihenfolge: eingetragener Pfad, dann `TABELLEN_PFAD`, dann
+Für den allgemeinen Arbeitsbereich gilt ohne Eintrag dort
+`config/tabellen_pfad.txt`, dann `TABELLEN_PFAD` aus der `.env`, dann
 `data/tabellen/`.
 
 Eine **Nur-Lese-Einhängung genügt** — die Anwendung schreibt dort nicht
@@ -2078,17 +2152,19 @@ hinein. Der Katalog liegt im Datenverzeichnis, nicht beim Ordner; genau
 dieser Fall hätte ihn sonst unmöglich gemacht.
 
 Der Pfad muss der Pfad **im Container** sein, nicht der des Hosts. Gibt es
-ihn dort nicht, sagt die Oberfläche das beim Verknüpfen — dann fehlt die
-Einhängung. Gelesen werden ausschließlich `xlsx`, `xlsm`, `csv` und `tsv`;
+ihn dort nicht, steht der Ordner nach dem Einlesen unter **Nicht lesbar**
+mit „Ordner nicht erreichbar" — dann fehlt die Einhängung. Gelesen
+werden ausschließlich `xlsx`, `xlsm`, `csv` und `tsv`;
 höchstens `TABELLEN_MAX_DATEIEN` Dateien, damit ein versehentliches `/`
 nicht den ganzen Container durchläuft.
 
 ### Große Listen
 
 Blätter ab `TABELLEN_GROSS_AB` Zeilen (Vorgabe 50.000) stehen im Katalog,
-werden aber **nicht abgefragt**, solange sie nicht ausdrücklich per Häkchen
-einbezogen werden — sie müssen bei jeder Frage vollständig geladen werden,
-und das dauert spürbar. Die Oberfläche weist beim Einschalten darauf hin.
+mit „groß" gekennzeichnet, werden aber **nicht abgefragt**, solange sie
+nicht ausdrücklich einbezogen werden — `lists_large: true` an
+`POST /api/v1/ask`, `"listen_gross": true` an `api.py`. Sie müssen bei
+jeder Frage vollständig geladen werden, und das dauert spürbar.
 
 Ist eine Liste dauerhaft zu groß, gehört sie in eine Datenbank und nicht in
 einen Ordner.
@@ -2123,7 +2199,7 @@ Werte auskommen.
 ## 🎛️ Voreinstellungen
 Dieselbe Anlage taugt für verschiedene Anwendungen, aber nicht mit denselben
 Einstellungen. Eine Voreinstellung bündelt, was zusammengehört, und steht
-oben in der Seitenleiste als Auswahl:
+im Chat unter **Arbeitsbereiche · Modell** als Auswahl **Voreinstellung**:
 
 | enthalten | |
 |---|---|
@@ -2140,17 +2216,19 @@ Zwei Arten:
 
 | | angelegt von | unter | Prompts |
 |---|---|---|---|
-| gemeinsame | Admins | Admin-Bereich → **Voreinstellungen** | ja, über **Gilt für** im Prompt-Editor |
-| eigene | jedem Nutzer | Einstellungen → **Meine Voreinstellungen** | nein — verfeinert wird mit **Meine Anweisung** |
+| gemeinsame | Admins | `PUT /api/v1/admin/presets/{name}` | ja, mit `?preset=…` an `PUT /api/v1/admin/prompts/{name}` |
+| eigene | jedem Nutzer | `PUT /api/v1/me/presets/{bezeichnung}` | nein — verfeinert wird mit der **Persönlichen Anweisung** |
 
-Eigene liegen unter `config/presets_nutzer/<kennung>/`, erscheinen in der
-Auswahl mit „(eigene)“ und sind nur für ihren Besitzer wählbar, auch über
-die Schnittstelle. Ohne Voreinstellungen erscheint die Auswahl nicht.
+**Einstellungen → Voreinstellungen** listet, welche es für den Nutzer
+gibt. Eigene liegen unter `config/presets_nutzer/<kennung>/`, erscheinen
+in der Auswahl mit „(eigene)“ und sind nur für ihren Besitzer wählbar,
+auch über die Schnittstelle. Ohne Voreinstellungen bietet die Auswahl nur
+„keine“.
 
-**Modell.** Gewählt wird aus `CHAT_MODEL` und `CHAT_MODELLE` (durch Kommas
-getrennt) — eintippen lässt sich kein Modell. Mit nur einem Modell
-erscheint keine Auswahl. Nennt eine Voreinstellung ein Modell, das nicht
-freigegeben ist, gilt `CHAT_MODEL`.
+**Modell.** Gewählt wird im Chat unter **Modell** aus `CHAT_MODEL` und
+`CHAT_MODELLE` (durch Kommas getrennt) — eintippen lässt sich kein
+Modell. Nennt eine Voreinstellung ein Modell, das nicht freigegeben ist,
+gilt `CHAT_MODEL`.
 
 ### Nicht enthalten
 
@@ -2159,7 +2237,7 @@ bestimmten Modell vektorisiert; ein anderes vergleicht Vektoren aus einem
 anderen Raum. Die Suche liefert dann Unsinn, ohne dass etwas fehlschlägt —
 die Antwort klingt normal und zitiert die falschen Stellen. Es gehört zum
 Index, nicht zur Bedienung, und ein Wechsel verlangt einen neuen Ingest. Aus
-demselben Grund ist das Eingabefeld dafür aus der Seitenleiste entfernt.
+demselben Grund gibt es in der Oberfläche kein Feld dafür.
 
 **Adressen und Schlüssel.** Wohin die Fragen gehen, ist Sache der
 Installation und steht in der `.env`.
@@ -2173,11 +2251,13 @@ Zwei Vorlagen bestimmen, wonach gesucht und wie geantwortet wird:
 | `search_prompt.txt` | aus der Frage werden drei Suchanfragen |
 | `system_prompt.txt` | Rolle, Regeln, Umgang mit Quellen |
 
-Verwalter bearbeiten sie in der Seitenleiste unter **📜 Prompts bearbeiten**.
-Gespeichert wird nach `config/`, also ins eingehängte Verzeichnis — die
-Änderung wirkt bei der nächsten Frage, ohne Rebuild. **Auf Vorlage
+Verwalter bearbeiten sie unter **Admin → Prompts und Glossar**: Vorlage
+wählen, **Öffnen**, ändern, **Speichern**. Gespeichert wird nach
+`config/`, also ins eingehängte Verzeichnis — die Änderung wirkt bei der
+nächsten Frage, ohne Rebuild. **Auf die mitgelieferte Vorlage
 zurücksetzen** entfernt die eigene Fassung wieder; die mitgelieferte gilt
-dann erneut.
+dann erneut. Die Fassung einer Voreinstellung bearbeitet
+`/api/v1/admin/prompts/{name}?preset=…`.
 
 **Pflicht-Platzhalter werden geprüft.** Verschwindet `{CONTEXT_PLATZHALTER}`
 aus dem Antwort-Prompt, bekommt das Sprachmodell die gefundenen Abschnitte
@@ -2186,7 +2266,7 @@ erfundenen Fundstellen und ohne jede Fehlermeldung. Ein Speichern ohne die
 nötigen Platzhalter wird deshalb abgelehnt.
 
 **Persönliche Anweisung.** Jeder Nutzer verfeinert die Antworten für sich
-unter *🗒️ Meine Anweisung*: der Text wird an seinen Antwortprompt
+unter **Einstellungen → Persönliche Anweisung**: der Text wird an seinen Antwortprompt
 angehängt, mit dem Hinweis, dass die Regeln der Vorlage vorgehen. Er gilt auch
 für Fragen über die Schnittstelle, liegt verschlüsselt unter
 `data/anweisungen/` und geht beim Löschen des Benutzers mit. `ANWEISUNG_MAX_ZEICHEN`
@@ -2252,10 +2332,10 @@ Minuten. Das Zeitlimit gehört auf die Client-Seite (`curl --max-time`).
 | `403` | dieser Nutzer darf in diesen Raum nicht schreiben |
 | `413` | größer als `AUFNAHME_MAX_MB` |
 
-**403 statt einer stillen Umleitung.** Die Oberfläche ersetzt einen
-Raum, in den der Nutzer nicht schreiben darf, durch seinen eigenen —
-dort sieht man ja, wo es gelandet ist. Über HTTP wäre dasselbe ein `200`
-für einen Stapel, der vollständig woanders liegt.
+**403 statt einer stillen Umleitung.** Die Seite **Dokumente** bietet
+zum Hochladen nur Räume an, in die der Nutzer schreiben darf. Eine
+Umleitung in den eigenen Raum wäre über HTTP ein `200` für einen Stapel,
+der vollständig woanders liegt.
 
 **Die Rolle kommt aus der Benutzerdatei, nicht aus dem Token.** Ein
 Token weist einen Nutzer aus; was er darf, steht in der signierten
@@ -2282,11 +2362,11 @@ Auskunft: sie zeigt, welche Fragen der Bestand gut trägt. Kennt man nur die
 Fehlschläge, lässt sich nach einer Änderung nicht sagen, ob sie etwas
 verbessert oder nur verschoben hat.
 
-Verwalter sehen die Sammlung in der Seitenleiste unter **📝 Rückmeldungen**.
-Die beiden Listen bedeuten Verschiedenes:
+Verwalter sehen die Sammlung unter **Admin → Rückmeldungen**, oben die
+Zahlen je Anlass. Die beiden Listen bedeuten Verschiedenes:
 
-* **Fragen ohne Treffer** — meist ein Wort, das im Glossar fehlt.
-* **Als nicht hilfreich gemeldet** — hier kamen Treffer, aber die falschen.
+* **Fragen ohne Antwort** — meist ein Wort, das im Glossar fehlt.
+* **Nicht hilfreich** — hier kamen Treffer, aber die falschen.
   Das ist kein Wortschatzproblem, sondern eines der Rangfolge.
 
 Festgehalten werden Frage, Suchsonden, Trefferzahlen sowie Datei und Seite
@@ -2308,15 +2388,20 @@ Sinn der Liste, aber es heißt auch: wer sie liest, liest mit, was
 Mitarbeiter gefragt haben. Deshalb liegt sie verschlüsselt und ist nur für
 Verwalter zu sehen.
 
-Die vollständige Liste lässt sich mit **Protokoll herunterladen** aus der
-Seitenleiste holen — auswerten heißt in der Regel sortieren und zählen, und
-dafür braucht man sie ganz. Frühere Ablagen stehen darunter zur Auswahl.
+Die vollständige Liste holt **Herunterladen** auf derselben Seite —
+auswerten heißt in der Regel sortieren und zählen, und dafür braucht man
+sie ganz. Frühere Ablagen nennt `GET /api/v1/admin/feedback/files`;
+`GET /api/v1/admin/feedback/download?file=…` holt eine davon.
 
-Ist eine Liste abgearbeitet, legt der Knopf **Liste abschliessen** das
-Protokoll unter dem Tagesdatum ab (`feedback-2026-09-02.jsonl`) und beginnt
-ein neues. Gelöscht wird nichts: was Nutzer nicht gefunden haben, ist die
-einzige Quelle für die Frage, ob der Bestand mit der Zeit besser wird. Die
-abgelegten Dateien stehen unter der Liste und liegen im selben Ordner.
+Ist eine Liste abgearbeitet, legt **Archivieren** das Protokoll unter dem
+Tagesdatum ab (`feedback-2026-09-02.jsonl`) und beginnt ein neues.
+Gelöscht wird nichts: was Nutzer nicht gefunden haben, ist die einzige
+Quelle für die Frage, ob der Bestand mit der Zeit besser wird. Die
+abgelegten Dateien liegen im selben Ordner.
+
+Liegen im Protokoll Zeilen im Klartext, nennt die Seite ihre Zahl, und
+**Neu verschlüsseln** schreibt das Protokoll vollständig verschlüsselt
+neu.
 
 Von Hand geht dasselbe:
 
@@ -2326,11 +2411,12 @@ mv data/feedback.jsonl data/feedback-$(date +%F).jsonl
 
 ### Glossar
 
-Gepflegt wird es **im Browser**: Verwalter finden in der Seitenleiste
-**🗣️ Glossar bearbeiten**. Die Datei liegt unter `config/glossar.txt` und
-damit im eingehängten Verzeichnis — die Änderung wirkt bei der nächsten
-Frage, ohne Rebuild und ohne Neustart. Wer sie noch nie angelegt hat,
-bekommt im Bearbeitungsfeld den Inhalt von `glossar.example.txt` vorgelegt.
+Gepflegt wird es **im Browser**: Verwalter finden es unter **Admin →
+Prompts und Glossar** im Abschnitt **Glossar**. Die Datei liegt unter
+`config/glossar.txt` und damit im eingehängten Verzeichnis — die Änderung
+wirkt bei der nächsten Frage, ohne Rebuild und ohne Neustart. Wer sie
+noch nie angelegt hat, findet ein leeres Feld; `glossar.example.txt`
+zeigt das Format.
 
 Auf dem Server geht es genauso:
 
@@ -2392,7 +2478,7 @@ zu gefährden.
 ### Token anlegen
 
 ```bash
-docker compose exec api python create_token.py markus --bezeichnung "Terminal Laptop"
+docker compose exec api python scripts/create_token.py markus --bezeichnung "Terminal Laptop"
 ```
 
 Das Token wird genau einmal ausgegeben; gespeichert ist nur sein Hashwert.
@@ -2403,8 +2489,8 @@ diese Kennung Mitglied ist.** Es gibt keinen Schalter, der das umgeht:
 Berechtigung wird still verworfen. `GET /raeume` zeigt, welche es sind.
 
 ```bash
-docker compose exec api python create_token.py --liste
-docker compose exec api python create_token.py --widerrufe 3f9a1c
+docker compose exec api python scripts/create_token.py --liste
+docker compose exec api python scripts/create_token.py --widerrufe 3f9a1c
 ```
 
 ### Aufrufen
@@ -2447,7 +2533,7 @@ curl -s -X DELETE -G -H "X-LocaNoto-Token: $LOCANOTO_TOKEN" --data-urlencode "ra
  "owncloud": "mitgeloescht", "hinweis": "'Betriebsanweisung.pdf' aus 'Einkauf' entfernt."}
 ```
 
-Derselbe Weg wie **🗑️ Löschen** in der Oberfläche — beide rufen
+Derselbe Weg wie **Löschen** auf der Seite **Dokumente** — beide rufen
 `aufnehmen.entferne_dokument`: Abschnitte aus Vektor- und Stichwortindex,
 die lokale Datei und, wenn eingerichtet, die Datei in ownCloud (in den
 Papierkorb, sonst holte der Abgleich sie zurück).
@@ -2463,11 +2549,12 @@ Das Recht wird **vor** der Datei geprüft: wer in einem Raum nicht löschen
 darf, bekommt `403`, auch für eine Datei, die es dort nicht gibt — die
 Antwort verrät nicht, was in einem fremden Raum liegt. `owncloud:
 fehlgeschlagen` heißt: in LocaNoto gelöscht, in ownCloud nicht; dann holt
-der nächste Abgleich die Datei zurück. Die Dokumentenliste der Oberfläche
-zeigt die Löschung nach spätestens einer Minute.
+der nächste Abgleich die Datei zurück. Die Seite **Dokumente** zeigt die
+Löschung beim nächsten Laden.
 
-Im Rumpf von `/frage` sind `top_k`, `dateien`, `sachgebiete`, `raeume` und
-`verlauf` optional — dieselben Einschränkungen wie die Filter in der Seitenleiste.
+Im Rumpf von `/frage` sind `top_k`, `dateien`, `raeume` und `verlauf`
+optional — sie entsprechen `top_k`, `files`, `rooms` und `history` an
+`POST /api/v1/ask`.
 
 `quellen` nennt standardmäßig nur Datei, Seite und die Zahl der Abschnitte.
 Ein Tabellenabschnitt ist mehrere Kilobyte groß; im Terminal überdeckt er
@@ -2542,19 +2629,27 @@ entscheidet ihn anhand des Feldes `transport`.
 
 Drei Schritte, alle in der Oberfläche. Für die persönlichen Postfächer genügt **ein Eintrag für alle**: jeder Nutzer öffnet darin mit seiner eigenen Adresse sein eigenes Postfach. Jedes Funktionspostfach bekommt einen eigenen Eintrag.
 
-**1. Verwaltung → 📬 Postfächer → Neues Postfach**
+**1. Admin → Postfächer → Anlegen**
 
 | Feld | Eingabe |
 |---|---|
-| Art des Servers | *Exchange/Outlook — direkt, ohne weiteren Server* |
+| Art | *Exchange/Outlook — direkt, ohne weiteren Server* |
 | Name | kurz, erscheint im Werkzeugnamen: `postfach` für den gemeinsamen persönlichen Eintrag, `info` für info@ |
-| Adresse | `owa.firma.de` — den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. Leer gelassen sucht exchangelib den Server |
-| Postfach | persönlich oder Funktionspostfach |
-| Mailadresse des Postfachs | bei einem Funktionspostfach Pflicht (`info@firma.de`), bei einem persönlichen leer — ein persönlicher Eintrag mit fester Adresse wird abgewiesen |
+| Adresse, Befehl, Exchange- oder IMAP-Server | `owa.firma.de` — den Pfad `/EWS/Exchange.asmx` ergänzt LocaNoto. Leer gelassen sucht exchangelib den Server |
+| persönlich (jeder meldet sich mit seinem Konto an) | Haken für einen persönlichen Eintrag, ohne Haken ein Funktionspostfach |
+| Adresse eines Funktionspostfachs (nur dafür) | bei einem Funktionspostfach Pflicht (`info@firma.de`), bei einem persönlichen leer — ein persönlicher Eintrag mit fester Adresse wird abgewiesen |
+| Persönlich: nur für diesen Benutzer | leer: jeder sieht den Eintrag und meldet sich mit seinem Konto an |
+| Funktionspostfach: Arbeitsbereich | dessen Mitglieder sehen das Postfach und bekommen seine Tickets; leer: alle |
 
-**2. Jeder Nutzer meldet sich selbst an** — Seitenleiste, *📬 Meine
-Postfächer*: Mailadresse und Passwort. Die Anmeldung wird sofort erprobt.
-Der Bereich steht für jeden Nutzer da; ist noch kein Postfach eingerichtet, sagt er das.
+Wer einen Eintrag sieht, lässt sich in der Liste darüber mit
+**Zuordnen** ändern.
+
+**2. Jeder Nutzer meldet sich selbst an** — **Einstellungen → Postfächer
+und Datenanschlüsse**: Mailadresse und Passwort, **Verbinden**. Die
+Anmeldung wird sofort erprobt. Der Abschnitt erscheint, sobald ein
+Postfach eingerichtet ist, das der Nutzer sehen darf. Mit **Bei neuer
+Mail benachrichtigen** meldet LocaNoto neue Nachrichten (siehe
+[Neue Mail melden](#neue-mail-melden)).
 
 **3. Fragen.** Ab der nächsten Frage stehen die Werkzeuge bereit.
 
@@ -2566,7 +2661,7 @@ Postfach dessen, der sich gerade anmeldet.
 
 ### IMAP/SMTP: Gmail, GMX, web.de, eigener Mailserver
 
-Art des Servers *IMAP/SMTP*, Adresse `imap.gmail.com` – der SMTP-Server
+Art *IMAP/SMTP — Gmail, GMX, web.de, eigener Mailserver*, Adresse `imap.gmail.com` – der SMTP-Server
 wird daraus abgeleitet (`smtp.gmail.com`, Port 587 mit STARTTLS). Abweichend
 beide angeben: `imap.gmx.net, mail.gmx.net:465` (465 = TLS von Anfang an).
 Dieselben Werkzeuge wie bei Exchange, ohne Kalender; Gesendetes landet im
@@ -2668,11 +2763,14 @@ und keinen zusätzlichen Modellaufruf.
 
 ### Einrichten in der Oberfläche
 
-Unter *Verwaltung → 📬 Postfächer* legt ein Verwalter sie an, ohne die
-Datei anzufassen. Fünf Vorlagen setzen, was für die jeweilige Art Server
-üblich ist; aus der Maske kommen Name, Adresse, die Art des Postfachs und
-die Regeln zum Senden. *Werkzeuge abfragen* verbindet sich und listet
-auf, was der Server anbietet.
+Unter **Admin → Postfächer** legt ein Verwalter sie an, ohne die
+Datei anzufassen. Die Auswahl **Art** setzt, was für die jeweilige Art
+Server üblich ist — Exchange, IMAP/SMTP, MCP-Server über HTTP (ohne
+Anmeldung, mit Token oder mit OAuth), Websuche, lokaler Prozess,
+Datenanschlüsse; aus der Maske kommen Name, Adresse, die Art des
+Postfachs, wer es sieht, und die Regeln zum Senden. **Löschen** entfernt
+einen Eintrag. `GET /api/v1/admin/mailboxes/{name}/tools` verbindet sich
+und listet auf, was der Server anbietet.
 
 **Ein persönliches Postfach antwortet nie selbständig.** Die
 Freischaltung gilt nur für Funktionspostfächer und wird beim Anlegen
@@ -2681,15 +2779,18 @@ eines persönlichen verworfen.
 ### Anmeldung durch den Nutzer
 
 Anmeldedaten, die einem Menschen gehören, stehen **nicht** in der
-Konfiguration. Jeder Nutzer verbindet seine Postfächer selbst — in der
-Seitenleiste unter *📬 Meine Postfächer*. `anmeldung` im Eintrag legt
-fest, was verlangt wird: Benutzer und Passwort (`basic`) oder ein Token
-(`bearer`).
+Konfiguration. Jeder Nutzer verbindet seine Postfächer selbst — unter
+**Einstellungen → Postfächer und Datenanschlüsse**. `anmeldung` im
+Eintrag legt fest, was verlangt wird: Benutzer und Passwort (`basic`),
+ein Token (`bearer`) oder die Anmeldung beim Anbieter (`oauth`, Knopf
+**Mit eigenem Konto verbinden**). **Trennen** vergisst die Anmeldung.
 
-Die Daten liegen ausschließlich im Sitzungsspeicher, werden nicht
-geschrieben und nicht protokolliert, und verschwinden beim Abmelden.
-Gespeichert wird dabei nicht das Passwort, sondern der fertige
-Anmeldekopf — also das, was ohnehin über die Leitung geht.
+Die Daten liegen ausschließlich im versiegelten Sitzungs-Cookie des
+Browsers — verschlüsselt mit dem Installationsschlüssel, an den Nutzer
+gebunden, höchstens `SEALED_MINUTES` (Vorgabe 480) gültig —, werden auf
+dem Server nicht geschrieben und nicht protokolliert, und verschwinden
+beim Abmelden. Gespeichert wird dabei nicht das Passwort, sondern der
+fertige Anmeldekopf — also das, was ohnehin über die Leitung geht.
 
 Jedes Postfach bekommt **nur seinen eigenen** Kopf. Eine Anmeldung geht
 damit nie an ein Postfach, für das sie nicht gedacht war.
@@ -2810,16 +2911,18 @@ Anweisung ist.
 
 | Raum | Websuche |
 |---|---|
-| eigener Raum | der Nutzer schaltet sie im Chat ein (🌐 Websuche) |
-| geteilter Raum | erst erlaubt ein Verwalter sie am Raum (*Räume verwalten*), dann schaltet der Nutzer sie ein |
+| eigener Raum | der Nutzer schaltet sie im Chat ein (unter **Arbeitsbereiche · Modell** der Haken **Websuche**) |
+| geteilter Raum | erst erlaubt ein Verwalter sie am Raum (**Admin → Arbeitsbereiche**, **Erlauben**), dann schaltet der Nutzer sie ein |
 
 Warum am Raum, obwohl gesucht wird im Chat: Das Modell formuliert den
 Suchbegriff mit den Abschnitten der gefragten Räume im Kontext. Was
 davon in einen Suchbegriff gerät — ein Projektname, eine Zahl —, geht an
 Suchmaschinen. Darüber entscheidet bei geteilten Unterlagen der
-Verwalter. Fragt jemand ohne Raumwahl, also in allen seinen Räumen,
-müssen alle die Websuche erlauben; sonst nennt die Seitenleiste die
-Räume, die es nicht tun. Eingeschaltet wird ohne Rückfrage gesucht.
+Verwalter. Fragt jemand mit eingeschalteter Websuche ohne Raumwahl, also
+in allen seinen Räumen, bleiben die Räume ohne Erlaubnis außen vor; unter
+der Antwort steht dann „Bei Websuche nicht durchsucht (dort gesperrt)"
+mit ihren Namen. Der allgemeine Raum ist ab Werk gesperrt. Eingeschaltet
+wird ohne Rückfrage gesucht.
 
 **Vorschlagen statt einschalten.** Ohne Schalter kann das Modell eine
 Websuche vorschlagen (`WEB_TOOL`, Vorgabe `auto`: wenn die Frage danach
@@ -2833,8 +2936,10 @@ eingeschaltetem Schalter ohne die Räume, die sie nicht erlauben, und die
 Antwort setzt den Chat ohne neue Frage fort.
 
 **Übernehmen.** Treffer stehen unter der Antwort getrennt von den
-Dokumenten, als **🌐 Aus dem Netz** mit `[W1]`, `[W2]` … Angehakt und
-**übernommen** wird ein Treffer ein Dokument im **eigenen Raum** des
+Dokumenten, unter **Aus dem Netz**, im Text als `[W1]`, `[W2]` …
+Übernommen wird auf der Seite **Quellen im Netz** (unten) oder mit
+`POST /api/v1/websources/take-over`; ein übernommener Treffer wird ein
+Dokument im **eigenen Raum** des
 Nutzers: die ganze Seite als Markdown im Ordner `Suchergebnisse/`, mit
 Quelle, Abrufdatum und Suchbegriff oben. Einen anderen Raum gibt es dabei
 nicht, auch nicht für Verwalter — das entscheidet `aufnehmen.py`, nicht
@@ -2843,16 +2948,21 @@ Verschieben; so füllt kein Klick einen gemeinsamen Raum. Übernommene
 Seiten sind Kopien fremder Texte; ob das im Einzelfall erlaubt ist,
 entscheidet, wer sie übernimmt.
 
-**Quellen sammeln ohne Antwort.** Über dem Chat steht **🌐 Quellen im
-Netz suchen**, wie bei NotebookLM: ein Thema, eine Liste mit bis zu zehn
-Treffern, anhaken, übernehmen — auch bei leerem Bestand. **👁️ Lesen**
-zeigt vorher die ganze Seite als reinen Text in einem schreibgeschützten
-Feld; geholt wird sie über den Websuche-Dienst, nicht vom Browser, und
-für die Sitzung gepuffert. Übernommen wird genau der gelesene Text.
-**Original ↗** öffnet die Seite direkt — dann sieht sie den Nutzer, nicht
-den Server. Hier braucht es keine Freigabe am Raum: den Suchbegriff
-tippt der Nutzer selbst, das Modell formuliert nichts aus den
-Abschnitten eines Raums. Es genügt ein eingerichteter Websuche-Server.
+**Quellen sammeln ohne Antwort.** Die Seite **Quellen im Netz** sammelt
+Quellen wie bei NotebookLM, auch bei leerem Bestand: Stichworte
+eingeben, **Suchen**. Die Suche läuft im Hintergrund, mit bis zu
+`WEB_RESEARCH_HITS` Treffern (Vorgabe 25); eine Meldung sagt, wenn sie
+fertig ist, und sie bleibt unter **Meine Suchen** stehen, bis der Nutzer
+sie löscht. Im Chat startet **Im Web suchen** dieselbe Suche mit dem
+Text des Eingabefelds, nach einer Rückfrage, die genau diesen Text
+zeigt. **Lesen** zeigt die ganze Seite eines Treffers als reinen Text;
+geholt wird sie über den Websuche-Dienst, nicht vom Browser. **↗**
+öffnet die Seite direkt — dann sieht sie den Nutzer, nicht den Server.
+**Ausgewählte in meinen Arbeitsbereich übernehmen** übernimmt die
+angehakten Treffer, ebenfalls im Hintergrund und mit Meldung. Hier
+braucht es keine Freigabe am Raum: den Suchbegriff tippt der Nutzer
+selbst, das Modell formuliert nichts aus den Abschnitten eines Raums. Es
+genügt ein eingerichteter Websuche-Server.
 
 **Fremder Text lädt nichts nach.** Titel und Ausschnitte aus dem Netz
 werden maskiert, ganze Seiten nur als Text gezeigt. In Antworten wird
@@ -2869,16 +2979,17 @@ nach 5 MB abgebrochen, nicht erst ganz geladen. Die NetworkPolicies in
 **Einrichten.** Kubernetes: `k8s/98-websuche.yaml`, Ablauf im Kopf der
 Datei. Compose: `SEARXNG_SECRET` setzen (`openssl rand -hex 32`), dann
 `docker compose --profile websuche up -d`. In beiden Fällen danach unter
-*Verwaltung → 📬 Postfächer* einen Server der Art **Websuche** anlegen,
+**Admin → Postfächer** einen Server der Art **Websuche (eigener Dienst,
+websuche.py)** anlegen,
 Adresse `http://websuche:8000/mcp`. Prüfen ohne LocaNoto:
 `python websuche.py --probe "suchbegriff"` im Websuche-Container.
 
 ## 🌐 Sprache
 
-Die Oberfläche gibt es auf Deutsch und Englisch. Jeder Nutzer schaltet in
-der Seitenleiste unter **🌐 Sprache / Language** um, ebenso auf der
-Anmeldeseite; die Wahl wird je Zugang in `config/sprachen.json` gemerkt.
-Wer nichts gewählt hat, bekommt `LOCANOTO_SPRACHE` (Vorgabe `de`).
+Die Oberfläche gibt es auf Deutsch und Englisch. Jeder Nutzer schaltet
+unter **Einstellungen → Sprache** um; die Wahl wird je Zugang in
+`config/sprachen.json` gemerkt. Wer nichts gewählt hat, bekommt
+`LOCANOTO_SPRACHE` (Vorgabe `de`), ebenso die Anmeldeseite.
 
 **Antworten kommen in der Sprache der Frage**, auch wenn die Dokumente
 deutsch sind; Dateinamen, Werte und Zitate bleiben im Original. Dafür
@@ -2889,14 +3000,19 @@ Stichwortsuche nur Wörter findet, die so in den Dokumenten stehen. Wer
 unter `config/` eigene Fassungen der Vorlagen führt, übernimmt die Regeln
 dort. Zitate mit „page“ statt „Seite“ werden ebenso verlinkt.
 
-**Wie übersetzt wird.** Der deutsche Text ist der Schlüssel:
-Oberflächentexte stehen in `tx("…")`, die englischen Fassungen in
-`sprache_en.json`. Texte mit eingesetzten Werten sind Muster mit `{}`.
-Fehlt eine Übersetzung, erscheint der deutsche Text.
+**Wie übersetzt wird.** Die Seiten sind auf Englisch geschrieben:
+`t('…')` in `web_templates/`, `t("…")` in `web*.py` und `routes_*.py`.
+Ihre deutschen Texte stehen im Wörterbuch `TEXTS` in `web.py`; ein Text
+ohne Eintrag erscheint englisch. Die Module dahinter melden auf Deutsch;
+die Seiten zeigen diese Meldungen über `tm()`, und die englischen
+Fassungen stehen in `sprache_en.json`. Dort ist der deutsche Text der
+Schlüssel; Texte mit eingesetzten Werten sind Muster mit `{}`. Fehlt eine
+Übersetzung, erscheint der deutsche Text.
 
 ```bash
-python uebersetzen.py --einwickeln app.py verwaltung.py   # neue Texte einwickeln
-python uebersetzen.py --fehlend                            # was noch fehlt
+python scripts/translations.py --german    # Seitentexte ohne deutschen Eintrag
+python scripts/translations.py --english   # Modulmeldungen ohne englische Fassung
+python scripts/translations.py --collect   # die Modulmeldungen als JSON
 ```
 
 Der Selbsttest prüft, dass nichts fehlt und jedes Muster dieselben

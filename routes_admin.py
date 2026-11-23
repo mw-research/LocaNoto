@@ -167,11 +167,11 @@ def create_token(body: NewToken, p: Principal = Depends(admin)):
     Not for other users: a token for someone else would let an admin act
     as that person -- read a personal workspace without the two-person
     emergency access. Tokens for other accounts (service accounts) are
-    made with create_token.py on the server, where it is logged who did.
+    made with scripts/create_token.py on the server, where it is logged who did.
     """
     if body.user != p.name:
         raise HTTPException(403, "Tokens only for your own account; for "
-                                 "others use create_token.py on the server.")
+                                 "others use scripts/create_token.py on the server.")
     token = auth.erzeuge(body.user, body.label, body.days)
     benutzer.protokolliere("token", body.user, p.name, body.label)
     return {"token": token, "user": body.user}

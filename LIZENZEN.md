@@ -248,7 +248,7 @@ Die schlanke Fassung ist die, die als öffentliches Abbild abrufbar ist.
 ## Erneuern
 
 ```bash
-python lizenzen.py
+python scripts/licenses.py
 ```
 
 Fragt PyPI für jede gepinnte Fassung ab und schreibt diese Datei neu.

@@ -46,7 +46,7 @@ kubectl create secret generic locanoto-gateway --from-literal=LITELLM_MASTER_KEY
 kubectl apply -f 10-postgres.yaml -f 20-config.yaml -f 40-gateway.yaml
 kubectl apply -f 30-server.yaml -f 31-worker.yaml -f 50-network.yaml
 kubectl exec deploy/locanoto-server -- python database.py --check
-kubectl exec deploy/locanoto-server -- python create_user.py   # first admin
+kubectl exec deploy/locanoto-server -- python scripts/create_user.py   # first admin
 ```
 
 Keep a copy of `LOCANOTO_SCHLUESSEL` outside the cluster. Without it the
@@ -56,12 +56,12 @@ backup.
 ## Moving an existing installation
 
 1. Measure the search before deciding the vector size: on the old
-   installation `python compare_search.py run questions.txt --user <name> --out old.json`.
+   installation `python scripts/compare_search.py run questions.txt --user <name> --out old.json`.
 2. Stop the old installation (`kubectl scale deploy/locanoto --replicas=0`).
 3. `kubectl apply -f 60-migrate.yaml` and follow `kubectl logs -f job/locanoto-migrate`
    (check, run, verify; the old volumes are mounted read-only).
 4. Start server and workers; run the same questions against the new one
-   (`--out new.json`) and `python compare_search.py diff old.json new.json`.
+   (`--out new.json`) and `python scripts/compare_search.py diff old.json new.json`.
 
 The way back: scale the old deployment up again -- its data was only read.
 

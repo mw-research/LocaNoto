@@ -116,7 +116,6 @@ def oidc_callback(request: Request, code: str = "", state: str = "",
                   error: str = ""):
     """Where the directory sends the browser back. Ends in a session."""
     import oidc
-    from fastapi.responses import RedirectResponse
     if not oidc.enabled():
         raise HTTPException(404, "No directory sign-in configured.")
     if error or not code:
