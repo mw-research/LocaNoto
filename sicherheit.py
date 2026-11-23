@@ -99,12 +99,3 @@ def lage():
     zeilen.append(("Protokoll nach aussen", ok_ziel, text_ziel))
     zeilen.append(("Laufender Server",) + _laufender_server())
     return zeilen
-
-
-def kurz():
-    """Eine Zeile fuer die Verwaltung."""
-    z = lage()
-    offen = [n for n, ok, _t in z if not ok]
-    if not offen:
-        return "alle Punkte erfuellt"
-    return f"{len(offen)} von {len(z)} Punkten offen: " + ", ".join(offen)

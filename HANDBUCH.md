@@ -1073,8 +1073,8 @@ ownCloud.
 
 ### Wo sehe ich Sicherheitslage, Speicherorte, Verschlüsselung und Konfiguration von LocaNoto?
 
-- **Sicherheitslage:** **Admin** zeigt oben eine Zeile – „alle Punkte
-  erfuellt" oder welche Punkte offen sind.
+- **Sicherheitslage:** **Admin** zeigt oben eine Zeile – „Alle Punkte
+  erfüllt." oder „Offene Punkte (3/8): …" mit den offenen.
 - **Verschlüsselung der Rückmeldungen:** **Admin** → **Rückmeldungen**
   (siehe dort).
 - **Sicherheitslage im Einzelnen** (auf **Admin** unter der Zeile

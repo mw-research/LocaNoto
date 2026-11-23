@@ -116,6 +116,7 @@ TEXTS = {
     "cancelled": "abgebrochen", "cancelling": "wird abgebrochen", "Log": "Protokoll",
     "Nothing to cancel.": "Es läuft nichts, das sich abbrechen ließe.",
     "(no output yet)": "(noch keine Ausgabe)", "Cancel this job?": "Diesen Lauf abbrechen?",
+    "All points met.": "Alle Punkte erfüllt.", "Open points": "Offene Punkte",
     "Security in detail": "Sicherheitslage im Einzelnen", "Installation key": "Installationsschlüssel",
     "Store": "Bestand", "Storage roots": "Speicherorte", "set from outside": "von außen gesetzt",
     "default": "Vorgabe",
@@ -1417,8 +1418,17 @@ def _security_details():
             "missing": len(missing)}
 
 
+def _security_line(points):
+    """One line above the details: all met, or which points are open."""
+    open_points = [name for name, ok, _text in points if not ok]
+    if not open_points:
+        return t("All points met.")
+    return (f"{t('Open points')} ({len(open_points)}/{len(points)}): "
+            + ", ".join(open_points))
+
+
 def _admin_context(p):
-    import sicherheit
+    details = _security_details()
     return {
         "nav": _nav(p, "admin"),
         "users": _user_page("", 0),
@@ -1431,8 +1441,8 @@ def _admin_context(p):
                        for r, d in sorted(raeume.liste().items())
                        if not raeume.ist_privat(r)],
         "jobs": jobs.overview(),
-        "security": sicherheit.kurz() if hasattr(sicherheit, "kurz") else "",
-        "security_details": _security_details(),
+        "security": _security_line(details["points"]),
+        "security_details": details,
     }
 
 

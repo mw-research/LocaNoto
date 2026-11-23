@@ -1034,8 +1034,8 @@ ownCloud.
 
 ### Where do I see security status, storage locations, encryption and configuration of LocaNoto?
 
-- **Security status:** **Admin** shows a line at the top – "alle Punkte
-  erfuellt" (all points met) or which points are open.
+- **Security status:** **Admin** shows a line at the top – "All points
+  met." or "Open points (3/8): …" with the open ones.
 - **Encryption of the feedback:** **Admin** → **Feedback** (see there).
 - **Security in detail** (open it below the line on **Admin**) – every
   point of the checklist with its explanation, where the installation key
