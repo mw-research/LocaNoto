@@ -200,6 +200,10 @@ TEXTS = {
     "Mailboxes and data connectors": "Postfächer und Datenanschlüsse",
     "Data connectors": "Datenanschlüsse", "shortened": "gekürzt",
     "Action in": "Aktion in", "Run": "Ausführen",
+    "Connect with your account": "Mit eigenem Konto verbinden",
+    "The provider did not sign you in.": "Der Anbieter hat dich nicht angemeldet.",
+    "Sign-in not possible": "Anmeldung nicht möglich",
+    "Back to the settings": "Zurück zu den Einstellungen",
     "No installation key: the settings cannot be signed.":
         "Kein Installationsschlüssel: Die Einstellungen lassen sich nicht signieren.",
     "External model": "Externes Modell", "Model": "Modell", "Source": "Quelle",
@@ -1058,7 +1062,8 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
     page_language(p.name)
     sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
     if action == "disconnect":
-        sealed.pop(server, None)
+        import mcp_oauth
+        mcp_oauth.forget(sealed, server)
         response = HTMLResponse("")
     else:
         mailboxes.require_visible(p.name, server)
@@ -1076,6 +1081,88 @@ def connect_mailbox(server: str, request: Request, user: str = Form(""),
                         httponly=True, secure=COOKIE_SECURE,
                         samesite="strict", path="/")
     response.headers["HX-Redirect"] = "/settings"
+    return response
+
+
+# --- SIGNING IN AT A TOOL SERVER'S PROVIDER (OAuth, mcp_oauth.py) ---
+#
+# Three steps, because the session cookie is SameSite=Strict and the
+# provider sends the browser back with a cross-site navigation:
+#   1. start   (with the session) -> the provider, a flow cookie (Lax)
+#   2. callback (no session needed) -> code for tokens, kept in a short
+#      sealed cookie, then a page of our own that moves on
+#   3. finish  (same-site again, with the session) -> into the sealed
+#      session cookie, like a mailbox login
+
+MCP_FLOW_COOKIE = "locanoto_mcp_flow"
+MCP_PENDING_COOKIE = "locanoto_mcp_pending"
+
+
+def _oauth_problem(message):
+    return render("oauth_problem.html", None, message=message)
+
+
+@router.get("/ui/settings/mailbox/{server}/oauth")
+def mailbox_oauth_start(server: str, request: Request,
+                        p: Principal = Depends(principal)):
+    import mcp_oauth
+    page_language(p.name)
+    mailboxes.require_visible(p.name, server)
+    entry = answering.mcp.lies_konfiguration().get(server) or {}
+    if answering.mcp.anmeldeart(server) != "oauth":
+        raise HTTPException(404, "No such sign-in.")
+    redirect_uri = str(request.url_for("mailbox_oauth_callback"))
+    try:
+        url, flow = mcp_oauth.start(p.name, server, entry, redirect_uri)
+    except mcp_oauth.Refused as e:
+        return _oauth_problem(str(e))
+    response = RedirectResponse(url, status_code=302)
+    response.set_cookie(MCP_FLOW_COOKIE, flow, max_age=mcp_oauth.FLOW_SECONDS,
+                        httponly=True, secure=COOKIE_SECURE, samesite="lax",
+                        path="/ui/mcp-oauth")
+    return response
+
+
+@router.get("/ui/mcp-oauth/callback", name="mailbox_oauth_callback")
+def mailbox_oauth_callback(request: Request, code: str = "", state: str = "",
+                           error: str = ""):
+    import mcp_oauth
+    page_language()
+    if error or not code:
+        return _oauth_problem(t("The provider did not sign you in."))
+    try:
+        user, server, entry = mcp_oauth.finish(
+            code, state, request.cookies.get(MCP_FLOW_COOKIE))
+    except mcp_oauth.Refused as e:
+        return _oauth_problem(str(e))
+    import html as _html
+    target = _html.escape(f"/ui/settings/mailbox/{quote(server, safe='')}/oauth/finish",
+                          quote=True)
+    response = HTMLResponse(
+        f'<!doctype html><meta http-equiv="refresh" content="0;url={target}">'
+        f'<a href="{target}">Continue</a>')
+    response.delete_cookie(MCP_FLOW_COOKIE, path="/ui/mcp-oauth")
+    response.set_cookie(MCP_PENDING_COOKIE,
+                        sessions.seal(user, {"server": server, "entry": entry}),
+                        max_age=120, httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", path="/ui/settings/mailbox")
+    return response
+
+
+@router.get("/ui/settings/mailbox/{server}/oauth/finish")
+def mailbox_oauth_finish(server: str, request: Request,
+                         p: Principal = Depends(principal)):
+    import mcp_oauth
+    pending = sessions.unseal(p.name, request.cookies.get(MCP_PENDING_COOKIE))
+    response = RedirectResponse("/settings", status_code=303)
+    response.delete_cookie(MCP_PENDING_COOKIE, path="/ui/settings/mailbox")
+    if pending.get("server") != server or not mailboxes.visible_to(p.name, server):
+        return response
+    sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
+    mcp_oauth.store(sealed, server, pending["entry"])
+    response.set_cookie(SEALED_COOKIE, sessions.seal(p.name, sealed),
+                        httponly=True, secure=COOKIE_SECURE,
+                        samesite="strict", path="/")
     return response
 
 

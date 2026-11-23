@@ -837,7 +837,10 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
             elif (mcp.braucht_bestaetigung(server, name, argumente)
                   # A built-in server names its own tools that need a
                   # person (workspace_notes.Tools.confirm).
-                  or name in getattr(verbindungen[server], "confirm", ())):
+                  or name in getattr(verbindungen[server], "confirm", ())
+                  # A tool of a tool server that changes something
+                  # (mcp.schreibt): never on the model's word.
+                  or name in getattr(verbindungen[server], "write_tools", ())):
                 # NICHT ausfuehren. Der Entwurf geht an die Oberflaeche,
                 # und das Modell erfaehrt ausdruecklich, dass nichts
                 # verschickt wurde -- sonst schreibt es dem Nutzer, die
@@ -860,6 +863,11 @@ def werkzeuglauf(client, modell, system, nachrichten, verbindungen,
                         # An action in a connected system, not a message:
                         # the page words it so.
                         entwurf["kind"] = "connector"
+                    elif (name in getattr(verbindungen[server], "write_tools", ())
+                          and not mcp.sendet(server, name)):
+                        # Deleting, moving, an appointment on a tool
+                        # server: an action too, not "send".
+                        entwurf["kind"] = "action"
                     if vorschau:
                         entwurf["vorschau"] = vorschau
                     entwuerfe.append(entwurf)

@@ -339,8 +339,9 @@ def mailbox_login(server: str, body: MailboxLogin, request: Request,
 @router.delete("/mailboxes/{server}/login", tags=["mailboxes"])
 def mailbox_logout(server: str, request: Request, response: Response,
                    p: Principal = Depends(principal)):
+    import mcp_oauth
     sealed = sessions.unseal(p.name, request.cookies.get(SEALED_COOKIE))
-    sealed.pop(server, None)
+    mcp_oauth.forget(sealed, server)
     response.set_cookie(SEALED_COOKIE, sessions.seal(p.name, sealed),
                         httponly=True, secure=COOKIE_SECURE,
                         samesite="strict", path="/")

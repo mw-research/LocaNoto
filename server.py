@@ -34,6 +34,7 @@ import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 import auth
 import benutzer
@@ -159,9 +160,42 @@ def _signed_in(request):
     return bool(sessions.verify(request.cookies.get(SESSION_COOKIE)))
 
 
+def _renew_tool_tokens(request):
+    """Renew OAuth tokens of tool servers in the sealed cookie that are
+    about to expire (mcp_oauth.refresh_due). Returns the new cookie value,
+    or None.
+
+    Before the request is handled, so every part of LocaNoto reads the
+    fresh token from the cookie as it always did: the request's cookie
+    header is replaced, and the response sets the new value.
+    """
+    raw = request.cookies.get(SEALED_COOKIE)
+    if not raw:
+        return None
+    s = sessions.verify(request.cookies.get(SESSION_COOKIE))
+    if not s:
+        return None
+    sealed = sessions.unseal(s["user"], raw)
+    import mcp_oauth
+    if not any(k.startswith(mcp_oauth.PREFIX) for k in sealed):
+        return None
+    if not mcp_oauth.refresh_due(sealed):
+        return None
+    new = sessions.seal(s["user"], sealed)
+    cookies = dict(request.cookies, **{SEALED_COOKIE: new})
+    header = "; ".join(f"{k}={v}" for k, v in cookies.items()).encode("latin-1")
+    request.scope["headers"] = [(k, v) for k, v in request.scope["headers"]
+                                if k != b"cookie"] + [(b"cookie", header)]
+    return new
+
+
 @app.middleware("http")
 async def _headers(request: Request, call_next):
     started = time.time()
+    try:
+        renewed_tokens = await run_in_threadpool(_renew_tool_tokens, request)
+    except Exception:
+        renewed_tokens = None
     # A multipart body (an upload) is read and spooled to a temporary
     # file before the route checks who is asking. Without this, anyone
     # who reaches the server could fill its disk 200 MB at a time. Every
@@ -179,6 +213,13 @@ async def _headers(request: Request, call_next):
         response.set_cookie(SESSION_COOKIE, renewed, httponly=True,
                             secure=COOKIE_SECURE, samesite="strict",
                             path="/")
+    # Unless the route wrote the sealed cookie itself (it read the renewed
+    # one, so its value is newer).
+    if renewed_tokens and not any(
+            k == b"set-cookie" and v.startswith(SEALED_COOKIE.encode() + b"=")
+            for k, v in response.raw_headers):
+        response.set_cookie(SEALED_COOKIE, renewed_tokens, httponly=True,
+                            secure=COOKIE_SECURE, samesite="strict", path="/")
     if not request.url.path.startswith(API_PREFIX + "/docs"):
         # Pages: scripts, styles and requests only to this server, nothing
         # inline. The API docs page loads its own assets and is excluded.

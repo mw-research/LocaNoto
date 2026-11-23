@@ -295,7 +295,8 @@ check("the connector's own words about itself are read at the handshake",
       "ERP der Musterfirma" in connections["erp"].instructions
       and "describe" in connections["erp"].instructions)
 check("tools that are not marked read-only wait for a person",
-      connections["demo"].confirm == {"book_out"} and connections["erp"].confirm == set())
+      connections["demo"].write_tools == {"book_out"}
+      and connections["erp"].write_tools == set())
 described = answering._describe(connections, False)
 check("the model is told what each connector is for",
       any("Datenanschluss erp: ERP der Musterfirma" in d for d in described), described)

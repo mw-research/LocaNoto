@@ -53,6 +53,8 @@
       <span class="ok">{{ t('connected') }}</span>
       <input type="hidden" name="action" value="disconnect">
       <button type="submit">{{ t('Disconnect') }}</button>
+    {% elif m.login == 'oauth' %}
+      <a class="button" href="/ui/settings/mailbox/{{ m.name|urlencode }}/oauth">{{ t('Connect with your account') }}</a>
     {% elif m.login != 'keine' %}
       {% if m.login == 'basic' %}<input name="user" placeholder="name@example.com" autocomplete="off">{% endif %}
       <input type="password" name="secret" placeholder="{{ t('Password') }}" autocomplete="off" required>

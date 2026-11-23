@@ -47,6 +47,7 @@ die Sitzung -- siehe zusatz_kopf in verbinde().
 import base64
 import json
 import os
+import re
 import subprocess
 import threading
 
@@ -88,7 +89,11 @@ _STDIO_UMGEBUNG = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "TMPDIR",
 ERLAUBTE_ANGABEN = ("postfach", "automatisch", "hinweis", "hinweis_anhaengen",
                     "sendet", "textfeld",
                     # who sees and uses the entry (mailboxes.visible_to)
-                    "owner", "room")
+                    "owner", "room",
+                    # OAuth (mcp_oauth.py): a client id where the provider
+                    # registers no clients itself, scopes where the server
+                    # names none
+                    "oauth_client_id", "oauth_scopes")
 
 _VERSION = "2024-11-05"
 
@@ -179,6 +184,20 @@ VORLAGEN = {
     "connector_token": {
         "beschreibung": "Datenanschluss, Anmeldung je Nutzer mit Token",
         "angaben": {"transport": "http", "anmeldung": "bearer",
+                    "art": "connector"},
+    },
+    # The MCP authorization standard (mcp_oauth.py): every user signs in at
+    # the provider the server names -- Exchange Online through Microsoft
+    # Graph, for example. The provider's rights apply per person.
+    "mcp_oauth": {
+        "beschreibung": "MCP-Server mit Anmeldung beim Anbieter (OAuth), "
+                        "z. B. Exchange Online über Microsoft Graph",
+        "angaben": {"transport": "http", "anmeldung": "oauth"},
+    },
+    "connector_oauth": {
+        "beschreibung": "Datenanschluss, jeder meldet sich beim Anbieter an "
+                        "(OAuth)",
+        "angaben": {"transport": "http", "anmeldung": "oauth",
                     "art": "connector"},
     },
 }
@@ -286,6 +305,8 @@ def entferne_postfach(name):
         return False, f"'{name}' ist nicht eingerichtet."
     del daten[name]
     schreibe_konfiguration(daten)
+    import mcp_oauth
+    mcp_oauth.forget_client(name)
     return True, f"'{name}' entfernt."
 
 
@@ -317,8 +338,13 @@ class Verbindung:
         # person (pipeline.werkzeuglauf asks "confirm").
         self.connector = self.angaben.get("art") == "connector"
         self.tables = []
-        if self.connector:
-            self.confirm = set()
+        # Tools that change something: never run on the model's word,
+        # always a draft (pipeline.werkzeuglauf). Filled by werkzeuge().
+        self.write_tools = set()
+        # The session the server gave at the handshake (Mcp-Session-Id),
+        # and the protocol version it agreed to.
+        self._sitzung = ""
+        self._version = ""
 
     # --- JSON-RPC ---
 
@@ -334,13 +360,27 @@ class Verbindung:
                 "Accept": "application/json, text/event-stream"}
         kopf.update(self.angaben.get("kopf") or {})
         kopf.update(self.zusatz_kopf)
+        if self._sitzung:
+            kopf["Mcp-Session-Id"] = self._sitzung
+        if self._version:
+            kopf["MCP-Protocol-Version"] = self._version
         try:
             a = httpx.post(self.angaben["url"], json=nachricht, headers=kopf,
                            timeout=ZEITLIMIT)
         except Exception as e:
             raise Fehler(f"{self.name}: nicht erreichbar ({type(e).__name__})")
+        if a.status_code == 401:
+            raise Fehler(f"{self.name}: nicht angemeldet oder Anmeldung "
+                         f"abgelaufen. Unter Einstellungen neu verbinden.")
+        if a.status_code == 404 and self._sitzung:
+            # The server ended the session: a new handshake, then again.
+            raise _SitzungWeg()
         if a.status_code >= 400:
             raise Fehler(f"{self.name}: HTTP {a.status_code}")
+        if nachricht.get("method") == "initialize":
+            self._sitzung = a.headers.get("mcp-session-id", "") or ""
+        if a.status_code == 202 or not a.content:
+            return {}
         text = a.text.strip()
         if text.startswith("event:") or text.startswith("data:"):
             # Ereignisstrom: die Nutzlast steht hinter "data:". Die
@@ -391,16 +431,24 @@ class Verbindung:
         except ValueError:
             raise Fehler(f"{self.name}: keine lesbare Antwort")
 
-    def _ruf(self, methode, parameter=None, antwort_erwartet=True):
+    def _ruf(self, methode, parameter=None, antwort_erwartet=True,
+             wieder=True):
         nachricht = {"jsonrpc": "2.0", "method": methode,
                      "params": parameter or {}}
         if antwort_erwartet:
             nachricht["id"] = self._naechste_nummer()
-        with self._sperre:
-            if self.angaben.get("transport") == "stdio":
-                antwort = self._ueber_stdio(nachricht, antwort_erwartet)
-            else:
-                antwort = self._ueber_http(nachricht)
+        try:
+            with self._sperre:
+                if self.angaben.get("transport") == "stdio":
+                    antwort = self._ueber_stdio(nachricht, antwort_erwartet)
+                else:
+                    antwort = self._ueber_http(nachricht)
+        except _SitzungWeg:
+            self._sitzung, self._version, self._bereit = "", "", False
+            if not wieder or methode == "initialize":
+                raise Fehler(f"{self.name}: Sitzung beendet")
+            self.oeffne()
+            return self._ruf(methode, parameter, antwort_erwartet, wieder=False)
         if not antwort_erwartet:
             return {}
         if "error" in (antwort or {}):
@@ -420,6 +468,7 @@ class Verbindung:
             "clientInfo": {"name": "LocaNoto", "version": "1.0"}})
         self.instructions = " ".join(
             str(hallo.get("instructions") or "").split())[:800]
+        self._version = str(hallo.get("protocolVersion") or "")[:20]
         # Die Bestaetigung ist eine Mitteilung ohne Antwort. Wer hier
         # auf eine wartet, haengt.
         self._ruf("notifications/initialized", antwort_erwartet=False)
@@ -439,12 +488,9 @@ class Verbindung:
                 "beschreibung": (w.get("description") or "")[:600],
                 "schema": w.get("inputSchema") or {"type": "object"},
             })
-            # A connector's tool runs on the model's word only if the
-            # connector marks it as reading. Anything else -- also a tool
-            # that says nothing -- becomes a draft for the user.
-            if self.connector and (w.get("annotations") or {}).get(
-                    "readOnlyHint") is not True:
-                self.confirm.add(w["name"])
+            if self.angaben.get("art") != "websuche" and schreibt(
+                    w["name"], w.get("annotations"), streng=self.connector):
+                self.write_tools.add(w["name"])
         return aus
 
     def rufe(self, name, argumente=None):
@@ -493,6 +539,49 @@ class Verbindung:
         self._bereit = False
 
 
+class _SitzungWeg(Exception):
+    """The server answered 404 to a call of an existing session."""
+
+
+# --- WHICH TOOLS CHANGE SOMETHING ---
+#
+# A tool server says it in the MCP annotations: readOnlyHint true for a
+# tool that only reads, destructiveHint for one that deletes. A tool of
+# a data connector runs on the model's word only with readOnlyHint true.
+# Other servers often say nothing; their tool runs when its name says it
+# reads ("list_messages", "mails_lesen") and nothing in it says it writes.
+# Everything else -- "create_event", "delete_mail", "dispatch" -- waits
+# for a person. A wrong guess costs a click, not a sent mail.
+_LESEN = {"get", "list", "search", "read", "find", "fetch", "query",
+          "describe", "show", "lookup", "count", "check", "lesen", "suchen",
+          "suche", "zeige", "finde", "liste", "abfrage", "status", "info"}
+_SCHREIBEN = {"send", "reply", "forward", "create", "update", "delete",
+              "remove", "move", "copy", "set", "write", "post", "put",
+              "patch", "add", "cancel", "accept", "decline", "mark", "flag",
+              "archive", "upload", "book", "approve", "submit", "run",
+              "execute", "senden", "sende", "antwort", "weiterleiten",
+              "anlegen", "loeschen", "verschieben", "buchen", "schreiben",
+              "aendern", "setzen", "draft", "share", "invite", "respond"}
+
+
+def _woerter(name):
+    teile = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", str(name or ""))
+    return [t.lower() for t in teile]
+
+
+def schreibt(name, annotationen=None, streng=False):
+    """Does this tool change something (then it waits for a person)?"""
+    a = annotationen if isinstance(annotationen, dict) else {}
+    if a.get("readOnlyHint") is True and a.get("destructiveHint") is not True:
+        return False
+    if streng or a.get("readOnlyHint") is False or a.get("destructiveHint"):
+        return True
+    w = _woerter(name)
+    if not w or any(x in _SCHREIBEN for x in w):
+        return True
+    return not (w[0] in _LESEN or w[-1] in _LESEN)
+
+
 def _aufruf_text(argumente):
     """The arguments of a call as a line for the list under the answer:
     the query itself if there is one, otherwise all of them."""
@@ -511,6 +600,7 @@ ANMELDUNGEN = {
     "keine": "keine Anmeldung -- der Server regelt es selbst",
     "basic": "Benutzer und Passwort (Authorization: Basic)",
     "bearer": "ein Token (Authorization: Bearer)",
+    "oauth": "Anmeldung beim Anbieter je Nutzer (OAuth 2.1)",
 }
 
 
@@ -537,7 +627,8 @@ def kopf_fuer(server, benutzer="", geheimnis=""):
         roh = f"{benutzer}:{geheimnis}".encode("utf-8")
         return {"Authorization": "Basic "
                 + base64.b64encode(roh).decode("ascii")}
-    if art == "bearer":
+    if art in ("bearer", "oauth"):
+        # oauth: a program that signed in itself (API) sends its token.
         return {"Authorization": f"Bearer {geheimnis}"}
     return {}
 

@@ -36,7 +36,7 @@ SCHICHT = {
         "routes_documents", "routes_admin", "worker", "test_api", "web",
         "test_multipod", "web_admin", "doctor", "make_ca", "trustbundle",
         "reembed", "test_reembed", "web_tickets", "test_mail_tools",
-        "test_connector", "test_external_model",
+        "test_connector", "test_external_model", "test_mcp_oauth",
     ),
     "Fachlogik": (
         "pipeline", "ranking", "tabellen", "listenquellen", "owncloud",
@@ -48,7 +48,7 @@ SCHICHT = {
         "mailboxes", "accounts", "sessions", "jobs", "metrics", "oidc",
         "auth", "sicherheit", "datentraeger", "workspace_notes",
         "attachments", "imap_mailbox", "created_files", "web_research",
-        "notices", "mail_watch", "tickets", "external_model",
+        "notices", "mail_watch", "tickets", "external_model", "mcp_oauth",
     ),
     "Bestand": (
         "store", "keyword_index", "raeume", "benutzer", "raumschluessel",

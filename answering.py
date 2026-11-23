@@ -561,6 +561,12 @@ def _describe(connections, web_confirm):
                          "fuer den Nutzer.")
         elif web_confirm and getattr(c, "confirm", None) is not None:
             out.append(f"Websuche {name} (nur nach Bestaetigung des Nutzers)")
+        elif (getattr(c, "angaben", None) or {}).get("postfach"):
+            # A mail server that asks which mailbox (Microsoft Graph: userId).
+            out.append(f"Postfach {name} ({c.angaben['postfach']}): wo ein "
+                       f"Werkzeug ein Postfach oder eine userId verlangt, "
+                       f"diese Adresse angeben. Werkzeuge, die etwas aendern, "
+                       f"werden zum Entwurf fuer den Nutzer.")
         else:
             out.append(f"Werkzeugserver {name}")
     return out

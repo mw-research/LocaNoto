@@ -729,6 +729,31 @@ Servertyp „lokaler Prozess (stdio)" erscheint nur, wenn der Betreiber ihn
 mit `MCP_STDIO=1` freigeschaltet hat: Er startet einen Befehl auf dem
 Server.
 
+### Wie binde ich Exchange Online (Microsoft Graph) oder einen anderen Server mit Anbieter-Anmeldung an LocaNoto an?
+
+Neuere Werkzeugserver – etwa ein MCP-Server für Exchange Online über
+Microsoft Graph – melden jeden Nutzer beim Anbieter an (OAuth 2.1, der
+Anmeldestandard von MCP). LocaNoto kann das:
+
+1. **Admin-Bereich** → **Postfächer** → **Anlegen** → Art „MCP-Server mit
+   Anmeldung beim Anbieter (OAuth)", Adresse des Servers (endet meist auf
+   `/mcp`). Bei einem Funktionspostfach die Postfachadresse eintragen –
+   das Modell gibt sie an, wo ein Werkzeug ein Postfach verlangt.
+2. Die Nutzer gehen unter **Einstellungen** auf **Mit eigenem Konto
+   verbinden**, melden sich beim Anbieter an und kommen zurück.
+
+Wo sich LocaNoto anmeldet, liest es beim Server selbst nach; als
+Anwendung registriert es sich dort automatisch. Erlaubt der Anbieter das
+nicht, trägt ein Admin über die Schnittstelle eine Client-ID ein
+(`oauth_client_id`). Die Anmeldung gilt nur in der Sitzung des
+Browsers und wird von selbst erneuert; auf dem Server liegt kein Token.
+Es gelten die Rechte, die der Nutzer beim Anbieter hat.
+
+Werkzeuge, die etwas ändern (senden, löschen, verschieben, Termine
+anlegen), führt LocaNoto nie von selbst aus: Sie erscheinen als Entwurf.
+Ohne Angabe des Servers gilt ein Werkzeug nur dann als lesend, wenn sein
+Name es sagt (`list_…`, `get_…`, `search_…`).
+
 ### Wer sieht ein Postfach in LocaNoto?
 
 Ohne Zuordnung sieht jeder Nutzer jeden Eintrag und kann sich daran

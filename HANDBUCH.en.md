@@ -696,6 +696,31 @@ Other tool servers (MCP) → server type "MCP server over HTTP". The server
 type "local process (stdio)" only appears where the operator has allowed it
 with `MCP_STDIO=1`: it starts a command on the server.
 
+### How do I connect Exchange Online (Microsoft Graph) or another server with sign-in at a provider to LocaNoto?
+
+Newer tool servers -- an MCP server for Exchange Online through Microsoft
+Graph, for example -- sign in every user at the provider (OAuth 2.1, the
+sign-in standard of MCP). LocaNoto can do that:
+
+1. **Admin area** → **Mailboxes** → **Create** → kind "MCP-Server mit
+   Anmeldung beim Anbieter (OAuth)", the server's address (usually ending
+   in `/mcp`). For a shared mailbox enter its address -- the model gives
+   it where a tool asks for a mailbox.
+2. Users go to **Settings** → **Connect with your account**, sign in at
+   the provider and come back.
+
+Where to sign in, LocaNoto reads from the server itself; it registers
+there as an application by itself. Where the provider does not allow
+that, an admin enters a client id through the API (`oauth_client_id`).
+The sign-in lives only in the browser session and is renewed by itself;
+no token is kept on the server. The user's own rights at the provider
+apply.
+
+Tools that change something (send, delete, move, create appointments)
+are never run by LocaNoto on its own: they appear as a draft. Where the
+server says nothing, a tool counts as reading only when its name says so
+(`list_…`, `get_…`, `search_…`).
+
 ### Who sees a mailbox in LocaNoto?
 
 Without an assignment every user sees every entry and can sign in to it.

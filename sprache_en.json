@@ -539,6 +539,8 @@
   ", {} nicht lesbar": ", {} unreadable",
   ", {} zu groß": ", {} too large",
   "Abfrage abgelehnt: {}": "Query rejected: {}",
+  "{}: Sitzung beendet": "{}: session ended",
+  "{}: nicht angemeldet oder Anmeldung abgelaufen. Unter Einstellungen neu verbinden.": "{}: not signed in or the sign-in expired. Connect again under Settings.",
   "Der persönliche Arbeitsbereich ist voll ({} MB). Erst Dokumente löschen.": "The personal workspace is full ({} MB). Delete documents first.",
   "Das Passwort darf höchstens {} Bytes lang sein.": "The password may be at most {} bytes long.",
   "Bild größer als {} Megapixel.": "Image larger than {} megapixels.",
