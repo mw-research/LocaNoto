@@ -15,6 +15,12 @@
   </form>
   {% endif %}
 </section>
+{% if archives %}
+<section class="card">
+  <h2>{{ t('Archives') }}</h2>
+  <ul>{% for a in archives %}<li><a href="/api/v1/admin/feedback/download?file={{ a|urlencode }}">{{ a }}</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
 {% for title, rows in ((t('Questions without an answer'), empty), (t('Not helpful'), down)) %}
 <section class="card">
   <h2>{{ title }}</h2>

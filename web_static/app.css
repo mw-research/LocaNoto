@@ -104,6 +104,9 @@ details.edit[open] { padding-bottom: .5rem; border-bottom: 1px solid var(--borde
 input.narrow { width: 5rem; }
 pre.log { max-height: 20rem; overflow: auto; white-space: pre-wrap; font-size: .85em; }
 p.lang { text-align: center; font-size: .9em; }
+details.inline { display: inline-block; }
+details.inline summary { list-style: none; cursor: pointer; display: inline-block; }
+details.inline summary::-webkit-details-marker { display: none; }
 fieldset { border: 1px solid var(--border); border-radius: 6px; margin: .5rem 0; }
 
 /* chat */

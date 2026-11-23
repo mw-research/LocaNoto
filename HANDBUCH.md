@@ -539,9 +539,8 @@ Admins sehen oben die Seite **Admin**. Ihre Leiste führt zu:
 - **Externes Modell** – welche Quellen extern beantwortet werden dürfen
 - **API** – Beschreibung der HTTP-Schnittstelle unter `/api/v1/docs`
 
-Was keine eigene Seite hat (Passwort eines Benutzers setzen, fremde
-persönliche Dokumente löschen), geht über die Schnittstelle; **API** zeigt
-die Aufrufe.
+Jede Funktion der Seiten gibt es auch über die Schnittstelle; **API**
+zeigt die Aufrufe.
 
 ### Wie werde ich Admin in LocaNoto?
 
@@ -584,9 +583,9 @@ Liste erst nach einer Suche Treffer). In der Zeile des Benutzers:
   Arbeitsbereich übernehmen. Auf dem Server entfernt
   `python accounts.py purge <name>` beides.
 
-**Passwort setzen** geht über die Schnittstelle oder auf dem Server mit
-`python scripts/manage_users.py`. Über die Schnittstelle braucht es bei
-einem Konto mit Chats oder Dokumenten im persönlichen Arbeitsbereich einen
+**Passwort setzen** in der Zeile → neues Passwort → **Speichern** (auch
+auf dem Server mit `python scripts/manage_users.py`). Bei einem Konto mit
+Chats oder Dokumenten im persönlichen Arbeitsbereich braucht es einen
 bestätigten Notzugang dazu – mit dem neuen Passwort wären sie sonst für
 dich offen. Bei verwalteten Konten gilt es auch in ownCloud.
 
@@ -628,7 +627,9 @@ Bestehenden Arbeitsbereich über **Arbeitsbereiche suchen** finden →
 - **Websuche erlaubt**,
 
 → **Speichern**. **Arbeitsbereich entfernen** → nimmt ihn aus der Liste,
-die Dokumente bleiben im Bestand.
+die Dokumente bleiben im Bestand. **Arbeitsbereich leeren** → Kennung
+eintippen → löscht alle seine Dokumente, auch in der Ablage; Mitglieder
+und Einstellungen bleiben. Rückgängig nur über eine Sicherung.
 
 Listenordner trägt **Admin** → **Listen** ein, Datenbanken **Admin** →
 **Datenbanken**. Persönliche Arbeitsbereiche stehen nicht in der Liste;
@@ -747,7 +748,8 @@ eigenen Eintrag.
 
 Danach verbindet sich jeder Nutzer selbst unter **Einstellungen** →
 **Postfächer und Datenanschlüsse**; ein gemeinsames Passwort gibt es
-nicht.
+nicht. **Werkzeuge** neben einem Postfach zeigt, was das Modell damit tun
+kann und welche Werkzeuge senden.
 
 Andere Werkzeugserver (MCP) → Art „MCP-Server über HTTP". Die Art „lokaler
 Prozess (stdio)" erscheint nur, wenn der Betreiber sie mit `MCP_STDIO=1`
@@ -929,6 +931,10 @@ Beide Namen und der Grund stehen im Protokoll. Ohne jemanden mit der Rolle
 `notzugang` gibt es keinen Notzugang: der Arbeitsbereich ist dann nur
 löschbar, nicht lesbar. Die Seite sagt das oben.
 
+Darunter stehen für Admins die **Dokumente in persönlichen
+Arbeitsbereichen anderer**, nur mit Kennung, nie mit Namen – zum Aufräumen
+nach Ausgeschiedenen; **Löschen** entfernt eines.
+
 Bestätigen kann nur, wer sein Passwort selbst gesetzt hat. Ein Konto, dessen
 Passwort jemand anderes vergeben hat – beim Anlegen oder durch Zurücksetzen
 –, wird abgewiesen, bis die Person es unter **Einstellungen** selbst ändert.
@@ -944,6 +950,7 @@ Konten aus dem Firmenverzeichnis betrifft das nicht.
 
 **Herunterladen** → die vollständige Liste. **Archivieren** → legt sie
 unter dem Tagesdatum ab und beginnt eine neue; gelöscht wird nichts.
+**Ablagen** listet die archivierten zum Herunterladen.
 
 Die Liste enthält Fragen im Wortlaut mit Kennung und liegt deshalb
 verschlüsselt. Steht dort „Zeilen liegen im Klartext.", bringt **Neu
@@ -1006,9 +1013,12 @@ erreichbar ist, und die Zuordnung Arbeitsbereich → Ordner:
 - **Dokumente abgleichen** → holt neue und geänderte Dateien aus
   ownCloud und liest sie ein (läuft im Hintergrund).
 
-Die Zuordnung eines Ordners ändern, die Ablage eines einzelnen Nutzers
-nachziehen, geplante Änderungen ansehen und vorhandene Konten als
-verwaltet übernehmen geht über die Schnittstelle (`/api/v1/admin/storage/…`).
+- **Ordner je Arbeitsbereich** → einen anderen Ordner eintragen →
+  **Speichern**; leer nimmt den Ordner mit der Kennung.
+- **Vorschau eines Abgleichs** → Arbeitsbereich → **Vorschau** → wie viele
+  Dateien neu, geändert, entfernt wären.
+- **Konten, die LocaNoto verwaltet** → Namen bestehender Konten →
+  **Übernehmen**; sie folgen danach Passwortänderungen und Löschungen.
 
 Löschen und Verschieben in LocaNoto wirkt auch in ownCloud (Gelöschtes →
 Papierkorb). Benutzer löschen und Passwörter ändern wirkt dort nur bei

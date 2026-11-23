@@ -516,8 +516,7 @@ Admins see the page **Admin** at the top. Its bar leads to:
 - **External model** – which sources may be answered externally
 - **API** – description of the HTTP API at `/api/v1/docs`
 
-What has no page of its own (setting a user's password, deleting other
-users' personal documents) goes through the API; **API** shows the calls.
+Every function of the pages is also in the API; **API** shows the calls.
 
 ### How do I become an admin in LocaNoto?
 
@@ -557,9 +556,9 @@ hits only after a search). In the user's row:
   can be created -- it would take over the chats and the workspace. On
   the server, `python accounts.py purge <name>` removes both.
 
-**Setting a password** goes through the API or, on the server, with
-`python scripts/manage_users.py`. Through the API, an account with chats
-or documents in its personal workspace needs a confirmed emergency access
+**Set password** in the row → new password → **Save** (also on the
+server with `python scripts/manage_users.py`). An account with chats or
+documents in its personal workspace needs a confirmed emergency access
 to it -- with the new password they would otherwise be open to you. For
 managed accounts it also applies in ownCloud.
 
@@ -600,7 +599,9 @@ editable there:
 - **Web search allowed**,
 
 → **Save**. **Remove workspace** → takes it off the list, the documents
-stay in the collection.
+stay in the collection. **Empty the workspace** → type its id → deletes all
+its documents, also in the file store; members and settings stay. Only a
+backup brings them back.
 
 List folders are entered under **Admin** → **Lists**, databases under
 **Admin** → **Databases**. Personal workspaces are not in the list; they
@@ -716,6 +717,8 @@ own mailbox in it. Each shared mailbox gets its own entry.
 
 After that, every user connects themselves under **Settings** →
 **Mailboxes and data connectors**; there is no shared password.
+**Tools** next to a mailbox lists what the model can do with it, and
+which tools send.
 
 Other tool servers (MCP) → kind "MCP-Server über HTTP". The kind "lokaler
 Prozess (stdio)" (local process) only appears where the operator has
@@ -891,6 +894,10 @@ Both names and the reason are recorded in the log. Without anyone holding
 the role `notzugang`, there is no emergency access: the workspace can then
 only be deleted, not read. The page says so at the top.
 
+Below, admins see the **Documents in personal workspaces of others**,
+by id only, never by name – for clearing up after people who left;
+**Delete** removes one.
+
 Only someone who set their own password can confirm. An account whose
 password somebody else set -- when it was created or by a reset -- is
 refused until that person changes it under **Settings**. Accounts from
@@ -905,7 +912,8 @@ the company directory are not affected.
 - **Not helpful** – there were results, but the wrong ones.
 
 **Download** → the complete list. **Archive** → files it under the
-current date and starts a new one; nothing is deleted.
+current date and starts a new one; nothing is deleted. **Archives** lists
+the archived ones for download.
 
 The list contains questions verbatim with user ID and is therefore stored
 encrypted. If it says "lines are stored in the clear.", **Encrypt again**
@@ -966,9 +974,12 @@ the mapping workspace → folder:
 - **Sync documents** → fetches new and changed files from ownCloud and
   ingests them (runs in the background).
 
-Changing the folder of a workspace, bringing a single user's file store up
-to date, reviewing planned changes and marking existing accounts as
-managed go through the API (`/api/v1/admin/storage/…`).
+- **Folder per workspace** → enter another folder → **Save**; empty
+  takes the folder of the workspace's id.
+- **Preview of a sync** → workspace → **Preview** → how many files would
+  be new, changed, removed.
+- **Accounts LocaNoto manages** → names of existing accounts → **Adopt**;
+  they then follow password changes and deletions.
 
 Deleting and moving in LocaNoto also applies in ownCloud (deleted items →
 trash). Deleting users and changing passwords only affect managed accounts

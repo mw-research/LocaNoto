@@ -43,5 +43,22 @@
   </form>
 </section>
 {% endif %}
+{% if can_request and others %}
+<section class="card">
+  <h2>{{ t('Documents in personal workspaces of others') }}</h2>
+  <p class="muted">{{ t('For clearing what people who left keep. Only the id of a document is shown, never its name: deleting is no right to read.') }}</p>
+  <table class="files">
+  {% for room, o in others.items() %}
+    <tr><td><code>{{ room }}</code></td><td class="muted">{{ o.passages }} {{ t('passages') }}</td><td></td></tr>
+    {% for f in o.files %}
+    <tr><td></td><td><code>{{ f }}</code></td>
+      <td><form hx-post="/ui/admin/foreign/delete" hx-target="#em-notice" hx-confirm="{{ t('Delete this document?') }}" class="inline">
+        <input type="hidden" name="room" value="{{ room }}"><input type="hidden" name="file_id" value="{{ f }}">
+        <button type="submit" class="danger">{{ t('Delete') }}</button></form></td></tr>
+    {% endfor %}
+  {% endfor %}
+  </table>
+</section>
+{% endif %}
 <div id="em-notice"></div>
 {% endblock %}

@@ -8,6 +8,14 @@
   <label class="check"><input type="checkbox" name="web" value="1"{% if web %} checked{% endif %}> {{ t('Web search allowed') }}</label>
   <button type="submit" class="primary">{{ t('Save') }}</button>
 </form>
+<details class="edit">
+  <summary>{{ t('Empty the workspace') }}</summary>
+  <p class="muted">{{ t('Deletes every document and passage of this workspace, also in the file store; the workspace itself, its members and settings stay. Cannot be undone -- the backups keep the last state.') }}</p>
+  <form hx-post="/ui/admin/workspaces/{{ room|urlencode }}/wipe" hx-target="#ws-notice" class="inline">
+    <input name="confirm" placeholder="{{ room }}" aria-label="{{ t('Type the id of the workspace to confirm.') }}" autocomplete="off" required>
+    <button type="submit" class="danger">{{ t('Empty the workspace') }}</button>
+  </form>
+</details>
 <form hx-post="/ui/admin/workspaces/{{ room|urlencode }}/delete" hx-target="#ws-notice" hx-confirm="{{ t('Remove the workspace? Its documents stay in the store until it is wiped.') }}" class="inline">
   <button type="submit" class="danger">{{ t('Remove workspace') }}</button>
 </form>

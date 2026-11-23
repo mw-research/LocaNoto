@@ -124,6 +124,34 @@ TEXTS = {
     "settings of the template not set (their default applies)":
         "Einstellungen der Vorlage nicht gesetzt (es gilt ihre Vorgabe)",
     "Workspace created; the storage reported:": "Arbeitsbereich angelegt; die Ablage meldet:",
+    "Set password": "Passwort setzen", "New password for": "Neues Passwort für",
+    "Empty the workspace": "Arbeitsbereich leeren",
+    "Deletes every document and passage of this workspace, also in the file store; the workspace itself, its members and settings stay. Cannot be undone -- the backups keep the last state.":
+        "Löscht alle Dokumente und Abschnitte dieses Arbeitsbereichs, auch in der Ablage; "
+        "der Arbeitsbereich selbst, seine Mitglieder und Einstellungen bleiben. Nicht "
+        "rückgängig zu machen – die Sicherungen halten den letzten Stand.",
+    "Type the id of the workspace to confirm.": "Zur Bestätigung die Kennung des Arbeitsbereichs eintippen.",
+    "Not removed in the file store:": "In der Ablage nicht entfernt:",
+    "Documents in personal workspaces of others": "Dokumente in persönlichen Arbeitsbereichen anderer",
+    "For clearing what people who left keep. Only the id of a document is shown, never its name: deleting is no right to read.":
+        "Zum Aufräumen dessen, was Ausgeschiedene hinterlassen. Gezeigt wird nur die Kennung "
+        "eines Dokuments, nie sein Name: Löschen ist kein Recht zu lesen.",
+    "passages": "Abschnitte", "Delete this document?": "Dieses Dokument löschen?",
+    "Folder per workspace": "Ordner je Arbeitsbereich",
+    "Empty: the folder of the workspace's id. A personal folder cannot be given to another workspace.":
+        "Leer: der Ordner mit der Kennung des Arbeitsbereichs. Ein persönlicher Ordner lässt "
+        "sich keinem anderen Arbeitsbereich geben.",
+    "Accounts LocaNoto manages": "Konten, die LocaNoto verwaltet",
+    "Existing accounts of this file store that LocaNoto created: they then follow password changes and deletions. Only the admin knows whether an account belongs to LocaNoto or to the company.":
+        "Bestehende Konten dieser Ablage, die LocaNoto angelegt hat: sie folgen dann "
+        "Passwortänderungen und Löschungen. Nur der Admin weiß, ob ein Konto LocaNoto gehört "
+        "oder dem Haus.",
+    "Adopt": "Übernehmen", "names, separated by commas": "Namen, durch Kommas getrennt",
+    "Adopted:": "Übernommen:", "Skipped:": "Übersprungen:",
+    "Preview of a sync": "Vorschau eines Abgleichs", "Preview": "Vorschau",
+    "new": "neu", "changed": "geändert", "removed": "entfernt", "unchanged": "unverändert",
+    "Tools": "Werkzeuge", "sends": "sendet",
+    "Archives": "Ablagen",
     "Chat": "Chat", "Documents": "Dokumente", "Web sources": "Quellen im Netz",
     "Settings": "Einstellungen", "Admin": "Admin", "New chat": "Neuer Chat",
     "Ask a question about your documents ...":
@@ -1496,6 +1524,18 @@ def admin_set_role(name: str, request: Request, role: str = Form(...),
     return _back_to_admin() if ok else _notice(tm(message), False)
 
 
+@router.post("/ui/admin/users/{name}/password")
+def admin_set_password(name: str, request: Request, password: str = Form(...),
+                       p: Principal = Depends(principal)):
+    """The same as PUT /api/v1/admin/users/{name}/password, with the same
+    rules (accounts.reset_refused)."""
+    _admin(p)
+    page_language(p.name)
+    ok, message, notes = accounts.set_password(name, password, by=p.name)
+    text = " ".join([tm(message)] + [tm(n) for n in notes or []])
+    return _notice(text, ok)
+
+
 @router.post("/ui/admin/users/{name}/delete")
 def admin_delete_user(name: str, request: Request,
                       p: Principal = Depends(principal)):
@@ -1564,6 +1604,26 @@ def admin_workspace_delete(room: str, request: Request,
     if ok:
         benutzer.protokolliere("raum_entfernt", room, p.name)
     return _back_to_admin() if ok else _notice(tm(message), False)
+
+
+@router.post("/ui/admin/workspaces/{room}/wipe")
+def admin_workspace_wipe(room: str, request: Request, confirm: str = Form(""),
+                         p: Principal = Depends(principal)):
+    """The same as POST /api/v1/admin/workspaces/{room}/wipe: every passage
+    of the workspace goes; the workspace stays. The typed id confirms it."""
+    _admin(p)
+    page_language(p.name)
+    if room not in raeume.liste():
+        raise HTTPException(404, "No such workspace.")
+    try:
+        ok, message, failed = doc_actions.wipe_room(p.name, True, room, confirm.strip())
+    except ValueError:
+        return _notice(t("Type the id of the workspace to confirm."), False)
+    benutzer.protokolliere("raum_geleert", room, p.name, "web")
+    # failed: how many files the file store kept
+    text = tm(message) + (f" {t('Not removed in the file store:')} {failed}"
+                          if failed else "")
+    return _notice(text, ok and not failed)
 
 
 @router.post("/ui/admin/workspaces/{room}/save")

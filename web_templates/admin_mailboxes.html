@@ -13,7 +13,9 @@
         {% if m.personal %}<select name="owner" aria-label="{{ t('Owner') }}"><option value="">{{ t('everyone (own login)') }}</option>{% for u in users %}<option value="{{ u }}"{% if u == m.owner %} selected{% endif %}>{{ u }}</option>{% endfor %}</select>
         {% else %}<select name="room" aria-label="{{ t('Workspace') }}"><option value="">{{ t('everyone') }}</option>{% for id, label in rooms %}<option value="{{ id }}"{% if id == m.room %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}
         <button type="submit">{{ t('Assign') }}</button></form>{% endif %}</td>
-      <td><form hx-post="/ui/admin/mailboxes/{{ m.name }}/delete" hx-confirm="{{ t('Delete') }} {{ m.name }}?" class="inline"><button type="submit" class="danger">{{ t('Delete') }}</button></form></td></tr>
+      <td><form hx-get="/ui/admin/mailboxes/{{ m.name|urlencode }}/tools" hx-target="#mbt-{{ loop.index }}" class="inline"><button type="submit">{{ t('Tools') }}</button></form>
+        <form hx-post="/ui/admin/mailboxes/{{ m.name }}/delete" hx-confirm="{{ t('Delete') }} {{ m.name }}?" class="inline"><button type="submit" class="danger">{{ t('Delete') }}</button></form></td></tr>
+    <tr class="edit-row"><td colspan="4" id="mbt-{{ loop.index }}"></td></tr>
   {% else %}<tr><td class="muted">{{ t('none') }}</td></tr>{% endfor %}
   </table>
 </section>

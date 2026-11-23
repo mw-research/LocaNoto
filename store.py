@@ -579,7 +579,10 @@ def loesche(name):
         vergiss(name)
         return True, "Gelöscht."
     try:
-        client().delete_collection(name=name)
+        # nothing to delete is no failure: a workspace without documents
+        # has no collection yet
+        if name in namen():
+            client().delete_collection(name=name)
         vergiss(name)
         return True, "Gelöscht."
     except Exception as e:

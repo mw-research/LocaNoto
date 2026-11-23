@@ -66,8 +66,9 @@ between users.
 | a named workspace | its members | its members |
 | a personal workspace | only its owner | the owner and admins |
 
-Administrators see documents in foreign rooms only through the admin API
-(`GET /api/v1/admin/foreign-documents`), and only as room and file id;
+Administrators see documents in foreign rooms only under **Admin →
+Emergency access → Documents in personal workspaces of others** (API:
+`GET /api/v1/admin/foreign-documents`), and only as room and file id;
 they never flow into their searches or answers. A **strict mode** hides
 even that list for personal rooms. Access to a personal room of someone
 who is no longer reachable requires **two people**: an administrator

@@ -1357,6 +1357,81 @@ check("the emergency role gets a tab, not the admin pages",
       'href="/admin/emergency"' in _home and 'href="/admin"' not in _home
       and 'class="subnav"' not in _nora.get("/admin/emergency").text, _home[:600])
 
+# --- the rest of the admin functions in the web pages ---
+print("== password, wipe, foreign documents, storage, mailbox tools, archives")
+benutzer.anlege("olga", "Passwort-123456")
+r = markus.post("/ui/admin/users/olga/password", data={"password": "Neues-Passwort-77"})
+check("an admin sets somebody's password", 'class="ok"' in r.text
+      and benutzer.pruefe("olga", "Neues-Passwort-77"), r.text[:300])
+check("only admins set passwords", anna.post("/ui/admin/users/olga/password",
+                                             data={"password": "Anderes-Passwort-1"}).status_code == 403)
+check("the users page offers it", "/ui/admin/users/" in markus.get("/ui/admin/users", params={"q": "olga"}).text
+      and "/password" in markus.get("/ui/admin/users", params={"q": "olga"}).text)
+
+raeume.anlegen("leerbar", "Leerbar", mitglieder=["markus"])
+check("a wrong confirmation does not empty a workspace",
+      "error" in markus.post("/ui/admin/workspaces/leerbar/wipe", data={"confirm": "x"}).text)
+r = markus.post("/ui/admin/workspaces/leerbar/wipe", data={"confirm": "leerbar"})
+check("the typed id empties it", "error" not in r.text, r.text[:300])
+check("only admins empty workspaces", anna.post("/ui/admin/workspaces/leerbar/wipe",
+                                                data={"confirm": "leerbar"}).status_code == 403)
+check("the edit form offers it", "/ui/admin/workspaces/leerbar/wipe"
+      in markus.get("/ui/admin/workspaces/leerbar/edit").text)
+raeume.entfernen("leerbar")
+
+import doc_actions  # noqa: E402
+_foreign = doc_actions.foreign_documents("markus", True)
+_em = markus.get("/admin/emergency").text
+check("the emergency page lists foreign documents by id only",
+      all(f in _em for _r, f in _foreign) and (not _foreign or "/ui/admin/foreign/delete" in _em))
+if _foreign:
+    _r, _f = _foreign[0]
+    check("only admins delete them", anna.post("/ui/admin/foreign/delete",
+                                               data={"room": _r, "file_id": _f}).status_code == 403)
+    markus.post("/ui/admin/foreign/delete", data={"room": _r, "file_id": _f})
+    check("a foreign document is deleted by its id",
+          (_r, _f) not in doc_actions.foreign_documents("markus", True))
+check("an unknown foreign document is refused", markus.post(
+    "/ui/admin/foreign/delete", data={"room": "privat_x", "file_id": "nix"}).status_code == 404)
+
+import owncloud  # noqa: E402
+check("without a file store the storage functions refuse",
+      markus.post("/ui/admin/storage/adopt", data={"names": "a"}).status_code == 409)
+_oc_alt = (owncloud.eingerichtet, owncloud.pruefe, owncloud.nutzer_vorhanden,
+           owncloud.beschreibung)
+owncloud.eingerichtet = lambda: True
+owncloud.pruefe = lambda: (True, "ok")
+owncloud.beschreibung = lambda: "stand-in"
+owncloud.nutzer_vorhanden = lambda k: k == "kim"
+try:
+    _st = markus.get("/admin/storage").text
+    check("the storage page shows mapping, preview and accounts",
+          "/ui/admin/storage/mapping" in _st and "/ui/admin/storage/plan" in _st
+          and "/ui/admin/storage/adopt" in _st, _st[-800:])
+    markus.post("/ui/admin/storage/mapping", data={"folder_einkauf": "/Abteilungen/Einkauf"})
+    check("a folder is mapped to a workspace",
+          owncloud.zuordnung().get("einkauf") == "/Abteilungen/Einkauf", owncloud.zuordnung())
+    check("a personal folder is not given away", "error" in markus.post(
+        "/ui/admin/storage/mapping", data={"folder_einkauf": "/LocaNoto/privat/anna"}).text
+          and owncloud.zuordnung().get("einkauf") == "/Abteilungen/Einkauf")
+    markus.post("/ui/admin/storage/mapping", data={"folder_einkauf": ""})
+    check("empty: the default folder again", "einkauf" not in owncloud.zuordnung())
+    r = markus.post("/ui/admin/storage/adopt", data={"names": "kim, gibtsnicht"})
+    check("existing accounts are adopted, others named",
+          "kim" in owncloud.verwaltete_konten() and "gibtsnicht" in r.text, r.text[:300])
+finally:
+    (owncloud.eingerichtet, owncloud.pruefe, owncloud.nutzer_vorhanden,
+     owncloud.beschreibung) = _oc_alt
+
+check("tools of an unknown mailbox: 404",
+      markus.get("/ui/admin/mailboxes/gibtsnicht/tools").status_code == 404
+      and anna.get("/ui/admin/mailboxes/gibtsnicht/tools").status_code == 403)
+import feedback  # noqa: E402
+feedback.archiviere()
+_fb = markus.get("/admin/feedback").text
+check("feedback archives are listed with a download",
+      not feedback.ablagen() or "/api/v1/admin/feedback/download?file=" in _fb)
+
 # --- every route called? ---
 routes = {(m, r.path) for r in server.app.routes
           if hasattr(r, "methods") and r.path.startswith(API)

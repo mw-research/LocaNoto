@@ -16,6 +16,7 @@ The same functions as /api/v1/admin/..., with the same checks. The
 emergency page is open to admins and to the role notzugang (the second
 person who confirms).
 """
+import html
 import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -23,6 +24,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 import benutzer
 import dateisperre
+import doc_actions
 import feedback
 import jobs
 import listenquellen
@@ -110,11 +112,34 @@ def emergency_page(request: Request):
         return away
     foreign = [r for r in raeume.liste() if raeume.ist_privat(r)
                and r != raeume.privat_kennung(p.name)]
+    others = {}
+    if p.is_admin:
+        counts = dict(doc_actions.foreign_rooms(p.name, True))
+        for room, file_id in doc_actions.foreign_documents(p.name, True):
+            others.setdefault(room, {"passages": counts.get(room, 0), "files": []})
+            others[room]["files"].append(file_id)
+        for room, n in counts.items():
+            others.setdefault(room, {"passages": n, "files": []})
     return render("admin_emergency.html", request, nav=_nav(p, "admin"),
                   possible=notzugang.moeglich(), open=notzugang.offene(),
                   requests=notzugang.antraege(), rooms=foreign,
                   can_request=p.is_admin, can_confirm=p.is_emergency,
-                  me=p.name)
+                  me=p.name, others=dict(sorted(others.items())))
+
+
+@router.post("/ui/admin/foreign/delete")
+def delete_foreign_document(request: Request, room: str = Form(...),
+                            file_id: str = Form(...),
+                            p: Principal = Depends(principal)):
+    """A document in a personal workspace of somebody else, by its id."""
+    _admin(p)
+    page_language(p.name)
+    try:
+        doc_actions.delete_foreign(p.name, True, room, file_id)
+    except doc_actions.NotFound:
+        raise HTTPException(404, "No such document in a foreign room.")
+    benutzer.protokolliere("fremdes_dokument_geloescht", f"{room}/{file_id}", p.name)
+    return _reload("/admin/emergency")
 
 
 @router.post("/ui/admin/emergency/{action}")
@@ -265,11 +290,74 @@ def storage_page(request: Request):
         return away
     configured = owncloud.eingerichtet()
     ok, message = owncloud.pruefe() if configured else (False, "")
+    own = owncloud.zuordnung() if configured else {}
     return render("admin_storage.html", request, nav=_nav(p, "admin"),
                   configured=configured, reachable=ok, message=message,
                   description=owncloud.beschreibung() if configured else "",
                   mapping=owncloud.zuordnung_wirksam() if configured else {},
+                  shared=[(r, raeume.bezeichnung(r), own.get(r, ""))
+                          for r in sorted(raeume.liste()) if not raeume.ist_privat(r)],
+                  accounts=sorted(owncloud.verwaltete_konten()) if configured else [],
                   job=jobs.status("abgleich"))
+
+
+@router.post("/ui/admin/storage/mapping")
+async def storage_mapping(request: Request, p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    if not owncloud.eingerichtet():
+        raise HTTPException(409, "No storage (OpenCloud) is configured.")
+    form = await request.form()
+    rooms = [r for r in raeume.liste() if not raeume.ist_privat(r)]
+    # personal rooms keep what they have; shared ones take the form
+    mapping = {r: v for r, v in owncloud.zuordnung().items() if r not in rooms}
+    for r in rooms:
+        value = str(form.get(f"folder_{r}") or "").strip()
+        if value:
+            mapping[r] = value
+    problem = owncloud.zuordnung_fehler(mapping)
+    if problem:
+        return _notice(tm(problem), False)
+    owncloud.setze_zuordnung(mapping)
+    benutzer.protokolliere("ablage_zuordnung", ", ".join(sorted(mapping)), p.name)
+    return _reload("/admin/storage")
+
+
+@router.post("/ui/admin/storage/adopt")
+def storage_adopt(request: Request, names: str = Form(""),
+                  p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    if not owncloud.eingerichtet():
+        raise HTTPException(409, "No storage (OpenCloud) is configured.")
+    added, skipped = owncloud.konten_uebernehmen(
+        [n.strip() for n in names.split(",") if n.strip()])
+    if added:
+        benutzer.protokolliere("konten_uebernommen", ", ".join(added), p.name)
+    text = t("Adopted:") + " " + (", ".join(added) or "–")
+    if skipped:
+        text += " · " + t("Skipped:") + " " + ", ".join(tm(s) for s in skipped)
+    return _notice(text, not skipped)
+
+
+@router.get("/ui/admin/storage/plan")
+def storage_plan(request: Request, room: str = "", p: Principal = Depends(principal)):
+    """How many files a sync of this workspace would add, change, remove.
+    Counts only: the names of a personal workspace are its owner's."""
+    _admin(p)
+    page_language(p.name)
+    if not owncloud.eingerichtet():
+        raise HTTPException(409, "No storage (OpenCloud) is configured.")
+    if room not in raeume.liste():
+        raise HTTPException(404, "No such workspace.")
+    try:
+        new, changed, removed, unchanged = owncloud.plane(room)
+    except Exception as e:
+        return _notice(f"{type(e).__name__}: {e}", False)
+    same = len(unchanged) if hasattr(unchanged, "__len__") else unchanged
+    return _notice(f"{raeume.bezeichnung(room)}: {len(new)} {t('new')} · "
+                   f"{len(changed)} {t('changed')} · {len(removed)} {t('removed')} · "
+                   f"{same} {t('unchanged')}")
 
 
 @router.post("/ui/admin/storage/{action}")
@@ -386,6 +474,27 @@ def lists_rebuild(request: Request, p: Principal = Depends(principal)):
     page_language(p.name)
     tabellen.baue_katalog()
     return _reload("/admin/lists")
+
+
+@router.get("/ui/admin/mailboxes/{name}/tools")
+def mailbox_tools(name: str, request: Request, p: Principal = Depends(principal)):
+    """The tools of a mailbox or data connector, as the model sees them.
+    A personal one answers with the admin's own login of this session."""
+    from routes_account import mailbox_headers
+    _admin(p)
+    page_language(p.name)
+    if name not in {m["name"] for m in mailboxes.overview()}:
+        raise HTTPException(404, "No such mailbox.")
+    try:
+        tools = mailboxes.tools(name, mailbox_headers(p, request).get(name))
+    except Exception as e:
+        return _notice(tm(str(e)) or type(e).__name__, False)
+    rows = "".join(
+        f"<li><code>{html.escape(str(x['name']))}</code>"
+        f"{' · <strong>' + html.escape(t('sends')) + '</strong>' if x['sends'] else ''}"
+        f" <span class=\"muted\">{html.escape(str(x['description'] or ''))[:200]}</span></li>"
+        for x in tools)
+    return HTMLResponse(f"<ul>{rows}</ul>" if rows else f"<p class=\"muted\">{t('none')}</p>")
 
 
 # --- DATABASES ---

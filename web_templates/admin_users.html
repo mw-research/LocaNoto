@@ -16,6 +16,12 @@
     </td>
     <td>
       <button type="button" hx-get="/ui/admin/users/{{ name|urlencode }}/workspaces" hx-target="#uws-{{ loop.index }}">{{ t('Workspaces') }}</button>
+      <details class="inline"><summary class="button">{{ t('Set password') }}</summary>
+        <form hx-post="/ui/admin/users/{{ name }}/password" hx-target="#user-notice" class="inline">
+          <input type="password" name="password" minlength="8" required autocomplete="new-password" aria-label="{{ t('New password for') }} {{ name }}" placeholder="{{ t('New password for') }} {{ name }}">
+          <button type="submit">{{ t('Save') }}</button>
+        </form>
+      </details>
       <form hx-post="/ui/admin/users/{{ name }}/delete" hx-target="#user-notice" hx-confirm="{{ t('Delete') }} {{ name }}?" class="inline">
         <button type="submit" class="danger">{{ t('Delete') }}</button>
       </form>

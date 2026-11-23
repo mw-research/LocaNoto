@@ -534,7 +534,7 @@ Dateien importieren sie.
 | `vector_columns.py` | Which vector column belongs to which embedding model (Postgres only). | `EMBEDDING_NEXT_DIMENSIONS`, `EMBEDDING_NEXT_MODEL` | `doctor`, `pg_collection`, `reembed`, `tests/test_reembed` |
 | **Fachlogik** | | | |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +1 |
-| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +10 |
+| `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +11 |
 | `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `routes_admin`, `routes_documents` +4 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `attachments`, `routes_admin` +12 |
 | `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `routes_account`, `routes_chat`, `server`, `tests/test_api` +8 |
@@ -550,7 +550,7 @@ Dateien importieren sie.
 | `oidc.py` | Sign-in through the company directory (OpenID Connect). | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_GROUPS_CLAIM` +7 | `api`, `routes_account`, `server`, `tests/test_api` +1 |
 | `sqldb.py` | Lesender Zugriff auf eine SQL-Server-Datenbank fuer Text-to-SQL. | `SQL_DB`, `SQL_HINWEIS`, `SQL_MAX_ROWS` +8 | `answering`, `tests/test_mail_tools`, `web`, `web_admin` |
 | `notzugang.py` | Notzugang zu einem persoenlichen Raum -- von zwei Personen getragen. | `NOTZUGANG_ANTRAG_TAGE`, `NOTZUGANG_STUNDEN` | `accounts`, `answering`, `api`, `doc_actions` +6 |
-| `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `routes_admin`, `routes_chat` +2 |
+| `feedback.py` | Rueckmeldungen zu Antworten -- was gefehlt hat und was gewirkt hat. | `FEEDBACK_ANZEIGE` | `answering`, `api`, `routes_admin`, `routes_chat` +3 |
 | `lesen.py` | Word, Markdown und einfache Textdateien in Abschnitte zerlegen. | `AUFNAHME_ENTPACKT_MAX_MB` | `aufnehmen`, `ingest`, `ingest_images`, `tabellen` |
 | `ocr.py` | Texterkennung fuer gescannte Seiten -- Tesseract ueber pymupdf. | `BILD_MAX_MEGAPIXEL`, `BILD_MINDEST_TEXT`, `OCR_DPI` +2 | `aufnehmen`, `bildtext`, `ingest`, `routes_chat` |
 | `chats.py` | Chatverlaeufe -- verschluesselt, mit dem Titel in der Datei statt im Namen. | — | `answering`, `attachments`, `mailboxes`, `routes_chat` +5 |
@@ -559,7 +559,7 @@ Dateien importieren sie.
 | `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_ATTEMPTS_PER_NAME` +4 | `mcp_oauth`, `oidc`, `routes_account`, `server` +4 |
 | `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `web` |
 | `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `pipeline`, `prompts` +5 |
-| `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `routes_admin`, `routes_documents`, `server`, `web` |
+| `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `routes_admin`, `routes_documents`, `server`, `tests/test_api` +2 |
 | `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `pipeline`, `routes_account`, `routes_admin` +4 |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `aufnehmen`, `ingest`, `ingest_images` |
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `routes_account`, `routes_admin` +4 |
@@ -584,12 +584,12 @@ Dateien importieren sie.
 | `web.py` | The web interface: server-rendered pages with HTMX-style fragments. | `UI_ACCENT_COLOR`, `UI_BRAND_NAME`, `UI_LOGO` | `server`, `tests/test_api`, `web_admin`, `web_tickets` |
 | `routes_admin.py` | API: the admin area -- everything the admin pages offer. | — | `server` |
 | `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD`, `SICHERUNG_VERSCHLUESSELN` | `routes_admin`, `tests/test_api`, `web_admin` |
-| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | — |
 | `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
+| `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | — |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
-| `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server`, `web` |
+| `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server`, `web`, `web_admin` |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
 | `routes_documents.py` | API: workspaces, documents, web sources, lists. | `AUFNAHME_MAX_MB` | `server` |
 | `einrichten.py` | Von null auf lauffaehig -- ein Lauf, der sagt, was er tut. | `APP_PORT`, `KUBERNETES_SERVICE_HOST`, `LOCANOTO_ERSTER_VERWALTER` +1 | — |
@@ -822,9 +822,11 @@ trägt hier nur die Zuordnung ein. Das Holen läuft dann unverändert.
 
 Eine Zuordnung von Hand geht dem Standardbaum vor — für Unterlagen, die
 an einem gewachsenen Ort wie `/Abteilungen/Einkauf/Handbücher` gepflegt
-werden. Sie steht in `config/owncloud.json` und wird mit
-`PUT /api/v1/admin/storage/mapping` gesetzt; **Admin → Ablage** zeigt die
-wirksame Zuordnung je Raum. Ohne Eintrag gilt der Standardbaum, und dann
+werden. Sie steht in `config/owncloud.json` und wird unter **Admin →
+Ablage → Ordner je Arbeitsbereich** gesetzt (oder mit
+`PUT /api/v1/admin/storage/mapping`); das Feld zeigt als Platzhalter den
+wirksamen Ordner. Persönliche Ordner lassen sich keinem anderen Raum
+geben (`owncloud.zuordnung_fehler`). Ohne Eintrag gilt der Standardbaum, und dann
 muss für einen neuen Raum niemand etwas eintragen.
 
 **Ordner und Freigaben der Arbeitsbereiche einrichten** unter
@@ -858,7 +860,9 @@ holt neue und geänderte Dateien, entfernt die Abschnitte entfallener und
 liest anschließend ein. Über die Oberfläche geht dasselbe abgekoppelt, mit
 **Dokumente abgleichen** unter **Admin → Ablage** oder „Aus ownCloud
 abgleichen" unter **Admin → Hintergrundläufe**. Den Plan für einen Raum
-ohne Änderung liefert `GET /api/v1/admin/storage/plan?room=…`.
+ohne Änderung zeigt **Vorschau eines Abgleichs** als Zahlen; mit
+Dateinamen liefert ihn `GET /api/v1/admin/storage/plan?room=…` (für einen
+persönlichen Raum nur mit Notzugang).
 
 Für den Dauerbetrieb in einen Zeitplan auf dem Server:
 
@@ -892,7 +896,8 @@ Datei liegt danach im ownCloud-Papierkorb –, verschoben über `MOVE`, ohne
 am Ziel zu überschreiben. Scheitert das, nennt die Meldung in der
 Oberfläche es.
 
-Das Leeren eines ganzen Raums (`POST /api/v1/admin/workspaces/{room}/wipe`)
+Das Leeren eines ganzen Raums (**Arbeitsbereich leeren** beim Bearbeiten,
+mit eingetippter Kennung, oder `POST /api/v1/admin/workspaces/{room}/wipe`)
 legt den Inhalt seines ownCloud-Ordners in den Papierkorb; Ordner und
 Freigaben bleiben, der Raum besteht weiter.
 
@@ -901,7 +906,8 @@ LocaNoto verwaltet: jedes, das es selbst anlegt, kommt hinzu. Nur bei
 diesen löscht LocaNoto das Konto mit dem Benutzer und setzt ein neues
 Passwort auch dort. Ein vorher vorhandenes Konto kann einem Menschen
 gehören, der es für alles andere im Haus nutzt; es bleibt, bis ein
-Verwalter es mit `POST /api/v1/admin/storage/adopt-accounts` vermerkt. Das Dienst- und das Verwalterkonto
+Verwalter es unter **Admin → Ablage → Konten, die LocaNoto verwaltet**
+(oder `POST /api/v1/admin/storage/adopt-accounts`) vermerkt. Das Dienst- und das Verwalterkonto
 (`OWNCLOUD_USER`, `OWNCLOUD_ADMIN_USER`) fasst LocaNoto nie an, auch
 wenn ein LocaNoto-Benutzer genauso heißt. Der persönliche Ordner im
 Bereich des Dienstkontos bleibt beim Löschen eines Benutzers, wie sein
@@ -1482,11 +1488,12 @@ schließen, nur eingrenzen:
 | ein benannter Raum | seine Mitglieder | seine Mitglieder |
 | ein persönlicher Raum | nur der Nutzer selbst | der Nutzer und Administratoren |
 
-Administratoren sehen Dokumente in fremden Räumen ausschließlich über die
-Verwaltungs-API (`GET /api/v1/admin/foreign-documents`,
-`GET /api/v1/admin/foreign-rooms`), und dort nur Raum und eine
-Dateikennung — ein Löschrecht ist kein Leserecht. Gelöscht wird mit
-`POST /api/v1/admin/foreign-documents/delete`. In Suche und Antworten
+Administratoren sehen Dokumente in fremden Räumen nur unter **Admin →
+Notzugang → Dokumente in persönlichen Arbeitsbereichen anderer** (oder
+`GET /api/v1/admin/foreign-documents`, `GET /api/v1/admin/foreign-rooms`),
+und dort nur Raum, Zahl der Abschnitte und eine Dateikennung — ein
+Löschrecht ist kein Leserecht. Gelöscht wird dort mit **Löschen** (oder
+`POST /api/v1/admin/foreign-documents/delete`). In Suche und Antworten
 fließen sie nie ein.
 Wer Administrator ist, steht als Rolle in der signierten Benutzerdatei — siehe [Benutzer und Rollen](#-benutzer-und-rollen).
 
@@ -1498,27 +1505,29 @@ Siehe [Räume](#-räume) für die Einrichtung.
 ## 👥 Benutzer und Rollen
 Angelegt werden Benutzer von Verwaltern — auf der Seite **Admin** im
 Abschnitt **Nutzer** (Name, Passwort, Rolle, **Anlegen**; dort auch Rolle
-ändern, Arbeitsbereiche zuordnen, löschen), über `POST /api/v1/admin/users`
-oder im Terminal. Alle Wege landen im selben Protokoll.
+ändern, **Passwort setzen**, Arbeitsbereiche zuordnen, löschen), über
+`POST /api/v1/admin/users` oder im Terminal. Alle Wege landen im selben
+Protokoll. Das Passwort eines Kontos mit Chats oder Dokumenten im
+persönlichen Raum setzt ein Verwalter nur mit bestätigtem Notzugang
+(`accounts.reset_refused`).
 
 ```bash
 docker compose exec locanoto_bot python scripts/create_user.py     # erster Benutzer, dann als Verwalter
 docker compose exec locanoto_bot python scripts/manage_users.py    # Passwort, Rolle, löschen
 ```
 
-Vorher genügte es, `scripts/create_user.py` zu starten: wer das konnte, legte sich
-einen Zugang an, und nichts hielt es fest. Jetzt gilt:
+Wer `scripts/create_user.py` starten kann, legt damit nicht einfach einen
+Zugang an:
 
 1. **Solange es keinen Benutzer gibt**, ist der erste Aufruf die
    Einrichtung — er legt einen Verwalter an, denn es gibt noch nichts zu
    schützen.
 2. **Danach** verlangt jeder Aufruf die Anmeldung eines vorhandenen
    Verwalters. Das gilt auch für `scripts/create_token.py`.
-3. **Die Rolle steht in der Benutzerdatei**, nicht mehr in `ADMIN_USERS`.
-   Eine Umgebungsvariable lässt sich am Container setzen, ohne die
-   Benutzerdatei anzufassen — damit war Verwalter zu werden eine Frage von
-   `docker run -e`. `ADMIN_USERS` greift nur noch, solange die Datei aus
-   der Zeit vor den Signaturen stammt.
+3. **Die Rolle steht in der Benutzerdatei**, mitsigniert. Eine
+   Umgebungsvariable ließe sich am Container setzen, ohne die
+   Benutzerdatei anzufassen; `ADMIN_USERS` greift deshalb nur, solange die
+   Datei unsigniert ist (beim Umstieg auf Signaturen).
 
 ### Jeder Eintrag ist einzeln signiert
 
@@ -2410,8 +2419,9 @@ Verwalter zu sehen.
 
 Die vollständige Liste holt **Herunterladen** auf derselben Seite —
 auswerten heißt in der Regel sortieren und zählen, und dafür braucht man
-sie ganz. Frühere Ablagen nennt `GET /api/v1/admin/feedback/files`;
-`GET /api/v1/admin/feedback/download?file=…` holt eine davon.
+sie ganz. Frühere Ablagen stehen unter **Ablagen** auf derselben Seite
+zum Herunterladen (`GET /api/v1/admin/feedback/files`,
+`GET /api/v1/admin/feedback/download?file=…`).
 
 Ist eine Liste abgearbeitet, legt **Archivieren** das Protokoll unter dem
 Tagesdatum ab (`feedback-2026-09-02.jsonl`) und beginnt ein neues.
@@ -2789,8 +2799,10 @@ Server üblich ist — Exchange, IMAP/SMTP, MCP-Server über HTTP (ohne
 Anmeldung, mit Token oder mit OAuth), Websuche, lokaler Prozess,
 Datenanschlüsse; aus der Maske kommen Name, Adresse, die Art des
 Postfachs, wer es sieht, und die Regeln zum Senden. **Löschen** entfernt
-einen Eintrag. `GET /api/v1/admin/mailboxes/{name}/tools` verbindet sich
-und listet auf, was der Server anbietet.
+einen Eintrag. **Werkzeuge** (oder
+`GET /api/v1/admin/mailboxes/{name}/tools`) verbindet sich und listet auf,
+was der Server anbietet und welche Werkzeuge senden; ein persönliches
+Postfach antwortet dabei mit der eigenen Anmeldung des Admins.
 
 **Ein persönliches Postfach antwortet nie selbständig.** Die
 Freischaltung gilt nur für Funktionspostfächer und wird beim Anlegen
