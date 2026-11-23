@@ -5,11 +5,14 @@
 <section class="card">
   <form method="get" action="/admin/content" class="inline">
     <select name="prompt">{% for name, title in prompts %}<option value="{{ name }}" {{ 'selected' if name == chosen }}>{{ title }} ({{ name }})</option>{% endfor %}</select>
+    {% if shared %}<select name="preset" aria-label="{{ t('Preset') }}"><option value="">{{ t('for all presets') }}</option>
+      {% for v in shared %}<option value="{{ v.name }}" {{ 'selected' if v.name == preset }}>{{ v.label }}</option>{% endfor %}</select>{% endif %}
     <button type="submit">{{ t('Open') }}</button>
   </form>
   {% if chosen %}
-  <p class="muted">{{ origin }}</p>
+  <p class="muted">{{ t(origin) }}</p>
   <form hx-post="/ui/admin/prompts/{{ chosen }}" hx-target="#prompt-notice">
+    <input type="hidden" name="preset" value="{{ preset }}">
     <textarea name="text" rows="18" class="mono">{{ text }}</textarea>
     <button type="submit" name="action" value="save" class="primary">{{ t('Save') }}</button>
     <button type="submit" name="action" value="reset">{{ t('Reset to the shipped template') }}</button>
@@ -24,5 +27,22 @@
     <button type="submit" class="primary">{{ t('Save') }}</button>
   </form>
   <div id="glossary-notice"></div>
+</section>
+<section class="card">
+  <h2>{{ t('Shared presets') }}</h2>
+  <p class="muted">{{ t('Every user can choose them in the chat. Their prompts are edited above, with the preset chosen next to the prompt.') }}</p>
+  {% for v in shared %}
+  <details class="edit">
+    <summary>{{ v.label }}{% if v.description %} <span class="muted">– {{ v.description }}</span>{% endif %}</summary>
+    {% with action='/ui/admin/presets' %}{% include "preset_form.html" %}{% endwith %}
+    <form hx-post="/ui/admin/presets/delete" hx-confirm="{{ t('Delete this preset?') }}" class="inline">
+      <input type="hidden" name="name" value="{{ v.name }}"><button type="submit" class="danger">{{ t('Delete') }}</button>
+    </form>
+  </details>
+  {% else %}<p class="muted">{{ t('none') }}</p>{% endfor %}
+  <details class="edit">
+    <summary>{{ t('New preset') }}</summary>
+    {% with action='/ui/admin/presets', v=none %}{% include "preset_form.html" %}{% endwith %}
+  </details>
 </section>
 {% endblock %}

@@ -646,12 +646,16 @@ def reencrypt_feedback(p: Principal = Depends(admin)):
 class HeaderRow(BaseModel):
     file: str
     sheet: str = ""
-    row: int = Field(ge=0)
+    row: int | None = Field(default=None, ge=0,
+                            description="0 = first row; null: found automatically")
+    root: str = Field(default="", description="the sheet's source (wurzel in "
+                                              "the catalog); empty: main list folder")
 
 
 @router.put("/lists/header", tags=["lists"])
 def set_header_row(body: HeaderRow, p: Principal = Depends(admin)):
-    result = tabellen.setze_kopfzeile(body.file, body.sheet, body.row)
+    result = tabellen.setze_kopfzeile(body.file, body.sheet, body.row,
+                                      wurzel=body.root or None)
     tabellen.baue_katalog()
     return {"result": result}
 
@@ -676,11 +680,14 @@ def put_list_sources(body: ListSources, p: Principal = Depends(admin)):
 
 @router.post("/lists/upload", tags=["lists"])
 def upload_list(file: UploadFile = File(...), area: str = Form(""),
+                room: str = Form("", description="into the list folder of this "
+                                                 "workspace; empty: the one list folder"),
                 p: Principal = Depends(admin)):
-    if not tabellen.beschreibbar():
+    if not room and not tabellen.beschreibbar():
         raise HTTPException(409, "The list folder is read-only.")
     message = _ok(tabellen.lege_ab(file.file.read(),
-                                   file.filename or "list.xlsx", area))
+                                   file.filename or "list.xlsx", area,
+                                   raum=room or None))
     tabellen.baue_katalog()
     return {"message": message}
 

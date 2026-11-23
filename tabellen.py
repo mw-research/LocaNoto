@@ -223,8 +223,20 @@ def _kopfzeilen():
         return {}
 
 
+def kopf_schluessel(wurzel, datei):
+    """Key of a file's manual header rows.
+
+    A file in the main list folder by its path there (datei); a file in
+    any other source by source and path, since two sources may hold
+    files of the same name.
+    """
+    if not wurzel or os.path.normpath(str(wurzel)) == os.path.normpath(pfad()):
+        return datei
+    return f"{wurzel}::{datei}"
+
+
 @dateisperre.unter_sperre(lambda *_a, **_k: KOPF_DATEI)
-def setze_kopfzeile(datei, blatt, zeile):
+def setze_kopfzeile(datei, blatt, zeile, wurzel=None):
     """Setzt die Kopfzeile eines Blattes von Hand. zeile=None loescht sie.
 
     Die Erkennung liegt meistens richtig und manchmal daneben. Wo sie
@@ -233,6 +245,7 @@ def setze_kopfzeile(datei, blatt, zeile):
     richtigstellen lassen.
     """
     d = _kopfzeilen()
+    datei = kopf_schluessel(wurzel, datei)
     schluessel = f"{datei}#{blatt}" if blatt else datei
     if zeile is None:
         d.pop(schluessel, None)
@@ -281,14 +294,12 @@ def _aufbereiten(roh, schluessel):
     return rahmen.reset_index(drop=True), k
 
 
-def _blaetter(voll):
-    """(blattname, dataframe, kopfzeile) je Blatt einer Datei."""
-    import pandas as pd
+def _blaetter(voll, rel):
+    """(blattname, dataframe, kopfzeile) je Blatt einer Datei.
 
-    try:
-        rel = os.path.relpath(voll, pfad()).replace(os.sep, "/")
-    except ValueError:
-        rel = os.path.basename(voll)
+    rel is the key of its manual header rows (kopf_schluessel).
+    """
+    import pandas as pd
 
     endung = os.path.splitext(voll)[1].lower()
     if endung in (".csv", ".tsv"):
@@ -478,7 +489,8 @@ def _lies_wolke(ordner, raum, uebrig):
             fehler.append((d["rel"], "Nicht ladbar."))
             continue
         try:
-            for blatt, rahmen, kopf in _blaetter(lokal):
+            for blatt, rahmen, kopf in _blaetter(
+                    lokal, kopf_schluessel(ordner, d["rel"])):
                 eintraege.append({
                     "datei": d["rel"],
                     "blatt": blatt,
@@ -522,7 +534,8 @@ def _lies_ordner(ordner, raum, uebrig):
             datei_pfad = os.path.join(wurzel, name)
             rel = os.path.relpath(datei_pfad, ordner).replace("\\", "/")
             try:
-                for blatt, rahmen, kopf in _blaetter(datei_pfad):
+                for blatt, rahmen, kopf in _blaetter(
+                        datei_pfad, kopf_schluessel(ordner, rel)):
                     eintraege.append({
                         "datei": rel,
                         "blatt": blatt,
@@ -620,17 +633,43 @@ def sicherer_dateiname(name):
     return name
 
 
-def lege_ab(daten, name, bereich=""):
-    """Speichert eine hochgeladene Tabellendatei. (ok, meldung)."""
-    if not beschreibbar():
+def ablageorte():
+    """[(raum, ordner)] -- the list sources an upload can write into.
+
+    Folders the catalog reads (quellen), on this machine, present and
+    writable; not the personal ones and not the file store.
+    """
+    aus = []
+    for raum, ordner in quellen():
+        if str(ordner).startswith(WOLKE) or str(raum).startswith("privat_"):
+            continue
+        if statefiles.isdir(ordner) and os.access(ordner, os.W_OK):
+            aus.append((raum, ordner))
+    return aus
+
+
+def lege_ab(daten, name, bereich="", raum=None):
+    """Speichert eine hochgeladene Tabellendatei. (ok, meldung).
+
+    raum: in den Listenordner dieses Arbeitsbereichs (ablageorte);
+    ohne: in den einen Listenordner (pfad).
+    """
+    if raum is not None:
+        ziele = [o for r, o in ablageorte() if r == raum]
+        if not ziele:
+            return False, "Dieser Arbeitsbereich hat keinen beschreibbaren Listenordner."
+        basis = ziele[0]
+    elif not beschreibbar():
         return False, ("Listenordner ist nicht beschreibbar – wohl nur lesend eingehängt.")
+    else:
+        basis = pfad()
     sicher = sicherer_dateiname(name)
     if not sicher:
         return False, (f"'{name}' ist kein zulässiger Name. Erlaubt: {', '.join(ENDUNGEN)}.")
 
     bereich = re.sub(r"[^0-9A-Za-zäöüÄÖÜß _-]",
                      "", (bereich or "").strip()).strip()
-    wurzel = os.path.realpath(pfad())
+    wurzel = os.path.realpath(basis)
     ziel_ordner = os.path.join(wurzel, bereich) if bereich else wurzel
     ziel = os.path.realpath(os.path.join(ziel_ordner, sicher))
 
@@ -968,7 +1007,7 @@ def _lade(datei, blatt, wurzel=None):
         return con
 
     gefunden = None
-    for name, rahmen, _kopf in _blaetter(voll):
+    for name, rahmen, _kopf in _blaetter(voll, kopf_schluessel(wurzel, datei)):
         con = _als_tabelle(rahmen)
         _merke(stand + (name,), con)
         if name == blatt or (not blatt and gefunden is None):

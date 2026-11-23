@@ -2,19 +2,23 @@
 
     /admin/backups      list, back up now, restore (with state)
     /admin/emergency    requests and open grants; request, confirm, reject, close
-    /admin/content      prompt templates and the glossary
+    /admin/content      prompt templates (also per preset), the glossary,
+                        shared presets
     /admin/feedback     empty answers and thumbs down; archive
     /admin/storage      OpenCloud: status, set up workspaces, group sync
     /admin/mailboxes    mailboxes and web search services; ticket system of
                         shared mailboxes (tickets.py)
-    /admin/lists        list folders per workspace, catalog, read again
+    /admin/lists        list folders per workspace, upload, catalog with
+                        header rows, read again
     /admin/databases    SQL databases per workspace: shared account or personal logins
 
 The same functions as /api/v1/admin/..., with the same checks. The
 emergency page is open to admins and to the role notzugang (the second
 person who confirms).
 """
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+import os
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import benutzer
@@ -22,10 +26,12 @@ import dateisperre
 import feedback
 import jobs
 import listenquellen
+import llm
 import mailboxes
 import notzugang
 import owncloud
 import paths
+import presets
 import prompts
 import raeume
 import sicherung
@@ -34,7 +40,8 @@ import statefiles
 import tabellen
 import tickets
 from server import Principal, principal
-from web import _need, _nav, _notice, page_language, render, t, tm
+from web import (_list_areas, _need, _nav, _notice, _preset_view, page_language,
+                 preset_values, render, t, tm)
 
 router = APIRouter(include_in_schema=False)
 
@@ -132,14 +139,19 @@ def emergency_action(action: str, request: Request, room: str = Form(...),
 
 # --- PROMPTS AND GLOSSARY ---
 
+ORIGINS = {"preset": "Version of this preset", "eigen": "Edited version",
+           "vorlage": "Shipped template"}
+
+
 @router.get("/admin/content")
-def content_page(request: Request, prompt: str = ""):
+def content_page(request: Request, prompt: str = "", preset: str = ""):
     p, away = _page(request)
     if away:
         return away
     names = prompts.verfuegbar()
     chosen = prompt if prompt in names else (names[0] if names else "")
-    text, origin = prompts.lese(chosen) if chosen else ("", "")
+    preset = preset if preset in presets.namen() else ""
+    text, origin = prompts.lese(chosen, preset or None) if chosen else ("", "")
     try:
         glossary = statefiles.read_text(paths.resolve_glossar())
     except OSError:
@@ -147,23 +159,61 @@ def content_page(request: Request, prompt: str = ""):
     return render("admin_content.html", request, nav=_nav(p, "admin"),
                   prompts=[(n, prompts.VORLAGEN[n].get("titel", n))
                            for n in names],
-                  chosen=chosen, text=text, origin=origin, glossary=glossary)
+                  chosen=chosen, text=text, origin=ORIGINS.get(origin, origin),
+                  glossary=glossary, preset=preset,
+                  shared=[_preset_view(n) for n in presets.namen()],
+                  models=llm.chat_modelle(), areas=_list_areas(p.name))
 
 
 @router.post("/ui/admin/prompts/{name}")
 def save_prompt(name: str, request: Request, text: str = Form(...),
-                action: str = Form("save"), p: Principal = Depends(principal)):
+                action: str = Form("save"), preset: str = Form(""),
+                p: Principal = Depends(principal)):
     _admin(p)
     page_language(p.name)
     if name not in prompts.verfuegbar():
         raise HTTPException(404, "No such prompt.")
+    if preset and preset not in presets.namen():
+        raise HTTPException(404, "No such preset.")
+    back = f"/admin/content?prompt={name}" + (f"&preset={preset}" if preset else "")
     if action == "reset":
-        prompts.zuruecksetzen(name)
-        return _reload(f"/admin/content?prompt={name}")
-    ok, message = prompts.speichern(name, text)
+        prompts.zuruecksetzen(name, preset or None)
+        return _reload(back)
+    ok, message = prompts.speichern(name, text, preset or None)
     if ok:
-        benutzer.protokolliere("prompt", name, p.name, "web")
+        benutzer.protokolliere("prompt", name, p.name, preset or "web")
     return _notice(tm(message), ok)
+
+
+@router.post("/ui/admin/presets")
+async def save_shared_preset(request: Request, p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    form = await request.form()
+    label = str(form.get("label") or "").strip()[:120]
+    values, error = preset_values(form)
+    if error:
+        return _notice(t(error), False)
+    # an existing preset keeps its folder (and its prompts) under a new label
+    name = str(form.get("name") or "") or label
+    if form.get("name") and name not in presets.namen():
+        raise HTTPException(404, "No such preset.")
+    values["bezeichnung"] = label or name
+    ok, message = presets.speichern(name, values)
+    if not ok:
+        return _notice(tm(message), False)
+    benutzer.protokolliere("voreinstellung", message, p.name, "web")
+    return _reload("/admin/content")
+
+
+@router.post("/ui/admin/presets/delete")
+def delete_shared_preset(request: Request, name: str = Form(...),
+                         p: Principal = Depends(principal)):
+    _admin(p)
+    if name not in presets.namen() or not presets.loesche(name):
+        raise HTTPException(404, "No such preset.")
+    benutzer.protokolliere("voreinstellung_geloescht", name, p.name, "web")
+    return _reload("/admin/content")
 
 
 @router.post("/ui/admin/glossary")
@@ -257,6 +307,8 @@ def lists_page(request: Request):
                for r in sorted(raeume.liste()) if not raeume.ist_privat(r)]
     return render("admin_lists.html", request, nav=_nav(p, "admin"),
                   folders=folders, sheets=sheets,
+                  targets=[(r, raeume.bezeichnung(r), o, _subfolders(o))
+                           for r, o in tabellen.ablageorte()],
                   errors=catalog.get("fehler") or [],
                   pattern=listenquellen.pfad_von(listenquellen.MUSTER_RAUM),
                   pattern_room=listenquellen.MUSTER_RAUM,
@@ -277,6 +329,51 @@ def lists_folder(request: Request, room: str = Form(...), path: str = Form(""),
         path = path.strip().rstrip("/") + "/" + listenquellen.PLATZHALTER
     ok, message = listenquellen.setze_raum(room, path, benutzer=p.name,
                                            ist_verwalter=True)
+    if not ok:
+        return _notice(tm(message), False)
+    tabellen.baue_katalog()
+    return _reload("/admin/lists")
+
+
+def _subfolders(folder):
+    try:
+        return sorted(d for d in statefiles.listdir(folder)
+                      if statefiles.isdir(os.path.join(folder, d)) and not d.startswith("."))
+    except OSError:
+        return []
+
+
+@router.post("/ui/admin/lists/upload")
+def lists_upload(request: Request, files: list[UploadFile] = File(...),
+                 room: str = Form(...), area: str = Form(""),
+                 p: Principal = Depends(principal)):
+    _admin(p)
+    page_language(p.name)
+    lines, all_ok = [], True
+    for f in files:
+        ok, message = tabellen.lege_ab(f.file.read(), f.filename or "", area, raum=room)
+        all_ok = all_ok and ok
+        lines.append(f"{f.filename}: {tm(message)}")
+    tabellen.baue_katalog()
+    benutzer.protokolliere("listen_hochgeladen", ", ".join(
+        f.filename or "" for f in files), p.name, f"{room}/{area}")
+    # all in: the page again, with them in the catalog; else say which not
+    return _reload("/admin/lists") if all_ok else _notice(" · ".join(lines), False)
+
+
+@router.post("/ui/admin/lists/header")
+def lists_header(request: Request, file: str = Form(...), sheet: str = Form(""),
+                 root: str = Form(""), row: str = Form(""),
+                 p: Principal = Depends(principal)):
+    """The header row of a sheet, counted from 1 as a spreadsheet shows it;
+    empty: found automatically."""
+    _admin(p)
+    page_language(p.name)
+    row = row.strip()
+    if row and not (row.isdigit() and int(row) >= 1):
+        return _notice(t("Header row: a row number from 1."), False)
+    ok, message = tabellen.setze_kopfzeile(file, sheet, int(row) - 1 if row else None,
+                                           wurzel=root or None)
     if not ok:
         return _notice(tm(message), False)
     tabellen.baue_katalog()

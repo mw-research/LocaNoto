@@ -88,7 +88,9 @@
       var data = new FormData(el);
       var submitter = event && event.submitter;
       if (submitter && submitter.name) data.append(submitter.name, submitter.value);
-      if (method === "POST") init.body = new URLSearchParams(data);
+      // A form with files goes as multipart, every other one as fields.
+      if (method === "POST") init.body = el.enctype === "multipart/form-data"
+        ? data : new URLSearchParams(data);
       else url += (url.indexOf("?") < 0 ? "?" : "&") + new URLSearchParams(data);
     }
     el.classList.add("busy");

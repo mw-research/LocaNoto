@@ -9,7 +9,7 @@ a page and an API call can never answer differently.
     /documents        workspaces and documents: upload, move, delete
     /web              sources from the web: search, read, take over
     /tickets          tickets of shared mailboxes (web_tickets.py)
-    /settings         language, instruction, presets, password, mailboxes, tokens
+    /settings         language, instruction, own presets, password, mailboxes, tokens
     /admin            users, workspaces, jobs, status (the rest: /api/v1/docs)
 
 Pages are rendered with Jinja; interaction uses hx-* attributes. The
@@ -53,6 +53,7 @@ import raeume
 import sessions
 import sprache
 import sqlquellen
+import tabellen
 import tickets
 import web_research
 import web_sources
@@ -83,6 +84,34 @@ TEXTS = {
     "Source code": "Quelltext",
     "Lines stored in the clear": "Zeilen im Klartext",
     "Encrypt again": "Neu verschlüsseln",
+    "Default": "Vorgabe", "Passages": "Abschnitte", "List areas": "Listenbereiche",
+    "Shared presets": "Gemeinsame Voreinstellungen", "Own presets": "Eigene Voreinstellungen",
+    "New preset": "Neue Voreinstellung", "Delete this preset?": "Diese Voreinstellung löschen?",
+    "A preset bundles model, number of passages and list areas; choose it in the chat options.":
+        "Eine Voreinstellung bündelt Modell, Zahl der Abschnitte und Listenbereiche; "
+        "gewählt wird sie in den Optionen des Chats.",
+    "Every user can choose them in the chat. Their prompts are edited above, with the preset chosen next to the prompt.":
+        "Alle Nutzer können sie im Chat wählen. Ihre Prompts werden oben bearbeitet, "
+        "mit der Voreinstellung neben dem Prompt gewählt.",
+    "Model not allowed.": "Dieses Modell ist nicht freigegeben.",
+    "Passages: a number from 1 to 30.": "Abschnitte: eine Zahl von 1 bis 30.",
+    "for all presets": "für alle Voreinstellungen",
+    "Version of this preset": "Fassung dieser Voreinstellung",
+    "Edited version": "Bearbeitete Fassung", "Shipped template": "Mitgelieferte Vorlage",
+    "Upload lists": "Listen hochladen",
+    "Into the list folder of a workspace. Excel or CSV; a file of the same name is replaced.":
+        "In den Listenordner eines Arbeitsbereichs. Excel oder CSV; eine Datei "
+        "gleichen Namens wird ersetzt.",
+    "Area (subfolder, optional)": "Bereich (Unterordner, optional)",
+    "No list folder here is writable; lists are kept where the departments keep them.":
+        "Kein Listenordner ist hier beschreibbar; die Listen pflegen die "
+        "Fachabteilungen dort, wo sie liegen.",
+    "Header row": "Kopfzeile",
+    "Header row: the row with the column names, counted as in the spreadsheet; empty: found automatically.":
+        "Kopfzeile: die Zeile mit den Spaltennamen, gezählt wie in der Tabelle; "
+        "leer: wird erkannt.",
+    "Header row: a row number from 1.": "Kopfzeile: eine Zeilennummer ab 1.",
+    "Include large lists": "Große Listen einbeziehen",
     "Chat": "Chat", "Documents": "Dokumente", "Web sources": "Quellen im Netz",
     "Settings": "Einstellungen", "Admin": "Admin", "New chat": "Neuer Chat",
     "Ask a question about your documents ...":
@@ -576,6 +605,43 @@ def login_page(request: Request, next: str = "/"):
                   directory=oidc.enabled())
 
 
+# --- PRESETS AND LISTS (also used by web_admin) ---
+
+def _preset_view(name):
+    v = presets.lese(name)
+    return {"name": name, "label": v["bezeichnung"], "description": v["beschreibung"],
+            "model": v["chat_modell"], "top_k": v["top_k"] or "",
+            "areas": list(v["listen_bereiche"] or [])}
+
+
+def _list_areas(user):
+    """The list areas (top folders) of the sheets this user sees."""
+    entries = tabellen.sichtbar(tabellen.lies_katalog().get("eintraege", []),
+                                user, notzugang.raeume_fuer(user))
+    return tabellen.bereiche(entries)
+
+
+def preset_values(form):
+    """The fields of a preset form; (values, error)."""
+    model = str(form.get("model") or "").strip()
+    if model and model not in llm.chat_modelle():
+        return None, "Model not allowed."
+    raw = str(form.get("top_k") or "").strip()
+    if raw and not (raw.isdigit() and 1 <= int(raw) <= 30):
+        return None, "Passages: a number from 1 to 30."
+    return {"beschreibung": str(form.get("description") or "").strip()[:500],
+            "chat_modell": model, "top_k": int(raw) if raw else 0,
+            "listen_bereiche": [str(a) for a in form.getlist("areas") if str(a).strip()]}, ""
+
+
+def _list_options(user):
+    """What the chat offers for lists: none when the user sees no sheet."""
+    entries = tabellen.sichtbar(tabellen.lies_katalog().get("eintraege", []),
+                                user, notzugang.raeume_fuer(user))
+    return {"any": bool(entries), "areas": tabellen.bereiche(entries),
+            "large": any(e.get("gross") for e in entries)}
+
+
 # --- CHAT ---
 
 def _chat_options(p, request=None):
@@ -588,6 +654,7 @@ def _chat_options(p, request=None):
         "models": llm.chat_modelle(),
         "presets": [(n, presets.anzeige(n))
                     for n in presets.namen() + presets.eigene(p.name)],
+        "lists": _list_options(p.name),
         "web": bool(answering.mcp.websuche_server()),
         "external": answering.external_model.configured(),
         # workspaces whose database this user may query ("" = the one from
@@ -970,8 +1037,10 @@ def _settings_context(p, request):
         "nav": _nav(p, "settings"), "language": sprache.gewaehlt(p.name),
         "instruction": prompts.anweisung(p.name) or "",
         "sso": entry.get("anmeldung") == "oidc",
-        "presets": [(n, presets.anzeige(n), presets.ist_eigene(n))
-                    for n in presets.namen() + presets.eigene(p.name)],
+        "shared_presets": [_preset_view(n) for n in presets.namen()],
+        "own_presets": [_preset_view(n) for n in presets.eigene(p.name)],
+        "models": llm.chat_modelle(),
+        "areas": _list_areas(p.name),
         "mailboxes": [dict(m, connected=m["name"] in connected,
                            watch=mail_watch.watching(p.name, m["name"]))
                       for m in mailboxes.overview(p.name)
@@ -1044,6 +1113,37 @@ def set_instruction(request: Request, text: str = Form(""),
     page_language(p.name)
     ok, message = prompts.anweisung_speichern(p.name, text)
     return _notice(tm(message), ok)
+
+
+@router.post("/ui/settings/preset")
+async def save_own_preset(request: Request, p: Principal = Depends(principal)):
+    page_language(p.name)
+    form = await request.form()
+    values, error = preset_values(form)
+    if error:
+        return _notice(t(error), False)
+    old = str(form.get("name") or "")
+    if old and not presets.gehoert(old, p.name):
+        raise HTTPException(404, "No such own preset.")
+    ok, name = presets.eigene_speichern(p.name, str(form.get("label") or "").strip()[:120],
+                                        values)
+    if not ok:
+        return _notice(tm(name), False)
+    if old and old != name:   # renamed: the file follows the label
+        presets.eigene_loeschen(old, p.name)
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = "/settings"
+    return response
+
+
+@router.post("/ui/settings/preset/delete")
+def delete_own_preset(request: Request, name: str = Form(...),
+                      p: Principal = Depends(principal)):
+    if not presets.eigene_loeschen(name, p.name):
+        raise HTTPException(404, "No such own preset.")
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = "/settings"
+    return response
 
 
 @router.post("/ui/settings/password")

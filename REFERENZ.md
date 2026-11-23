@@ -512,7 +512,7 @@ Dateien importieren sie.
 |---|---|---|---|
 | **Grundlage** | | | |
 | `paths.py` | Zentrale Pfad-Definition und Bootstrap. | `LOCANOTO_DATEN`, `LOCANOTO_INDEX`, `LOCANOTO_KONFIG` +1 | `abgleich`, `accounts`, `answering`, `api` +76 |
-| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `aufnehmen`, `doctor` +15 |
+| `llm.py` | Modell-Endpunkte je Aufgabe. | `CHAT_MODELLE`, `LLM_COOLDOWN`, `LLM_RATE_MAX_WAIT` +4 | `answering`, `api`, `aufnehmen`, `doctor` +16 |
 | `geheim.py` | Installationsschluessel: verschluesseln, entschluesseln, signieren. | `LOCANOTO_SCHLUESSEL`, `LOCANOTO_SCHLUESSEL_DATEI`, `UNSIGNIERT_ERLAUBT` | `api`, `auth`, `benutzer`, `chats` +22 |
 | `statefiles.py` | State files: config and runtime state, on disk or in Postgres. | — | `accounts`, `attachments`, `aufnehmen`, `auth` +34 |
 | `database.py` | Postgres connection and schema -- the shared store of the enterprise edition. | `DATABASE_DIMENSIONS`, `DATABASE_URL` | `doctor`, `jobs`, `keyword_index`, `metrics` +15 |
@@ -533,7 +533,7 @@ Dateien importieren sie.
 | **Fachlogik** | | | |
 | `postfach.py` | Exchange-Postfaecher direkt anbinden, ohne Server dazwischen. | `POSTFACH_HOLGRENZE`, `POSTFACH_TEXTAUSZUG`, `POSTFACH_TIMEOUT` +2 | `answering`, `imap_mailbox`, `mailboxes`, `mcp` +1 |
 | `owncloud.py` | Dokumente aus OpenCloud, oCIS, ownCloud oder Nextcloud -- je Raum ein Ordner. | `OWNCLOUD_ADMIN_PASSWORT`, `OWNCLOUD_ADMIN_USER`, `OWNCLOUD_PASSWORT` +5 | `abgleich`, `accounts`, `aufnehmen`, `doc_actions` +9 |
-| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `routes_admin`, `routes_documents` +3 |
+| `tabellen.py` | Listen aus Tabellendateien -- Katalog und Abfrage. | `TABELLEN_ABFRAGE_SEKUNDEN`, `TABELLEN_BEISPIELE`, `TABELLEN_BEISPIELE_BIS` +10 | `answering`, `api`, `routes_admin`, `routes_documents` +4 |
 | `pipeline.py` | Suche und Antwort -- unabhaengig von der Oberflaeche. | `ANSWER_TIMEOUT`, `EXPERT_ROLE`, `HELPER_TIMEOUT` +5 | `answering`, `api`, `attachments`, `routes_admin` +12 |
 | `answering.py` | The whole way from a question to a saved answer, as a stream of events. | `HELPER_TIMEOUT`, `TOP_K`, `WEB_TOOL` | `routes_account`, `routes_chat`, `server`, `tests/test_api` +8 |
 | `mcp.py` | Werkzeugserver nach dem Model-Context-Protocol anbinden. | `MCP_MAX_WERKZEUGE`, `MCP_STDIO`, `MCP_TIMEOUT` | `answering`, `doctor`, `external_model`, `mail_watch` +12 |
@@ -556,9 +556,9 @@ Dateien importieren sie.
 | `sqlquellen.py` | Wer sich mit welchem Konto an der Fachdatenbank anmeldet. | — | `answering`, `routes_account`, `routes_admin`, `tests/test_api` +2 |
 | `sessions.py` | Sign-in sessions without server state, sealed credentials, rate limits. | `LOGIN_ATTEMPTS`, `LOGIN_ATTEMPTS_PER_ADDRESS`, `LOGIN_ATTEMPTS_PER_NAME` +4 | `mcp_oauth`, `oidc`, `routes_account`, `server` +4 |
 | `web_research.py` | Web searches and take-overs that run in the background, with notice. | `WEB_RESEARCH_HITS`, `WEB_RESEARCH_PARALLEL`, `WEB_RESEARCH_PER_HOUR` +1 | `routes_documents`, `web` |
-| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `pipeline`, `prompts` +3 |
+| `presets.py` | Voreinstellungen: benannte Buendel aus Modell, Umfang und Formulierung. | — | `answering`, `api`, `pipeline`, `prompts` +5 |
 | `doc_actions.py` | Document actions with their permission checks: move, delete, wipe. | — | `routes_admin`, `routes_documents`, `server`, `web` |
-| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `pipeline`, `routes_account`, `routes_admin` +3 |
+| `prompts.py` | Prompt-Vorlagen lesen, pruefen und ablegen. | `ANWEISUNG_MAX_ZEICHEN` | `accounts`, `pipeline`, `routes_account`, `routes_admin` +4 |
 | `tables.py` | Tabellen-Chunks bauen: Ueberschrift davor, uebergrosse Tabellen aufteilen. | `CAPTION_HEIGHT`, `MAX_TABLE_CHARS` | `aufnehmen`, `ingest`, `ingest_images` |
 | `auth.py` | Zugangstoken fuer die Schnittstelle. | — | `accounts`, `api`, `routes_account`, `routes_admin` +4 |
 | `workspace_notes.py` | Summaries and notes that become documents of a workspace. | `SUMMARY_MAX_CHAT_CHARS`, `WORKSPACE_TOOL` | `answering`, `mailboxes`, `routes_chat`, `routes_documents` |
@@ -583,9 +583,9 @@ Dateien importieren sie.
 | `routes_admin.py` | API: the admin area -- everything the admin pages offer. | — | `server` |
 | `sicherung.py` | Die Vektordatenbank sichern und zurueckholen -- ohne Modell. | `SICHERUNG_BEHALTEN`, `SICHERUNG_PFAD`, `SICHERUNG_VERSCHLUESSELN` | `routes_admin`, `tests/test_api`, `web_admin` |
 | `websuche.py` | Websuche als Werkzeugserver (MCP) -- Informationen herein, nichts hinaus. | `WEBSUCHE_SEARXNG`, `WEBSUCHE_SPRACHE` | — |
+| `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
 | `api.py` | HTTP-Schnittstelle zu derselben Suche, die auch die Oberflaeche benutzt. | `API_WURZELPFAD`, `AUFNAHME_MAX_MB`, `CHROMA_EINZELN` +1 | — |
 | `ingest_images.py` | Abbildungen aus PDFs beschreiben und durchsuchbar machen. | `INGEST_ORDNER`, `INGEST_RAUM`, `MIN_AREA` +6 | — |
-| `web_admin.py` | Admin pages of the web interface beyond users, workspaces and jobs. | — | `server` |
 | `ingest.py` | Batch-Vektorisierung der PDFs aus data/dokumente. | `INGEST_ORDNER`, `INGEST_RAUM`, `MAX_KOPFZEILE_CHARS` | — |
 | `routes_account.py` | API: sign-in, the own account and own settings. | — | `routes_chat`, `server`, `web` |
 | `routes_chat.py` | API: asking, chats, drafts, feedback, source pages. | — | `server` |
@@ -2037,13 +2037,19 @@ die Antwort stehen könnte, dann dort gezielt nachsehen.
 
 ### Dateien hineinbekommen
 
-Verwalter laden sie mit `POST /api/v1/admin/lists/upload` hoch — eine
-Datei je Aufruf, im Feld `area` der Bereich; ein neuer Name legt den
-Bereich an. Abgelegt und eingelesen wird in einem Schritt.
+Verwalter laden sie unter **Admin → Listen → Listen hochladen** hoch:
+mehrere Dateien, der Arbeitsbereich und optional ein Bereich; ein neuer
+Name legt den Bereich an. Ziel ist der Listenordner des Arbeitsbereichs.
+Angeboten werden nur Quellen, die der Katalog liest, auf diesem Rechner
+liegen und beschreibbar sind (`tabellen.ablageorte`) — keine persönlichen
+und keine in der Dateiablage. Abgelegt und eingelesen wird in einem
+Schritt. An der Schnittstelle: `POST /api/v1/admin/lists/upload`, eine
+Datei je Aufruf, `room` und `area`; ohne `room` in den einen Listenordner
+(`TABELLEN_PFAD`).
 
-Ist der Ordner nur lesend eingehängt, entfällt der Upload: dann werden die
-Dateien dort gepflegt, wo sie liegen, und ein zweiter Ablageort wäre genau
-das Problem, das die Einhängung löst.
+Ist ein Ordner nur lesend eingehängt, entfällt der Upload dorthin: dann
+werden die Dateien dort gepflegt, wo sie liegen, und ein zweiter Ablageort
+wäre genau das Problem, das die Einhängung löst.
 
 Auf dem Server geht es auch von Hand — `data/` ist eingehängt, ein Neustart
 ist nicht nötig:
@@ -2087,10 +2093,13 @@ ihrer tatsächlichen Positionen.
 
 **Admin → Listen** zeigt unter **Blätter im Katalog** je Blatt Datei,
 Arbeitsbereich und Zeilenzahl; `GET /api/v1/lists` nennt dazu die
-erkannten Spalten (`spalten`). Verwalter setzen die Zeile von Hand mit
-`PUT /api/v1/admin/lists/header` (`file`, `sheet`, `row`); die Angabe
-liegt in `config/tabellen_kopf.json` und gilt, bis sie zurückgenommen
-wird.
+erkannten Spalten (`spalten`). Verwalter setzen die Zeile dort von Hand
+im Feld **Kopfzeile** (gezählt wie in der Tabelle, leer = erkennen) oder
+mit `PUT /api/v1/admin/lists/header` (`file`, `sheet`, `row` ab 0 oder
+`null`, `root` = `wurzel` des Katalogeintrags). Die Angabe liegt in
+`config/tabellen_kopf.json` — je Datei im einen Listenordner unter ihrem
+Pfad, in jeder anderen Quelle unter Quelle und Pfad — und gilt, bis sie
+zurückgenommen wird.
 
 Sieht eine Erkennung falsch aus, fällt das an den Spalten auf: sie heißen
 dann `Spalte 1`, `Spalte 2`. Eine falsche Kopfzeile lässt das Blatt
@@ -2110,7 +2119,9 @@ dasselbe, was ein Raum für Dokumente ist, nur ohne Rechtewirkung:
 
 Eingegrenzt wird über eine Voreinstellung, die Bereiche mitbringt —
 „Einkauf" nimmt dann die Lieferantenlisten, „Fertigung" die
-Auftragslisten — oder an der API mit `list_areas` an `POST /api/v1/ask`.
+Auftragslisten —, im Chat unter **Listenbereiche** oder an der API mit
+`list_areas` an `POST /api/v1/ask`. **Listen** abgewählt fragt keine
+Liste ab (`lists: false`).
 
 Listenordner tragen Verwalter ein — ein Nutzer wählt nur einen
 Unterordner seines eigenen Ordners —, und nie in die Verzeichnisse der
@@ -2162,8 +2173,9 @@ nicht den ganzen Container durchläuft.
 
 Blätter ab `TABELLEN_GROSS_AB` Zeilen (Vorgabe 50.000) stehen im Katalog,
 mit „groß" gekennzeichnet, werden aber **nicht abgefragt**, solange sie
-nicht ausdrücklich einbezogen werden — `lists_large: true` an
-`POST /api/v1/ask`, `"listen_gross": true` an `api.py`. Sie müssen bei
+nicht ausdrücklich einbezogen werden — im Chat **Große Listen
+einbeziehen**, `lists_large: true` an `POST /api/v1/ask`,
+`"listen_gross": true` an `api.py`. Sie müssen bei
 jeder Frage vollständig geladen werden, und das dauert spürbar.
 
 Ist eine Liste dauerhaft zu groß, gehört sie in eine Datenbank und nicht in
@@ -2216,18 +2228,20 @@ Zwei Arten:
 
 | | angelegt von | unter | Prompts |
 |---|---|---|---|
-| gemeinsame | Admins | `PUT /api/v1/admin/presets/{name}` | ja, mit `?preset=…` an `PUT /api/v1/admin/prompts/{name}` |
-| eigene | jedem Nutzer | `PUT /api/v1/me/presets/{bezeichnung}` | nein — verfeinert wird mit der **Persönlichen Anweisung** |
+| gemeinsame | Admins | **Admin → Prompts und Glossar → Gemeinsame Voreinstellungen**, `PUT /api/v1/admin/presets/{name}` | ja: neben der Vorlage die Voreinstellung wählen, oder `?preset=…` an `PUT /api/v1/admin/prompts/{name}` |
+| eigene | jedem Nutzer | **Einstellungen → Voreinstellungen**, `PUT /api/v1/me/presets/{bezeichnung}` | nein — verfeinert wird mit der **Persönlichen Anweisung** |
 
-**Einstellungen → Voreinstellungen** listet, welche es für den Nutzer
-gibt. Eigene liegen unter `config/presets_nutzer/<kennung>/`, erscheinen
+**Einstellungen → Voreinstellungen** listet die gemeinsamen und legt
+eigene an, ändert und löscht sie; eine umbenannte bekommt die Kennung der
+neuen Bezeichnung. Eigene liegen unter `config/presets_nutzer/<kennung>/`, erscheinen
 in der Auswahl mit „(eigene)“ und sind nur für ihren Besitzer wählbar,
 auch über die Schnittstelle. Ohne Voreinstellungen bietet die Auswahl nur
 „keine“.
 
 **Modell.** Gewählt wird im Chat unter **Modell** aus `CHAT_MODEL` und
 `CHAT_MODELLE` (durch Kommas getrennt) — eintippen lässt sich kein
-Modell. Nennt eine Voreinstellung ein Modell, das nicht freigegeben ist,
+Modell. **Vorgabe** schickt keines: dann gilt das der Voreinstellung,
+sonst `CHAT_MODEL`. Nennt eine Voreinstellung ein Modell, das nicht freigegeben ist,
 gilt `CHAT_MODEL`.
 
 ### Nicht enthalten

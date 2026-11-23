@@ -25,8 +25,25 @@
 
 <section class="card">
   <h2>{{ t('Presets') }}</h2>
-  {% if presets %}<ul>{% for name, label, own in presets %}<li>{{ label }}</li>{% endfor %}</ul>
-  {% else %}<p class="muted">{{ t('none') }}</p>{% endif %}
+  <p class="muted">{{ t('A preset bundles model, number of passages and list areas; choose it in the chat options.') }}</p>
+  {% if shared_presets %}
+  <h3>{{ t('Shared presets') }}</h3>
+  <ul>{% for v in shared_presets %}<li>{{ v.label }}{% if v.description %} <span class="muted">– {{ v.description }}</span>{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  <h3>{{ t('Own presets') }}</h3>
+  {% for v in own_presets %}
+  <details class="edit">
+    <summary>{{ v.label }}{% if v.description %} <span class="muted">– {{ v.description }}</span>{% endif %}</summary>
+    {% with action='/ui/settings/preset' %}{% include "preset_form.html" %}{% endwith %}
+    <form hx-post="/ui/settings/preset/delete" hx-confirm="{{ t('Delete this preset?') }}" class="inline">
+      <input type="hidden" name="name" value="{{ v.name }}"><button type="submit" class="danger">{{ t('Delete') }}</button>
+    </form>
+  </details>
+  {% else %}<p class="muted">{{ t('none') }}</p>{% endfor %}
+  <details class="edit">
+    <summary>{{ t('New preset') }}</summary>
+    {% with action='/ui/settings/preset', v=none %}{% include "preset_form.html" %}{% endwith %}
+  </details>
 </section>
 
 <section class="card">

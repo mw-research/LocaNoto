@@ -65,8 +65,8 @@ quotations stay as they are in the document.
 - Follow-up question in the same chat → refers to the conversation so far.
 
 Below the input field, **Workspaces · Model** opens the options of the
-question: workspaces, model, preset and, if set up, web search, database
-and "internal only".
+question: workspaces, model, preset and, if set up, lists, web search,
+database and "internal only".
 
 If an answer ends with "The answer broke off.", ask again with **Ask
 again**.
@@ -110,6 +110,8 @@ In the **Chat**, open **Workspaces · Model** below the input field:
 - **Preset:** among other things, sets how many source passages go into
   an answer. More helps with extensive sets of rules, but makes the answer
   slower.
+- **List areas:** with lists in several subfolders, tick single ones →
+  only these lists are queried.
 
 The choice applies to the next question.
 
@@ -217,22 +219,24 @@ purpose. Choose it in the **Chat** under **Workspaces · Model** →
 **Preset**; **none** uses the basic settings. Own presets are marked
 "(eigene)" (own).
 
-**Settings** → **Presets** shows all presets you can choose.
-
-You create your own presets through the HTTP API
-(`PUT /api/v1/me/presets/{name}`); only models the admins have allowed can
-be used there. Presets for everyone are created by admins; only those can
+Your own: **Settings** → **Presets** → **New preset** → label,
+description, **Model**, **Passages** (1 to 30) and **List areas** →
+**Save**. **Default** takes the basic setting. Open an own preset → change
+it or **Delete**. **Shared presets** are created by admins; only those can
 have their own prompts.
 
 **Model:** in the **Chat** under **Workspaces · Model** → **Model** you
-choose the language model from the list the admins allow.
+choose the language model from the list the admins allow. **Default**
+takes the model of the preset, otherwise the basic model.
 
 ### How do I query lists from Excel or CSV in LocaNoto?
 
 Lists (xlsx, csv) are read fresh with every question → new rows take
 effect immediately. If lists are set up for you, LocaNoto includes them in
 every question: it picks the matching list and reads the matching rows.
-Very large sheets are left out.
+In the **Chat** under **Workspaces · Model**: untick **Lists** → no lists;
+**List areas** → only these subfolders; **Include large lists** → very
+large sheets too (slower).
 
 Below the answer, **Lists (n)** shows which sheet returned how many rows
 with which query.
@@ -510,9 +514,8 @@ Admins see the page **Admin** at the top. Its bar leads to:
 - **External model** – which sources may be answered externally
 - **API** – description of the HTTP API at `/api/v1/docs`
 
-What has no page of its own (presets for everyone, setting a user's
-password, deleting other users' personal documents) goes through the API;
-**API** shows the calls.
+What has no page of its own (setting a user's password, deleting other
+users' personal documents) goes through the API; **API** shows the calls.
 
 ### How do I become an admin in LocaNoto?
 
@@ -642,8 +645,12 @@ reads the rows fresh with every question. **Admin** → **Lists**:
   sheets are marked "large".
 - **Not readable** → files with errors.
 
-Uploading lists and correcting a wrongly detected header row go through
-the API (`/api/v1/admin/lists/…`).
+- **Upload lists** → choose files (xlsx, xlsm, csv, tsv), the workspace
+  and optionally an area (subfolder) → **Upload**. They go into the list
+  folder of the workspace; only writable folders are offered. A file of
+  the same name is replaced.
+- **Header row** per sheet: the row with the column names, counted as in
+  the spreadsheet → **Save**. Empty → LocaNoto finds it itself.
 
 ### How do I create an access token for LocaNoto as an admin?
 
@@ -928,11 +935,11 @@ under **Feedback**.
   required placeholders is rejected.
 - **Reset to the shipped template** → restores the supplied version.
 
-**Presets** (for everyone): label, description, chat model, number of
-passages (0 = default), list areas and own prompts. They are created,
-changed and removed through the API (`PUT`/`DELETE
-/api/v1/admin/presets/{name}`, prompts of a preset through
-`/api/v1/admin/prompts/{name}`).
+**Shared presets** (at the bottom of the same page): **New preset** →
+label, description, model, passages, list areas → **Save**; open one →
+change it or **Delete**. Prompts of one preset: at the top, choose the
+preset next to the template → **Open** → **Save**. "for all presets"
+edits the general version.
 
 The selectable models are set by `CHAT_MODELLE` in the `.env`; users see
 the same list in the chat under **Model**. Users refine with their

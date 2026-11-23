@@ -24,15 +24,37 @@
   <div id="ls-notice"></div>
 </section>
 <section class="card">
+  <h2>{{ t('Upload lists') }}</h2>
+  {% if targets %}
+  <p class="muted">{{ t('Into the list folder of a workspace. Excel or CSV; a file of the same name is replaced.') }}</p>
+  <form hx-post="/ui/admin/lists/upload" hx-target="#ls-upload" enctype="multipart/form-data" class="inline wide">
+    <input type="file" name="files" accept=".xlsx,.xlsm,.csv,.tsv" multiple required aria-label="{{ t('Upload lists') }}">
+    <select name="room" aria-label="{{ t('Workspace') }}">{% for room, label, folder, subs in targets %}<option value="{{ room }}">{{ label }}</option>{% endfor %}</select>
+    <input name="area" list="ls-areas" placeholder="{{ t('Area (subfolder, optional)') }}">
+    <datalist id="ls-areas">{% for room, label, folder, subs in targets %}{% for a in subs %}<option value="{{ a }}">{% endfor %}{% endfor %}</datalist>
+    <button type="submit" class="primary">{{ t('Upload') }}</button>
+  </form>
+  <div id="ls-upload"></div>
+  {% else %}
+  <p class="muted">{{ t('No list folder here is writable; lists are kept where the departments keep them.') }}</p>
+  {% endif %}
+</section>
+<section class="card">
   <h2>{{ t('Sheets in the catalog') }} ({{ sheets|length }})</h2>
   <p class="muted">{{ description }}</p>
   <form hx-post="/ui/admin/lists/rebuild" hx-target="#ls-notice2" class="inline"><button type="submit" class="primary">{{ t('Read lists again') }}</button></form>
   <div id="ls-notice2"></div>
+  <p class="muted">{{ t('Header row: the row with the column names, counted as in the spreadsheet; empty: found automatically.') }}</p>
   <table class="files">
   {% for e in sheets %}
     <tr><td>{{ e.datei }}{% if e.blatt %} · {{ e.blatt }}{% endif %}</td>
       <td class="muted">{{ e.raum or 'allgemein' }}</td>
-      <td class="muted">{{ e.zeilen }} {{ t('rows') }}{% if e.gross %} · {{ t('large') }}{% endif %}</td></tr>
+      <td class="muted">{{ e.zeilen }} {{ t('rows') }}{% if e.gross %} · {{ t('large') }}{% endif %}</td>
+      <td><form hx-post="/ui/admin/lists/header" hx-target="#ls-notice2" class="inline">
+        <input type="hidden" name="file" value="{{ e.datei }}"><input type="hidden" name="sheet" value="{{ e.blatt }}">
+        <input type="hidden" name="root" value="{{ e.wurzel }}">
+        <input type="number" name="row" min="1" class="narrow" value="{{ e.kopfzeile + 1 if e.kopfzeile is not none }}" aria-label="{{ t('Header row') }}">
+        <button type="submit">{{ t('Save') }}</button></form></td></tr>
   {% endfor %}
   </table>
   {% if errors %}

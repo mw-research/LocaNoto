@@ -211,7 +211,8 @@
   "Übernehmen": "Apply",
   "Ohne '..'.": "Without '..'.",
   "Der Hinweis ist ein Dateiname. Den Text der Datei einfügen, nicht ihren Namen.": "The note is a file name. Paste the text of the file, not its name.",
-  "Unbekannte Datenbank.": "Unknown database."
+  "Unbekannte Datenbank.": "Unknown database.",
+  "Dieser Arbeitsbereich hat keinen beschreibbaren Listenordner.": "This workspace has no writable list folder."
  },
  "muster": {
   "'{}' angelegt ({}).": "'{}' created ({}).",

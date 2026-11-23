@@ -35,13 +35,17 @@
     var body = {
       chat_id: box.getAttribute("data-chat-id") || null,
       rooms: Array.prototype.map.call(form.querySelectorAll("input[name=rooms]:checked"), function (c) { return c.value; }),
-      model: form.model ? form.model.value : null,
+      model: form.model && form.model.value ? form.model.value : null,
       preset: form.preset && form.preset.value ? form.preset.value : null,
       web: !!(form.web && form.web.checked),
       sql: !!(form.sql && form.sql.checked),
       intern: !!(form.intern && form.intern.checked),
+      lists: form.lists ? form.lists.checked : true,
+      list_areas: Array.prototype.map.call(form.querySelectorAll("input[name=list_areas]:checked"), function (c) { return c.value; }),
+      lists_large: !!(form.lists_large && form.lists_large.checked),
       images: []
     };
+    if (!body.list_areas.length) body.list_areas = null;
     if (body.sql && form.sql_room) body.sql_room = form.sql_room.value;
     if (!body.rooms.length) body.rooms = null;
     return body;

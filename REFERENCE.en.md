@@ -185,9 +185,8 @@ access, Prompts and glossary, Feedback, Storage, Mailboxes, Lists,
 Databases, External model) — and every function of those pages as an HTTP
 API under `/api/v1`, documented at `/api/v1/docs`. The API accepts the
 session cookie of the pages or a signed per-user token. Functions without
-a control on the pages (own and shared presets, list upload, header rows,
-storage mapping, job logs, the status of encryption, storage and models)
-are reached through the API.
+a control on the pages (storage mapping, job logs, the status of
+encryption, storage and models) are reached through the API.
 
 `api.py` (port 8600) offers a smaller API for scripts: asking questions,
 uploading and deleting documents, feedback and presets:
@@ -217,12 +216,17 @@ these rules; the HTTP API reports in German.
 ### Presets and models
 
 A preset bundles model, passages per question and list areas; it is
-chosen in the chat under **Workspaces · Model**. Every user creates
-**own presets** through the API (`PUT /api/v1/me/presets/{label}`);
-admins create shared presets (`PUT /api/v1/admin/presets/{name}`), which
-may also carry their own prompts. **Settings → Presets** lists the ones a
-user has. The model is chosen from `CHAT_MODEL` and `CHAT_MODELLE`
-(comma-separated) — no free text. Chat titles are a short phrase.
+chosen in the chat under **Workspaces · Model**. Every user creates, changes
+and deletes **own presets** under **Settings → Presets** (API:
+`PUT /api/v1/me/presets/{label}`); admins create shared presets under
+**Admin → Prompts and glossary → Shared presets** (API:
+`PUT /api/v1/admin/presets/{name}`), which may also carry their own
+prompts: choose the preset next to the prompt template. The model is chosen
+from `CHAT_MODEL` and `CHAT_MODELLE` (comma-separated) — no free text;
+**Default** takes the preset's model, otherwise `CHAT_MODEL`. Lists:
+**Admin → Lists** uploads files into a workspace's list folder and sets
+the header row of a sheet; in the chat, **Lists**, **List areas** and
+**Include large lists** narrow what is queried. Chat titles are a short phrase.
 
 ### Learning from use
 

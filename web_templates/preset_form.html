@@ -1,0 +1,20 @@
+{# One preset: v is its view (_preset_view) or none for a new one; action the form's address. #}
+{% set key = (v.name if v else 'new')|replace('@', '_')|replace('/', '_') %}
+<form hx-post="{{ action }}" hx-target="#preset-{{ key }}">
+  {% if v %}<input type="hidden" name="name" value="{{ v.name }}">{% endif %}
+  <label>{{ t('Label') }}<input name="label" value="{{ v.label if v else '' }}" maxlength="120" required></label>
+  <label>{{ t('Description') }}<input name="description" value="{{ v.description if v else '' }}" maxlength="500"></label>
+  <label>{{ t('Model') }}
+    <select name="model"><option value="">{{ t('Default') }}</option>
+      {% for m in models %}<option {{ 'selected' if v and v.model == m }}>{{ m }}</option>{% endfor %}</select>
+  </label>
+  <label>{{ t('Passages') }}<input type="number" name="top_k" min="1" max="30" value="{{ v.top_k if v else '' }}" placeholder="{{ t('Default') }}"></label>
+  {% if areas %}
+  <fieldset>
+    <legend>{{ t('List areas') }} ({{ t('all') }}, {{ t('or') }} …)</legend>
+    {% for a in areas %}<label class="check"><input type="checkbox" name="areas" value="{{ a }}" {{ 'checked' if v and a in v.areas }}> {{ a }}</label>{% endfor %}
+  </fieldset>
+  {% endif %}
+  <button type="submit" class="primary">{{ t('Save') }}</button>
+</form>
+<div id="preset-{{ key }}"></div>

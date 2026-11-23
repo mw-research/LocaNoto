@@ -32,12 +32,20 @@
           {% endfor %}
         </fieldset>
         <label>{{ t('Model') }}
-          <select name="model">{% for m in options.models %}<option>{{ m }}</option>{% endfor %}</select>
+          <select name="model"><option value="">{{ t('Default') }}</option>{% for m in options.models %}<option>{{ m }}</option>{% endfor %}</select>
         </label>
         <label>{{ t('Preset') }}
           <select name="preset"><option value="">{{ t('none') }}</option>
             {% for name, label in options.presets %}<option value="{{ name }}">{{ label }}</option>{% endfor %}</select>
         </label>
+        {% if options.lists.any %}
+        <label class="check"><input type="checkbox" name="lists" checked> {{ t('Lists') }}</label>
+        {% if options.lists.areas|length > 1 %}<fieldset>
+          <legend>{{ t('List areas') }} ({{ t('all') }}, {{ t('or') }} …)</legend>
+          {% for a in options.lists.areas %}<label class="check"><input type="checkbox" name="list_areas" value="{{ a }}"> {{ a }}</label>{% endfor %}
+        </fieldset>{% endif %}
+        {% if options.lists.large %}<label class="check"><input type="checkbox" name="lists_large"> {{ t('Include large lists') }}</label>{% endif %}
+        {% endif %}
         {% if options.web %}<label class="check"><input type="checkbox" name="web"> {{ t('Web search') }}</label>{% endif %}
         {% if options.external %}<label class="check"><input type="checkbox" name="intern"> {{ t('internal only') }}</label>{% endif %}
         {% if options.sql %}<label class="check"><input type="checkbox" name="sql" checked> {{ t('Database') }}</label>

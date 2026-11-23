@@ -98,6 +98,10 @@ form.inline.wide input { flex: 1; min-width: 8rem; }
 .busy { opacity: .6; pointer-events: none; }
 .or { text-align: center; color: var(--muted); }
 .legal { text-align: center; font-size: .85em; margin-top: 1.5em; }
+details.edit { margin: .4rem 0; }
+details.edit summary { cursor: pointer; }
+details.edit[open] { padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+input.narrow { width: 5rem; }
 fieldset { border: 1px solid var(--border); border-radius: 6px; margin: .5rem 0; }
 
 /* chat */

@@ -1257,6 +1257,79 @@ check("role follows the directory (no admin group: user)",
 check("and the workspace goes with the group",
       "einkauf" not in _c.get(f"{API}/me").json()["readable_rooms"])
 
+# --- presets and lists in the web pages ---
+print("== presets and lists in the web pages")
+import llm  # noqa: E402
+import presets  # noqa: E402
+import prompts  # noqa: E402
+import tabellen  # noqa: E402
+anna = client_for("anna", "Anderes-Passwort-9")   # signed out above, new password
+_model = llm.chat_modelle()[0]
+r = anna.post("/ui/settings/preset", data={"label": "Kurz", "model": _model, "top_k": "8"})
+check("a user saves an own preset", r.headers.get("HX-Redirect") == "/settings"
+      and presets.lese("@anna/kurz")["top_k"] == 8
+      and presets.lese("@anna/kurz")["chat_modell"] == _model, r.text[:300])
+anna.post("/ui/settings/preset", data={"name": "@anna/kurz", "label": "Knapp", "top_k": "8"})
+check("renaming keeps one preset", presets.eigene("anna") == ["@anna/knapp"],
+      presets.eigene("anna"))
+check("a model outside the list is refused", "error" in anna.post(
+    "/ui/settings/preset", data={"label": "X", "model": "gibt-es-nicht"}).text
+      and presets.eigene("anna") == ["@anna/knapp"])
+check("nobody edits or deletes a preset of someone else",
+      markus.post("/ui/settings/preset", data={"name": "@anna/knapp", "label": "Y"}).status_code == 404
+      and markus.post("/ui/settings/preset/delete", data={"name": "@anna/knapp"}).status_code == 404)
+check("the settings page shows it",
+      "Knapp" in anna.get("/settings").text and "/ui/settings/preset/delete" in anna.get("/settings").text)
+check("and the chat offers it with the model left to the preset",
+      "@anna/knapp" in anna.get("/").text
+      and '<select name="model"><option value="">' in anna.get("/").text)
+anna.post("/ui/settings/preset/delete", data={"name": "@anna/knapp"})
+check("an own preset is deleted", presets.eigene("anna") == [])
+
+r = markus.post("/ui/admin/presets", data={"label": "Einkauf", "top_k": "6"})
+check("an admin creates a shared preset", "einkauf" in presets.namen()
+      and presets.lese("einkauf")["top_k"] == 6, r.text[:300])
+check("only admins", anna.post("/ui/admin/presets", data={"label": "Z"}).status_code == 403
+      and anna.post("/ui/admin/presets/delete", data={"name": "einkauf"}).status_code == 403)
+_pname = prompts.verfuegbar()[0]
+markus.post(f"/ui/admin/prompts/{_pname}", data={"text": prompts.lese(_pname)[0] + "\nNUR EINKAUF",
+                                                  "preset": "einkauf"})
+check("a prompt is saved for one preset only",
+      "NUR EINKAUF" in prompts.lese(_pname, "einkauf")[0]
+      and "NUR EINKAUF" not in prompts.lese(_pname)[0])
+markus.post("/ui/admin/presets/delete", data={"name": "einkauf"})
+check("a shared preset is deleted", "einkauf" not in presets.namen())
+
+os.makedirs(tabellen.pfad(), exist_ok=True)
+_targets = tabellen.ablageorte()
+check("the list folders an upload can go to", _targets, tabellen.quellen())
+r = markus.post("/ui/admin/lists/upload", data={"room": _targets[0][0], "area": "einkauf"}, files=[
+    ("files", ("preise.csv", "Titel;Stand\nPreise 2026;Jan\nArtikel;Preis\nSchraube;0,99\n".encode(), "text/csv")),
+    ("files", ("bad.exe", b"MZ", "application/octet-stream"))])
+_cat = tabellen.sichtbar(tabellen.lies_katalog().get("eintraege", []), "markus")
+check("lists are uploaded; a wrong file type is named",
+      any(e.get("datei") == "einkauf/preise.csv" for e in _cat) and "bad.exe" in r.text, r.text[:300])
+check("only admins upload lists", anna.post("/ui/admin/lists/upload", data={"room": _targets[0][0]}, files=[
+    ("files", ("x.csv", b"a;b\n1;2\n", "text/csv"))]).status_code == 403)
+_e = next(e for e in _cat if e.get("datei") == "einkauf/preise.csv")
+check("a workspace without a writable list folder is refused",
+      "error" in markus.post("/ui/admin/lists/upload", data={"room": "gibtsnicht"}, files=[
+          ("files", ("y.csv", b"a;b\n1;2\n", "text/csv"))]).text)
+markus.post("/ui/admin/lists/header", data={"file": _e["datei"], "sheet": _e["blatt"],
+                                            "root": _e["wurzel"], "row": "3"})
+_e = next(e for e in tabellen.sichtbar(tabellen.lies_katalog()["eintraege"], "markus") if e.get("datei") == "einkauf/preise.csv")
+check("the header row is set, counted from 1",
+      [c["name"] for c in _e["spalten"]] == ["Artikel", "Preis"], _e["spalten"])
+markus.post("/ui/admin/lists/header", data={"file": _e["datei"], "sheet": _e["blatt"],
+                                            "root": _e["wurzel"], "row": ""})
+_e = next(e for e in tabellen.sichtbar(tabellen.lies_katalog()["eintraege"], "markus") if e.get("datei") == "einkauf/preise.csv")
+check("empty: found automatically again", _e["kopfzeile"] == 0, _e["kopfzeile"])
+check("the chat offers lists", 'name="lists"' in markus.get("/").text)
+check("a header row of another list folder has a key of its own",
+      tabellen.kopf_schluessel(tabellen.pfad(), "a.csv") == "a.csv"
+      and tabellen.kopf_schluessel("/mnt/listen/einkauf", "a.csv")
+      == "/mnt/listen/einkauf::a.csv")
+
 # --- every route called? ---
 routes = {(m, r.path) for r in server.app.routes
           if hasattr(r, "methods") and r.path.startswith(API)

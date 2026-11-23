@@ -67,7 +67,7 @@ wie im Dokument.
 
 Unter dem Eingabefeld öffnet **Arbeitsbereiche · Modell** die Optionen der
 Frage: Arbeitsbereiche, Modell, Voreinstellung und, falls eingerichtet,
-Websuche, Datenbank und „nur intern“.
+Listen, Websuche, Datenbank und „nur intern“.
 
 Steht unter einer Antwort „Die Antwort wurde abgebrochen.“, mit **Nochmal
 fragen** erneut stellen.
@@ -112,6 +112,8 @@ Im **Chat** unter dem Eingabefeld **Arbeitsbereiche · Modell** öffnen:
 - **Voreinstellung:** legt unter anderem fest, wie viele Fundstellen in
   eine Antwort eingehen. Mehr hilft bei umfangreichen Regelwerken, macht
   die Antwort aber langsamer.
+- **Listenbereiche:** bei Listen in mehreren Unterordnern einzelne
+  ankreuzen → nur diese Listen abfragen.
 
 Die Auswahl gilt für die nächste Frage.
 
@@ -225,22 +227,25 @@ Listenbereiche für einen Zweck. Auswahl im **Chat** unter **Arbeitsbereiche
 · Modell** → **Voreinstellung**; **keine** nutzt die Grundeinstellung.
 Eigene Voreinstellungen tragen den Zusatz „(eigene)".
 
-**Einstellungen** → **Voreinstellungen** zeigt alle, die du wählen kannst.
-
-Eigene Voreinstellungen legst du über die HTTP-Schnittstelle an
-(`PUT /api/v1/me/presets/{name}`); Modelle sind dort nur die, die die
-Admins freigegeben haben. Voreinstellungen für alle legen Admins an; nur
-diese können eigene Prompts haben.
+Eigene anlegen: **Einstellungen** → **Voreinstellungen** → **Neue
+Voreinstellung** → Bezeichnung, Beschreibung, **Modell**, **Abschnitte**
+(1 bis 30) und **Listenbereiche** → **Speichern**. **Vorgabe** übernimmt
+die Grundeinstellung. Eine eigene Voreinstellung aufklappen → ändern oder
+**Löschen**. **Gemeinsame Voreinstellungen** legen Admins an; nur diese
+können eigene Prompts haben.
 
 **Modell:** Im **Chat** unter **Arbeitsbereiche · Modell** → **Modell**
 wählst du das Sprachmodell aus der Liste, die die Admins freigeben.
+**Vorgabe** nimmt das Modell der Voreinstellung, sonst das Grundmodell.
 
 ### Wie frage ich in LocaNoto Listen aus Excel oder CSV ab?
 
 Listen (xlsx, csv) werden bei jeder Frage frisch gelesen → neue Zeilen
 wirken sofort. Sind für dich Listen eingerichtet, bezieht LocaNoto sie in
 jede Frage ein: es wählt die passende Liste und liest die passenden
-Zeilen. Sehr große Blätter bleiben dabei außen vor.
+Zeilen. Im **Chat** unter **Arbeitsbereiche · Modell**: **Listen**
+abwählen → keine Listen; **Listenbereiche** → nur diese Unterordner;
+**Große Listen einbeziehen** → auch sehr große Blätter (langsamer).
 
 Unter der Antwort zeigt **Listen (n)**, welches Blatt mit welcher Abfrage
 wie viele Zeilen geliefert hat.
@@ -532,9 +537,9 @@ Admins sehen oben die Seite **Admin**. Ihre Leiste führt zu:
 - **Externes Modell** – welche Quellen extern beantwortet werden dürfen
 - **API** – Beschreibung der HTTP-Schnittstelle unter `/api/v1/docs`
 
-Was keine eigene Seite hat (Voreinstellungen für alle, Passwort eines
-Benutzers setzen, fremde persönliche Dokumente löschen), geht über die
-Schnittstelle; **API** zeigt die Aufrufe.
+Was keine eigene Seite hat (Passwort eines Benutzers setzen, fremde
+persönliche Dokumente löschen), geht über die Schnittstelle; **API** zeigt
+die Aufrufe.
 
 ### Wie werde ich Admin in LocaNoto?
 
@@ -670,8 +675,12 @@ die Zeilen liest LocaNoto bei jeder Frage frisch. **Admin** → **Listen**:
   große Blätter sind als „groß" markiert.
 - **Nicht lesbar** → Dateien mit Fehlern.
 
-Listen hochladen und eine falsch erkannte Kopfzeile korrigieren geht über
-die Schnittstelle (`/api/v1/admin/lists/…`).
+- **Listen hochladen** → Dateien (xlsx, xlsm, csv, tsv) wählen,
+  Arbeitsbereich und optional einen Bereich (Unterordner) angeben →
+  **Hochladen**. Ziel ist der Listenordner des Arbeitsbereichs; angeboten
+  werden nur beschreibbare Ordner. Eine Datei gleichen Namens wird ersetzt.
+- **Kopfzeile** je Blatt: die Zeile mit den Spaltennamen, gezählt wie in
+  der Tabelle → **Speichern**. Leer → LocaNoto erkennt sie selbst.
 
 ### Wie lege ich als Admin ein Zugangstoken für LocaNoto an?
 
@@ -967,11 +976,12 @@ Antwort" unter **Rückmeldungen**.
 - **Auf die mitgelieferte Vorlage zurücksetzen** → stellt die
   mitgelieferte Fassung wieder her.
 
-**Voreinstellungen** (für alle): Bezeichnung, Beschreibung, Chat-Modell,
-Zahl der Abschnitte (0 = Vorgabe), Listenbereiche und eigene Prompts.
-Angelegt, geändert und entfernt werden sie über die Schnittstelle
-(`PUT`/`DELETE /api/v1/admin/presets/{name}`, Prompts einer Voreinstellung
-über `/api/v1/admin/prompts/{name}`).
+**Gemeinsame Voreinstellungen** (unten auf derselben Seite): **Neue
+Voreinstellung** → Bezeichnung, Beschreibung, Modell, Abschnitte,
+Listenbereiche → **Speichern**; aufklappen → ändern oder **Löschen**.
+Eigene Prompts einer Voreinstellung: oben neben der Vorlage die
+Voreinstellung wählen → **Öffnen** → **Speichern**. „für alle
+Voreinstellungen" bearbeitet die allgemeine Fassung.
 
 Wählbare Modelle legt `CHAT_MODELLE` in der `.env` fest; dieselbe Liste
 sehen Nutzer im Chat unter **Modell**. Nutzer verfeinern mit ihrer
